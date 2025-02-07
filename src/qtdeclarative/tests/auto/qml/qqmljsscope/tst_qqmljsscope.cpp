@@ -31,27 +31,27 @@ class tst_qqmljsscope : public QQmlDataTest
 {
     Q_OBJECT
 
-    QString loadUrl(const QString &url)
+    QString loadFile(const QString &file)
     {
-        const QFileInfo fi(url);
+        const QFileInfo fi(file);
         QFile f(fi.absoluteFilePath());
         if (!f.open(QIODevice::ReadOnly))
-            qFatal("Could not open file %s", qPrintable(url));
+            qFatal("Could not open file %s", qPrintable(file));
         QByteArray data = f.readAll();
         return QString::fromUtf8(data);
     }
 
-    QQmlJSScope::ConstPtr run(QString url, bool expectErrorsOrWarnings = false)
+    QQmlJSScope::ConstPtr run(const QString &unresolved, bool expectErrorsOrWarnings = false)
     {
-        QmlIR::Document document(false);
-        return run(url, &document, expectErrorsOrWarnings);
+        const QString resolved = testFile(unresolved);
+        QmlIR::Document document(resolved, resolved, false);
+        return run(resolved, &document, expectErrorsOrWarnings);
     }
 
-    QQmlJSScope::ConstPtr run(QString url, QmlIR::Document *document,
+    QQmlJSScope::ConstPtr run(const QString &resolvedFile, QmlIR::Document *document,
                               bool expectErrorsOrWarnings = false)
     {
-        url = testFile(url);
-        const QString sourceCode = loadUrl(url);
+        const QString sourceCode = loadFile(resolvedFile);
         if (sourceCode.isEmpty())
             return QQmlJSScope::ConstPtr();
 
@@ -59,7 +59,7 @@ class tst_qqmljsscope : public QQmlDataTest
         QQmlJSSaveFunction noop([](auto &&...) { return true; });
         QQmlJSCompileError error;
         [&]() {
-            QVERIFY2(qCompileQmlFile(*document, url, noop, nullptr, &error),
+            QVERIFY2(qCompileQmlFile(*document, resolvedFile, noop, nullptr, &error),
                      qPrintable(error.message));
         }();
         if (!error.message.isEmpty())
@@ -67,7 +67,7 @@ class tst_qqmljsscope : public QQmlDataTest
 
 
         QQmlJSLogger logger;
-        logger.setFilePath(url);
+        logger.setFilePath(resolvedFile);
         logger.setCode(sourceCode);
         logger.setSilent(expectErrorsOrWarnings);
         QQmlJSScope::Ptr target = QQmlJSScope::create();
@@ -523,8 +523,9 @@ void tst_qqmljsscope::scriptIndices()
         QVERIFY2(root, qPrintable(component.errorString()));
     }
 
-    QmlIR::Document document(false); // we need QmlIR information here
-    QQmlJSScope::ConstPtr root = run(u"functionAndBindingIndices.qml"_s, &document);
+    const QString file = testFile(u"functionAndBindingIndices.qml"_s);
+    QmlIR::Document document(file, file, false); // we need QmlIR information here
+    QQmlJSScope::ConstPtr root = run(file, &document);
     QVERIFY(root);
     QVERIFY(document.javaScriptCompilationUnit->unitData());
 
@@ -797,13 +798,12 @@ getRuntimeInfoFromCompilationUnit(const QV4::CompiledData::Unit *unit,
 // Note: this test is here because we never explicitly test qCompileQmlFile()
 void tst_qqmljsscope::compilationUnitsAreCompatible()
 {
-    const QString url = u"compilationUnitsCompatibility.qml"_s;
     QList<const QV4::CompiledData::Function *> componentFunctions;
     QList<const QV4::CompiledData::Function *> cachegenFunctions;
 
     QQmlEngine engine;
     QQmlComponent component(&engine);
-    component.loadUrl(testFileUrl(url));
+    component.loadUrl(testFileUrl(u"compilationUnitsCompatibility.qml"_s));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> root(component.create());
     QVERIFY2(root, qPrintable(component.errorString()));
@@ -817,8 +817,9 @@ void tst_qqmljsscope::compilationUnitsAreCompatible()
     if (QTest::currentTestFailed())
         return;
 
-    QmlIR::Document document(false); // we need QmlIR information here
-    QVERIFY(run(url, &document));
+    const QString file = testFile(u"compilationUnitsCompatibility.qml"_s);
+    QmlIR::Document document(file, file, false); // we need QmlIR information here
+    QVERIFY(run(file, &document));
     QVERIFY(document.javaScriptCompilationUnit->unitData());
     getRuntimeInfoFromCompilationUnit(document.javaScriptCompilationUnit->unitData(),
                                       cachegenFunctions);
@@ -963,7 +964,6 @@ void tst_qqmljsscope::builtinTypeResolution()
 
 void tst_qqmljsscope::methodAndSignalSourceLocation()
 {
-    QmlIR::Document document(false);
     auto jsscope = run(u"methodAndSignalSourceLocation.qml"_s, false);
 
     std::array<std::array<int, 9>, 2> offsetsByLineEnding = {
@@ -993,13 +993,13 @@ void tst_qqmljsscope::methodAndSignalSourceLocation()
 void tst_qqmljsscope::modulePrefixes()
 {
     const auto url = testFile("modulePrefixes.qml");
-    const QString sourceCode = loadUrl(url);
+    const QString sourceCode = loadFile(url);
     QQmlJSLogger logger;
     logger.setFilePath(url);
     logger.setCode(sourceCode);
 
     QQmlJSScope::Ptr target = QQmlJSScope::create();
-    QmlIR::Document document(false);
+    QmlIR::Document document(url, url, false);
     QQmlJSSaveFunction noop([](auto &&...) { return true; });
     QQmlJSCompileError error;
     [&]() {
@@ -1023,10 +1023,10 @@ void tst_qqmljsscope::javaScriptBuiltinFlag()
     const auto url = testFile("ComponentType.qml");
     QQmlJSLogger logger;
     logger.setFilePath(url);
-    logger.setCode(loadUrl(url));
+    logger.setCode(loadFile(url));
 
     QQmlJSScope::Ptr target = QQmlJSScope::create();
-    QmlIR::Document document(false);
+    QmlIR::Document document(url, url, false);
     QQmlJSSaveFunction noop([](auto &&...) { return true; });
     QQmlJSCompileError error;
     [&]() {

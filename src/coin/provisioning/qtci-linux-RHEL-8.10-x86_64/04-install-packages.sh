@@ -154,6 +154,8 @@ installPackages+=(zip)
 installPackages+=(perl-IPC-Cmd)
 # password management support for Qt Creator
 installPackages+=(libsecret-devel)
+# For tst_license.pl with all the machines generating SBOM
+installPackages+=(perl-JSON)
 
 sudo yum -y install "${installPackages[@]}"
 

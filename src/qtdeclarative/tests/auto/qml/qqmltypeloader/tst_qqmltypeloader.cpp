@@ -736,7 +736,8 @@ static void getCompilationUnitAndRuntimeInfo(QQmlRefPointer<QV4::ExecutableCompi
 
     // the QmlIR::Document is deleted once loader.getType() is complete, so
     // restore it
-    QmlIR::Document restoredIrDocument(false);
+    const QString &urlString = url.toString();
+    QmlIR::Document restoredIrDocument(urlString, urlString, false);
     QQmlIRLoader irLoader(unit->unitData(), &restoredIrDocument);
     irLoader.load();
     QCOMPARE(restoredIrDocument.objects.size(), 1);

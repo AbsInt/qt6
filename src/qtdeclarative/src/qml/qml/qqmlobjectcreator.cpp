@@ -886,6 +886,9 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
 
     QObject *createdSubObject = nullptr;
     if (bindingType == QV4::CompiledData::Binding::Type_Object) {
+        // This is not a top level object. Its required properties don't count towards the
+        // top level required properties.
+        QScopedValueRollback topLevelRequired(sharedState->hadTopLevelRequiredProperties);
         createdSubObject = createInstance(binding->value.objectIndex, _bindingTarget);
         if (!createdSubObject)
             return false;

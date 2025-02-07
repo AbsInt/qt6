@@ -70,23 +70,12 @@ public:
             CodegenWarningInterface *iface = defaultCodegenWarningInterface(),
             bool storeSourceLocations = false);
 
-    void generateFromProgram(const QString &fileName,
-                             const QString &finalUrl,
-                             const QString &sourceCode,
-                             QQmlJS::AST::Program *ast,
-                             Module *module,
-                             ContextType contextType = ContextType::Global);
+    void generateFromProgram(
+            const QString &sourceCode, QQmlJS::AST::Program *ast, Module *module,
+            ContextType contextType = ContextType::Global);
 
-    void generateFromModule(const QString &fileName,
-                            const QString &finalUrl,
-                            const QString &sourceCode,
-                            QQmlJS::AST::ESModule *ast,
-                            Module *module);
-
-    void generateFromModule(const QString &fileName,
-                            const QString &finalUrl,
-                            const Value &value,
-                            Module *module);
+    void generateFromModule(const QString &sourceCode, QQmlJS::AST::ESModule *ast, Module *module);
+    void generateFromModule(const Value &value, Module *module);
 
 public:
     class VolatileMemoryLocationScanner;

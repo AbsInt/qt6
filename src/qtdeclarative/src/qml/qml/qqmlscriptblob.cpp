@@ -72,7 +72,7 @@ void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
             return;
         }
     } else {
-        QmlIR::Document irUnit(isDebugging());
+        QmlIR::Document irUnit(urlString(), finalUrlString(), isDebugging());
 
         irUnit.jsModule.sourceTimeStamp = data.sourceTimeStamp();
 
@@ -81,7 +81,7 @@ void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
 
         QList<QQmlError> errors;
         irUnit.javaScriptCompilationUnit = QV4::Script::precompile(
-                     &irUnit.jsModule, &irUnit.jsParserEngine, &irUnit.jsGenerator, urlString(), finalUrlString(),
+                     &irUnit.jsModule, &irUnit.jsParserEngine, &irUnit.jsGenerator, urlString(),
                      source, &errors, QV4::Compiler::ContextType::ScriptImportedByQML);
 
         source.clear();

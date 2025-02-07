@@ -45,6 +45,7 @@ private slots:
     void universalModelData();
     void typedModelData();
     void requiredModelData();
+    void nestedRequired();
     void overriddenModelData();
     void deleteRace();
     void persistedItemsStayInCache();
@@ -591,6 +592,55 @@ void tst_QQmlDelegateModel::requiredModelData()
         QCOMPARE(a.metaType(), QMetaType::fromType<QString>());
         QCOMPARE(a.toString(), QLatin1String("a"));
     }
+}
+
+void tst_QQmlDelegateModel::nestedRequired()
+{
+    QQmlEngine engine;
+
+    const QUrl url = testFileUrl("nestedRequired.qml");
+
+    QQmlComponent c(&engine, url);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+
+    QQmlDelegateModel *delegateModel = qvariant_cast<QQmlDelegateModel *>(o->property("m"));
+    QVERIFY(delegateModel);
+
+    QObject *delegate1 = delegateModel->object(0);
+    QVERIFY(delegate1);
+    QCOMPARE(delegate1->objectName(), QLatin1String("one"));
+
+    QObject *delegate2= delegateModel->object(1);
+    QVERIFY(delegate2);
+    QCOMPARE(delegate2->objectName(), QLatin1String("two"));
+
+    QQmlDelegateModel *delegateModel2 = qvariant_cast<QQmlDelegateModel *>(o->property("n"));
+    QVERIFY(delegateModel2);
+
+    QObject *delegate3 = delegateModel2->object(0);
+    QVERIFY(delegate3);
+    QCOMPARE(delegate3->objectName(), QLatin1String("three"));
+
+    QObject *delegate4 = delegateModel2->object(1);
+    QVERIFY(delegate4);
+    QCOMPARE(delegate4->objectName(), QLatin1String("four"));
+
+    QQmlDelegateModel *delegateModel3 = qvariant_cast<QQmlDelegateModel *>(o->property("o"));
+    QVERIFY(delegateModel3);
+
+    QTest::ignoreMessage(
+            QtInfoMsg,
+            qPrintable(url.toString()
+                       + QLatin1String(":50:9: QML Component: Cannot create delegate")));
+    QTest::ignoreMessage(
+            QtWarningMsg,
+            qPrintable(url.toString()
+                       + QLatin1String(":13:9: Required property control was not initialized")));
+    QObject *delegate5 = delegateModel3->object(0);
+
+    QEXPECT_FAIL("", "object should not be created with required property unset", Continue);
+    QVERIFY(!delegate5);
 }
 
 void tst_QQmlDelegateModel::overriddenModelData()

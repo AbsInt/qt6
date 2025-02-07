@@ -121,8 +121,8 @@ QQmlRefPointer<QV4::CompiledData::CompilationUnit> QQmlTypeCompiler::compile()
             sss.scan();
         }
 
-        document->jsModule.fileName = typeData->urlString();
-        document->jsModule.finalUrl = typeData->finalUrlString();
+        Q_ASSERT(document->jsModule.fileName == typeData->urlString());
+        Q_ASSERT(document->jsModule.finalUrl == typeData->finalUrlString());
         QmlIR::JSCodeGen v4CodeGenerator(document, engine->v4engine()->illegalNames());
         for (QmlIR::Object *object : std::as_const(document->objects)) {
             if (!v4CodeGenerator.generateRuntimeFunctions(object)) {

@@ -480,6 +480,8 @@ private slots:
     void asCastTypeResolutionImportOrderAB();
     void asCastTypeResolutionImportOrderBA();
 
+    void fromAsIdentifier();
+
 private:
     QQmlEngine engine;
     QStringList defaultImportPathList;
@@ -9117,6 +9119,16 @@ void tst_qqmllanguage::asCastTypeResolutionImportOrderBA()
                          QRegularExpression(".*TypeError: Cannot call method 's' of null"));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
+}
+
+void tst_qqmllanguage::fromAsIdentifier()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("fromAsIdentifier.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
+    QCOMPARE(o->children().first()->property("from").toInt(), 3);
 }
 
 QTEST_MAIN(tst_qqmllanguage)

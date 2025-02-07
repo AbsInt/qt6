@@ -463,7 +463,7 @@ struct Q_QML_COMPILER_EXPORT Pragma
 
 struct Q_QML_COMPILER_EXPORT Document
 {
-    Document(bool debugMode);
+    Document(const QString &fileName, const QString &finalUrl, bool debugMode);
     QString code;
     QQmlJS::Engine jsParserEngine;
     QV4::Compiler::Module jsModule;

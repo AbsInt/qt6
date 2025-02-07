@@ -238,6 +238,9 @@ installPackages+=(jq)
 
 installPackages+=(patchelf)
 
+# For tst_license.pl with all the machines generating SBOM
+installPackages+=(libjson-perl)
+
 echo "Running update for apt"
 waitLoop
 sudo apt-get update

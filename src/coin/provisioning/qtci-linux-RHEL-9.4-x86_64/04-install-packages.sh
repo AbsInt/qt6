@@ -167,6 +167,8 @@ installPackages+=(perl-IPC-Cmd)
 installPackages+=(libsecret-devel)
 # For Firebird in RTA
 installPackages+=(libtommath-devel)
+# For tst_license.pl with all the machines generating SBOM
+installPackages+=(perl-JSON)
 
 sudo yum -y install "${installPackages[@]}"
 

@@ -184,7 +184,7 @@ bool qCompileQmlFile(const QString &inputFileName, QQmlJSSaveFunction saveFuncti
                      bool storeSourceLocation, QV4::Compiler::CodegenWarningInterface *interface,
                      const QString *fileContents)
 {
-    QmlIR::Document irDocument(/*debugMode*/false);
+    QmlIR::Document irDocument(QString(), QString(), /*debugMode*/false);
     return qCompileQmlFile(irDocument, inputFileName, saveFunction, aotCompiler, error,
                            storeSourceLocation, interface, fileContents);
 }
@@ -373,8 +373,12 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
     return true;
 }
 
-bool qCompileJSFile(const QString &inputFileName, const QString &inputFileUrl, QQmlJSSaveFunction saveFunction, QQmlJSCompileError *error)
+bool qCompileJSFile(
+        const QString &inputFileName, const QString &inputFileUrl, QQmlJSSaveFunction saveFunction,
+        QQmlJSCompileError *error)
 {
+    Q_UNUSED(inputFileUrl);
+
     QQmlRefPointer<QV4::CompiledData::CompilationUnit> unit;
 
     QString sourceCode;
@@ -402,7 +406,7 @@ bool qCompileJSFile(const QString &inputFileName, const QString &inputFileUrl, Q
         if (!unit || !unit->unitData())
             return false;
     } else {
-        QmlIR::Document irDocument(/*debugMode*/false);
+        QmlIR::Document irDocument(QString(), QString(), /*debugMode*/false);
 
         QQmlJS::Engine *engine = &irDocument.jsParserEngine;
         QmlIR::ScriptDirectivesCollector directivesCollector(&irDocument);
@@ -438,16 +442,17 @@ bool qCompileJSFile(const QString &inputFileName, const QString &inputFileUrl, Q
 
         {
             QmlIR::JSCodeGen v4CodeGen(&irDocument, *illegalNames());
-            v4CodeGen.generateFromProgram(inputFileName, inputFileUrl, sourceCode, program,
-                                          &irDocument.jsModule, QV4::Compiler::ContextType::ScriptImportedByQML);
+            v4CodeGen.generateFromProgram(
+                    sourceCode, program, &irDocument.jsModule,
+                    QV4::Compiler::ContextType::ScriptImportedByQML);
             if (v4CodeGen.hasError()) {
                 error->appendDiagnostic(inputFileName, v4CodeGen.error());
                 return false;
             }
 
             // Precompiled files are relocatable and the final location will be set when loading.
-            irDocument.jsModule.fileName.clear();
-            irDocument.jsModule.finalUrl.clear();
+            Q_ASSERT(irDocument.jsModule.fileName.isEmpty());
+            Q_ASSERT(irDocument.jsModule.finalUrl.isEmpty());
 
             irDocument.javaScriptCompilationUnit = v4CodeGen.generateCompilationUnit(/*generate unit*/false);
             QmlIR::QmlUnitGenerator generator;

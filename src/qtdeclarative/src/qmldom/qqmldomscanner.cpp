@@ -326,6 +326,7 @@ bool Token::lexKindIsIdentifier(int kind)
     case QQmlJSGrammar::T_TRY:
     case QQmlJSGrammar::T_TYPEOF:
     case QQmlJSGrammar::T_WITHOUTAS:
+    case QQmlJSGrammar::T_FROM:
         return true;
     default:
         break;

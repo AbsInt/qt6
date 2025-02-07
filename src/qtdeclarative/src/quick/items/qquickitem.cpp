@@ -5300,10 +5300,26 @@ void QQuickItem::setState(const QString &state)
 }
 
 /*!
-  \qmlproperty list<Transform> QtQuick::Item::transform
-  This property holds the list of transformations to apply.
+    \qmlproperty list<Transform> QtQuick::Item::transform
 
-  For more information see \l Transform.
+    This property holds the list of transformations to apply.
+
+    This property is specified as a list of \l {Transform}-derived objects.
+    For example:
+
+    \qml
+    import QtQuick
+
+    Item {
+        width: 100; height: 100
+        transform: [
+            Scale { origin.x: 25; origin.y: 25; xScale: 3},
+            Rotation { origin.x: 25; origin.y: 25; angle: 45}
+        ]
+    }
+    \endqml
+
+    For more information see \l Transform.
 */
 /*!
     \property QQuickItem::transform

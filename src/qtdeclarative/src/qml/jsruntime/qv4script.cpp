@@ -51,7 +51,7 @@ void Script::parse()
     ExecutionEngine *v4 = context->engine();
     Scope valueScope(v4);
 
-    QV4::Compiler::Module module(v4->debugger() != nullptr);
+    QV4::Compiler::Module module(sourceFile, sourceFile, v4->debugger() != nullptr);
 
     if (sourceCode.startsWith(QLatin1String("function("))) {
         static const int snippetLength = 70;
@@ -91,7 +91,7 @@ void Script::parse()
         RuntimeCodegen cg(v4, &jsGenerator, strictMode);
         if (inheritContext)
             cg.setUseFastLookups(false);
-        cg.generateFromProgram(sourceFile, sourceFile, sourceCode, program, &module, contextType);
+        cg.generateFromProgram(sourceCode, program, &module, contextType);
         if (v4->hasException)
             return;
 
@@ -136,7 +136,7 @@ Function *Script::function()
 
 QQmlRefPointer<QV4::CompiledData::CompilationUnit> Script::precompile(
         QV4::Compiler::Module *module, QQmlJS::Engine *jsEngine,
-        Compiler::JSUnitGenerator *unitGenerator, const QString &fileName, const QString &finalUrl,
+        Compiler::JSUnitGenerator *unitGenerator, const QString &fileName,
         const QString &source, QList<QQmlError> *reportedErrors,
         QV4::Compiler::ContextType contextType)
 {
@@ -164,7 +164,7 @@ QQmlRefPointer<QV4::CompiledData::CompilationUnit> Script::precompile(
     }
 
     Codegen cg(unitGenerator, /*strict mode*/false);
-    cg.generateFromProgram(fileName, finalUrl, source, program, module, contextType);
+    cg.generateFromProgram(source, program, module, contextType);
     if (cg.hasError()) {
         if (reportedErrors) {
             const auto v4Error = cg.error();

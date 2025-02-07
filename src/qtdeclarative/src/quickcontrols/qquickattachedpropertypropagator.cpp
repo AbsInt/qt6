@@ -39,18 +39,49 @@ Q_LOGGING_CATEGORY(lcAttached, "qt.quick.controls.attachedpropertypropagator")
     as it is better suited for that use case, and is more efficient in that
     it only requires one QObject.
 
-    To use QQuickAttachedPropertyPropagator:
-    \list
-    \li Derive from it
-    \li Call \l initialize() in the constructor
-    \li Define set/inherit/propagate/reset functions for each property as needed
-    \li Reimplement \l attachedParentChange() to handle property inheritance
+    To implement a custom attached property:
+
+    \list 1
+    \li Derive a class that exposes the attached property from
+        QQuickAttachedPropertyPropagator.
+
+        For example, to implement an attached \c {MyStyle.theme} property,
+        declare the \c {MyStyle} class:
+
+        \quotefromfile ../../examples/quickcontrols/attachedstyleproperties/MyStyle/mystyle.h
+        \skipto class
+        \printto {
+
+    \li Call \l initialize() in the constructor of your class:
+
+        \quotefromfile ../../examples/quickcontrols/attachedstyleproperties/MyStyle/mystyle.cpp
+        \skipto MyStyle::MyStyle
+        \printuntil }
+
+    \li Define set/inherit/propagate/reset functions for the attached property
+        as needed. For example, to define a \c theme attached property:
+
+        \quotefromfile ../../examples/quickcontrols/attachedstyleproperties/MyStyle/mystyle.cpp
+        \skipto theme()
+        \printto MyStyle::themeChange()
+
+    \li Reimplement \l attachedParentChange() to handle property inheritance:
+
+        \quotefromfile ../../examples/quickcontrols/attachedstyleproperties/MyStyle/mystyle.cpp
+        \skipto attachedParentChange
+        \printuntil /^\}/
+
     \li Implement a static \c qmlAttachedProperties function and declare the
         type as an attached QML type with \l QML_ELEMENT and \l QML_ATTACHED,
-        as detailed in \l {Providing Attached Properties}
+        as detailed in \l {Providing Attached Properties}:
+
+        \quotefromfile ../../examples/quickcontrols/attachedstyleproperties/MyStyle/mystyle.cpp
+        \skipto qmlAttachedProperties
+        \printuntil }
+
     \endlist
 
-    For an example that demonstrates this in depth, see
+    The complete implementation is available in
     \l {Qt Quick Controls - Attached Style Properties Example}.
 
     \sa {Styling Qt Quick Controls}

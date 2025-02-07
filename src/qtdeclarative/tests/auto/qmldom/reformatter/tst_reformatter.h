@@ -198,6 +198,10 @@ private slots:
         QTest::newRow("file1NoReorder")
                 << QStringLiteral(u"file1.qml") << QStringLiteral(u"file1Reformatted2.qml")
                 << noReorderOptions;
+        QTest::newRow("fromAsIdentifier")
+                << "fromAsIdentifier.qml"
+                << "fromAsIdentifier.formatted.qml"
+                << defaultOptions;
     }
 
     void lineByLineReformatter()
