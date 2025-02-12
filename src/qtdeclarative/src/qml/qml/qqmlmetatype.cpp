@@ -615,9 +615,21 @@ static QQmlType createTypeForUrl(
     // Not having URIs also means that the types cannot be found by name
     // etc, the only way to look them up is through QQmlImports -- for
     // better or worse.
-    const QQmlType::RegistrationType registrationType = mode == QQmlMetaType::Singleton
-                                                            ? QQmlType::CompositeSingletonType
-                                                            : QQmlType::CompositeType;
+    QQmlType::RegistrationType registrationType;
+    switch (mode) {
+    case QQmlMetaType::Singleton:
+        registrationType = QQmlType::CompositeSingletonType;
+        break;
+    case QQmlMetaType::NonSingleton:
+        registrationType = QQmlType::CompositeType;
+        break;
+    case QQmlMetaType::JavaScript:
+        registrationType = QQmlType::JavaScriptType;
+        break;
+    default:
+        Q_UNREACHABLE_RETURN(QQmlType());
+    }
+
     if (checkRegistration(registrationType, data, nullptr, typeName, version, {})) {
 
         // TODO: Ideally we should defer most of this work using some lazy/atomic mechanism
@@ -631,15 +643,24 @@ static QQmlType createTypeForUrl(
         priv->setName(QString(), typeName);
         priv->version = version;
 
-        if (mode == QQmlMetaType::Singleton) {
+        switch (mode) {
+        case  QQmlMetaType::Singleton: {
             QQmlType::SingletonInstanceInfo::Ptr siinfo = QQmlType::SingletonInstanceInfo::create();
             siinfo->url = url;
             siinfo->typeName = typeName.toUtf8();
             priv->extraData.singletonTypeData->singletonInstanceInfo =
                     QQmlType::SingletonInstanceInfo::ConstPtr(
                             siinfo.take(), QQmlType::SingletonInstanceInfo::ConstPtr::Adopt);
-        } else {
+            break;
+        }
+        case  QQmlMetaType::NonSingleton: {
             priv->extraData.compositeTypeData = url;
+            break;
+        }
+        case QQmlMetaType::JavaScript: {
+            priv->extraData.javaScriptTypeData = url;
+            break;
+        }
         }
 
         data->registerType(priv);

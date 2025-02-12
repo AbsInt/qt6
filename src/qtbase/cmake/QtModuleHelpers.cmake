@@ -976,7 +976,7 @@ set(QT_ALLOW_MISSING_TOOLS_PACKAGES TRUE)")
                 ${__qt_internal_sbom_multi_args}
         )
 
-        _qt_internal_extend_sbom(${target} ${sbom_args})
+        qt_internal_extend_qt_entity_sbom(${target} ${sbom_args})
     endif()
 
     qt_add_list_file_finalizer(qt_finalize_module ${target} ${arg_INTERNAL_MODULE} ${arg_NO_PRIVATE_MODULE})
@@ -1227,7 +1227,12 @@ function(qt_describe_module target)
     qt_path_join(install_dir ${QT_INSTALL_DIR} ${path_suffix})
 
     set(descfile_in "${QT_CMAKE_DIR}/ModuleDescription.json.in")
+
+    # IMPORTANT: If you adjust the file name not to be the exact target name and thus the CMake
+    # package name, it needs to consider also the code in QtConfig.cmake.in that globs the json
+    # files.
     set(descfile_out "${build_dir}/${target}.json")
+
     string(TOLOWER "${PROJECT_NAME}" lower_case_project_name)
     set(cross_compilation "false")
     if(CMAKE_CROSSCOMPILING)

@@ -56,6 +56,9 @@ QQmlTypePrivate::QQmlTypePrivate(QQmlType::RegistrationType type)
     case QQmlType::SequentialContainerType:
         new (&extraData.sequentialContainerTypeData) QMetaSequence();
         break;
+    case QQmlType::JavaScriptType:
+        new (&extraData.javaScriptTypeData) QUrl();
+        break;
     default: qFatal("QQmlTypePrivate Internal Error.");
     }
 }
@@ -88,6 +91,9 @@ QQmlTypePrivate::~QQmlTypePrivate()
         break;
     case QQmlType::SequentialContainerType:
         extraData.sequentialContainerTypeData.~QMetaSequence();
+        break;
+    case QQmlType::JavaScriptType:
+        extraData.javaScriptTypeData.~QUrl();
         break;
     default: //Also InterfaceType, because it has no extra data
         break;

@@ -158,6 +158,7 @@ void tst_QGestureRecognizer::panGesture()
     const Qt::GestureType gestureType = Qt::PanGesture;
     TestWidget widget(GestureTypeVector(1, gestureType));
     widget.setWindowTitle(QTest::currentTestFunction());
+    widget.setWindowFlag(Qt::FramelessWindowHint);
     widget.show();
     QVERIFY(QTest::qWaitForWindowExposed(&widget));
 
@@ -256,6 +257,7 @@ void tst_QGestureRecognizer::swipeGesture()
     const Qt::GestureType gestureType = Qt::SwipeGesture;
     TestWidget widget(GestureTypeVector(1, gestureType));
     widget.setWindowTitle(QTest::currentTestFunction());
+    widget.setWindowFlag(Qt::FramelessWindowHint);
     widget.show();
     QVERIFY(QTest::qWaitForWindowExposed(&widget));
 
@@ -306,13 +308,16 @@ void tst_QGestureRecognizer::swipeGesture()
 void tst_QGestureRecognizer::touchReplay()
 {
     const Qt::GestureType gestureType = Qt::TapGesture;
+    const QPoint pos = QGuiApplication::primaryScreen()->availableGeometry().topLeft();
     QWidget parent;
     TestWidget widget(GestureTypeVector(1, gestureType));
     widget.setParent(&parent);
     widget.setGeometry(0, 0, 100, 100);
     parent.adjustSize();
+    parent.move(pos);
     parent.show();
     QVERIFY(QTest::qWaitForWindowActive(&parent));
+    QTRY_COMPARE(parent.pos(), pos);
 
     QWindow* windowHandle = parent.window()->windowHandle();
     const QPoint globalPos = QPoint(42, 16);

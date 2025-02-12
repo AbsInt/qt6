@@ -34,6 +34,7 @@ Window {
     Window {
         id: window2
         x: 500
+        y: 100
         width: 500
         height: 500
 

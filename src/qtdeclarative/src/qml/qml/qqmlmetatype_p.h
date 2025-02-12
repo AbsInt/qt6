@@ -68,6 +68,7 @@ public:
     enum CompositeTypeLookupMode {
         NonSingleton,
         Singleton,
+        JavaScript,
     };
 
     static QQmlType findCompositeType(

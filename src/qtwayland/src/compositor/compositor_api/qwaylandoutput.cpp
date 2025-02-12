@@ -402,13 +402,15 @@ void QWaylandOutput::setCompositor(QWaylandCompositor *compositor)
 /*!
  * \qmlproperty string QtWayland.Compositor::WaylandOutput::manufacturer
  *
- * This property holds a textual description of the manufacturer of this WaylandOutput.
+ * This property holds a textual description of the manufacturer of the display
+ * managed by this WaylandOutput.
  */
 
 /*!
  * \property QWaylandOutput::manufacturer
  *
- * This property holds a textual description of the manufacturer of this QWaylandOutput.
+ * This property holds a textual description of the manufacturer of the display
+ * managed by this QWaylandOutput.
  */
 QString QWaylandOutput::manufacturer() const
 {
@@ -430,13 +432,15 @@ void QWaylandOutput::setManufacturer(const QString &manufacturer)
 /*!
  * \qmlproperty string QtWayland.Compositor::WaylandOutput::model
  *
- * This property holds a textual description of the model of this WaylandOutput.
+ * This property holds a textual description of the model of the display
+ * managed by this WaylandOutput.
  */
 
 /*!
  * \property QWaylandOutput::model
  *
- * This property holds a textual description of the model of this QWaylandOutput.
+ * This property holds a textual description of the model of the display
+ * managed by this QWaylandOutput.
  */
 QString QWaylandOutput::model() const
 {

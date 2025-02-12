@@ -69,6 +69,8 @@ public:
             return extraData.singletonTypeData->singletonInstanceInfo->url;
         case QQmlType::InlineComponentType:
             return extraData.inlineComponentTypeData;
+        case QQmlType::JavaScriptType:
+            return extraData.javaScriptTypeData;
         default:
             return QUrl();
         }
@@ -137,6 +139,7 @@ public:
         QQmlCppTypeData *cppTypeData;
         QQmlSingletonTypeData *singletonTypeData;
         QUrl compositeTypeData;
+        QUrl javaScriptTypeData;
         QUrl inlineComponentTypeData;
         QMetaSequence sequentialContainerTypeData;
         const char *interfaceTypeData;

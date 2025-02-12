@@ -165,6 +165,7 @@ public:
         CompositeSingletonType = 4,
         InlineComponentType = 5,
         SequentialContainerType = 6,
+        JavaScriptType = 7,
         AnyRegistrationType = 255
     };
 

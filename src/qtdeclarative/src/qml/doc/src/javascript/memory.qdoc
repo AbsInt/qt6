@@ -142,7 +142,9 @@ the JavaScript heap, though, but rather managed using new and delete.
 \section1 Garbage Collection
 
 The garbage collector used in the JavaScript engine is a non-moving,
-stop-the-world Mark and Sweep design. In the \e mark phase we traverse all the
+Mark and Sweep design. Since Qt 6.8, it runs incrementally by default (unless
+\l QV4_GC_TIMELIMIT is set to 0).
+In the \e mark phase we traverse all the
 known places where live references to objects can be found. In particular:
 
 \list

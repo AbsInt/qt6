@@ -2157,6 +2157,8 @@ ExecutionEngine::Module ExecutionEngine::loadModule(
         const QUrl &url, const ExecutableCompilationUnit *referrer)
 {
     return doFindModule(m_compilationUnits, url, referrer, [this](const QUrl &resolved) {
+        if (auto cu = QQmlMetaType::obtainCompilationUnit(resolved))
+            return executableCompilationUnit(std::move(cu));
         return compileModule(resolved);
     });
 }

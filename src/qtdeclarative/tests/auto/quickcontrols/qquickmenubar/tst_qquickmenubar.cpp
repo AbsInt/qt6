@@ -421,9 +421,9 @@ void tst_qquickmenubar::keys()
 
     // navigate up, back to the menubar
     QTest::keyClick(window.data(), Qt::Key_Up);
+    QTRY_VERIFY(!editMenuBarMenu->isVisible());
     QVERIFY(editMenuBarItem->isHighlighted());
     QVERIFY(editMenuBarItem->hasActiveFocus());
-    QTRY_VERIFY(!editMenuBarMenu->isVisible());
 
 // There seem to be problems in focus handling in webOS QPA, see https://bugreports.qt.io/browse/WEBOSCI-45
 #ifdef Q_OS_WEBOS
@@ -1627,6 +1627,8 @@ void tst_qquickmenubar::menuPosition()
     QQuickItem *background = editMenu->background();
     QVERIFY(background);
 
+    if (QQuickStyle::name() == QLatin1String("Imagine") || QQuickStyle::name() == QLatin1String("Windows"))
+        QEXPECT_FAIL("", "This fails when run with certain styles: QTBUG-133530", Abort);
     const QPoint bgPos = editMenu->parentItem()->mapFromGlobal(background->mapToGlobal({0, 0})).toPoint();
     QVERIFY2(pixelsCloseEnough(requestedPos.x(), bgPos.x()),
              "The background's x coordinate changed when mapped to the overlay's coordinate space.");

@@ -1006,14 +1006,12 @@ void tst_QQuickPopup::activeFocusItemAfterWindowInactive()
     QVERIFY(button);
 
     popup->open();
-    QVERIFY(popup->isVisible());
     QTRY_VERIFY(popup->isOpened());
     QVERIFY(popup->hasActiveFocus());
     QVERIFY(!button->hasActiveFocus());
 
     popup->close();
-    QVERIFY(!popup->isVisible());
-    QTRY_VERIFY(!popup->isOpened());
+    QTRY_VERIFY(!popup->isVisible());
     QVERIFY(button->hasActiveFocus());
     QCOMPARE(window->activeFocusItem(), button);
 
@@ -1028,11 +1026,12 @@ void tst_QQuickPopup::activeFocusItemAfterWindowInactive()
     QVERIFY(QTest::qWaitForWindowFocused(&newWindow));
 
     popup->close();
+    QTRY_VERIFY(!popup->isVisible());
     QCOMPARE(QGuiApplication::focusWindow(), &newWindow);
 
     window->requestActivate();
     QVERIFY(QTest::qWaitForWindowFocused(window));
-    QCOMPARE(window->activeFocusItem(), button);
+    QTRY_COMPARE(window->activeFocusItem(), button);
 }
 
 void tst_QQuickPopup::hover_data()
@@ -1837,6 +1836,8 @@ void tst_QQuickPopup::tabFence()
     QTest::keyClick(window, Qt::Key_Tab);
     QVERIFY(outsideButton2->hasActiveFocus());
     QTest::keyClick(window, Qt::Key_Tab);
+    if (QQuickStyle::name() == QLatin1String("Material"))
+        QEXPECT_FAIL("", "This fails with the Material style: QTBUG-133530", Abort);
     QVERIFY(dialogButton1->hasActiveFocus());
     QTest::keyClick(window, Qt::Key_Tab);
     QVERIFY(dialogButton2->hasActiveFocus());
@@ -2195,6 +2196,8 @@ void tst_QQuickPopup::mirroredCombobox()
                 comboBox->position().y() - popupSize.height() + comboBox->topPadding()
                 == popupPos.y();
 
+        if (QQuickStyle::name() == QLatin1String("FluentWinUI3"))
+            QEXPECT_FAIL("", "Rotated ComboBox is broken in FluentWinUI3 style", Abort);
         QVERIFY(styleDrawsPopupOverCombobox || styleDrawsPopupBelowCombobox);
 
         popup->close();
@@ -2294,6 +2297,8 @@ void tst_QQuickPopup::rotatedCombobox()
                 comboBox->position().x() + comboBox->width() - comboBox->leftPadding()
                 == popupPos.x();
 
+        if (QQuickStyle::name() == QLatin1String("FluentWinUI3"))
+            QEXPECT_FAIL("", "Rotated ComboBox is broken in FluentWinUI3 style", Abort);
         QVERIFY(styleDrawsPopupOverCombobox || styleDrawsPopupAboveCombobox);
 
         popup->close();
@@ -2948,7 +2953,7 @@ void tst_QQuickPopup::popupWindowChangingParentWindow()
     QCOMPARE_LT(qAbs(popup->y()), 2);
 
     popup->close();
-    QVERIFY(!popup->isVisible());
+    QTRY_VERIFY(!popup->isVisible());
     popup->setParentItem(childWindow->contentItem());
     popup->open();
     QTRY_VERIFY(popup->isOpened());
@@ -3014,6 +3019,7 @@ void tst_QQuickPopup::popupWindowFocus()
     QTRY_COMPARE(textField2->text(), "t");
     popup->close();
     QTRY_VERIFY(!popup->isOpened());
+    QTRY_VERIFY(!popup->isVisible());
     QVERIFY(QGuiApplication::focusObject() == textField1);
     QCOMPARE(QGuiApplicationPrivate::popupCount(), 0);
 
@@ -3030,6 +3036,7 @@ void tst_QQuickPopup::popupWindowFocus()
     QTRY_COMPARE(textField1->text(), "qt");
     popup->close();
     QTRY_VERIFY(!popup->isOpened());
+    QTRY_VERIFY(!popup->isVisible());
 }
 
 void tst_QQuickPopup::popupTypeChangeFromWindowToItem()

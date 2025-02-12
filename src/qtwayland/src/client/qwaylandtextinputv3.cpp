@@ -40,12 +40,16 @@ const Qt::InputMethodQueries supportedQueries3 = Qt::ImEnabled |
                                                 Qt::ImCursorRectangle;
 }
 
-void QWaylandTextInputv3::zwp_text_input_v3_enter(struct ::wl_surface *surface)
+void QWaylandTextInputv3::enableSurface(::wl_surface *surface)
 {
-    qCDebug(qLcQpaWaylandTextInput) << Q_FUNC_INFO << m_surface << surface;
+    qCDebug(qLcQpaWaylandTextInput) << Q_FUNC_INFO << surface;
+
+    if (m_surface == surface)
+        return; // already enabled
+    if (m_surface)
+        qCWarning(qLcQpaWaylandTextInput()) << Q_FUNC_INFO << "Try to enable surface" << surface << "with focusing surface" << m_surface;
 
     m_surface = surface;
-
     m_pendingPreeditString.clear();
     m_pendingCommitString.clear();
     m_pendingDeleteBeforeText = 0;
@@ -55,27 +59,51 @@ void QWaylandTextInputv3::zwp_text_input_v3_enter(struct ::wl_surface *surface)
     updateState(supportedQueries3, update_state_enter);
 }
 
+void QWaylandTextInputv3::disableSurface(::wl_surface *surface)
+{
+    qCDebug(qLcQpaWaylandTextInput) << Q_FUNC_INFO << surface;
+
+    if (!m_surface)
+        return; // already disabled
+    if (m_surface != surface)
+        qCWarning(qLcQpaWaylandTextInput()) << Q_FUNC_INFO << "Try to disable surface" << surface << "with focusing surface" << m_surface;
+
+    m_currentPreeditString.clear();
+    m_surface = nullptr;
+    disable();
+    commit();
+}
+
+void QWaylandTextInputv3::zwp_text_input_v3_enter(struct ::wl_surface *surface)
+{
+    qCDebug(qLcQpaWaylandTextInput) << Q_FUNC_INFO << m_surface << surface;
+
+    if (m_surface)
+        qCWarning(qLcQpaWaylandTextInput) << Q_FUNC_INFO << "Got enter event without leaving a surface " << m_surface;
+
+    enableSurface(surface);
+}
+
 void QWaylandTextInputv3::zwp_text_input_v3_leave(struct ::wl_surface *surface)
 {
     qCDebug(qLcQpaWaylandTextInput) << Q_FUNC_INFO;
 
-    if (m_surface != surface) {
-        qCWarning(qLcQpaWaylandTextInput()) << Q_FUNC_INFO << "Got leave event for surface" << surface << "focused surface" << m_surface;
-        return;
-    }
+    if (!m_surface)
+        return; // Nothing to leave
 
-    m_currentPreeditString.clear();
+    if (m_surface != surface)
+        qCWarning(qLcQpaWaylandTextInput()) << Q_FUNC_INFO << "Got leave event for surface" << surface << "with focusing surface" << m_surface;
 
-    m_surface = nullptr;
-
-    disable();
-    commit();
-    qCDebug(qLcQpaWaylandTextInput) << Q_FUNC_INFO << "Done";
+    disableSurface(surface);
 }
 
 void QWaylandTextInputv3::zwp_text_input_v3_preedit_string(const QString &text, int32_t cursorBegin, int32_t cursorEnd)
 {
     qCDebug(qLcQpaWaylandTextInput) << Q_FUNC_INFO << text << cursorBegin << cursorEnd;
+    if (!m_surface) {
+        qCWarning(qLcQpaWaylandTextInput) << "Got preedit_string event without entering a surface";
+        return;
+    }
 
     if (!QGuiApplication::focusObject())
         return;
@@ -88,6 +116,10 @@ void QWaylandTextInputv3::zwp_text_input_v3_preedit_string(const QString &text, 
 void QWaylandTextInputv3::zwp_text_input_v3_commit_string(const QString &text)
 {
     qCDebug(qLcQpaWaylandTextInput) << Q_FUNC_INFO << text;
+    if (!m_surface) {
+        qCWarning(qLcQpaWaylandTextInput) << "Got commit_string event without entering a surface";
+        return;
+    }
 
     if (!QGuiApplication::focusObject())
         return;
@@ -98,6 +130,10 @@ void QWaylandTextInputv3::zwp_text_input_v3_commit_string(const QString &text)
 void QWaylandTextInputv3::zwp_text_input_v3_delete_surrounding_text(uint32_t beforeText, uint32_t afterText)
 {
     qCDebug(qLcQpaWaylandTextInput) << Q_FUNC_INFO << beforeText << afterText;
+    if (!m_surface) {
+        qCWarning(qLcQpaWaylandTextInput) << "Got delete_surrounding_text event without entering a surface";
+        return;
+    }
 
     if (!QGuiApplication::focusObject())
         return;
@@ -109,6 +145,9 @@ void QWaylandTextInputv3::zwp_text_input_v3_delete_surrounding_text(uint32_t bef
 void QWaylandTextInputv3::zwp_text_input_v3_done(uint32_t serial)
 {
     qCDebug(qLcQpaWaylandTextInput) << Q_FUNC_INFO << "with serial" << serial << m_currentSerial;
+
+    if (!m_surface)
+        return;
 
     // This is a case of double click.
     // text_input_v3 will ignore this done signal and just keep the selection of the clicked word.

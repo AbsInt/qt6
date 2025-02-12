@@ -33,6 +33,7 @@ private slots:
     void findFilePathsFromFileNames();
     void openFiles();
     void reloadLotsOfFiles();
+    void importPathViaSettings();
 };
 
 #endif // TST_QMLLS_QQMLCODEMODEL_H

@@ -18,5 +18,8 @@ cd .. || exit 1
 rm -rf src || exit 1
 mv qt5 src || exit 1
 
+# fix win compile with clang-cl
+sed 's/#if !defined(Q_OS_VXWORKS)/#if !defined(Q_OS_WIN)/' -i src/qtbase/src/corelib/global/qsystemdetection.h
+
 # add new stuff to git
 git add src || exit 1

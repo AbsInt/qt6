@@ -7434,15 +7434,13 @@ void QQuickTableViewPrivate::initializeIndexMapping()
             visualIndex[index].index = logicalIndex[index].index = index;
     };
 
-    if (!tableSize.isEmpty()) {
-        if (visualIndices[0].size() != tableSize.width()
-            || logicalIndices[0].size() != tableSize.width())
-            initIndices(visualIndices[0], logicalIndices[0], tableSize.width());
+    if (visualIndices[0].size() != tableSize.width()
+        || logicalIndices[0].size() != tableSize.width())
+        initIndices(visualIndices[0], logicalIndices[0], tableSize.width());
 
-        if (visualIndices[1].size() != tableSize.height()
-            || logicalIndices[1].size() != tableSize.height())
-            initIndices(visualIndices[1], logicalIndices[1], tableSize.height());
-    }
+    if (visualIndices[1].size() != tableSize.height()
+        || logicalIndices[1].size() != tableSize.height())
+        initIndices(visualIndices[1], logicalIndices[1], tableSize.height());
 }
 
 void QQuickTableViewPrivate::clearIndexMapping()

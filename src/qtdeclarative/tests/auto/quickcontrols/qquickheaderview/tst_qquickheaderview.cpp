@@ -229,6 +229,7 @@ private slots:
     void headerData();
     void warnMissingDefaultRole();
     void dragInvalidItemDuringReorder();
+    void reorderEmptyModel();
 
 private:
     QQmlEngine *engine;
@@ -487,6 +488,23 @@ void tst_QQuickHeaderView::dragInvalidItemDuringReorder()
 
     QVERIFY(!QQuickTest::qIsPolishScheduled(item));
     QCOMPARE(columnMovedSpy.size(), 0);
+}
+
+void tst_QQuickHeaderView::reorderEmptyModel()
+{
+    QQuickApplicationHelper helper(this, QStringLiteral("reorderEmptyModel.qml"));
+    QVERIFY2(helper.errorMessage.isEmpty(), helper.errorMessage);
+    QQuickWindow *window = helper.window;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    auto hhv = window->findChild<QQuickHorizontalHeaderView *>("horizontalHeader");
+    QVERIFY(hhv);
+
+    QSignalSpy columnMovedSpy(hhv, SIGNAL(columnMoved(int, int, int)));
+    QVERIFY(columnMovedSpy.isValid());
+    hhv->moveColumn(0, 1);
+    QVERIFY(!columnMovedSpy.isEmpty());
 }
 
 QTEST_MAIN(tst_QQuickHeaderView)

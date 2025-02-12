@@ -85,6 +85,7 @@ private slots:
     void objectListArgumentMethod();
     void variantListQJsonConversion();
     void attachedObjectOfUnregistered();
+    void multiLoadedJavaScriptModule();
 
 public slots:
     QObject *createAQObjectForOwnershipTest ()
@@ -1813,6 +1814,20 @@ void tst_qqmlengine::attachedObjectOfUnregistered()
     QVERIFY(c);
     QVERIFY(qobject_cast<UnregisteredAttached *>(c));
     QVERIFY(c != a);
+}
+
+void tst_qqmlengine::multiLoadedJavaScriptModule()
+{
+    QQmlEngine e;
+    QQmlComponent c(&e, testFileUrl("multiLoaded.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QTest::ignoreMessage(QtCriticalMsg, "In a1 - DATA_IN_A1");
+    QTest::ignoreMessage(QtCriticalMsg, "In B1 DATA_IN_A1");
+    QTest::ignoreMessage(QtCriticalMsg, "In B1 DATA_IN_A1");
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
 }
 
 QTEST_MAIN(tst_qqmlengine)
