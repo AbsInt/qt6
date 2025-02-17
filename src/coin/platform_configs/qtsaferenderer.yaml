@@ -70,7 +70,7 @@ Configurations:
     ]
 -
     Id: 'Windows-MSVC2022_Static'
-    Template: 'qtci-windows-10_22H2-x86_64-52'
+    Template: 'qtci-windows-10_22H2-x86_64-53'
     Compiler: 'MSVC2022'
     Features: ['Packaging', 'Sccache', 'UseConfigure', 'MinimalStaticTests']
     Configure arguments: '-release -headersclean -nomake examples -qt-zlib -static -no-icu -no-sql-mysql -no-sql-odbc -no-sql-psql'

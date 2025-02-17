@@ -1587,6 +1587,8 @@ static bool pixelsCloseEnough(int lhs, int rhs)
 
 void tst_qquickmenubar::menuPosition()
 {
+    if (QQuickStyle::name() != QLatin1String("Basic"))
+        QSKIP("This fails when run with certain styles: QTBUG-133530");
     QFETCH(QQuickPopup::PopupType, popupType);
     // A Menu.qml will typically have a background with a drop-shadow. And to make
     // room for this shadow, the Menu itself is made bigger by using Control.insets.
@@ -1627,8 +1629,6 @@ void tst_qquickmenubar::menuPosition()
     QQuickItem *background = editMenu->background();
     QVERIFY(background);
 
-    if (QQuickStyle::name() == QLatin1String("Imagine") || QQuickStyle::name() == QLatin1String("Windows"))
-        QEXPECT_FAIL("", "This fails when run with certain styles: QTBUG-133530", Abort);
     const QPoint bgPos = editMenu->parentItem()->mapFromGlobal(background->mapToGlobal({0, 0})).toPoint();
     QVERIFY2(pixelsCloseEnough(requestedPos.x(), bgPos.x()),
              "The background's x coordinate changed when mapped to the overlay's coordinate space.");

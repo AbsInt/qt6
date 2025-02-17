@@ -51,33 +51,41 @@ static QString driveSpec(const QString &path)
 }
 #endif
 
-enum {
-#if defined(Q_OS_WIN)
-    OSSupportsUncPaths = true
-#else
-    OSSupportsUncPaths = false
-#endif
-};
-
 // Return the length of the root part of an absolute path, for use by cleanPath(), cd().
-static qsizetype rootLength(QStringView name, bool allowUncPaths)
+static qsizetype rootLength(QStringView name, QDirPrivate::PathNormalizations flags)
 {
-    const qsizetype len = name.size();
-    // starts with double slash
-    if (allowUncPaths && name.startsWith("//"_L1)) {
-        // Server name '//server/path' is part of the prefix.
-        const qsizetype nextSlash = name.indexOf(u'/', 2);
-        return nextSlash >= 0 ? nextSlash + 1 : len;
-    }
+    constexpr bool UseWindowsRules = false // So we don't #include <QOperatingSystemVersion>
 #if defined(Q_OS_WIN)
-    if (len >= 2 && name.at(1) == u':') {
-        // Handle a possible drive letter
-        return len > 2 && name.at(2) == u'/' ? 3 : 2;
-    }
+            || true
 #endif
-    if (len && name.at(0) == u'/')
-        return 1;
-    return 0;
+            ;
+    const qsizetype len = name.size();
+    char16_t firstChar = len > 0 ? name.at(0).unicode() : u'\0';
+    char16_t secondChar = len > 1 ? name.at(1).unicode() : u'\0';
+    if constexpr (UseWindowsRules) {
+        // Handle possible UNC paths which start with double slash
+        bool urlMode = flags.testAnyFlags(QDirPrivate::UrlNormalizationMode);
+        if (firstChar == u'/' && secondChar == u'/' && !urlMode) {
+            // Server name '//server/path' is part of the prefix.
+            const qsizetype nextSlash = name.indexOf(u'/', 2);
+            return nextSlash >= 0 ? nextSlash + 1 : len;
+        }
+
+        // Handle a possible drive letter
+        qsizetype driveLength = 2;
+        if (firstChar == u'/' && urlMode && len > 2 && name.at(2) == u':') {
+            // Drive-in-URL-Path mode, e.g. "/c:" or "/c:/autoexec.bat"
+            ++driveLength;
+            secondChar = u':';
+        }
+        if (secondChar == u':') {
+            if (len > driveLength && name.at(driveLength) == u'/')
+                return driveLength + 1;     // absolute drive path, e.g. "c:/config.sys"
+            return driveLength;             // relative drive path, e.g. "c:" or "d:swapfile.sys"
+        }
+    }
+
+    return firstChar == u'/' ? 1 : 0;
 }
 
 //************* QDirPrivate
@@ -2221,17 +2229,12 @@ bool QDir::match(const QString &filter, const QString &fileName)
        "a/b/" and "a/b//../.." becomes "a/"), which matches the behavior
        observed in web browsers.
 
-    However, QUrl also uses local path mode for local URLs; with one exception:
-    Even in local mode we leave one trailing slash for paths ending in "/." if
-    the KeepLocalTrailingSlash flag is given. This reflects how QUrl needs to
-    treat local URLs due to compatibility constraints.
+    As a Qt extension, for local URLs we treat multiple slashes as one slash.
 */
 bool qt_normalizePathSegments(QString *path, QDirPrivate::PathNormalizations flags)
 {
-    const bool allowUncPaths = flags.testAnyFlag(QDirPrivate::AllowUncPaths);
     const bool isRemote = flags.testAnyFlag(QDirPrivate::RemotePath);
-    const bool keepLocalTrailingSlash = flags.testAnyFlags(QDirPrivate::KeepLocalTrailingSlash);
-    const qsizetype prefixLength = rootLength(*path, allowUncPaths);
+    const qsizetype prefixLength = rootLength(*path, flags);
 
     // RFC 3986 says: "The input buffer is initialized with the now-appended
     // path components and the output buffer is initialized to the empty
@@ -2341,27 +2344,12 @@ bool qt_normalizePathSegments(QString *path, QDirPrivate::PathNormalizations fla
             ++in;       // the one dot
         }
 
-        if (out > start) {
-            // Always backtrack one slash
-            if (out[-1] == u'/' && in != end)
-                --out;
-
-            if (!isRemote) {
-                bool removedAnySlashes = false;
-
-                // Backtrack all slashes ...
-                while (out > start && out[-1] == u'/') {
-                    --out;
-                    removedAnySlashes = true;
-                }
-
-                // ... except a trailing one if it exists and flag given
-                if (removedAnySlashes && keepLocalTrailingSlash && out > start) {
-                    ++out;
-                    break;
-                }
-            }
-        }
+        // Not at 'end' yet, prepare for the next loop iteration by backtracking one slash.
+        // E.g.: /a/b/../c    >>> /a/b/../c
+        //          ^out            ^out
+        // the next iteration will copy '/c' to the output buffer >>> /a/c
+        if (in != end && out > start && out[-1] == u'/')
+            --out;
         if (out == start) {
             // We've reached the root. Make sure we don't turn a relative path
             // to absolute or, in the case of local paths that are already
@@ -2389,8 +2377,7 @@ static bool qt_cleanPath(QString *path)
 
     QString &ret = *path;
     ret = QDir::fromNativeSeparators(ret);
-    auto normalization = OSSupportsUncPaths ? QDirPrivate::AllowUncPaths : QDirPrivate::DefaultNormalization;
-    bool ok = qt_normalizePathSegments(&ret, normalization);
+    bool ok = qt_normalizePathSegments(&ret, QDirPrivate::DefaultNormalization);
 
     // Strip away last slash except for root directories
     if (ret.size() > 1 && ret.endsWith(u'/')) {

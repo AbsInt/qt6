@@ -1139,10 +1139,12 @@ void QWaylandInputDevice::Pointer::flushFrameEvent()
         } else if (mFrameData.event->type == QEvent::MouseButtonRelease) {
             // If the window has been destroyed, we still need to report an up event, but it can't
             // be handled by the destroyed window (obviously), so send the event here instead.
-            QWindowSystemInterface::handleMouseEvent(nullptr, event->timestamp, event->local,
-                                 event->global, event->buttons,
-                                 event->button, event->type,
-                                 event->modifiers);// , Qt::MouseEventSource source = Qt::MouseEventNotSynthesized);
+            QWindowSystemInterface::handleMouseEvent(
+                    nullptr, event->timestamp,
+                    QPointingDevice::primaryPointingDevice(mParent->seatname()), event->local,
+                    event->global, event->buttons, event->button, event->type,
+                    event->modifiers); // , Qt::MouseEventSource source =
+                                       // Qt::MouseEventNotSynthesized);
         }
         delete mFrameData.event;
         mFrameData.event = nullptr;

@@ -550,6 +550,13 @@ public:
     inline bool isLocalFile() const { return flags & IsLocalFile; }
     QString toLocalFile(QUrl::FormattingOptions options) const;
 
+    bool normalizePathSegments(QString *path) const
+    {
+        QDirPrivate::PathNormalizations mode = QDirPrivate::UrlNormalizationMode;
+        if (!isLocalFile())
+            mode |= QDirPrivate::RemotePath;
+        return qt_normalizePathSegments(path, mode);
+    }
     QString mergePaths(const QString &relativePath) const;
 
     QAtomicInt ref;
@@ -910,11 +917,8 @@ inline void QUrlPrivate::appendPassword(QString &appendTo, QUrl::FormattingOptio
 inline void QUrlPrivate::appendPath(QString &appendTo, QUrl::FormattingOptions options, Section appendingTo) const
 {
     QString thePath = path;
-    if (options & QUrl::NormalizePathSegments) {
-        qt_normalizePathSegments(
-                &thePath,
-                isLocalFile() ? QDirPrivate::KeepLocalTrailingSlash : QDirPrivate::RemotePath);
-    }
+    if (options & QUrl::NormalizePathSegments)
+        normalizePathSegments(&thePath);
 
     QStringView thePathView(thePath);
     if (options & QUrl::RemoveFilename) {
@@ -2714,11 +2718,13 @@ QUrl QUrl::resolved(const QUrl &relative) const
     else
         t.d->sectionIsPresent &= ~QUrlPrivate::Fragment;
 
-    qt_normalizePathSegments(
-            &t.d->path,
-            isLocalFile() ? QDirPrivate::KeepLocalTrailingSlash : QDirPrivate::RemotePath);
-    if (!t.d->hasAuthority())
-        fixupNonAuthorityPath(&t.d->path);
+    t.d->normalizePathSegments(&t.d->path);
+    if (!t.d->hasAuthority()) {
+        if (t.d->isLocalFile() && t.d->path.startsWith(u'/'))
+            t.d->sectionIsPresent |= QUrlPrivate::Host;
+        else
+            fixupNonAuthorityPath(&t.d->path);
+    }
 
 #if defined(QURL_DEBUG)
     qDebug("QUrl(\"%ls\").resolved(\"%ls\") = \"%ls\"",
@@ -2892,6 +2898,11 @@ QUrl QUrl::adjusted(QUrl::FormattingOptions options) const
         QString path;
         d->appendPath(path, options | FullyEncoded, QUrlPrivate::Path);
         that.d->setPath(path, 0, path.size());
+    }
+    if (that.d->isLocalFile() && that.d->path.startsWith(u'/')) {
+        // ensure absolute file URLs have an empty authority to comply with the
+        // XDG file spec (note this may undo a RemoveAuthority)
+        that.d->sectionIsPresent |= QUrlPrivate::Host;
     }
     return that;
 }
@@ -3307,15 +3318,18 @@ static QString fromNativeSeparators(const QString &pathName)
 QUrl QUrl::fromLocalFile(const QString &localFile)
 {
     QUrl url;
-    if (localFile.isEmpty())
+    QString deslashified = fromNativeSeparators(localFile);
+    if (deslashified.isEmpty())
         return url;
     QString scheme = fileScheme();
-    QString deslashified = fromNativeSeparators(localFile);
+    char16_t firstChar = deslashified.at(0).unicode();
+    char16_t secondChar = deslashified.size() > 1 ? deslashified.at(1).unicode() : u'\0';
 
     // magic for drives on windows
-    if (deslashified.size() > 1 && deslashified.at(1) == u':' && deslashified.at(0) != u'/') {
+    if (firstChar != u'/' && secondChar == u':') {
         deslashified.prepend(u'/');
-    } else if (deslashified.startsWith("//"_L1)) {
+        firstChar = u'/';
+    } else if (firstChar == u'/' && secondChar == u'/') {
         // magic for shared drive on windows
         qsizetype indexOfPath = deslashified.indexOf(u'/', 2);
         QStringView hostSpec = QStringView{deslashified}.mid(2, indexOfPath - 2);
@@ -3339,9 +3353,15 @@ QUrl QUrl::fromLocalFile(const QString &localFile)
             deslashified.clear();
         }
     }
+    if (firstChar == u'/') {
+        // ensure absolute file URLs have an empty authority to comply with the XDG file spec
+        url.detach();
+        url.d->sectionIsPresent |= QUrlPrivate::Host;
+    }
 
     url.setScheme(scheme);
     url.setPath(deslashified, DecodedMode);
+
     return url;
 }
 
