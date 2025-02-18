@@ -39,7 +39,7 @@ void QQuickPressHandler::mousePressEvent(QMouseEvent *event)
 
 void QQuickPressHandler::mouseMoveEvent(QMouseEvent *event)
 {
-    if (qAbs(int(event->position().x() - pressPos.x())) > QGuiApplication::styleHints()->startDragDistance())
+    if (qAbs(event->position().x() - pressPos.x()) > QGuiApplication::styleHints()->startDragDistance())
         timer.stop();
 }
 
