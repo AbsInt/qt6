@@ -1,10 +1,10 @@
 // Copyright (C) 2018 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qnetworkreplywasmimpl_p.h"
 #include "qnetworkrequest.h"
 
-#include <QtCore/qtimer.h>
 #include <QtCore/qdatetime.h>
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qfileinfo.h>

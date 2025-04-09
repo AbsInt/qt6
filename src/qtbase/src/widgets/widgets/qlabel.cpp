@@ -6,6 +6,7 @@
 #include "qstyle.h"
 #include "qstyleoption.h"
 #include "qlabel_p.h"
+#include "private/qhexstring_p.h"
 #include "private/qstylesheetstyle_p.h"
 #include <qmath.h>
 
@@ -304,20 +305,19 @@ void QLabel::clear()
 void QLabel::setPixmap(const QPixmap &pixmap)
 {
     Q_D(QLabel);
-    if (!d->pixmap || d->pixmap->cacheKey() != pixmap.cacheKey()) {
-        d->clearContents();
-        d->pixmap = pixmap;
-    }
-
+    if (d->icon && d->icon->availableSizes().contains(pixmap.size()) &&
+        d->icon->pixmap(pixmap.size()).cacheKey() == pixmap.cacheKey())
+        return;
+    d->clearContents();
+    d->icon = QIcon(pixmap);
+    d->pixmapSize = pixmap.deviceIndependentSize().toSize();
     d->updateLabel();
 }
 
 QPixmap QLabel::pixmap() const
 {
     Q_D(const QLabel);
-    if (d->pixmap)
-        return *(d->pixmap);
-    return QPixmap();
+    return d->icon ? d->icon->pixmap(d->pixmapSize) : QPixmap();
 }
 
 /*!
@@ -525,9 +525,8 @@ QSize QLabelPrivate::sizeForWidth(int w) const
     int vextra = hextra;
     QFontMetrics fm = q->fontMetrics();
 
-    if (pixmap && !pixmap->isNull()) {
-        br = pixmap->rect();
-        br.setSize(pixmap->deviceIndependentSize().toSize());
+    if (icon && !icon->isNull()) {
+        br = QRect(QPoint(0, 0), pixmapSize);
 #ifndef QT_NO_PICTURE
     } else if (picture && !picture->isNull()) {
         br = picture->boundingRect();
@@ -1050,25 +1049,30 @@ void QLabel::paintEvent(QPaintEvent *)
         }
     } else
 #endif
-    if (d->pixmap && !d->pixmap->isNull()) {
-        QPixmap pix;
+    if (d->icon && !d->icon->isNull()) {
         const qreal dpr = devicePixelRatio();
-        if (d->scaledcontents || dpr != d->pixmap->devicePixelRatio()) {
-            QSize scaledSize = d->scaledcontents ? (cr.size() * dpr)
-                               : (d->pixmap->size() * (dpr / d->pixmap->devicePixelRatio()));
-            if (!d->scaledpixmap || d->scaledpixmap->size() != scaledSize) {
-                d->scaledpixmap =
-                        d->pixmap->scaled(scaledSize,
-                                          Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-                d->scaledpixmap->setDevicePixelRatio(dpr);
+        const QSize size = d->scaledcontents ? cr.size() : d->pixmapSize;
+        const auto mode = isEnabled() ? QIcon::Normal : QIcon::Disabled;
+        QPixmap pix = d->icon->pixmap(size, dpr, mode);
+        if (d->scaledcontents && pix.size() != size * dpr) {
+            const QString key = "qt_label_"_L1 % HexString<quint64>(pix.cacheKey())
+                                               % HexString<quint8>(mode)
+                                               % HexString<uint>(size.width())
+                                               % HexString<uint>(size.height())
+                                               % HexString<quint16>(qRound(dpr * 1000));
+            if (!QPixmapCache::find(key, &pix)) {
+                pix = pix.scaled(size * dpr, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+                pix.setDevicePixelRatio(dpr);
+                // using QIcon to cache the newly create pixmap is not possible
+                // because QIcon does not clear this cache (so we grow indefinitely)
+                // and also uses the newly added pixmap as starting point for new
+                // scaled pixmap which makes it very blurry.
+                // Therefore use QPixmapCache here.
+                QPixmapCache::insert(key, pix);
             }
-            pix = *d->scaledpixmap;
-        } else
-            pix = *d->pixmap;
+        }
         QStyleOption opt;
         opt.initFrom(this);
-        if (!isEnabled())
-            pix = style->generatedIconPixmap(QIcon::Disabled, pix, &opt);
         style->drawItemPixmap(&painter, cr, align, pix);
     }
 }
@@ -1266,8 +1270,8 @@ void QLabelPrivate::clearContents()
 #ifndef QT_NO_PICTURE
     picture.reset();
 #endif
-    scaledpixmap.reset();
-    pixmap.reset();
+    icon.reset();
+    pixmapSize = QSize();
 
     text.clear();
     Q_Q(QLabel);
@@ -1410,8 +1414,6 @@ void QLabel::setScaledContents(bool enable)
     if ((bool)d->scaledcontents == enable)
         return;
     d->scaledcontents = enable;
-    if (!enable)
-        d->scaledpixmap.reset();
     update(contentsRect());
 }
 

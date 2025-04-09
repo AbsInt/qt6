@@ -25,8 +25,8 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcDimmer, "qt.quick.controls.popup.dimmer")
-Q_LOGGING_CATEGORY(lcQuickPopup, "qt.quick.controls.popup")
+Q_STATIC_LOGGING_CATEGORY(lcDimmer, "qt.quick.controls.popup.dimmer")
+Q_STATIC_LOGGING_CATEGORY(lcQuickPopup, "qt.quick.controls.popup")
 
 /*!
     \qmltype Popup
@@ -774,8 +774,14 @@ bool QQuickPopupPrivate::prepareEnterTransition()
 
         QQuickOverlay *overlay = QQuickOverlay::overlay(window);
         auto *overlayPrivate = QQuickOverlayPrivate::get(overlay);
-        if (overlayPrivate->lastActiveFocusItem.isNull())
+        if (overlayPrivate->lastActiveFocusItem.isNull()) {
             overlayPrivate->lastActiveFocusItem = window->activeFocusItem();
+            // If we're moving between popups this popup may already have the
+            // active focus, in which case we don't want to restore focus to
+            // ourselves again on exit. Use the content item as a fallback.
+            if (popupItem->isAncestorOf(overlayPrivate->lastActiveFocusItem))
+                overlayPrivate->lastActiveFocusItem = window->contentItem();
+        }
 
         if (focus)
             popupItem->setFocus(true, Qt::PopupFocusReason);
@@ -855,7 +861,9 @@ void QQuickPopupPrivate::finalizeExitTransition()
             auto *overlayPrivate = QQuickOverlayPrivate::get(overlay);
             if (!contentItem->scopedFocusItem()
                 && !overlayPrivate->lastActiveFocusItem.isNull()) {
-                overlayPrivate->lastActiveFocusItem->setFocus(true, Qt::OtherFocusReason);
+                // The last active focus item may have lost focus not just for
+                // itself but for its entire focus chain, so force active focus.
+                overlayPrivate->lastActiveFocusItem->forceActiveFocus(Qt::OtherFocusReason);
             } else {
                 contentItem->setFocus(true, Qt::PopupFocusReason);
             }
@@ -1064,8 +1072,8 @@ QQuickPopup::PopupType QQuickPopupPrivate::resolvedPopupType() const
 
     // PopupType::Native is not directly supported by QQuickPopup (only by subclasses).
     // So for that case, we fall back to use PopupType::Window, if supported.
-    if (m_popupType == QQuickPopup::PopupType::Window
-        || m_popupType == QQuickPopup::PopupType::Native) {
+    if (popupType == QQuickPopup::PopupType::Window
+        || popupType == QQuickPopup::PopupType::Native) {
         if (QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::Capability::MultipleWindows))
             return QQuickPopup::PopupType::Window;
     }
@@ -1096,11 +1104,15 @@ void QQuickPopupPrivate::adjustPopupItemParentAndWindow()
         if (visible) {
             if (!popupWindow) {
                 popupWindow = new QQuickPopupWindow(q, window);
-                popupWindow->setWidth(popupItem->width() + windowInsets().left() + windowInsets().right());
-                popupWindow->setHeight(popupItem->height() + windowInsets().top() + windowInsets().bottom());
+                // Changing the visual parent can cause the popup item's implicit width/height to change.
+                // We store the initial size here first, to ensure that we're resizing the window to the correct size.
+                const qreal initialWidth = popupItem->width() + windowInsets().left() + windowInsets().right();
+                const qreal initialHeight = popupItem->height() + windowInsets().top() + windowInsets().bottom();
+                popupItem->setParentItem(popupWindow->contentItem());
+                popupWindow->resize(initialWidth, initialHeight);
                 popupWindow->setModality(modal ? Qt::ApplicationModal : Qt::NonModal);
                 popupItem->resetTitle();
-                popupWindow->setTitle(m_title);
+                popupWindow->setTitle(title);
             }
             popupItem->setParentItem(popupWindow->contentItem());
             popupItem->forceActiveFocus(Qt::PopupFocusReason);
@@ -1131,7 +1143,7 @@ void QQuickPopupPrivate::adjustPopupItemParentAndWindow()
             }
         }
 
-        popupItem->setTitle(m_title);
+        popupItem->setTitle(title);
     }
     popupItem->setVisible(visible);
 }
@@ -2385,8 +2397,6 @@ void QQuickPopup::setModal(bool modal)
         d->toggleOverlay();
     emit modalChanged();
 
-    QQuickItemPrivate::get(d->popupItem)->isTabFence = modal;
-
     if (!d->hasDim) {
         setDim(modal);
         d->hasDim = false;
@@ -2963,16 +2973,16 @@ void QQuickPopup::resetBottomInset()
 QQuickPopup::PopupType QQuickPopup::popupType() const
 {
     Q_D(const QQuickPopup);
-    return d->m_popupType;
+    return d->popupType;
 }
 
 void QQuickPopup::setPopupType(PopupType popupType)
 {
     Q_D(QQuickPopup);
-    if (d->m_popupType == popupType)
+    if (d->popupType == popupType)
         return;
 
-    d->m_popupType = popupType;
+    d->popupType = popupType;
 
     emit popupTypeChanged();
 }
@@ -3056,6 +3066,7 @@ void QQuickPopup::componentComplete()
         d->transitionManager.transitionEnter();
 
     d->complete = true;
+    d->popupItem->setObjectName(QQmlMetaType::prettyTypeName(this));
     d->popupItem->componentComplete();
 
     if (auto currentContentItem = d->popupItem->d_func()->contentItem.data()) {
@@ -3376,6 +3387,11 @@ bool QQuickPopup::setAccessibleProperty(const char *propertyName, const QVariant
 {
     Q_D(QQuickPopup);
     return d->popupItem->setAccessibleProperty(propertyName, value);
+}
+
+QQuickItem *QQuickPopup::safeAreaAttachmentItem()
+{
+    return popupItem();
 }
 
 QT_END_NAMESPACE

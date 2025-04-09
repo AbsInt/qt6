@@ -2,22 +2,19 @@
 // Copyright © 2004-2023 Unicode, Inc.
 // SPDX-License-Identifier: Unicode-3.0
 
-#ifndef QPERSIANCALENDAR_DATA_P_H
-#define QPERSIANCALENDAR_DATA_P_H
+#ifndef QJALALICALENDAR_DATA_P_H
+#define QJALALICALENDAR_DATA_P_H
 
 //
 //  W A R N I N G
 //  -------------
 //
-// This file is not part of the Qt API.  It exists for the convenience
-// of qapplication_*.cpp, qwidget*.cpp and qfiledialog.cpp.  This header
-// file may change from version to version without notice, or even be removed.
+// This file is not a normal header file.
+// It defines data tables for internal use by QJalaliCalendar.
+// It may change incompatibly between versions, or even be removed.
 //
 // We mean it.
 //
-
-#include <QtCore/private/qglobal_p.h>
-#include <QtCore/private/qcalendarbackend_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -1179,4 +1176,4 @@ static inline constexpr char16_t months_data[] = {
 
 QT_END_NAMESPACE
 
-#endif
+#endif // QJALALICALENDAR_DATA_P_H

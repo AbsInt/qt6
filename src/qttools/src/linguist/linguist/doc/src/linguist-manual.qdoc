@@ -161,7 +161,8 @@
 
         \li Run \c lupdate to incorporate any new text added to the application.
             \c lupdate synchronizes the user-visible text from the application
-            with the translations. It does not destroy any data.
+            with the translations. Existing translations in the TS file are
+            preserved.
 
         \li Run \c lrelease to read the TS files and produce the QM files used
             by the application at runtime.
@@ -260,6 +261,9 @@
     \row
         \li \c {-recursive}
         \li Recursively scan directories (default).
+    \row
+        \li \c {-warnings-are-errors}
+        \li Treat warnings as errors.
     \row
         \li \c {-I <includepath> or -I<includepath>}
         \li Look for include files in this additional location. You can specify
@@ -1302,6 +1306,9 @@
         identically spelled words with different meanings need separate
         text IDs. For example, \c {qsTrId("id-back-backstep")} differentiates
         the back-step \e {Back} from the \c id-back-not-front \e {Back}.
+
+        \li Since context names are not allowed for text-ID-based translations,
+        \QL lists the IDs in a file without context names.
 
         \li The \e {engineering English} text that you see in the user interface for
         development builds is indicated with a \c {//%} comment. If you do not

@@ -121,8 +121,8 @@ target_sources(qtquickcontrols2imaginestyleplugin
         qtquickcontrols2imaginestyleplugin.cpp
 )
 
-target_link_libraries(qtquickcontrols2imaginestyleplugin
-    PRIVATE
+qt_internal_extend_target(qtquickcontrols2imaginestyleplugin
+    LIBRARIES
         Qt::QuickControls2Private
 )
 

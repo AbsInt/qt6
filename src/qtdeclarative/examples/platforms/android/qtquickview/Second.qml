@@ -13,65 +13,56 @@ Rectangle {
     Text {
         id: title
 
-        text: "Second QML component"
+        text: "Second QML View"
         color: "white"
-        font.pixelSize: 72
-        fontSizeMode: Text.VerticalFit
-        // Height is calculated based on display orientation
-        // from Screen height, dividing numbers are based on what seem
-        // to look good on most displays
-        height: Screen.width > Screen.height ? Screen.height / 8 : (Screen.height / 2) / 8
+        font.pointSize: 72
+        width: parent.width
         font.bold: true
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: 5
+        wrapMode: Text.Wrap
         horizontalAlignment: Text.AlignHCenter
+        anchors {
+            top: parent.top
+            topMargin: 50
+            horizontalCenter: parent.horizontalCenter
+        }
     }
 
-    Text {
-        id: gridText
+    Column {
+        anchors.centerIn: parent
+        width: parent.width
+        spacing: 30
 
-        text: "QML Grid type"
-        fontSizeMode: Text.VerticalFit
-        font.pixelSize: 48
-        color: "white"
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: title.bottom
-        anchors.topMargin: 100
-    }
+        Grid {
+            id: grid
 
-    Grid {
-        id: grid
+            columns: 3
+            rows: 3
+            spacing: 50
+            rotation: gridRotation
+            anchors.horizontalCenter: parent.horizontalCenter
 
-        columns: 3
-        rows: 3
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: gridText.bottom
-        anchors.topMargin: 50
-        spacing: 50
-        rotation: gridRotation
+            Repeater {
+                id: repeater
 
-        Repeater {
-            id: repeater
+                model: [
+                    "green",
+                    "lightblue",
+                    "grey",
+                    "red",
+                    "black",
+                    "white",
+                    "pink",
+                    "yellow",
+                    "orange"
+                ]
 
-            model: [
-                "green",
-                "lightblue",
-                "grey",
-                "red",
-                "black",
-                "white",
-                "pink",
-                "yellow",
-                "orange"
-            ]
+                Rectangle {
+                    required property string modelData
 
-            Rectangle {
-                required property string modelData
-
-                height: 50
-                width: 50
-                color: modelData
+                    height: 50
+                    width: 50
+                    color: modelData
+                }
             }
         }
     }

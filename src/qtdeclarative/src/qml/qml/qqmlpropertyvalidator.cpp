@@ -65,7 +65,9 @@ struct BindingFinder
 };
 
 QVector<QQmlError> QQmlPropertyValidator::validateObject(
-        int objectIndex, const QV4::CompiledData::Binding *instantiatingBinding, bool populatingValueTypeGroupProperty) const
+        int objectIndex, const QV4::CompiledData::Binding *instantiatingBinding,
+        bool populatingValueTypeGroupProperty,
+        QQmlPropertyResolver::RevisionCheck checkRevision) const
 {
     const QV4::CompiledData::Object *obj = compilationUnit->objectAt(objectIndex);
     for (auto it = obj->inlineComponentsBegin(); it != obj->inlineComponentsEnd(); ++it) {
@@ -163,10 +165,9 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
         if (!name.isEmpty()) {
             if (bindingFlags & QV4::CompiledData::Binding::IsSignalHandlerExpression
                     || bindingFlags & QV4::CompiledData::Binding::IsSignalHandlerObject) {
-                pd = propertyResolver.signal(name, &notInRevision);
+                pd = propertyResolver.signal(name, &notInRevision, checkRevision);
             } else {
-                pd = propertyResolver.property(name, &notInRevision,
-                                               QQmlPropertyResolver::CheckRevision);
+                pd = propertyResolver.property(name, &notInRevision, checkRevision);
             }
 
             if (notInRevision) {
@@ -214,9 +215,12 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
                     = pd
                       && QQmlMetaType::metaObjectForValueType(pd->propType())
                       && !binding->hasFlag(QV4::CompiledData::Binding::IsOnAssignment);
-            const QVector<QQmlError> subObjectValidatorErrors
-                    = validateObject(binding->value.objectIndex, binding,
-                                     populatingValueTypeGroupProperty);
+
+            // As this is a sub-object, its properties are qualified. We can ignore revisions.
+            const QVector<QQmlError> subObjectValidatorErrors = validateObject(
+                    binding->value.objectIndex, binding, populatingValueTypeGroupProperty,
+                    QQmlPropertyResolver::IgnoreRevision);
+
             if (!subObjectValidatorErrors.isEmpty())
                 return subObjectValidatorErrors;
         }
@@ -343,7 +347,8 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
             return recordError(obj->locationOfIdProperty, tr("Invalid use of id property with a value type"));
 
         bool notInRevision = false;
-        collectedBindingPropertyData << propertyResolver.property(QStringLiteral("id"), &notInRevision);
+        collectedBindingPropertyData
+                << propertyResolver.property(QStringLiteral("id"), &notInRevision, checkRevision);
     }
 
     if (customParser && !customBindings.isEmpty()) {
@@ -742,10 +747,7 @@ QQmlError QQmlPropertyValidator::validateObjectBinding(const QQmlPropertyData *p
                                                       .arg(typeName));
     } else if (propType == QMetaType::fromType<QQmlScriptString>()) {
         return qQmlCompileError(binding->valueLocation, tr("Invalid property assignment: script expected"));
-    } else if (QQmlMetaType::isValueType(property->propType())) {
-        return qQmlCompileError(binding->location, tr("Cannot assign value of type \"%1\" to property \"%2\", expecting an object")
-                                                      .arg(rhsType()).arg(propertyName));
-    } else {
+    } else if (!QQmlMetaType::isValueType(property->propType())) {
         // We want to use the raw metaObject here as the raw metaobject is the
         // actual property type before we applied any extensions that might
         // effect the properties on the type, but don't effect assignability

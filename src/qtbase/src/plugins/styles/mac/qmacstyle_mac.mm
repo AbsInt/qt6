@@ -437,7 +437,7 @@ static bool isInMacUnifiedToolbarArea(QWindow *window, int windowY)
         return false; // Not Cocoa platform plugin.
 
     typedef bool (*TestContentBorderPositionFunction)(QWindow *, int);
-    return (reinterpret_cast<TestContentBorderPositionFunction>(function))(window, windowY);
+    return (reinterpret_cast<TestContentBorderPositionFunction>(QFunctionPointer(function)))(window, windowY);
 }
 
 
@@ -3027,7 +3027,7 @@ void QMacStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPai
         }
         d->drawNSViewInRect(box, adjustedRect, p, ^(CGContextRef ctx, const CGRect &rect) {
 #if QT_CONFIG(tabwidget)
-            if (QTabWidget *tabWidget = qobject_cast<QTabWidget *>(opt->styleObject))
+            if (qobject_cast<QTabWidget *>(opt->styleObject))
                 clipTabBarFrame(opt, this, ctx);
 #endif
             CGContextTranslateCTM(ctx, 0, rect.origin.y + rect.size.height);
@@ -4090,7 +4090,10 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
         d->drawFocusRing(p, opt->rect, hMargin, vMargin, QMacStylePrivate::CocoaControl(ct, cs));
         break; }
     case CE_MenuEmptyArea:
-        // Skip: PE_PanelMenu fills in everything
+        // for QComboBoxListView
+        if (qobject_cast<const QAbstractItemView *>(w))
+            proxy()->drawPrimitive(PE_PanelMenu, opt, p, w);
+        // otherwise, PE_PanelMenu has already drawn everything
         break;
     case CE_MenuItem:
     case CE_MenuHMargin:

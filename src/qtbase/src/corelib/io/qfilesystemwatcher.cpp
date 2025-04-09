@@ -9,7 +9,6 @@
 #include <qfileinfo.h>
 #include <qloggingcategory.h>
 #include <qset.h>
-#include <qtimer.h>
 
 #if (defined(Q_OS_LINUX) || defined(Q_OS_QNX)) && QT_CONFIG(inotify)
 #define USE_INOTIFY
@@ -33,7 +32,7 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
-Q_LOGGING_CATEGORY(lcWatcher, "qt.core.filesystemwatcher")
+Q_STATIC_LOGGING_CATEGORY(lcWatcher, "qt.core.filesystemwatcher")
 
 QFileSystemWatcherEngine *QFileSystemWatcherPrivate::createNativeEngine(QObject *parent)
 {

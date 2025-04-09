@@ -158,10 +158,8 @@ enum class DomType {
     RegionComments, // DomItems have attached RegionComments; can attach comments to fine grained
                     // "regions" in a DomItem; like the default keyword of a property definition
     AstComments, // hash-table from AST node to commented element
-    FileLocations, // mapping from DomItem to file location ### REVISIT: try to move out of
-                   // hierarchy?
-    UpdatedScriptExpression, // used in writeOut method when formatting changes ### Revisit: try to
-                             // move out of DOM hierarchy
+    FileLocationsInfo, // mapping from DomItem to file location ### REVISIT: try to move out of
+                       // hierarchy?
 
     // convenience collecting types
     PropertyInfo, // not a DOM Item, just a convenience class
@@ -179,7 +177,7 @@ enum class DomType {
     // supporting objects
     LoadInfo, // owning, used inside DomEnvironment ### REVISIT: move out of hierarchy
     ErrorMessage, // wrapped
-    AttachedInfo, // owning
+    FileLocationsNode, // owning
 
     // Dom top level
     DomEnvironment, // a consistent view of modules, types, files, etc.
@@ -308,13 +306,9 @@ Q_ENUM_NS(FilterUpOptions)
 
 enum class WriteOutCheck {
     None = 0x0,
-    UpdatedDomCompare = 0x1,
-    UpdatedDomStable = 0x2,
     Reparse = 0x4,
     ReparseCompare = 0x8,
     ReparseStable = 0x10,
-    DumpOnFailure = 0x20,
-    All = 0x3F,
     Default = Reparse | ReparseCompare | ReparseStable
 };
 Q_ENUM_NS(WriteOutCheck)

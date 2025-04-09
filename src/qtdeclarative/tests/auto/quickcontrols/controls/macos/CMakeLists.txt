@@ -13,18 +13,25 @@ file(GLOB_RECURSE test_data_glob
     ${CMAKE_CURRENT_SOURCE_DIR}/../data/tst_*)
 list(APPEND test_data ${test_data_glob})
 
+set(controls_data ${CMAKE_CURRENT_SOURCE_DIR}/../data)
+
 qt_internal_add_test(tst_macos
     GUI
     QMLTEST
     SOURCES
         tst_macos.cpp
     DEFINES
-        TST_CONTROLS_DATA="${CMAKE_CURRENT_SOURCE_DIR}/../data"
+        TST_CONTROLS_DATA="${controls_data}"
     LIBRARIES
         Qt::Gui
         Qt::QuickControls2
     TESTDATA ${test_data}
 )
+
+# Make sure qml import scanner finds the qml files when building against a static Qt build.
+# By default it only scans the current source directory.
+set_target_properties(tst_macos PROPERTIES
+    QT_QML_IMPORT_SCANNER_EXTRA_ROOT_PATHS "${controls_data}")
 
 # Make the QML files available to Creator's locator.
 target_sources(tst_macos

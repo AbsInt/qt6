@@ -7,7 +7,7 @@
 #include <QtQuickControls2/private/qquickstyleplugin_p.h>
 #include <QtQuickTemplates2/private/qquicktheme_p.h>
 
-#include "qquickfluentwinui3focusframe_p.h"
+#include <QtQuickControls2FluentWinUI3StyleImpl/private/qquickfluentwinui3focusframe_p.h>
 
 QT_BEGIN_NAMESPACE
 

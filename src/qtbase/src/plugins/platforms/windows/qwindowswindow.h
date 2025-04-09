@@ -33,7 +33,7 @@ struct QWindowsGeometryHint
     static QMargins frame(const QWindow *w, HWND hwnd);
     static QMargins frame(const QWindow *w, const QRect &geometry,
                           DWORD style, DWORD exStyle);
-    static bool handleCalculateSize(const QMargins &customMargins, const MSG &msg, LRESULT *result);
+    static bool handleCalculateSize(const QWindow *window, const QMargins &customMargins, const MSG &msg, LRESULT *result);
     static void applyToMinMaxInfo(const QWindow *w, const QScreen *screen,
                                   const QMargins &margins, MINMAXINFO *mmi);
     static void applyToMinMaxInfo(const QWindow *w, const QMargins &margins,
@@ -82,6 +82,7 @@ struct QWindowsWindowData
     QMargins fullFrameMargins; // Do not use directly for windows, see FrameDirty.
     QMargins customMargins;    // User-defined, additional frame for NCCALCSIZE
     HWND hwnd = nullptr;
+    HWND hwndTitlebar = nullptr;
     bool embedded = false;
     bool hasFrame = false;
 
@@ -223,6 +224,7 @@ public:
     void setGeometry(const QRect &rect) override;
     QRect geometry() const override { return m_data.geometry; }
     QRect normalGeometry() const override;
+    QMargins safeAreaMargins() const override;
     QRect restoreGeometry() const { return m_data.restoreGeometry; }
     void updateRestoreGeometry();
 
@@ -241,6 +243,7 @@ public:
     void setParent(const QPlatformWindow *window) override;
 
     void setWindowTitle(const QString &title) override;
+    QString windowTitle() const override;
     void raise() override { raise_sys(); }
     void lower() override { lower_sys(); }
 
@@ -290,7 +293,6 @@ public:
     void handleMoved();
     void handleResized(int wParam, LPARAM lParam);
     void handleHidden();
-    void handleCompositionSettingsChanged();
     void handleDpiScaledSize(WPARAM wParam, LPARAM lParam, LRESULT *result);
     void handleDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam);
     void handleDpiChangedAfterParent(HWND hwnd);
@@ -302,6 +304,7 @@ public:
     static QWindow *topLevelOf(QWindow *w);
     static inline void *userDataOf(HWND hwnd);
     static inline void setUserDataOf(HWND hwnd, void *ud);
+    static bool isWindowArranged(HWND hwnd);
 
     static bool hasNoNativeFrame(HWND hwnd, Qt::WindowFlags flags);
     static bool setWindowLayered(HWND hwnd, Qt::WindowFlags flags, bool hasAlpha, qreal opacity);
@@ -311,6 +314,7 @@ public:
     void releaseDC();
     void getSizeHints(MINMAXINFO *mmi) const;
     bool handleNonClientHitTest(const QPoint &globalPos, LRESULT *result) const;
+    void updateCustomTitlebar();
 
 #ifndef QT_NO_CURSOR
     CursorHandlePtr cursor() const { return m_cursor; }
@@ -353,6 +357,10 @@ public:
 
     bool isFrameless() const { return m_data.flags.testFlag(Qt::FramelessWindowHint); }
 
+    void requestUpdate() override;
+
+    void transitionAnimatedCustomTitleBar();
+
 private:
     inline void show_sys() const;
     inline QWindowsWindowData setWindowFlags_sys(Qt::WindowFlags wt, unsigned flags = 0) const;
@@ -377,6 +385,8 @@ private:
     mutable unsigned m_flags = WithinCreate;
     HDC m_hdc = nullptr;
     Qt::WindowStates m_windowState = Qt::WindowNoState;
+    bool m_windowWasArranged = false;
+    QString m_windowTitle;
     qreal m_opacity = 1;
 #ifndef QT_NO_CURSOR
     CursorHandlePtr m_cursor;
@@ -397,6 +407,9 @@ private:
 #endif
     static bool m_borderInFullScreenDefault;
     static bool m_inSetgeometry;
+
+    qsizetype m_vsyncServiceCallbackId = 0;
+    QAtomicInt m_vsyncUpdatePending;
 };
 
 #ifndef QT_NO_DEBUG_STREAM

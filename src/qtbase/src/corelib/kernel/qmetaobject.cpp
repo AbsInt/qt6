@@ -136,10 +136,21 @@ static inline QByteArrayView stringDataView(const QMetaObject *mo, int index)
     return {string, qsizetype(length)};
 }
 
+static inline QByteArray stringData(const QMetaObject *mo, QByteArrayView view)
+{
+    if (QMetaObjectPrivate::get(mo)->flags & AllocatedMetaObject) {
+        // allocate memory, in case the meta object disappears
+        return view.toByteArray();
+    }
+
+    // don't allocate memory: we assume that the meta object remains loaded
+    // forever (modern C++ libraries can't be unloaded from memory anyway)
+    return QByteArray::fromRawData(view.data(), view.size());
+}
+
 static inline QByteArray stringData(const QMetaObject *mo, int index)
 {
-    const auto view = stringDataView(mo, index);
-    return QByteArray::fromRawData(view.data(), view.size());
+    return stringData(mo, stringDataView(mo, index));
 }
 
 static inline QByteArrayView typeNameFromTypeInfo(const QMetaObject *mo, uint typeInfo)
@@ -180,7 +191,7 @@ public:
     { return static_cast<const QMetaMethodPrivate *>(q); }
 
     inline QByteArray signature() const;
-    inline QByteArray name() const;
+    inline QByteArrayView name() const noexcept;
     inline int typesDataIndex() const;
     inline const char *rawReturnTypeName() const;
     inline int returnType() const;
@@ -191,10 +202,10 @@ public:
     inline void getParameterTypes(int *types) const;
     inline const QtPrivate::QMetaTypeInterface *returnMetaTypeInterface() const;
     inline const QtPrivate::QMetaTypeInterface *const *parameterMetaTypeInterfaces() const;
-    inline QByteArray parameterTypeName(int index) const;
+    inline QByteArrayView parameterTypeName(int index) const noexcept;
     inline QList<QByteArray> parameterTypes() const;
     inline QList<QByteArray> parameterNames() const;
-    inline QByteArray tag() const;
+    inline const char *tag() const;
     inline int ownMethodIndex() const;
     inline int ownConstructorMethodIndex() const;
 
@@ -641,17 +652,18 @@ bool QMetaObjectPrivate::methodMatch(const QMetaObject *m, const QMetaMethod &me
     if (priv->parameterCount() != argc)
         return false;
 
-    if (stringData(m, data.name()) != name)
+    if (QMetaMethodPrivate::get(&method)->name() != name)
         return false;
 
     const QtPrivate::QMetaTypeInterface * const *ifaces = priv->parameterMetaTypeInterfaces();
     int paramsIndex = data.parameters() + 1;
     for (int i = 0; i < argc; ++i) {
         uint typeInfo = m->d.data[paramsIndex + i];
-        if (int id = types[i].type()) {
-            if (id == QMetaType(ifaces[i]).id())
+        QMetaType mt = types[i].metaType();
+        if (mt.isValid()) {
+            if (mt == QMetaType(ifaces[i]))
                 continue;
-            if (id != typeFromTypeInfo(m, typeInfo))
+            if (mt.id() != typeFromTypeInfo(m, typeInfo))
                 return false;
         } else {
             if (types[i].name() == QMetaType(ifaces[i]).name())
@@ -1907,10 +1919,13 @@ QByteArray QMetaMethodPrivate::signature() const
     return result;
 }
 
-QByteArray QMetaMethodPrivate::name() const
+QByteArrayView QMetaMethodPrivate::name() const noexcept
 {
     Q_ASSERT(priv(mobj->d.data)->revision >= 7);
-    return stringData(mobj, data.name());
+    QByteArrayView name = stringDataView(mobj, data.name());
+    if (qsizetype colon = name.lastIndexOf(':'); colon > 0)
+        return name.sliced(colon + 1);
+    return name;
 }
 
 int QMetaMethodPrivate::typesDataIndex() const
@@ -2021,10 +2036,10 @@ void QMetaMethodPrivate::getParameterTypes(int *types) const
     }
 }
 
-QByteArray QMetaMethodPrivate::parameterTypeName(int index) const
+QByteArrayView QMetaMethodPrivate::parameterTypeName(int index) const noexcept
 {
     int paramsIndex = parametersDataIndex();
-    return typeNameFromTypeInfo(mobj, mobj->d.data[paramsIndex + index]).toByteArray();
+    return typeNameFromTypeInfo(mobj, mobj->d.data[paramsIndex + index]);
 }
 
 QList<QByteArray> QMetaMethodPrivate::parameterTypes() const
@@ -2053,10 +2068,10 @@ QList<QByteArray> QMetaMethodPrivate::parameterNames() const
     return list;
 }
 
-QByteArray QMetaMethodPrivate::tag() const
+const char *QMetaMethodPrivate::tag() const
 {
     Q_ASSERT(priv(mobj->d.data)->revision >= 7);
-    return stringData(mobj, data.tag());
+    return rawStringData(mobj, data.tag());
 }
 
 int QMetaMethodPrivate::ownMethodIndex() const
@@ -2098,6 +2113,21 @@ QByteArray QMetaMethod::name() const
 {
     if (!mobj)
         return QByteArray();
+    // ### Qt 7: change the return type and make noexcept
+    return stringData(mobj, QMetaMethodPrivate::get(this)->name());
+}
+
+/*!
+    \since 6.9
+
+    Returns the name of this method.
+    The returned QByteArrayView is valid as long as the meta-object of
+    the class to which the method belongs is valid.
+
+    \sa name
+ */
+QByteArrayView QMetaMethod::nameView() const
+{
     return QMetaMethodPrivate::get(this)->name();
 }
 
@@ -2227,7 +2257,8 @@ QByteArray QMetaMethod::parameterTypeName(int index) const
 {
     if (!mobj || index < 0 || index >= parameterCount())
         return {};
-    return QMetaMethodPrivate::get(this)->parameterTypeName(index);
+    // ### Qt 7: change the return type and make noexcept
+    return stringData(mobj, QMetaMethodPrivate::get(this)->parameterTypeName(index));
 }
 
 /*!
@@ -2244,7 +2275,11 @@ QList<QByteArray> QMetaMethod::parameterNames() const
 
 
 /*!
-    Returns the return type name of this method.
+    Returns the return type name of this method. If this method is a
+    constructor, this function returns an empty string (constructors have no
+    return types).
+
+    \note In Qt 7, this function will return a null pointer for constructors.
 
     \sa returnType(), QMetaType::type()
 */
@@ -2252,6 +2287,10 @@ const char *QMetaMethod::typeName() const
 {
     if (!mobj)
         return nullptr;
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
+    if (methodType() == QMetaMethod::Constructor)
+        return "";
+#endif
     return QMetaMethodPrivate::get(this)->rawReturnTypeName();
 }
 
@@ -2283,7 +2322,7 @@ const char *QMetaMethod::tag() const
 {
     if (!mobj)
         return nullptr;
-    return QMetaMethodPrivate::get(this)->tag().constData();
+    return QMetaMethodPrivate::get(this)->tag();
 }
 
 
@@ -2332,13 +2371,19 @@ int QMetaMethod::revision() const
 {
     if (!mobj)
         return 0;
-    if (data.flags() & MethodRevisioned) {
+    if ((data.flags() & MethodRevisioned) == 0)
+        return 0;
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
+    if (priv(mobj->d.data)->revision < 13) {
+        // revision number located elsewhere
         int offset = priv(mobj->d.data)->methodData
                      + priv(mobj->d.data)->methodCount * Data::Size
                      + QMetaMethodPrivate::get(this)->ownMethodIndex();
         return mobj->d.data[offset];
     }
-    return 0;
+#endif
+
+    return mobj->d.data[data.parameters() - 1];
 }
 
 /*!
@@ -3139,15 +3184,91 @@ const char *QMetaEnum::key(int index) const
     Returns the value with the given \a index; or returns -1 if there
     is no such value.
 
-    \sa keyCount(), key(), keyToValue()
+    If this is an enumeration with a 64-bit underlying type (see is64Bit()),
+    this function returns the low 32-bit portion of the value. Use value64() to
+    obtain the full value instead.
+
+    \sa value64(), keyCount(), key(), keyToValue()
 */
 int QMetaEnum::value(int index) const
 {
+    return value64(index).value_or(-1);
+}
+
+enum EnumExtendMode {
+    SignExtend = -1,
+    ZeroExtend,
+    Use64Bit = 64
+};
+Q_DECL_PURE_FUNCTION static inline EnumExtendMode enumExtendMode(const QMetaEnum &e)
+{
+    if (e.is64Bit())
+        return Use64Bit;
+    if (e.isFlag())
+        return ZeroExtend;
+    if (e.metaType().flags() & QMetaType::IsUnsignedEnumeration)
+        return ZeroExtend;
+    return SignExtend;
+}
+
+static constexpr bool isEnumValueSuitable(quint64 value, EnumExtendMode mode)
+{
+    if (mode == Use64Bit)
+        return true;        // any value is suitable
+
+    // 32-bit QMetaEnum
+    if (mode == ZeroExtend)
+        return value == uint(value);
+    return value == quint64(int(value));
+}
+
+template <typename... Mode> inline
+quint64 QMetaEnum::value_helper(uint index, Mode... modes) const noexcept
+{
+    static_assert(sizeof...(Mode) < 2);
+    if constexpr (sizeof...(Mode) == 0) {
+        return value_helper(index, enumExtendMode(*this));
+    } else if constexpr (sizeof...(Mode) == 1) {
+        auto mode = (modes, ...);
+        quint64 value = mobj->d.data[data.data() + 2U * index + 1];
+        if (mode > 0)
+            value |= quint64(mobj->d.data[data.data() + 2U * data.keyCount() + index]) << 32;
+        else if (mode < 0)
+            value = int(value);     // sign extend to 64-bit
+        return value;
+    }
+}
+
+/*!
+    \since 6.9
+
+    Returns the value with the given \a index if it exists; or returns a
+    \c{std::nullopt} if it doesn't.
+
+//! [qmetaenum-32bit-signextend-64bit]
+    This function always sign-extends the value of 32-bit enumerations to 64
+    bits, if their underlying type is signed (e.g., \c int, \c short). In most
+    cases, this is the expected behavior.
+
+    A notable exception is for flag values that have bit 31 set, like
+    0x8000'0000, because some compilers (such as Microsoft Visual Studio), do
+    not automatically switch to an unsigned underlying type. To avoid this
+    problem, explicitly specify the underlying type in the \c enum declaration.
+
+    \note For QMetaObjects compiled prior to Qt 6.6, this function always
+    sign-extends.
+//! [qmetaenum-32bit-signextend-64bit]
+
+    \sa keyCount(), key(), keyToValue(), is64Bit()
+*/
+std::optional<quint64> QMetaEnum::value64(int index) const
+{
     if (!mobj)
-        return 0;
-    if (index >= 0 && index < int(data.keyCount()))
-        return mobj->d.data[data.data() + 2 * index + 1];
-    return -1;
+        return std::nullopt;
+    if (index < 0 || index >= int(data.keyCount()))
+        return std::nullopt;
+
+    return value_helper(index);
 }
 
 /*!
@@ -3177,6 +3298,20 @@ bool QMetaEnum::isScoped() const
     if (!mobj)
         return false;
     return data.flags() & EnumIsScoped;
+}
+
+/*!
+    \since 6.9
+
+    Returns \c true if the underlying type of this enumeration is 64 bits wide.
+
+    \sa value64()
+*/
+bool QMetaEnum::is64Bit() const
+{
+    if (!mobj)
+        return false;
+    return data.flags() & EnumIs64Bit;
 }
 
 /*!
@@ -3228,25 +3363,44 @@ static bool isScopeMatch(QByteArrayView scope, const QMetaEnum *e)
 
     For flag types, use keysToValue().
 
-    \sa valueToKey(), isFlag(), keysToValue()
+    If this is a 64-bit enumeration (see is64Bit()), this function returns the
+    low 32-bit portion of the value. Use keyToValue64() to obtain the full value
+    instead.
+
+    \sa keyToValue64, valueToKey(), isFlag(), keysToValue(), is64Bit()
 */
 int QMetaEnum::keyToValue(const char *key, bool *ok) const
 {
+    auto value = keyToValue64(key);
     if (ok != nullptr)
-        *ok = false;
-    if (!mobj || !key)
-        return -1;
+        *ok = value.has_value();
+    return int(value.value_or(-1));
+}
 
+/*!
+    \since 6.9
+
+    Returns the integer value of the given enumeration \a key, or \c
+    std::nullopt if \a key is not defined.
+
+    For flag types, use keysToValue64().
+
+    \include qmetaobject.cpp qmetaenum-32bit-signextend-64bit
+
+    \sa valueToKey(), isFlag(), keysToValue64()
+*/
+std::optional<quint64> QMetaEnum::keyToValue64(const char *key) const
+{
+    if (!mobj || !key)
+        return std::nullopt;
     const auto [scope, enumKey] = parse_scope(QLatin1StringView(key));
     for (int i = 0; i < int(data.keyCount()); ++i) {
         if ((!scope || isScopeMatch(*scope, this))
             && enumKey == stringDataView(mobj, mobj->d.data[data.data() + 2 * i])) {
-            if (ok != nullptr)
-                *ok = true;
-            return mobj->d.data[data.data() + 2 * i + 1];
+            return value_helper(i);
         }
     }
-    return -1;
+    return std::nullopt;
 }
 
 /*!
@@ -3257,13 +3411,19 @@ int QMetaEnum::keyToValue(const char *key, bool *ok) const
 
     \sa isFlag(), valueToKeys()
 */
-const char *QMetaEnum::valueToKey(int value) const
+const char *QMetaEnum::valueToKey(quint64 value) const
 {
     if (!mobj)
         return nullptr;
-    for (int i = 0; i < int(data.keyCount()); ++i)
-        if (value == (int)mobj->d.data[data.data() + 2 * i + 1])
+
+    EnumExtendMode mode = enumExtendMode(*this);
+    if (!isEnumValueSuitable(value, mode))
+        return nullptr;
+
+    for (int i = 0; i < int(data.keyCount()); ++i) {
+        if (value == value_helper(i, mode))
             return rawStringData(mobj, mobj->d.data[data.data() + 2 * i]);
+    }
     return nullptr;
 }
 
@@ -3320,39 +3480,57 @@ static bool parseEnumFlags(QByteArrayView v, QVarLengthArray<QByteArrayView, 10>
     If \a keys is not defined, *\a{ok} is set to false; otherwise
     *\a{ok} is set to true.
 
-    \sa isFlag(), valueToKey(), valueToKeys()
+    If this is a 64-bit enumeration (see is64Bit()), this function returns the
+    low 32-bit portion of the value. Use keyToValue64() to obtain the full value
+    instead.
+
+    \sa keysToValue64(), isFlag(), valueToKey(), valueToKeys(), is64Bit()
 */
 int QMetaEnum::keysToValue(const char *keys, bool *ok) const
 {
+    auto value = keysToValue64(keys);
     if (ok != nullptr)
-        *ok = false;
-    if (!mobj || !keys)
-        return -1;
+        *ok = value.has_value();
+    return int(value.value_or(-1));
+}
 
-    auto lookup = [&] (QByteArrayView key) -> std::optional<int> {
+/*!
+    Returns the value derived from combining together the values of the \a keys
+    using the OR operator, or \c std::nullopt if \a keys is not defined. Note
+    that the strings in \a keys must be '|'-separated.
+
+    \include qmetaobject.cpp qmetaenum-32bit-signextend-64bit
+
+    \sa isFlag(), valueToKey(), valueToKeys()
+*/
+std::optional<quint64> QMetaEnum::keysToValue64(const char *keys) const
+{
+    if (!mobj || !keys)
+        return std::nullopt;
+
+    EnumExtendMode mode = enumExtendMode(*this);
+    auto lookup = [&] (QByteArrayView key) -> std::optional<quint64> {
         for (int i = data.keyCount() - 1; i >= 0; --i) {
             if (key == stringDataView(mobj, mobj->d.data[data.data() + 2*i]))
-                return mobj->d.data[data.data() + 2*i + 1];
+                return value_helper(i, mode);
         }
         return std::nullopt;
     };
 
-    int value = 0;
+    quint64 value = 0;
     QVarLengthArray<QByteArrayView, 10> list;
     const bool r = parseEnumFlags(QByteArrayView{keys}, list);
     if (!r)
-        return -1;
+        return std::nullopt;
     for (const auto &untrimmed : list) {
         const auto parsed = parse_scope(untrimmed.trimmed());
         if (parsed.scope && !isScopeMatch(*parsed.scope, this))
-            return -1; // wrong type name in qualified name
+            return std::nullopt; // wrong type name in qualified name
         if (auto thisValue = lookup(parsed.key))
             value |= *thisValue;
         else
-            return -1; // no such enumerator
+            return std::nullopt; // no such enumerator
     }
-    if (ok != nullptr)
-        *ok = true;
     return value;
 }
 
@@ -3382,18 +3560,28 @@ void join_reversed(String &s, const Container &c, Separator sep)
     Returns a byte array of '|'-separated keys that represents the
     given \a value.
 
+    \note Passing a 64-bit \a value to an enumeration whose underlying type is
+    32-bit (that is, if is64Bit() returns \c false) results in an empty string
+    being returned.
+
     \sa isFlag(), valueToKey(), keysToValue()
 */
-QByteArray QMetaEnum::valueToKeys(int value) const
+QByteArray QMetaEnum::valueToKeys(quint64 value) const
 {
     QByteArray keys;
     if (!mobj)
         return keys;
+
+    EnumExtendMode mode = enumExtendMode(*this);
+    if (!isEnumValueSuitable(value, mode))
+        return keys;
+
     QVarLengthArray<QByteArrayView, sizeof(int) * CHAR_BIT> parts;
-    int v = value;
+    quint64 v = value;
+
     // reverse iterate to ensure values like Qt::Dialog=0x2|Qt::Window are processed first.
     for (int i = data.keyCount() - 1; i >= 0; --i) {
-        int k = mobj->d.data[data.data() + 2 * i + 1];
+        quint64 k = value_helper(i, mode);
         if ((k != 0 && (v & k) == k) || (k == value)) {
             v = v & ~k;
             parts.push_back(stringDataView(mobj, mobj->d.data[data.data() + 2 * i]));
@@ -3414,7 +3602,10 @@ QMetaEnum::QMetaEnum(const QMetaObject *mobj, int index)
 
 int QMetaEnum::Data::index(const QMetaObject *mobj) const
 {
-    return (d - mobj->d.data - priv(mobj->d.data)->enumeratorData) / Size;
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
+#  warning "Consider changing Size to a power of 2"
+#endif
+    return (unsigned(d - mobj->d.data) - priv(mobj->d.data)->enumeratorData) / Size;
 }
 
 /*!
@@ -3552,7 +3743,10 @@ QMetaType QMetaProperty::metaType() const
 
 int QMetaProperty::Data::index(const QMetaObject *mobj) const
 {
-    return (d - mobj->d.data - priv(mobj->d.data)->propertyData) / Size;
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
+#  warning "Consider changing Size to a power of 2"
+#endif
+    return (unsigned(d - mobj->d.data) - priv(mobj->d.data)->propertyData) / Size;
 }
 
 /*!
@@ -3780,13 +3974,13 @@ bool QMetaProperty::write(QObject *object, QVariant &&v) const
             // Assigning a string to a property of type Q_ENUMS (instead of Q_ENUM)
             // means the QMetaType has no associated QMetaObject, so it can't
             // do the conversion (see qmetatype.cpp:convertToEnum()).
-            bool ok;
-            if (isFlagType())
-                v = QVariant(menum.keysToValue(v.toByteArray(), &ok));
-            else
-                v = QVariant(menum.keyToValue(v.toByteArray(), &ok));
-            if (!ok)
-                return false;
+            std::optional value = isFlagType() ? menum.keysToValue64(v.toByteArray())
+                                               : menum.keyToValue64(v.toByteArray());
+            if (value)
+                v = QVariant(qlonglong(*value));
+
+            // If the key(s)ToValue64 call failed, the convert() call below
+            // gives QMetaType one last chance.
         }
         if (!v.isValid()) {
             if (isResettable())
@@ -3986,7 +4180,7 @@ int QMetaProperty::notifySignalIndex() const
     if (idx >= 0)
         return idx + m->methodOffset();
     // try 1-arg signal
-    QArgumentType argType(typeId());
+    QArgumentType argType(metaType());
     idx = QMetaObjectPrivate::indexOfMethodRelative<MethodSignal>(&m, signalName, 1, &argType);
     if (idx >= 0)
         return idx + m->methodOffset();

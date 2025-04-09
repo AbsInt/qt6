@@ -141,8 +141,9 @@ public Q_SLOTS:
     bool sendRST_STREAM(Http2::Http2Error errorCode);
     bool sendHEADERS(const HPack::HttpHeader &headers, bool endStream,
                      quint8 priority = DefaultPriority);
-    void sendDATA(QIODevice *device, bool endStream);
-    void sendDATA(QNonContiguousByteDevice *device, bool endStream);
+    bool sendDATA(const QByteArray &payload, bool endStream);
+    bool sendDATA(QIODevice *device, bool endStream);
+    bool sendDATA(QNonContiguousByteDevice *device, bool endStream);
     void sendWINDOW_UPDATE(quint32 delta);
 
 private Q_SLOTS:
@@ -243,11 +244,13 @@ public:
         return nullptr;
     }
 
-    void close() { sendGOAWAY(Http2::HTTP2_NO_ERROR); }
+    void close(Http2::Http2Error error = Http2::HTTP2_NO_ERROR) { sendGOAWAY(error); }
 
     bool isGoingAway() const noexcept { return m_goingAway; }
 
     quint32 maxConcurrentStreams() const noexcept { return m_maxConcurrentStreams; }
+    quint32 peerMaxConcurrentStreams() const noexcept { return m_peerMaxConcurrentStreams; }
+
     quint32 maxHeaderListSize() const noexcept { return m_maxHeaderListSize; }
 
     bool isUpgradedConnection() const noexcept { return m_upgradedConnection; }
@@ -262,6 +265,8 @@ Q_SIGNALS:
     void errorOccurred(Http2::Http2Error errorCode, const QString &errorString);
     void receivedGOAWAY(Http2::Http2Error errorCode, quint32 lastStreamID);
     void receivedEND_STREAM(quint32 streamID);
+    void incomingStreamErrorOccured(CreateStreamError error);
+
 public Q_SLOTS:
     bool sendPing();
     bool sendPing(QByteArrayView data);
@@ -272,7 +277,7 @@ private:
     friend class QHttp2Stream;
     [[nodiscard]] QIODevice *getSocket() const { return qobject_cast<QIODevice *>(parent()); }
 
-    QH2Expected<QHttp2Stream *, QHttp2Connection::CreateStreamError> createStreamInternal();
+    QH2Expected<QHttp2Stream *, QHttp2Connection::CreateStreamError> createLocalStreamInternal();
     QHttp2Stream *createStreamInternal_impl(quint32 streamID);
 
     bool isInvalidStream(quint32 streamID) noexcept;
@@ -357,10 +362,14 @@ private:
 
     // This is how many concurrent streams our peer allows us, 100 is the
     // initial value, can be updated by the server's SETTINGS frame(s):
-    quint32 m_maxConcurrentStreams = Http2::maxConcurrentStreams;
+    quint32 m_peerMaxConcurrentStreams = Http2::maxConcurrentStreams;
     // While we allow sending SETTTINGS_MAX_CONCURRENT_STREAMS to limit our peer,
     // it's just a hint and we do not actually enforce it (and we can continue
     // sending requests and creating streams while maxConcurrentStreams allows).
+
+    // This is how many concurrent streams we allow our peer to create
+    // This value is specified in QHttp2Configuration when creating the connection
+    quint32 m_maxConcurrentStreams = Http2::maxConcurrentStreams;
 
     // This is our (client-side) maximum possible receive window size, we set
     // it in a ctor from QHttp2Configuration, it does not change after that.
@@ -390,6 +399,8 @@ private:
     bool m_goingAway = false;
     bool pushPromiseEnabled = false;
     quint32 m_lastIncomingStreamID = Http2::connectionStreamID;
+
+    bool m_prefaceSent = false;
 
     // Server-side only:
     bool m_waitingForClientPreface = false;

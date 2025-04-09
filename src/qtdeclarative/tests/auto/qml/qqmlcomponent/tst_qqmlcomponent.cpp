@@ -133,6 +133,8 @@ private slots:
     void boundComponent();
     void loadFromModule_data();
     void loadFromModule();
+    void loadFromModuleSyncAndAsync_data();
+    void loadFromModuleSyncAndAsync();
     void loadFromModuleLifecycle();
     void loadFromModuleThenCreateWithIncubator();
     void loadFromModuleFailures_data();
@@ -717,7 +719,7 @@ void tst_qqmlcomponent::relativeUrl_data()
 {
     QTest::addColumn<QUrl>("url");
 
-#if !defined(Q_OS_ANDROID)
+#if !defined(Q_OS_ANDROID) && !defined(BUILTIN_TESTDATA)
     QTest::addRow("fromLocalFile") << QUrl::fromLocalFile("data/QtObjectComponent.qml");
     QTest::addRow("fromLocalFileHash") << QUrl::fromLocalFile("data/QtObjectComponent#2.qml");
     QTest::addRow("constructor") << QUrl("data/QtObjectComponent.qml");
@@ -1130,8 +1132,12 @@ void tst_qqmlcomponent::testSetInitialProperties()
 void tst_qqmlcomponent::createInsideJSModule()
 {
     QQmlEngine engine;
+    QString prefix;
+#if defined(Q_OS_ANDROID) || defined(BUILTIN_TESTDATA)
+    prefix = "qrc:/";
+#endif
     QQmlComponent component(&engine, testFileUrl("jsmodule/test.qml"));
-    QScopedPointer<QObject> root(component.create());
+    QScopedPointer<QObject> root(component.createWithInitialProperties({{"prefix", prefix}}));
     QVERIFY2(root, qPrintable(component.errorString()));
     QVERIFY(root->property("ok").toBool());
 }
@@ -1358,6 +1364,26 @@ void tst_qqmlcomponent::loadFromModule()
     const char *name = object->metaObject()->className();
     QVERIFY2(classNameMatcher.match(name).hasMatch(),
              name);
+}
+
+void tst_qqmlcomponent::loadFromModuleSyncAndAsync_data()
+{
+    loadFromModule_data();
+}
+
+void tst_qqmlcomponent::loadFromModuleSyncAndAsync()
+{
+    QFETCH(QString, uri);
+    QFETCH(QString, typeName);
+
+    QQmlEngine engine;
+    QQmlComponent syncAndAsync(&engine);
+    syncAndAsync.loadFromModule(uri, typeName, QQmlComponent::Asynchronous);
+    QVERIFY(syncAndAsync.isLoading());
+    syncAndAsync.loadFromModule(uri, typeName, QQmlComponent::PreferSynchronous);
+    QVERIFY2(syncAndAsync.isReady(), qPrintable(syncAndAsync.errorString()));
+    std::unique_ptr<QObject> object(syncAndAsync.create());
+    QVERIFY(object);
 }
 
 void tst_qqmlcomponent::loadFromModuleLifecycle()

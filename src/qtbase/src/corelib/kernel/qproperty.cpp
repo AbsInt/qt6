@@ -14,7 +14,7 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcQPropertyBinding, "qt.qproperty.binding");
+Q_STATIC_LOGGING_CATEGORY(lcQPropertyBinding, "qt.qproperty.binding");
 
 using namespace QtPrivate;
 
@@ -1176,6 +1176,7 @@ QString QPropertyBindingError::description() const
 
 /*!
    \fn template<typename T> QBindable<T>::QBindable(QObject *obj, const char *property)
+   \since 6.5
 
    Constructs a QBindable for the \l Q_PROPERTY \a property on \a obj. The property must
    have a notify signal but does not need to have \c BINDABLE in its \c Q_PROPERTY
@@ -1202,6 +1203,7 @@ QString QPropertyBindingError::description() const
 
 /*!
    \fn template<typename T> QBindable<T>::QBindable(QObject *obj, const QMetaProperty &property)
+   \since 6.5
 
    See \l QBindable::QBindable(QObject *obj, const char *property)
 */

@@ -102,6 +102,29 @@ public:
 
     static QQmlDelegateModelAttached *qmlAttachedProperties(QObject *obj);
 
+    template<typename View, typename ViewPrivate>
+    static QQmlDelegateModel *createForView(View *q, ViewPrivate *d)
+    {
+        Q_ASSERT(d->model.isNull());
+        QQmlDelegateModel *delegateModel = new QQmlDelegateModel(qmlContext(q), q);
+        d->model = delegateModel;
+        d->ownModel = true;
+        if (d->componentComplete)
+            delegateModel->componentComplete();
+        return delegateModel;
+    }
+
+    template<typename View, typename ViewPrivate>
+    static void applyDelegateChangeOnView(View *q, ViewPrivate *d)
+    {
+        if (d->explicitDelegate) {
+            qmlWarning(q) << "Explicitly set delegate is externally overridden";
+            d->explicitDelegate = false;
+        }
+
+        Q_EMIT q->delegateChanged();
+    }
+
 Q_SIGNALS:
     void filterGroupChanged();
     void defaultGroupsChanged();

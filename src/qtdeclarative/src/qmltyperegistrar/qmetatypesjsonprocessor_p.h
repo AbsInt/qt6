@@ -123,6 +123,7 @@ struct Method
     bool isCloned = false;
     bool isJavaScriptFunction = false;
     bool isConstructor = false;
+    bool isConst = false;
 };
 
 struct Enum

@@ -68,7 +68,7 @@ Item {
 
 \section2 What happened?
 You tried to instantiate a QML object from an
-\l{QQmlEngine::QML_UNCREATABLE}{uncreatable type}.
+\l{QML_UNCREATABLE}{uncreatable type}.
 
 \section2 Why is this bad?
 Uncreatable types are specifically marked to forbid instantiations.

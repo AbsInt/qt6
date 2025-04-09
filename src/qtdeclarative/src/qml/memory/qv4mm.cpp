@@ -18,7 +18,6 @@
 #include <QMap>
 #include <QScopedValueRollback>
 
-#include <iostream>
 #include <cstdlib>
 #include <algorithm>
 #include "qv4profiling_p.h"
@@ -56,16 +55,11 @@
 #include <pthread_np.h>
 #endif
 
-Q_LOGGING_CATEGORY(lcGcStats, "qt.qml.gc.statistics")
-Q_DECLARE_LOGGING_CATEGORY(lcGcStats)
-Q_LOGGING_CATEGORY(lcGcAllocatorStats, "qt.qml.gc.allocatorStats")
-Q_DECLARE_LOGGING_CATEGORY(lcGcAllocatorStats)
-Q_LOGGING_CATEGORY(lcGcStateTransitions, "qt.qml.gc.stateTransitions")
-Q_DECLARE_LOGGING_CATEGORY(lcGcStateTransitions)
-Q_LOGGING_CATEGORY(lcGcForcedRuns, "qt.qml.gc.forcedRuns")
-Q_DECLARE_LOGGING_CATEGORY(lcGcForcedRuns)
-Q_LOGGING_CATEGORY(lcGcStepExecution, "qt.qml.gc.stepExecution")
-Q_DECLARE_LOGGING_CATEGORY(lcGcStepExecution)
+Q_STATIC_LOGGING_CATEGORY(lcGcStats, "qt.qml.gc.statistics")
+Q_STATIC_LOGGING_CATEGORY(lcGcAllocatorStats, "qt.qml.gc.allocatorStats")
+Q_STATIC_LOGGING_CATEGORY(lcGcStateTransitions, "qt.qml.gc.stateTransitions")
+Q_STATIC_LOGGING_CATEGORY(lcGcForcedRuns, "qt.qml.gc.forcedRuns")
+Q_STATIC_LOGGING_CATEGORY(lcGcStepExecution, "qt.qml.gc.stepExecution")
 
 using namespace WTF;
 

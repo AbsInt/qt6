@@ -3,16 +3,25 @@
 
 package org.qtproject.qt.android;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
+
+import android.graphics.Insets;
+
+import android.view.DisplayCutout;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+
+import android.os.Build;
 
 import java.util.HashMap;
 
+@SuppressLint("ViewConstructor")
 class QtWindow extends QtLayout implements QtSurfaceInterface {
     private View m_surfaceContainer;
     private View m_nativeView;
@@ -23,7 +32,9 @@ class QtWindow extends QtLayout implements QtSurfaceInterface {
     private final QtInputConnection.QtInputConnectionListener m_inputConnectionListener;
 
     private static native void setSurface(int windowId, Surface surface);
+    private static native void safeAreaMarginsChanged(Insets insets, int id);
     static native void windowFocusChanged(boolean hasFocus, int id);
+    static native void updateWindows();
 
     QtWindow(Context context, boolean isForeignWindow, QtWindow parentWindow,
                     QtInputConnection.QtInputConnectionListener listener)
@@ -47,11 +58,9 @@ class QtWindow extends QtLayout implements QtSurfaceInterface {
             // TODO QTBUG-122552 - Service keyboard input not implemented
             m_editText = new QtEditText(context, listener);
             m_editText.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            QtNative.runAction(() -> {
-                addView(m_editText,
-                        new QtLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                                                  ViewGroup.LayoutParams.WRAP_CONTENT));
-            });
+            LayoutParams layoutParams = new LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            QtNative.runAction(() -> addView(m_editText, layoutParams));
         } else {
             m_editText = null;
         }
@@ -66,6 +75,47 @@ class QtWindow extends QtLayout implements QtSurfaceInterface {
                 });
             m_gestureDetector.setIsLongpressEnabled(true);
         });
+
+        if (getContext() instanceof QtActivityBase) {
+            setOnApplyWindowInsetsListener((view, insets) -> {
+                Insets safeInsets;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    int types = WindowInsets.Type.displayCutout() | WindowInsets.Type.systemBars();
+                    safeInsets = insets.getInsets(types);
+                } else {
+                    int left = 0;
+                    int top = 0;
+                    int right = 0;
+                    int bottom = 0;
+
+                    int visibility = view.getSystemUiVisibility();
+                    if ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
+                        left = insets.getSystemWindowInsetLeft();
+                        top = insets.getSystemWindowInsetTop();
+                        right = insets.getSystemWindowInsetRight();
+                        bottom = insets.getSystemWindowInsetBottom();
+                    }
+
+                    // Android 9 and 10 emulators don't seem to be able
+                    // to handle this, but let's have the logic here anyway
+                    DisplayCutout cutout = insets.getDisplayCutout();
+                    if (cutout != null) {
+                        left = Math.max(left, cutout.getSafeInsetLeft());
+                        top = Math.max(top, cutout.getSafeInsetTop());
+                        right = Math.max(right, cutout.getSafeInsetRight());
+                        bottom = Math.max(bottom, cutout.getSafeInsetBottom());
+                    }
+
+                    safeInsets = Insets.of(left, top, right, bottom);
+                }
+
+                QtNative.runAction(() -> safeAreaMarginsChanged(safeInsets, getId()));
+
+                return insets;
+            });
+
+            QtNative.runAction(() -> requestApplyInsets());
+        }
     }
 
     @UsedFromNativeCode
@@ -91,7 +141,6 @@ class QtWindow extends QtLayout implements QtSurfaceInterface {
         if (m_editText != null && m_inputConnectionListener != null)
             m_inputConnectionListener.onEditTextChanged(m_editText);
 
-        event.setLocation(event.getX() + getX(), event.getY() + getY());
         QtInputDelegate.sendTouchEvent(event, getId());
         m_gestureDetector.onTouchEvent(event);
         return true;

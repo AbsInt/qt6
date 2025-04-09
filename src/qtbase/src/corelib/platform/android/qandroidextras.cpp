@@ -17,6 +17,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace QtJniTypes;
+
 class QAndroidParcelPrivate
 {
 public:
@@ -63,13 +65,7 @@ void QAndroidParcelPrivate::writeData(const QByteArray &data) const
     if (data.isEmpty())
         return;
 
-    QJniEnvironment().checkAndClearExceptions();
-    QJniEnvironment env;
-    jbyteArray array = env->NewByteArray(data.size());
-    env->SetByteArrayRegion(array, 0, data.length(),
-                            reinterpret_cast<const jbyte*>(data.constData()));
-    handle.callMethod<void>("writeByteArray", "([B)V", array);
-    env->DeleteLocalRef(array);
+    handle.callMethod<void>("writeByteArray", data);
 }
 
 void QAndroidParcelPrivate::writeBinder(const QAndroidBinder &binder) const
@@ -493,7 +489,7 @@ public:
 
     static QAndroidActivityResultReceiverPrivate *get(QAndroidActivityResultReceiver *publicObject)
     {
-        return publicObject->d.data();
+        return publicObject->d.get();
     }
 };
 
@@ -517,7 +513,7 @@ QAndroidActivityResultReceiver::QAndroidActivityResultReceiver()
     : d(new QAndroidActivityResultReceiverPrivate)
 {
     d->q = this;
-    QtAndroidPrivate::registerActivityResultListener(d.data());
+    QtAndroidPrivate::registerActivityResultListener(d.get());
 }
 
 /*!
@@ -525,7 +521,7 @@ QAndroidActivityResultReceiver::QAndroidActivityResultReceiver()
 */
 QAndroidActivityResultReceiver::~QAndroidActivityResultReceiver()
 {
-    QtAndroidPrivate::unregisterActivityResultListener(d.data());
+    QtAndroidPrivate::unregisterActivityResultListener(d.get());
 }
 
 /*!
@@ -768,15 +764,7 @@ QAndroidIntent::QAndroidIntent(const QJniObject &packageContext, const char *cla
  */
 void QAndroidIntent::putExtra(const QString &key, const QByteArray &data)
 {
-    QJniEnvironment().checkAndClearExceptions();
-    QJniEnvironment env;
-    jbyteArray array = env->NewByteArray(data.size());
-    env->SetByteArrayRegion(array, 0, data.length(),
-                            reinterpret_cast<const jbyte*>(data.constData()));
-    m_handle.callObjectMethod("putExtra", "(Ljava/lang/String;[B)Landroid/content/Intent;",
-                              QJniObject::fromString(key).object(), array);
-    env->DeleteLocalRef(array);
-    QJniEnvironment().checkAndClearExceptions();
+    m_handle.callMethod<QtJniTypes::Intent>("putExtra", key, data);
 }
 
 /*!
@@ -784,19 +772,7 @@ void QAndroidIntent::putExtra(const QString &key, const QByteArray &data)
  */
 QByteArray QAndroidIntent::extraBytes(const QString &key)
 {
-    QJniEnvironment().checkAndClearExceptions();
-    auto array = m_handle.callObjectMethod("getByteArrayExtra", "(Ljava/lang/String;)[B",
-                                           QJniObject::fromString(key).object());
-    if (!array.isValid() || !array.object())
-        return QByteArray();
-    QJniEnvironment env;
-    auto sz = env->GetArrayLength(jarray(array.object()));
-    QByteArray res(sz, Qt::Initialization::Uninitialized);
-    env->GetByteArrayRegion(jbyteArray(array.object()), 0, sz,
-                            reinterpret_cast<jbyte *>(res.data()));
-    QJniEnvironment().checkAndClearExceptions();
-
-    return res;
+    return m_handle.callMethod<QByteArray>("getByteArrayExtra", key);
 }
 
 /*!
@@ -1055,8 +1031,6 @@ void QAndroidActivityCallbackResultReceiver::registerCallback(
 
 // Permissions API
 
-static const char qtNativeClassName[] = "org/qtproject/qt/android/QtNative";
-
 QtAndroidPrivate::PermissionResult resultFromAndroid(jint value)
 {
     return value == 0 ? QtAndroidPrivate::Authorized : QtAndroidPrivate::Denied;
@@ -1077,12 +1051,13 @@ static int nextRequestCode()
     \internal
 
     This function is called when the result of the permission request is available.
-    Once a permission is requested, the result is braodcast by the OS and listened
+    Once a permission is requested, the result is broadcast by the OS and listened
     to by QtActivity which passes it to C++ through a native JNI method call.
  */
-static void sendRequestPermissionsResult(JNIEnv *env, jobject *obj, jint requestCode,
-                                         jobjectArray permissions, jintArray grantResults)
+static void sendRequestPermissionsResult(JNIEnv *env, jclass obj, jint requestCode,
+                                         const QJniArray<int> &grantResults)
 {
+    Q_UNUSED(env);
     Q_UNUSED(obj);
 
     QMutexLocker locker(&g_pendingPermissionRequestsMutex);
@@ -1096,18 +1071,18 @@ static void sendRequestPermissionsResult(JNIEnv *env, jobject *obj, jint request
     g_pendingPermissionRequests->erase(it);
     locker.unlock();
 
-    const int size = env->GetArrayLength(permissions);
-    std::unique_ptr<jint[]> results(new jint[size]);
-    env->GetIntArrayRegion(grantResults, 0, size, results.get());
-
-    for (int i = 0 ; i < size; ++i) {
-        QtAndroidPrivate::PermissionResult result = resultFromAndroid(results[i]);
-        request->addResult(result, i);
-    }
+    request->addResults([grantResults](){
+        QList<QtAndroidPrivate::PermissionResult> results(grantResults.size(),
+                                                          Qt::Uninitialized);
+        for (qsizetype i = 0; i < grantResults.size(); ++i)
+            results[i] = resultFromAndroid(grantResults.at(i));
+        return results;
+    }());
 
     QtAndroidPrivate::releaseAndroidDeadlockProtector();
     request->finish();
 }
+Q_DECLARE_JNI_NATIVE_METHOD(sendRequestPermissionsResult)
 
 QFuture<QtAndroidPrivate::PermissionResult>
 requestPermissionsInternal(const QStringList &permissions)
@@ -1199,10 +1174,7 @@ QtAndroidPrivate::checkPermission(const QString &permission)
 {
     QtAndroidPrivate::PermissionResult result = Denied;
     if (!permission.isEmpty()) {
-        auto res = QJniObject::callStaticMethod<jint>(qtNativeClassName,
-                                                      "checkSelfPermission",
-                                                      "(Ljava/lang/String;)I",
-                                                      QJniObject::fromString(permission).object());
+        auto res = QtNative::callStaticMethod<jint>("checkSelfPermission", permission);
         result = resultFromAndroid(res);
     }
     return QtFuture::makeReadyValueFuture(result);
@@ -1213,12 +1185,9 @@ bool QtAndroidPrivate::registerPermissionNatives(QJniEnvironment &env)
     if (QtAndroidPrivate::androidSdkVersion() < 23)
         return true;
 
-    const JNINativeMethod methods[] = {
-        {"sendRequestPermissionsResult", "(I[Ljava/lang/String;[I)V",
-         reinterpret_cast<void *>(sendRequestPermissionsResult)
-        }};
-
-    return env.registerNativeMethods(qtNativeClassName, methods, 1);
+    return env.registerNativeMethods<QtNative>({
+        Q_JNI_NATIVE_METHOD(sendRequestPermissionsResult)
+    });
 }
 
 QT_END_NAMESPACE

@@ -1,4 +1,4 @@
-// Copyright (C) 2024 The Qt Company Ltd.
+// Copyright (C) 2025 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 // Up-to-date with Qt Creator 14.0.0
@@ -875,7 +875,7 @@
 */
 /*!
     \externalpage https://doc.qt.io/qtcreator/creator-developing-android.html
-    \title \QC:Developing for Android
+    \title \QC: Developing for Android
 */
 /*!
     \externalpage https://doc.qt.io/qtcreator/creator-how-to-set-android-preferences.html

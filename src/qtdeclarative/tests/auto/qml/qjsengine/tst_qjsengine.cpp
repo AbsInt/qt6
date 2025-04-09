@@ -336,6 +336,16 @@ private slots:
 
     void multiMatchingRegularExpression();
 
+#if QT_CONFIG(icu)
+    void toLocaleLowerCase_data();
+    void toLocaleLowerCase();
+    void toLocaleLowerStringWithQLocale();
+
+    void toLocaleUpperCase_data();
+    void toLocaleUpperCase();
+    void toLocaleUpperStringWithQLocale();
+#endif
+
 public:
     Q_INVOKABLE QJSValue throwingCppMethod1();
     Q_INVOKABLE void throwingCppMethod2();
@@ -6448,7 +6458,6 @@ void tst_QJSEngine::emptyStringLiteralEvaluatesToANonNullString() {
   QVERIFY(result.toString().isEmpty());
 }
 
-
 static unsigned stringListFetchCount = 0;
 class StringListProvider : public QObject
 {
@@ -6479,6 +6488,7 @@ void tst_QJSEngine::consoleLogSequence()
     engine.evaluate(QStringLiteral("console.log(object.strings)"));
     QCOMPARE(stringListFetchCount, 1);
 }
+
 
 void tst_QJSEngine::generatorFunctionInTailCallPosition() {
   QJSEngine engine;
@@ -6621,6 +6631,241 @@ void tst_QJSEngine::multiMatchingRegularExpression()
     QVERIFY(result2.isString());
     QCOMPARE(result2.toString(), "4F15 9D7A D402 55D9 4A5B 7EB9 AAAC D740 8C79 245D "_L1);
 }
+
+#if QT_CONFIG(icu)
+void tst_QJSEngine::toLocaleLowerCase_data()
+{
+    QTest::addColumn<QString>("expected");
+    QTest::addColumn<QString>("toBeLocaleLowerCased");
+    QTest::addColumn<QString>("locales");
+    QTest::addColumn<bool>("valid");
+    QTest::addColumn<QJSValue::ErrorType>("errorType");
+    QTest::addColumn<QString>("expectedFailureComment");
+    // As there are no "NoError", the default error is set to GenericError
+    // We only check the error if the call is not valid
+    QTest::addRow("In Turkic (tr), U+0307 preceded by Capital Letter I is dropped.")
+            << u"abci"_s << u"\"aBcI\u0307\""_s << u"\"tr\""_s << true << QJSValue::GenericError
+            << "";
+    QTest::addRow("In Turkic (az), U+0307 preceded by Capital Letter I is dropped.")
+            << u"abci"_s << u"\"aBcI\u0307\""_s << u"\"az\""_s << true << QJSValue::GenericError
+            << "";
+    QTest::addRow("U+0307 preceded by Capital Letter I is dropped.")
+            << u"abci"_s << u"\"aBcI\u0307\""_s << u"[\"tr\", \"en\"]"_s << true
+            << QJSValue::GenericError << "";
+    QTest::addRow("concatened string.") << u"abcde"_s << u"(\"a\" + \"b\" + \"cde\")"_s << u""_s
+                                        << true << QJSValue::GenericError << "";
+    QTest::addRow("concatened string in filipino.")
+            << u"abcde"_s << u"(\"a\" + \"b\" + \"cde\")"_s << u"\"fil\""_s << true
+            << QJSValue::GenericError << "";
+    QTest::addRow("concatened string in structurally valid language.")
+            << u"abcde"_s << u"(\"a\" + \"b\" + \"cde\")"_s << u"\"longlang\""_s << true
+            << QJSValue::GenericError << "";
+    QTest::addRow("english locale keeps U+0307.")
+            << u"abci\u0307"_s << u"\"aBcI\u0307\""_s << u"\"en\""_s << true
+            << QJSValue::GenericError << "";
+    QTest::addRow("english (en-GB) locale keeps U+0307.")
+            << u"abci\u0307"_s << u"\"aBcI\u0307\""_s << u"\"en-GB\""_s << true
+            << QJSValue::GenericError << "";
+    QTest::addRow("klingon locale.") << u"abci\u0307"_s << u"\"aBcI\u0307\""_s << u"\"i-klingon\""_s
+                                     << true << QJSValue::GenericError << "";
+    QTest::addRow("enochian locale.")
+            << u"abci\u0307"_s << u"\"aBcI\u0307\""_s << u"\"i-enochian\""_s << true
+            << QJSValue::GenericError << "";
+    QTest::addRow("x-foobar locale.") << u"abci\u0307"_s << u"\"aBcI\u0307\""_s << u"\"x-foobar\""_s
+                                      << true << QJSValue::GenericError << "";
+    QTest::addRow("zh-Hant-TW locale.")
+            << u"abci\u0307"_s << u"\"aBcI\u0307\""_s << u"\"zh-Hant-TW\""_s << true
+            << QJSValue::GenericError << "";
+    // cases not handled
+    QTest::addRow("String ArrayBuffer error.")
+            << u"[object arraybuffer]"_s << u"(new String(new ArrayBuffer()))"_s << u"\"fil\""_s
+            << false << QJSValue::GenericError << "Should return [object arraybuffer]";
+
+    QTest::addRow("undefined in Intl error.")
+            << u"abc"_s << u"abc"_s << u"Intl.GetDefaultLocale"_s << false << QJSValue::GenericError
+            << "Intl.GetDefaultLocale is undefined, however, as Intl is not defined in the tests, "
+               "we fail due to it";
+}
+
+void tst_QJSEngine::toLocaleLowerCase()
+{
+    QFETCH(QString, expected);
+    QFETCH(QString, toBeLocaleLowerCased);
+    QFETCH(QString, locales);
+    QFETCH(bool, valid);
+    QFETCH(QJSValue::ErrorType, errorType);
+    QFETCH(QString, expectedFailureComment);
+
+    QJSEngine engine;
+    engine.installExtensions(QJSEngine::ConsoleExtension);
+
+    const QString program =
+            QString::fromUtf8("%1.toLocaleLowerCase(%2);").arg(toBeLocaleLowerCased, locales);
+
+    const QJSValue result = engine.evaluate(program);
+
+    if (!expectedFailureComment.isEmpty()) {
+        QEXPECT_FAIL("", expectedFailureComment.toLocal8Bit().data(), Abort);
+    }
+    QVERIFY(expectedFailureComment.isEmpty());
+    QCOMPARE(!result.isError(), valid);
+    if (valid) {
+        QVERIFY(result.isString());
+        QCOMPARE(result.toString(), expected);
+    }
+    if (!valid) {
+        QCOMPARE(result.errorType(), errorType);
+    }
+}
+
+void tst_QJSEngine::toLocaleLowerStringWithQLocale()
+{
+    QQmlEngine engine;
+    QQmlComponent comp(&engine);
+    comp.setData(R"(
+        import QtQml 2.15
+        QtObject {
+            id: root
+            property string loweredCase
+            property string loweredCaseArray
+            Component.onCompleted: () => {
+                const myLocale = Qt.locale("tr_TR")
+                root.loweredCase = "aBcI\u0307".toLocaleLowerCase(myLocale);
+                root.loweredCaseArray = "aBcI\u0307".toLocaleLowerCase([myLocale]);
+            }
+        }
+    )", QUrl("testdata"));
+    QScopedPointer<QObject> root {comp.create()};
+    const auto error = comp.errorString();
+    if (!error.isEmpty())
+        qDebug() << error;
+    QVERIFY(root);
+    QCOMPARE(root->property("loweredCase").toString(), QLatin1String("abci"));
+    QCOMPARE(root->property("loweredCaseArray").toString(), QLatin1String("abci"));
+}
+
+void tst_QJSEngine::toLocaleUpperCase_data()
+{
+    QTest::addColumn<QString>("expected");
+    QTest::addColumn<QString>("toBeLocaleUpperCased");
+    QTest::addColumn<QString>("locales");
+    QTest::addColumn<bool>("valid");
+    QTest::addColumn<QJSValue::ErrorType>("errorType");
+    QTest::addColumn<QString>("expectedFailureComment");
+    // As there are no "NoError", the default error is set to GenericError
+    // We only check the error if the call is not valid
+    QTest::addRow("OneByte input with buffer size increase")
+            << u"ABCSS"_s << u"\"abCß\""_s << u"\"tr\""_s << true << QJSValue::GenericError << "";
+    QTest::addRow("concatened string.") << u"ABCDE"_s << u"(\"a\" + \"b\" + \"cde\")"_s << u""_s
+                                        << true << QJSValue::GenericError << "";
+    QTest::addRow("concatened string in filipino.")
+            << u"ABCDE"_s << u"(\"a\" + \"b\" + \"cde\")"_s << u"\"fil\""_s << true
+            << QJSValue::GenericError << "";
+    QTest::addRow("concatened string in structurally valid language.")
+            << u"ABCDE"_s << u"(\"a\" + \"b\" + \"cde\")"_s << u"\"longlang\""_s << true
+            << QJSValue::GenericError << "";
+    QTest::addRow("english locale keeps U+0307.")
+            << u"ABCI\u0307"_s << u"\"aBcI\u0307\""_s << u"\"en\""_s << true
+            << QJSValue::GenericError << "";
+    QTest::addRow("english (en-GB) locale keeps U+0307.")
+            << u"ABCI\u0307"_s << u"\"aBcI\u0307\""_s << u"\"en-GB\""_s << true
+            << QJSValue::GenericError << "";
+
+    // Greek uppercasing: not covered by intl402/String/*, yet. Tonos (U+0301) and
+    // other diacritic marks are dropped.  See
+    // http://bugs.icu-project.org/trac/ticket/5456#comment:19 for more examples.
+    // See also http://bugs.icu-project.org/trac/ticket/12845 .
+    QTest::addRow("Greek uppercasing.")
+            << u"A"_s << u"\"α\u0301\""_s << u"\"el-GR\""_s << true << QJSValue::GenericError
+            << "Greek uppercasing: not covered by intl402/String/*, yet. Tonos (U+0301) and other "
+               "diacritic marks are dropped. See "
+               "http://bugs.icu-project.org/trac/ticket/5456#comment:19 for more examples. See "
+               "also http://bugs.icu-project.org/trac/ticket/12845";
+    QTest::addRow("Greek uppercasing 2.")
+            << u"A"_s << u"\"α\u0301\""_s << u"\"el-Grek\""_s << true << QJSValue::GenericError
+            << "Greek uppercasing: not covered by intl402/String/*, yet. Tonos (U+0301) and other "
+               "diacritic marks are dropped. See "
+               "http://bugs.icu-project.org/trac/ticket/5456#comment:19 for more examples. See "
+               "also http://bugs.icu-project.org/trac/ticket/12845";
+    QTest::addRow("Greek uppercasing 3.")
+            << u"A"_s << u"\"α\u0301\""_s << u"\"el-Grek-GR\""_s << true << QJSValue::GenericError
+            << "Greek uppercasing: not covered by intl402/String/*, yet. Tonos (U+0301) and other "
+               "diacritic marks are dropped. See "
+               "http://bugs.icu-project.org/trac/ticket/5456#comment:19 for more examples. See "
+               "also http://bugs.icu-project.org/trac/ticket/12845";
+    QTest::addRow("Greek uppercasing 4.") << u"ΡΩΜΕΪΚΑ"_s << u"\"ρωμέικα\""_s << u"\"el\""_s << true
+                                          << QJSValue::GenericError << "";
+    QTest::addRow("In other locales, U+0301 is preserved.")
+            << u"Α\u0301Ο\u0301Υ\u0301Ω\u0301"_s << u"\"α\u0301ο\u0301υ\u0301ω\u0301\""_s
+            << u"\"en\""_s << true << QJSValue::GenericError << "";
+    // cases not handled
+    QTest::addRow("String ArrayBuffer error.")
+            << u"[OBJECT ARRAYBUFFER]"_s << u"(new String(new ArrayBuffer()))"_s << u"\"fil\""_s
+            << false << QJSValue::GenericError << "Should return [OBJECT ARRAYBUFFER]";
+
+    QTest::addRow("undefined in Intl error.")
+            << u"abc"_s << u"abc"_s << u"Intl.GetDefaultLocale"_s << false << QJSValue::GenericError
+            << "Intl.GetDefaultLocale is undefined, however, as Intl is not defined in the tests, "
+               "we fail due to it";
+}
+
+void tst_QJSEngine::toLocaleUpperCase()
+{
+    QFETCH(QString, expected);
+    QFETCH(QString, toBeLocaleUpperCased);
+    QFETCH(QString, locales);
+    QFETCH(bool, valid);
+    QFETCH(QJSValue::ErrorType, errorType);
+    QFETCH(QString, expectedFailureComment);
+
+    QJSEngine engine;
+    engine.installExtensions(QJSEngine::ConsoleExtension);
+
+    const QString program =
+            QString::fromUtf8("%1.toLocaleUpperCase(%2);").arg(toBeLocaleUpperCased, locales);
+
+    const QJSValue result = engine.evaluate(program);
+
+    if (!expectedFailureComment.isEmpty()) {
+        QEXPECT_FAIL("", expectedFailureComment.toLocal8Bit().data(), Abort);
+    }
+    QVERIFY(expectedFailureComment.isEmpty());
+    QCOMPARE(!result.isError(), valid);
+    if (valid) {
+        QVERIFY(result.isString());
+        QCOMPARE(result.toString(), expected);
+    }
+    if (!valid) {
+        QCOMPARE(result.errorType(), errorType);
+    }
+}
+
+void tst_QJSEngine::toLocaleUpperStringWithQLocale()
+{
+    QQmlEngine engine;
+    QQmlComponent comp(&engine);
+    comp.setData(R"(
+        import QtQml 2.15
+        QtObject {
+            id: root
+            property string upperedCase
+            property string upperedCaseArray
+            Component.onCompleted: () => {
+                const myLocale = Qt.locale("tr_TR")
+                root.upperedCase = "abCß".toLocaleUpperCase(myLocale);
+                root.upperedCaseArray = "abCß".toLocaleUpperCase([myLocale]);
+            }
+        }
+    )", QUrl("testdata"));
+    QScopedPointer<QObject> root {comp.create()};
+    const auto error = comp.errorString();
+    if (!error.isEmpty())
+        qDebug() << error;
+    QVERIFY(root);
+    QCOMPARE(root->property("upperedCase").toString(), QLatin1String("ABCSS"));
+    QCOMPARE(root->property("upperedCaseArray").toString(), QLatin1String("ABCSS"));
+}
+#endif
 
 QTEST_MAIN(tst_QJSEngine)
 

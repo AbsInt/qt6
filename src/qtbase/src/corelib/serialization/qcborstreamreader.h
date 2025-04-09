@@ -11,6 +11,8 @@
 #include <QtCore/qstring.h>
 #include <QtCore/qstringview.h>
 
+#include <memory>
+
 QT_REQUIRE_CONFIG(cborstreamreader);
 
 /* X11 headers use these values too, but as defines */
@@ -194,16 +196,11 @@ private:
     friend QCborStreamReaderPrivate;
     friend class QCborContainerPrivate;
     quint64 value64;
-    QScopedPointer<QCborStreamReaderPrivate> d;
+    std::unique_ptr<QCborStreamReaderPrivate> d;
     quint8 type_;
     quint8 reserved[3] = {};
 };
 
 QT_END_NAMESPACE
-
-#if defined(QT_X11_DEFINES_FOUND)
-#  define True  1
-#  define False 0
-#endif
 
 #endif // QCBORSTREAMREADER_H

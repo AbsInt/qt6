@@ -25,7 +25,8 @@ qt_internal_add_qml_module(Qml
     URI "QML"
     VERSION "1.0"
     DESIGNER_SUPPORTED
-    __QT_INTERNAL_SYSTEM_MODULE
+    __QT_INTERNAL_SYSTEM_MODULE # This module includes the JavaScript root object
+    __QT_INTERNAL_STATIC_MODULE # This module is never "unused" where it's imported
     PLUGIN_TYPES qmltooling
     NO_PLUGIN
     SOURCES
@@ -219,6 +220,7 @@ qt_internal_add_qml_module(Qml
         jsruntime/qv4typedarray.cpp jsruntime/qv4typedarray_p.h
         jsruntime/qv4urlobject.cpp jsruntime/qv4urlobject_p.h
         jsruntime/qv4value.cpp jsruntime/qv4value_p.h
+        jsruntime/qv4variantassociationobject.cpp jsruntime/qv4variantassociationobject_p.h
         jsruntime/qv4variantobject.cpp jsruntime/qv4variantobject_p.h
         jsruntime/qv4vme_moth.cpp jsruntime/qv4vme_moth_p.h
         jsruntime/qv4vtable_p.h
@@ -246,7 +248,7 @@ qt_internal_add_qml_module(Qml
         qml/ftw/qprimefornumbits_p.h
         qml/ftw/qqmlnullablevalue_p.h
         qml/ftw/qqmlrefcount_p.h
-        qml/ftw/qqmlthread.cpp qml/ftw/qqmlthread_p.h
+        qml/ftw/qqmlthread_p.h
         qml/ftw/qrecursionwatcher_p.h
         qml/ftw/qrecyclepool_p.h
         qml/ftw/qstringhash_p.h
@@ -344,6 +346,7 @@ qt_internal_add_qml_module(Qml
         qtqmlcompilerglobal.h qtqmlcompilerglobal_p.h
         qtqmlglobal.h qtqmlglobal_p.h
         util/qqmlpropertymap.cpp util/qqmlpropertymap.h
+        util/qqmlpropertyutils_p.h
 
         qmltc/qqmltcobjectcreationhelper_p.h
         qmltc/qqmltcobjectcreationhelper.cpp
@@ -455,13 +458,13 @@ get_target_property(qml_build_dir Qml QT_QML_MODULE_OUTPUT_DIRECTORY)
 _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
 add_custom_command(
     OUTPUT
-        "${qml_root_dir}/jsroot.qmltypes"
+        "${qml_build_dir}/jsroot.qmltypes"
     DEPENDS
         ${QT_CMAKE_EXPORT_NAMESPACE}::qmltyperegistrar
     COMMAND
         ${tool_wrapper}
         $<TARGET_FILE:${QT_CMAKE_EXPORT_NAMESPACE}::qmltyperegistrar>
-        --jsroot --generate-qmltypes "${qml_root_dir}/jsroot.qmltypes"
+        --jsroot --generate-qmltypes "${qml_build_dir}/jsroot.qmltypes"
     COMMENT "Generating jsroot.qmltypes"
     VERBATIM
 )
@@ -476,6 +479,19 @@ add_custom_command(
         "${qml_build_dir}/plugins.qmltypes"
         "${qml_root_dir}/builtins.qmltypes"
     COMMENT "Copying builtins.qmltypes"
+    VERBATIM
+)
+
+add_custom_command(
+    OUTPUT
+        "${qml_root_dir}/jsroot.qmltypes"
+    DEPENDS
+        "${qml_build_dir}/jsroot.qmltypes"
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different
+        "${qml_build_dir}/jsroot.qmltypes"
+        "${qml_root_dir}/jsroot.qmltypes"
+    COMMENT "Copying jsroot.qmltypes"
     VERBATIM
 )
 
@@ -515,6 +531,16 @@ qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_network
         qml/qqmltypeloadernetworkreplyproxy.cpp qml/qqmltypeloadernetworkreplyproxy_p.h
     PUBLIC_LIBRARIES
         Qt::Network
+)
+
+qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_type_loader_thread
+    SOURCES
+        qml/ftw/qqmlthread_impl.cpp
+)
+
+qt_internal_extend_target(Qml CONDITION NOT QT_FEATURE_qml_type_loader_thread
+    SOURCES
+        qml/ftw/qqmlthread_stub.cpp
 )
 
 qt_internal_extend_target(Qml CONDITION MSVC AND (TEST_architecture_arch STREQUAL "i386")

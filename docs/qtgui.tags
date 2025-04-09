@@ -1363,6 +1363,12 @@
             <arglist></arglist>
         </member>
         <member kind="enumvalue">
+            <name>BlockQuote</name>
+            <anchorfile>qaccessible.html</anchorfile>
+            <anchor>Role-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
             <name>UserRole</name>
             <anchorfile>qaccessible.html</anchorfile>
             <anchor>Role-enum</anchor>
@@ -1972,7 +1978,7 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="virtual" static="no">
-            <type>virtual QList&lt;QPair&lt;QAccessibleInterface *, QAccessible::Relation&gt;&gt;</type>
+            <type>virtual QList&lt;std::pair&lt;QAccessibleInterface *, QAccessible::Relation&gt;&gt;</type>
             <name>relations</name>
             <anchorfile>qaccessibleinterface.html</anchorfile>
             <anchor>relations</anchor>
@@ -4044,6 +4050,27 @@
             <type>QBrush &amp;</type>
             <name>operator=</name>
             <anchorfile>qbrush.html</anchorfile>
+            <anchor>operator-eq-2</anchor>
+            <arglist>(QColor color)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QBrush &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qbrush.html</anchorfile>
+            <anchor>operator-eq-3</anchor>
+            <arglist>(Qt::BrushStyle style)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QBrush &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qbrush.html</anchorfile>
+            <anchor>operator-eq-4</anchor>
+            <arglist>(Qt::GlobalColor color)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QBrush &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qbrush.html</anchorfile>
             <anchor>operator-eq-1</anchor>
             <arglist>(const QBrush &amp;brush)</arglist>
         </member>
@@ -5413,6 +5440,7 @@
     <compound kind="class">
         <name>QColorSpace</name>
         <filename>qcolorspace.html</filename>
+        <class>QColorSpace::PrimaryPoints</class>
         <member kind="enumeration">
             <name>ColorModel</name>
             <anchorfile>qcolorspace.html</anchorfile>
@@ -5666,21 +5694,28 @@
             <type></type>
             <name>QColorSpace</name>
             <anchorfile>qcolorspace.html</anchorfile>
-            <anchor>QColorSpace-8</anchor>
-            <arglist>(const QPointF &amp;whitePoint, const QPointF &amp;redPoint, const QPointF &amp;greenPoint, const QPointF &amp;bluePoint, QColorSpace::TransferFunction transferFunction, float gamma)</arglist>
+            <anchor>QColorSpace-7</anchor>
+            <arglist>(const QColorSpace::PrimaryPoints &amp;primaryPoints, QColorSpace::TransferFunction transferFunction, float gamma)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QColorSpace</name>
             <anchorfile>qcolorspace.html</anchorfile>
             <anchor>QColorSpace-9</anchor>
+            <arglist>(const QPointF &amp;whitePoint, const QPointF &amp;redPoint, const QPointF &amp;greenPoint, const QPointF &amp;bluePoint, QColorSpace::TransferFunction transferFunction, float gamma)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QColorSpace</name>
+            <anchorfile>qcolorspace.html</anchorfile>
+            <anchor>QColorSpace-10</anchor>
             <arglist>(const QPointF &amp;whitePoint, const QPointF &amp;redPoint, const QPointF &amp;greenPoint, const QPointF &amp;bluePoint, const QList&lt;uint16_t&gt; &amp;redTransferFunctionTable, const QList&lt;uint16_t&gt; &amp;greenTransferFunctionTable, const QList&lt;uint16_t&gt; &amp;blueTransferFunctionTable)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QColorSpace</name>
             <anchorfile>qcolorspace.html</anchorfile>
-            <anchor>QColorSpace-7</anchor>
+            <anchor>QColorSpace-8</anchor>
             <arglist>(const QPointF &amp;whitePoint, const QPointF &amp;redPoint, const QPointF &amp;greenPoint, const QPointF &amp;bluePoint, const QList&lt;uint16_t&gt; &amp;transferFunctionTable)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -5731,6 +5766,13 @@
             <anchorfile>qcolorspace.html</anchorfile>
             <anchor>setPrimaries-1</anchor>
             <arglist>(const QPointF &amp;whitePoint, const QPointF &amp;redPoint, const QPointF &amp;greenPoint, const QPointF &amp;bluePoint)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setPrimaryPoints</name>
+            <anchorfile>qcolorspace.html</anchorfile>
+            <anchor>setPrimaryPoints</anchor>
+            <arglist>(const QColorSpace::PrimaryPoints &amp;primaryPoints)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
@@ -5810,6 +5852,13 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QColorSpace::PrimaryPoints</type>
+            <name>primaryPoints</name>
+            <anchorfile>qcolorspace.html</anchorfile>
+            <anchor>primaryPoints</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type>QColorSpace::TransferFunction</type>
             <name>transferFunction</name>
             <anchorfile>qcolorspace.html</anchorfile>
@@ -5870,6 +5919,24 @@
             <name>gamma</name>
             <anchorfile>qcolorspace.html</anchorfile>
             <anchor>gamma</anchor>
+            <arglist>() const const</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QColorSpace::PrimaryPoints</name>
+        <filename>qcolorspace-primarypoints.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QColorSpace::PrimaryPoints</type>
+            <name>fromPrimaries</name>
+            <anchorfile>qcolorspace-primarypoints.html</anchorfile>
+            <anchor>fromPrimaries</anchor>
+            <arglist>(QColorSpace::Primaries primaries)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>isValid</name>
+            <anchorfile>qcolorspace-primarypoints.html</anchorfile>
+            <anchor>isValid</anchor>
             <arglist>() const const</arglist>
         </member>
     </compound>
@@ -9376,6 +9443,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
             <type>QStringList</type>
+            <name>applicationEmojiFontFamilies</name>
+            <anchorfile>qfontdatabase.html</anchorfile>
+            <anchor>applicationEmojiFontFamilies</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QStringList</type>
             <name>applicationFallbackFontFamilies</name>
             <anchorfile>qfontdatabase.html</anchorfile>
             <anchor>applicationFallbackFontFamilies</anchor>
@@ -9460,6 +9534,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
             <type>bool</type>
+            <name>removeApplicationEmojiFontFamily</name>
+            <anchorfile>qfontdatabase.html</anchorfile>
+            <anchor>removeApplicationEmojiFontFamily</anchor>
+            <arglist>(const QString &amp;familyName)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>bool</type>
             <name>removeApplicationFallbackFontFamily</name>
             <anchorfile>qfontdatabase.html</anchorfile>
             <anchor>removeApplicationFallbackFontFamily</anchor>
@@ -9495,10 +9576,24 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
             <type>void</type>
+            <name>addApplicationEmojiFontFamily</name>
+            <anchorfile>qfontdatabase.html</anchorfile>
+            <anchor>addApplicationEmojiFontFamily</anchor>
+            <arglist>(const QString &amp;familyName)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>void</type>
             <name>addApplicationFallbackFontFamily</name>
             <anchorfile>qfontdatabase.html</anchorfile>
             <anchor>addApplicationFallbackFontFamily</anchor>
             <arglist>(QChar::Script script, const QString &amp;familyName)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>void</type>
+            <name>setApplicationEmojiFontFamilies</name>
+            <anchorfile>qfontdatabase.html</anchorfile>
+            <anchor>setApplicationEmojiFontFamilies</anchor>
+            <arglist>(const QStringList &amp;familyNames)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
             <type>void</type>
@@ -9558,6 +9653,13 @@
             <name>styleHint</name>
             <anchorfile>qfontinfo.html</anchorfile>
             <anchor>styleHint</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QList&lt;QFontVariableAxis&gt;</type>
+            <name>variableAxes</name>
+            <anchorfile>qfontinfo.html</anchorfile>
+            <anchor>variableAxes</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -10224,6 +10326,101 @@
             <name>xHeight</name>
             <anchorfile>qfontmetricsf.html</anchorfile>
             <anchor>xHeight</anchor>
+            <arglist>() const const</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QFontVariableAxis</name>
+        <filename>qfontvariableaxis.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QFontVariableAxis &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>operator-eq</anchor>
+            <arglist>(const QFontVariableAxis &amp;axis)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QFontVariableAxis</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>QFontVariableAxis</anchor>
+            <arglist>(const QFontVariableAxis &amp;axis)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setDefaultValue</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>setDefaultValue</anchor>
+            <arglist>(qreal defaultValue)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setMaximumValue</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>setMaximumValue</anchor>
+            <arglist>(qreal maximumValue)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setMinimumValue</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>setMinimumValue</anchor>
+            <arglist>(qreal minimumValue)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setName</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>setName</anchor>
+            <arglist>(const QString &amp;name)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setTag</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>setTag</anchor>
+            <arglist>(QFont::Tag tag)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>~QFontVariableAxis</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>dtor.QFontVariableAxis</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QFont::Tag</type>
+            <name>tag</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>tag</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QString</type>
+            <name>name</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>name</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>qreal</type>
+            <name>defaultValue</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>defaultValue</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>qreal</type>
+            <name>maximumValue</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>maximumValue</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>qreal</type>
+            <name>minimumValue</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>minimumValue</anchor>
             <arglist>() const const</arglist>
         </member>
     </compound>
@@ -14380,6 +14577,13 @@
             <anchor>convertedToColorSpace-1</anchor>
             <arglist>(const QColorSpace &amp;colorSpace, QImage::Format format, Qt::ImageConversionFlags flags) &amp;&amp;</arglist>
         </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QImage</type>
+            <name>flipped</name>
+            <anchorfile>qimage.html</anchorfile>
+            <anchor>flipped</anchor>
+            <arglist>(Qt::Orientations orient) &amp;&amp;</arglist>
+        </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
             <type>QImage</type>
             <name>fromData</name>
@@ -14641,6 +14845,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>flip</name>
+            <anchorfile>qimage.html</anchorfile>
+            <anchor>flip</anchor>
+            <arglist>(Qt::Orientations orient)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>invertPixels</name>
             <anchorfile>qimage.html</anchorfile>
             <anchor>invertPixels</anchor>
@@ -14897,6 +15108,13 @@
             <anchorfile>qimage.html</anchorfile>
             <anchor>createMaskFromColor</anchor>
             <arglist>(QRgb color, Qt::MaskMode mode) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QImage</type>
+            <name>flipped</name>
+            <anchorfile>qimage.html</anchorfile>
+            <anchor>flipped-1</anchor>
+            <arglist>(Qt::Orientations orient) const &amp; const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QImage</type>
@@ -16504,6 +16722,13 @@
             <anchorfile>qinputdevice.html</anchorfile>
             <anchor>availableVirtualGeometry-prop</anchor>
             <arglist>(QRect area)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>capabilitiesChanged</name>
+            <anchorfile>qinputdevice.html</anchorfile>
+            <anchor>capabilities-prop</anchor>
+            <arglist>(QInputDevice::Capabilities capabilities)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QInputDevice::Capabilities</type>
@@ -18155,6 +18380,13 @@
             <anchorfile>qmatrix4x4.html</anchorfile>
             <anchor>operator-2a-20</anchor>
             <arglist>(const QVector4D &amp;vector, const QMatrix4x4 &amp;matrix)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>qFuzzyCompare</name>
+            <anchorfile>qmatrix4x4.html</anchorfile>
+            <anchor>qFuzzyCompare</anchor>
+            <arglist>(const QMatrix4x4 &amp;m1, const QMatrix4x4 &amp;m2)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>float &amp;</type>
@@ -24159,6 +24391,13 @@
             <anchor>QPaintDevice</anchor>
             <arglist>()</arglist>
         </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>int</type>
+            <name>encodeMetricF</name>
+            <anchorfile>qpaintdevice.html</anchorfile>
+            <anchor>encodeMetricF</anchor>
+            <arglist>(QPaintDevice::PaintDeviceMetric metric, double value)</arglist>
+        </member>
         <member kind="function" protection="public" virtualness="virtual" static="no">
             <type>virtual </type>
             <name>~QPaintDevice</name>
@@ -25266,6 +25505,12 @@
             <anchor>CompositionMode-enum</anchor>
             <arglist></arglist>
         </member>
+        <member kind="enumvalue">
+            <name>NCompositionModes</name>
+            <anchorfile>qpainter.html</anchorfile>
+            <anchor>CompositionMode-enum</anchor>
+            <arglist></arglist>
+        </member>
         <member kind="enumeration">
             <name>PixmapFragmentHint</name>
             <anchorfile>qpainter.html</anchorfile>
@@ -26240,7 +26485,21 @@
             <name>setBrush</name>
             <anchorfile>qpainter.html</anchorfile>
             <anchor>setBrush-1</anchor>
+            <arglist>(QColor color)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setBrush</name>
+            <anchorfile>qpainter.html</anchorfile>
+            <anchor>setBrush-2</anchor>
             <arglist>(Qt::BrushStyle style)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setBrush</name>
+            <anchorfile>qpainter.html</anchorfile>
+            <anchor>setBrush-3</anchor>
+            <arglist>(Qt::GlobalColor color)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
@@ -27464,6 +27723,59 @@
         </member>
     </compound>
     <compound kind="class">
+        <name>QPainterStateGuard</name>
+        <filename>qpainterstateguard.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QPainterStateGuard &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qpainterstateguard.html</anchorfile>
+            <anchor>operator-eq</anchor>
+            <arglist>(QPainterStateGuard &amp;&amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QPainterStateGuard</name>
+            <anchorfile>qpainterstateguard.html</anchorfile>
+            <anchor>QPainterStateGuard-1</anchor>
+            <arglist>(QPainter *painter, QPainterStateGuard::InitialState state)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QPainterStateGuard</name>
+            <anchorfile>qpainterstateguard.html</anchorfile>
+            <anchor>QPainterStateGuard</anchor>
+            <arglist>(QPainterStateGuard &amp;&amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>restore</name>
+            <anchorfile>qpainterstateguard.html</anchorfile>
+            <anchor>restore</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>save</name>
+            <anchorfile>qpainterstateguard.html</anchorfile>
+            <anchor>save</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>swap</name>
+            <anchorfile>qpainterstateguard.html</anchorfile>
+            <anchor>swap</anchor>
+            <arglist>(QPainterStateGuard &amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>~QPainterStateGuard</name>
+            <anchorfile>qpainterstateguard.html</anchorfile>
+            <anchor>dtor.QPainterStateGuard</anchor>
+            <arglist>()</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
         <name>QPalette</name>
         <filename>qpalette.html</filename>
         <member kind="enumeration">
@@ -28208,6 +28520,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setAuthor</name>
+            <anchorfile>qpdfwriter.html</anchorfile>
+            <anchor>setAuthor</anchor>
+            <arglist>(const QString &amp;author)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setColorModel</name>
             <anchorfile>qpdfwriter.html</anchorfile>
             <anchor>setColorModel</anchor>
@@ -28306,6 +28625,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QString</type>
+            <name>author</name>
+            <anchorfile>qpdfwriter.html</anchorfile>
+            <anchor>author</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QString</type>
             <name>creator</name>
             <anchorfile>qpdfwriter.html</anchorfile>
             <anchor>creator</anchor>
@@ -28354,8 +28680,22 @@
             <type>QPen &amp;</type>
             <name>operator=</name>
             <anchorfile>qpen.html</anchorfile>
+            <anchor>operator-eq-2</anchor>
+            <arglist>(QColor color)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QPen &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qpen.html</anchorfile>
             <anchor>operator-eq</anchor>
             <arglist>(QPen &amp;&amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QPen &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qpen.html</anchorfile>
+            <anchor>operator-eq-3</anchor>
+            <arglist>(Qt::PenStyle style)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QPen &amp;</type>
@@ -32577,6 +32917,36 @@
             <anchor>Feature-enum</anchor>
             <arglist></arglist>
         </member>
+        <member kind="enumvalue">
+            <name>VariableRateShading</name>
+            <anchorfile>qrhi.html</anchorfile>
+            <anchor>Feature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>VariableRateShadingMap</name>
+            <anchorfile>qrhi.html</anchorfile>
+            <anchor>Feature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>VariableRateShadingMapWithTexture</name>
+            <anchorfile>qrhi.html</anchorfile>
+            <anchor>Feature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>PerRenderTargetBlending</name>
+            <anchorfile>qrhi.html</anchorfile>
+            <anchor>Feature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>SampleVariables</name>
+            <anchorfile>qrhi.html</anchorfile>
+            <anchor>Feature-enum</anchor>
+            <arglist></arglist>
+        </member>
         <member kind="enumeration">
             <name>Flag</name>
             <anchorfile>qrhi.html</anchorfile>
@@ -32771,6 +33141,12 @@
             <anchor>ResourceLimit-enum</anchor>
             <arglist></arglist>
         </member>
+        <member kind="enumvalue">
+            <name>ShadingRateImageTileSize</name>
+            <anchorfile>qrhi.html</anchorfile>
+            <anchor>ResourceLimit-enum</anchor>
+            <arglist></arglist>
+        </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QByteArray</type>
             <name>pipelineCacheData</name>
@@ -32867,6 +33243,13 @@
             <name>newShaderResourceBindings</name>
             <anchorfile>qrhi.html</anchorfile>
             <anchor>newShaderResourceBindings</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRhiShadingRateMap *</type>
+            <name>newShadingRateMap</name>
+            <anchorfile>qrhi.html</anchorfile>
+            <anchor>newShadingRateMap</anchor>
             <arglist>()</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -32996,11 +33379,25 @@
             <arglist>(const QByteArray &amp;data)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setQueueSubmitParams</name>
+            <anchorfile>qrhi.html</anchorfile>
+            <anchor>setQueueSubmitParams</anchor>
+            <arglist>(QRhiNativeHandles *params)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>~QRhi</name>
             <anchorfile>qrhi.html</anchorfile>
             <anchor>dtor.QRhi</anchor>
             <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QList&lt;QSize&gt;</type>
+            <name>supportedShadingRates</name>
+            <anchorfile>qrhi.html</anchorfile>
+            <anchor>supportedShadingRates</anchor>
+            <arglist>(int sampleCount) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QList&lt;int&gt;</type>
@@ -33615,6 +34012,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setShadingRate</name>
+            <anchorfile>qrhicommandbuffer.html</anchorfile>
+            <anchor>setShadingRate</anchor>
+            <arglist>(const QSize &amp;coarsePixelSize)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setStencilRef</name>
             <anchorfile>qrhicommandbuffer.html</anchorfile>
             <anchor>setStencilRef</anchor>
@@ -34182,6 +34586,12 @@
         </member>
         <member kind="enumvalue">
             <name>CompileShadersWithDebugInfo</name>
+            <anchorfile>qrhigraphicspipeline.html</anchorfile>
+            <anchor>Flag-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>UsesShadingRate</name>
             <anchorfile>qrhigraphicspipeline.html</anchorfile>
             <anchor>Flag-enum</anchor>
             <arglist></arglist>
@@ -35125,6 +35535,12 @@
             <anchor>Type-enum</anchor>
             <arglist></arglist>
         </member>
+        <member kind="enumvalue">
+            <name>ShadingRateMap</name>
+            <anchorfile>qrhiresource.html</anchorfile>
+            <anchor>Type-enum</anchor>
+            <arglist></arglist>
+        </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
             <name>deleteLater</name>
@@ -35992,6 +36408,37 @@
         </member>
     </compound>
     <compound kind="class">
+        <name>QRhiShadingRateMap</name>
+        <filename>qrhishadingratemap.html</filename>
+        <base>QRhiResource</base>
+        <class>QRhiShadingRateMap::NativeShadingRateMap</class>
+        <member kind="function" protection="public" virtualness="virtual" static="no">
+            <type>virtual bool</type>
+            <name>createFrom</name>
+            <anchorfile>qrhishadingratemap.html</anchorfile>
+            <anchor>createFrom</anchor>
+            <arglist>(QRhiShadingRateMap::NativeShadingRateMap src)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="virtual" static="no">
+            <type>virtual bool</type>
+            <name>createFrom</name>
+            <anchorfile>qrhishadingratemap.html</anchorfile>
+            <anchor>createFrom-1</anchor>
+            <arglist>(QRhiTexture *src)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="virtual" static="no">
+            <type>virtual QRhiResource::Type</type>
+            <name>resourceType</name>
+            <anchorfile>qrhishadingratemap.html</anchorfile>
+            <anchor>resourceType</anchor>
+            <arglist>() const const override</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QRhiShadingRateMap::NativeShadingRateMap</name>
+        <filename>qrhishadingratemap-nativeshadingratemap.html</filename>
+    </compound>
+    <compound kind="class">
         <name>QRhiStats</name>
         <filename>qrhistats.html</filename>
     </compound>
@@ -36186,6 +36633,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setShadingRateMap</name>
+            <anchorfile>qrhiswapchain.html</anchorfile>
+            <anchor>setShadingRateMap</anchor>
+            <arglist>(QRhiShadingRateMap *map)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setWindow</name>
             <anchorfile>qrhiswapchain.html</anchorfile>
             <anchor>setWindow</anchor>
@@ -36211,6 +36665,13 @@
             <anchorfile>qrhiswapchain.html</anchorfile>
             <anchor>resourceType</anchor>
             <arglist>() const const override</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRhiShadingRateMap *</type>
+            <name>shadingRateMap</name>
+            <anchorfile>qrhiswapchain.html</anchorfile>
+            <anchor>shadingRateMap</anchor>
+            <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QRhiSwapChain::Flags</type>
@@ -36411,6 +36872,12 @@
             <anchor>Flag-enum</anchor>
             <arglist></arglist>
         </member>
+        <member kind="enumvalue">
+            <name>UsedAsShadingRateMap</name>
+            <anchorfile>qrhitexture.html</anchorfile>
+            <anchor>Flag-enum</anchor>
+            <arglist></arglist>
+        </member>
         <member kind="enumeration">
             <name>Format</name>
             <anchorfile>qrhitexture.html</anchorfile>
@@ -36495,6 +36962,30 @@
             <arglist></arglist>
         </member>
         <member kind="enumvalue">
+            <name>R8UI</name>
+            <anchorfile>qrhitexture.html</anchorfile>
+            <anchor>Format-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>R32UI</name>
+            <anchorfile>qrhitexture.html</anchorfile>
+            <anchor>Format-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>RG32UI</name>
+            <anchorfile>qrhitexture.html</anchorfile>
+            <anchor>Format-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>RGBA32UI</name>
+            <anchorfile>qrhitexture.html</anchorfile>
+            <anchor>Format-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
             <name>D16</name>
             <anchorfile>qrhitexture.html</anchorfile>
             <anchor>Format-enum</anchor>
@@ -36514,6 +37005,12 @@
         </member>
         <member kind="enumvalue">
             <name>D32F</name>
+            <anchorfile>qrhitexture.html</anchorfile>
+            <anchor>Format-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>D32FS8</name>
             <anchorfile>qrhitexture.html</anchorfile>
             <anchor>Format-enum</anchor>
             <arglist></arglist>
@@ -37104,10 +37601,24 @@
             <arglist>(QRhiTexture *texture)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setShadingRateMap</name>
+            <anchorfile>qrhitexturerendertargetdescription.html</anchorfile>
+            <anchor>setShadingRateMap</anchor>
+            <arglist>(QRhiShadingRateMap *map)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type>QRhiRenderBuffer *</type>
             <name>depthStencilBuffer</name>
             <anchorfile>qrhitexturerendertargetdescription.html</anchorfile>
             <anchor>depthStencilBuffer</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRhiShadingRateMap *</type>
+            <name>shadingRateMap</name>
+            <anchorfile>qrhitexturerendertargetdescription.html</anchorfile>
+            <anchor>shadingRateMap</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -37994,6 +38505,11 @@
     <compound kind="class">
         <name>QRhiVulkanNativeHandles</name>
         <filename>qrhivulkannativehandles.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiVulkanQueueSubmitParams</name>
+        <filename>qrhivulkanqueuesubmitparams.html</filename>
         <base>QRhiNativeHandles</base>
     </compound>
     <compound kind="class">
@@ -42905,18 +43421,18 @@
         <filename>qsurfaceformat.html</filename>
         <member kind="enumeration">
             <name>ColorSpace</name>
-            <anchorfile>qsurfaceformat.html</anchorfile>
+            <anchorfile>qsurfaceformat-obsolete.html</anchorfile>
             <anchor>ColorSpace-enum</anchor>
         </member>
         <member kind="enumvalue">
             <name>DefaultColorSpace</name>
-            <anchorfile>qsurfaceformat.html</anchorfile>
+            <anchorfile>qsurfaceformat-obsolete.html</anchorfile>
             <anchor>ColorSpace-enum</anchor>
             <arglist></arglist>
         </member>
         <member kind="enumvalue">
             <name>sRGBColorSpace</name>
-            <anchorfile>qsurfaceformat.html</anchorfile>
+            <anchorfile>qsurfaceformat-obsolete.html</anchorfile>
             <anchor>ColorSpace-enum</anchor>
             <arglist></arglist>
         </member>
@@ -43233,13 +43749,6 @@
             <arglist>()</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QPair&lt;int, int&gt;</type>
-            <name>version</name>
-            <anchorfile>qsurfaceformat.html</anchorfile>
-            <anchor>version</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>QSurfaceFormat::FormatOptions</type>
             <name>options</name>
             <anchorfile>qsurfaceformat.html</anchorfile>
@@ -43363,6 +43872,13 @@
             <name>swapInterval</name>
             <anchorfile>qsurfaceformat.html</anchorfile>
             <anchor>swapInterval</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::pair&lt;int, int&gt;</type>
+            <name>version</name>
+            <anchorfile>qsurfaceformat.html</anchorfile>
+            <anchor>version</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="typedef" type="QSurfaceFormat::FormatOption">
@@ -45648,6 +46164,29 @@
             <name>FindWholeWords</name>
             <anchorfile>qtextdocument.html</anchorfile>
             <anchor>FindFlag-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
+            <name>MarkdownFeature</name>
+            <anchorfile>qtextdocument.html</anchorfile>
+            <anchor>MarkdownFeature-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>MarkdownNoHTML</name>
+            <anchorfile>qtextdocument.html</anchorfile>
+            <anchor>MarkdownFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>MarkdownDialectCommonMark</name>
+            <anchorfile>qtextdocument.html</anchorfile>
+            <anchor>MarkdownFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>MarkdownDialectGitHub</name>
+            <anchorfile>qtextdocument.html</anchorfile>
+            <anchor>MarkdownFeature-enum</anchor>
             <arglist></arglist>
         </member>
         <member kind="enumeration">
@@ -49861,6 +50400,18 @@
         </member>
         <member kind="enumvalue">
             <name>ShowDocumentTerminator</name>
+            <anchorfile>qtextoption.html</anchorfile>
+            <anchor>Flag-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>ShowDefaultIgnorables</name>
+            <anchorfile>qtextoption.html</anchorfile>
+            <anchor>Flag-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DisableEmojiParsing</name>
             <anchorfile>qtextoption.html</anchorfile>
             <anchor>Flag-enum</anchor>
             <arglist></arglist>
@@ -54431,6 +54982,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>safeAreaMarginsChanged</name>
+            <anchorfile>qwindow.html</anchorfile>
+            <anchor>safeAreaMarginsChanged</anchor>
+            <arglist>(QMargins margins)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>screenChanged</name>
             <anchorfile>qwindow.html</anchorfile>
             <anchor>screenChanged</anchor>
@@ -54840,6 +55398,13 @@
             <name>frameMargins</name>
             <anchorfile>qwindow.html</anchorfile>
             <anchor>frameMargins</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QMargins</type>
+            <name>safeAreaMargins</name>
+            <anchorfile>qwindow.html</anchorfile>
+            <anchor>safeAreaMargins</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="virtual" static="no">

@@ -3,6 +3,12 @@
 
 set -ex
 
+sudo zypper clean
+sudo rm -rf /var/cache/zypp
+sudo zypper rr repo-backports-update
+sudo zypper ar -f http://ftp.funet.fi/pub/mirrors/ftp.opensuse.com/pub/opensuse/update/leap/15.5/backports/ repo-backports-update
+sudo zypper refresh
+
 sudo zypper -nq install git gcc9 gcc9-c++ ninja
 sudo /usr/sbin/update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 1 \
                                      --slave /usr/bin/g++ g++ /usr/bin/g++-9 \
@@ -79,10 +85,13 @@ sudo zypper -nq install valgrind-devel
 # cifs-utils, for mounting smb drive
 sudo zypper -nq install cifs-utils
 
+# For Firebird in RTA
+sudo zypper -nq install libtommath-devel
+
 # Java
 sudo zypper -nq install java-17-openjdk
 
-gccVersion="$(gcc --version |grep gcc |cut -b 17-23)"
+gccVersion="$(gcc --version |grep -Eo '[0-9]+\.[0-9]+(\.[0-9]+)?' |head -n 1)"
 echo "GCC = $gccVersion" >> versions.txt
 
 OpenSSLVersion="$(openssl-3 version |cut -b 9-14)"

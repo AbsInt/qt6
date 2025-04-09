@@ -50,10 +50,10 @@
 QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcBuiltinsBindingRemoval, "qt.qml.binding.removal", QtWarningMsg)
-Q_LOGGING_CATEGORY(lcObjectConnect, "qt.qml.object.connect", QtWarningMsg)
-Q_LOGGING_CATEGORY(lcOverloadResolution, "qt.qml.overloadresolution", QtWarningMsg)
-Q_LOGGING_CATEGORY(lcMethodBehavior, "qt.qml.method.behavior")
-Q_LOGGING_CATEGORY(lcSignalHandler, "qt.qml.signalhandler")
+Q_STATIC_LOGGING_CATEGORY(lcObjectConnect, "qt.qml.object.connect", QtWarningMsg)
+Q_STATIC_LOGGING_CATEGORY(lcOverloadResolution, "qt.qml.overloadresolution", QtWarningMsg)
+Q_STATIC_LOGGING_CATEGORY(lcMethodBehavior, "qt.qml.method.behavior")
+Q_STATIC_LOGGING_CATEGORY(lcSignalHandler, "qt.qml.signalhandler")
 
 // The code in this file does not violate strict aliasing, but GCC thinks it does
 // so turn off the warnings for us to have a clean build
@@ -228,6 +228,12 @@ static ReturnedValue loadProperty(
         return scope.engine->fromData(
                 propMetaType, &v, wrapper, property.coreIndex(), referenceFlags(v4, property));
     }
+    case QMetaType::QVariantHash: {
+        QVariantHash v;
+        property.readProperty(object, &v);
+        return scope.engine->fromData(
+                propMetaType, &v, wrapper, property.coreIndex(), referenceFlags(v4, property));
+    }
     case QMetaType::QJsonValue: {
         QJsonValue v;
         property.readProperty(object, &v);
@@ -363,9 +369,13 @@ ReturnedValue QObjectWrapper::getProperty(
 
     QQmlEnginePrivate *ep = engine->qmlEngine() ? QQmlEnginePrivate::get(engine->qmlEngine()) : nullptr;
 
-    if (ep && ep->propertyCapture && !property->isConstant())
-        if (!property->isBindable() || ep->propertyCapture->expression->mustCaptureBindableProperty())
-            ep->propertyCapture->captureProperty(object, property->coreIndex(), property->notifyIndex());
+    if (ep && ep->propertyCapture && !property->isConstant()) {
+        if (!property->notifiesViaBindable()
+                || ep->propertyCapture->expression->mustCaptureBindableProperty()) {
+            ep->propertyCapture->captureProperty(
+                    object, property->coreIndex(), property->notifyIndex());
+        }
+    }
 
     if (property->isVarProperty()) {
         QQmlVMEMetaObject *vmemo = QQmlVMEMetaObject::get(object);
@@ -374,6 +384,18 @@ ReturnedValue QObjectWrapper::getProperty(
     } else {
         return loadProperty(engine, wrapper, object, *property);
     }
+}
+
+ReturnedValue QObjectWrapper::getMethodFallback(
+        ExecutionEngine *engine, Heap::Object *wrapper, QObject *qobject,
+        QV4::String *name, Flags flags)
+{
+    QQmlPropertyData local;
+    const QQmlPropertyData *property = QQmlPropertyCache::property(
+            qobject, name, engine->callingQmlContext(), &local);
+    return property
+            ? getProperty(engine, wrapper, qobject, property, flags)
+            : Encode::undefined();
 }
 
 static OptionalReturnedValue getDestroyOrToStringMethod(
@@ -630,7 +652,7 @@ void QObjectWrapper::setProperty(
             ScopedContext ctx(scope, f->scope());
 
             // binding assignment.
-            if (property->isBindable()) {
+            if (property->acceptsQBinding()) {
                 const QQmlPropertyIndex idx(property->coreIndex(), /*not a value type*/-1);
                 auto [targetObject, targetIndex] = QQmlPropertyPrivate::findAliasTarget(object, idx);
                 QUntypedPropertyBinding binding;
@@ -641,6 +663,7 @@ void QObjectWrapper::setProperty(
                 } else {
                     binding = QQmlPropertyBinding::create(property, f->function(), object, callingQmlContext,
                                                            ctx, targetObject, targetIndex);
+
                 }
                 QUntypedBindable bindable;
                 void *argv = {&bindable};
@@ -1096,18 +1119,18 @@ ReturnedValue QObjectWrapper::virtualResolveLookupGetter(const Object *object, E
         Scoped<QObjectMethod> method(scope, *methodValue);
         setupQObjectMethodLookup(
                     lookup, ddata ? ddata : QQmlData::get(qobj, true), nullptr, This, method->d());
-        lookup->getter = Lookup::getterQObjectMethod;
+        lookup->call = Lookup::Call::GetterQObjectMethod;
         return method.asReturnedValue();
     }
 
     if (!ddata || !ddata->propertyCache) {
-        QQmlPropertyData local;
-        const QQmlPropertyData *property = QQmlPropertyCache::property(
-                    qobj, name, qmlContext, &local);
-        return property
-                ? getProperty(engine, This->d(), qobj, property,
-                              lookup->forCall ? NoFlag : AttachMethods)
-                : Encode::undefined();
+        QV4::ScopedValue result(scope, getMethodFallback(
+                engine, This->d(), qobj, name, lookup->forCall ? NoFlag : AttachMethods));
+        lookup->qobjectMethodLookup.ic.set(engine, object->internalClass());
+        if (QObjectMethod *method = result->as<QObjectMethod>())
+            lookup->qobjectMethodLookup.method.set(engine, method->d());
+        lookup->call = Lookup::Call::GetterQObjectMethodFallback;
+        return result->asReturnedValue();
     }
     const QQmlPropertyData *property = ddata->propertyCache->property(name.getPointer(), qobj, qmlContext);
 
@@ -1126,29 +1149,14 @@ ReturnedValue QObjectWrapper::virtualResolveLookupGetter(const Object *object, E
             && !property->isSignalHandler()) { // TODO: Optimize SignalHandler, too
         QV4::Heap::QObjectMethod *method = nullptr;
         setupQObjectMethodLookup(lookup, ddata, property, This, method);
-        lookup->getter = Lookup::getterQObjectMethod;
-        return lookup->getter(lookup, engine, *object);
+        lookup->call = Lookup::Call::GetterQObjectMethod;
+        return lookup->getter(engine, *object);
     }
 
     setupQObjectLookup(lookup, ddata, property, This);
-    lookup->getter = Lookup::getterQObject;
-    return lookup->getter(lookup, engine, *object);
-}
 
-ReturnedValue QObjectWrapper::lookupAttached(
-            Lookup *l, ExecutionEngine *engine, const Value &object)
-{
-    if (&QObjectWrapper::lookupAttached == &Lookup::getterGeneric) {
-        // Certain compilers, e.g. MSVC, will "helpfully" deduplicate methods that are completely
-        // equal. As a result, the pointers are the same, which wreaks havoc on the logic that
-        // decides how to retrieve the property.
-        qFatal("Your C++ compiler is broken.");
-    }
-
-    // This getter marks the presence of a lookup for an attached object.
-    // It falls back to the generic lookup when run through the interpreter, but AOT-compiled
-    // code can get clever with it.
-    return Lookup::getterGeneric(l, engine, object);
+    lookup->call = Lookup::Call::GetterQObjectProperty;
+    return lookup->getter(engine, *object);
 }
 
 bool QObjectWrapper::virtualResolveLookupSetter(Object *object, ExecutionEngine *engine, Lookup *lookup,
@@ -1667,7 +1675,8 @@ static ReturnedValue CallMethod(const QQmlObjectOrGadget &object, int index, QMe
         for (int ii = 0; ii < argCount; ++ii) {
             if (!args[ii + 1].fromValue(argTypes[ii], engine,
                                         callArgs->args[ii].asValue<Value>())) {
-                qWarning() << QString::fromLatin1("Could not convert argument %1 at").arg(ii);
+                qWarning() << QString::fromLatin1("Could not convert argument %1 from %2 to %3")
+                    .arg(ii).arg(callArgs->args[ii].asValue<Value>().toQStringNoThrow()).arg(argTypes[ii].name());
                 const StackTrace stack = engine->stackTrace();
                 for (const StackFrame &frame : stack) {
                     qWarning() << "\t" << frame.function + QLatin1Char('@') + frame.source
@@ -2922,22 +2931,26 @@ ReturnedValue QObjectMethod::method_toString(ExecutionEngine *engine, QObject *o
 ReturnedValue QObjectMethod::method_destroy(
         ExecutionEngine *engine, QObject *o, const Value *args, int argc) const
 {
+    method_destroy(engine, o, argc > 0 ? args[0].toInt32() : 0);
+    return Encode::undefined();
+}
+
+bool QObjectMethod::method_destroy(ExecutionEngine *engine, QObject *o, int delay) const
+{
     if (!o)
-        return Encode::undefined();
+        return true;
 
-    if (QQmlData::keepAliveDuringGarbageCollection(o))
-        return engine->throwError(QStringLiteral("Invalid attempt to destroy() an indestructible object"));
-
-    int delay = 0;
-    if (argc > 0)
-        delay = args[0].toUInt32();
+    if (QQmlData::keepAliveDuringGarbageCollection(o)) {
+        engine->throwError(QStringLiteral("Invalid attempt to destroy() an indestructible object"));
+        return false;
+    }
 
     if (delay > 0)
-        QTimer::singleShot(delay, o, SLOT(deleteLater()));
+        QTimer::singleShot(delay, o, &QObject::deleteLater);
     else
         o->deleteLater();
 
-    return Encode::undefined();
+    return true;
 }
 
 ReturnedValue QObjectMethod::virtualCall(

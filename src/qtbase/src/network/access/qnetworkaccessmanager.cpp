@@ -64,13 +64,16 @@
 #include "qnetconmonitor_p.h"
 
 #include <mutex>
+#include <utility>
 
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 using namespace std::chrono_literals;
 
-Q_LOGGING_CATEGORY(lcQnam, "qt.network.access.manager")
+#if defined(Q_OS_MACOS)
+Q_STATIC_LOGGING_CATEGORY(lcQnam, "qt.network.access.manager")
+#endif
 
 Q_APPLICATION_STATIC(QNetworkAccessFileBackendFactory, fileBackend)
 
@@ -204,6 +207,11 @@ static void ensureInitialized()
     of requests executed in parallel is dependent on the protocol.
     Currently, for the HTTP protocol on desktop platforms, 6 requests are
     executed in parallel for one host/port combination.
+
+    \note QNetworkAccessManager doesn't handle RFC 2616 Section 8.2.2 properly,
+    in that it doesn't react to incoming data until it's done writing. For
+    example, the upload of a large file won't stop even if the server returns
+    a status code that instructs the client to not continue.
 
     A more involved example, assuming the manager is already existent,
     can be:
@@ -408,7 +416,7 @@ QNetworkAccessManager::QNetworkAccessManager(QObject *parent)
     qRegisterMetaType<QSslConfiguration>();
     qRegisterMetaType<QSslPreSharedKeyAuthenticator *>();
 #endif
-    qRegisterMetaType<QList<QPair<QByteArray,QByteArray> > >();
+    qRegisterMetaType<QList<std::pair<QByteArray, QByteArray>>>();
 #if QT_CONFIG(http)
     qRegisterMetaType<QHttpNetworkRequest>();
 #endif
@@ -788,7 +796,7 @@ QNetworkReply *QNetworkAccessManager::get(const QNetworkRequest &request)
    \note A GET request with a message body is not cached.
 
    \note If the request is redirected, the message body will be kept only if the status code is
-   307 or 308.
+   308.
 */
 
 QNetworkReply *QNetworkAccessManager::get(const QNetworkRequest &request, QIODevice *data)
@@ -806,7 +814,7 @@ QNetworkReply *QNetworkAccessManager::get(const QNetworkRequest &request, QIODev
    \note A GET request with a message body is not cached.
 
    \note If the request is redirected, the message body will be kept only if the status code is
-   307 or 308.
+   308.
 */
 
 QNetworkReply *QNetworkAccessManager::get(const QNetworkRequest &request, const QByteArray &data)

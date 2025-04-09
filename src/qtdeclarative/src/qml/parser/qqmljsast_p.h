@@ -2522,6 +2522,7 @@ public:
 // attributes
     PatternElement *element = nullptr;
     FormalParameterList *next;
+    SourceLocation commaToken;
 };
 
 class QML_PARSER_EXPORT ClassExpression : public ExpressionNode
@@ -3551,6 +3552,8 @@ public:
     SourceLocation identifierToken;
     SourceLocation colonToken;
     SourceLocation semicolonToken;
+    SourceLocation lparenToken;
+    SourceLocation rparenToken;
 private:
     union {
         SourceLocation m_propertyToken = SourceLocation {};

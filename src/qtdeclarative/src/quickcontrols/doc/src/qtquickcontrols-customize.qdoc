@@ -361,9 +361,9 @@
     style will illustrate the elevation with a drop shadow; the higher the
     elevation, the larger the shadow.
 
-    The first step is to \l {Qt Creator: Project Types}{create a new Qt Quick
-    Controls application} in Qt Creator. After that, we
-    \l {Qt Creator: Creating C++ Classes}{add a C++ type} that stores the elevation. Since
+    The first step is to \l {\QC: Create Qt Quick Applications}
+    {create a new Qt Quick Controls application} in \QC. After that, we
+    \l {\QC: Create C++ classes}{add a C++ type} that stores the elevation. Since
     the type will be used for every control supported by our style, and because
     we may wish to add other attached properties later on, we'll call it
     MyStyle. Here is \c MyStyle.h:
@@ -1040,4 +1040,20 @@
         For a non-wrapping Tumbler, use ListView:
 
         \snippet qtquickcontrols-tumbler-listView.qml contentItem
+
+    \section2 Customizing TableViewDelegate
+
+        TableViewDelegate inherits \l ItemDelegate, which means that it's composed of two
+        visual items:
+        \l [QML]{Control::}{background} and
+        \l [QML]{Control::}{contentItem}.
+
+        You can always assign your own custom edit delegate to
+        \l [QML]{TableView::}{editDelegate} if you have needs
+        outside what the default edit delegate offers.
+
+        \image qtquickcontrols-tableviewdelegate-custom.png
+
+        \snippet qtquickcontrols-tableviewdelegate-custom.qml delegate
+
 */

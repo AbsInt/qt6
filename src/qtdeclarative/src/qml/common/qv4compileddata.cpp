@@ -281,7 +281,7 @@ void CompiledData::CompilationUnit::finalizeCompositeType(const QQmlType &type)
             qmlType = type;
         } else {
             qmlType = QQmlMetaType::findCompositeType(
-                    finalUrl(), this, (unitData()->flags & CompiledData::Unit::IsSingleton)
+                    url(), this, (unitData()->flags & CompiledData::Unit::IsSingleton)
                             ? QQmlMetaType::Singleton
                             : QQmlMetaType::NonSingleton);
         }

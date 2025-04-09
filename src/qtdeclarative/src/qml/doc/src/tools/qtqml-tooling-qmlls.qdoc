@@ -79,6 +79,9 @@ types. It automatically rebuilds CMake QML modules to provide
 accurate and up-to-date warnings and completion items for C++
 defined QML types.
 
+You can
+\l{Disabling automatic CMake builds}{disable this feature}.
+
 \section2 Documentation Hints
 
 \QMLLS includes a documentation hints feature that
@@ -86,9 +89,6 @@ provides programmers with quick access to Qt’s documentation
 by hovering over a keyword. In order to use this feature, your
 Qt kit should contain the Qt documentation and your project
 should be built with \l{QT_QML_GENERATE_QMLLS_INI} variable.
-
-You can
-\l{Disabling automatic CMake builds}{disable this feature}.
 
 \section1 Setting up the \QMLLS in Your Editor
 
@@ -197,24 +197,20 @@ already existing .qmlls.ini file in the current directory.
 
 \section1 Known Limitations
 
-\QMLLS might emit false positive warnings on projects
-that were not built, as it needs the build information to find
-QML modules defined in the same project, for example.
-
-Despite covering many common QML features,
-the \QMLLS is still in development with some features
+Despite covering many common QML features, \QMLLS is still in development with some features
 yet to be supported:
-
 \list
-    \li Renaming QML types.
     \li Suggesting autocompletions on invalid QML files.
     \li Navigating to definitions of objects defined in C++.
-    \li Supporting all QML and JavaScript language constructs for all features.
+    \li Autocompleting context properties
 \endlist
 
-The QML code model in the \QMLLS does not yet
-support all of the JavaScript language constructs, which means that
-some features like navigating to definition and finding usages might not
-work on these language constructs.
+\QMLLS might emit false positive warnings on projects
+\list
+    \li using QMake or imperative type registration---see \l{Port QML modules to CMake}
+    \li that were not built---\QMLLS uses the build information to find QML modules
+    \li where QML modules don't follow the guidelines in \l{Modern QML modules}
+    \li not using \l QT_QML_GENERATE_QMLLS_INI
+\endlist
 
 */

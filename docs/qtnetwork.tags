@@ -2744,13 +2744,6 @@
             <anchor>QHostAddress-8</anchor>
             <arglist>(quint32 ip4Addr)</arglist>
         </member>
-        <member kind="function" protection="public" virtualness="non" static="yes">
-            <type>QPair&lt;QHostAddress, int&gt;</type>
-            <name>parseSubnet</name>
-            <anchorfile>qhostaddress.html</anchorfile>
-            <anchor>parseSubnet</anchor>
-            <arglist>(const QString &amp;subnet)</arglist>
-        </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>operator!=</name>
@@ -2778,6 +2771,13 @@
             <anchorfile>qhostaddress.html</anchorfile>
             <anchor>qHash-1</anchor>
             <arglist>(const QHostAddress &amp;key, size_t seed)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>std::pair&lt;QHostAddress, int&gt;</type>
+            <name>parseSubnet</name>
+            <anchorfile>qhostaddress.html</anchorfile>
+            <anchor>parseSubnet</anchor>
+            <arglist>(const QString &amp;subnet)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
@@ -2896,7 +2896,7 @@
             <name>isInSubnet</name>
             <anchorfile>qhostaddress.html</anchorfile>
             <anchor>isInSubnet-1</anchor>
-            <arglist>(const QPair&lt;QHostAddress, int&gt; &amp;subnet) const const</arglist>
+            <arglist>(const std::pair&lt;QHostAddress, int&gt; &amp;subnet) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
@@ -3487,6 +3487,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setMaxConcurrentStreams</name>
+            <anchorfile>qhttp2configuration.html</anchorfile>
+            <anchor>setMaxConcurrentStreams</anchor>
+            <arglist>(unsigned int value)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setServerPushEnabled</name>
             <anchorfile>qhttp2configuration.html</anchorfile>
             <anchor>setServerPushEnabled</anchor>
@@ -3518,6 +3525,13 @@
             <name>serverPushEnabled</name>
             <anchorfile>qhttp2configuration.html</anchorfile>
             <anchor>serverPushEnabled</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>unsigned int</type>
+            <name>maxConcurrentStreams</name>
+            <anchorfile>qhttp2configuration.html</anchorfile>
+            <anchor>maxConcurrentStreams</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">

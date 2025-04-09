@@ -743,6 +743,9 @@ bool QDBusMessage::isInteractiveAuthorizationAllowed() const
     Sets the arguments that are going to be sent over D-Bus to \a arguments. Those
     will be the arguments to a method call or the parameters in the signal.
 
+    Note that QVariantMap with invalid QVariant as value is not allowed
+    in \a arguments.
+
     \sa arguments()
 */
 void QDBusMessage::setArguments(const QList<QVariant> &arguments)

@@ -258,14 +258,24 @@ qt_copy_or_install(DIRECTORY
 )
 
 # Install qt-internal-strip and qt-internal-ninja files.
-set(__qt_internal_strip_wrappers
+set(__qt_internal_strip_wrapper_programs
     libexec/qt-internal-strip.in
-    libexec/qt-internal-strip.bat.in
     libexec/qt-internal-ninja.in
+)
+set(__qt_internal_strip_wrapper_files
+    libexec/qt-internal-strip.bat.in
     libexec/qt-internal-ninja.bat.in
 )
+set(__qt_internal_strip_wrappers
+    ${__qt_internal_strip_wrapper_programs}
+    ${__qt_internal_strip_wrapper_files}
+)
 qt_copy_or_install(PROGRAMS
-    ${__qt_internal_strip_wrappers}
+    ${__qt_internal_strip_wrapper_programs}
+    DESTINATION "${__GlobalConfig_install_dir}/libexec"
+)
+qt_copy_or_install(FILES
+    ${__qt_internal_strip_wrapper_files}
     DESTINATION "${__GlobalConfig_install_dir}/libexec"
 )
 if(QT_WILL_INSTALL)
@@ -386,9 +396,23 @@ if(APPLE)
 elseif(WASM)
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/util/wasm/wasmtestrunner/qt-wasmtestrunner.py"
         "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/qt-wasmtestrunner.py" @ONLY)
-
     qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/qt-wasmtestrunner.py"
         DESTINATION "${INSTALL_LIBEXECDIR}")
+
+    if(QT_FEATURE_shared)
+        configure_file("${CMAKE_CURRENT_SOURCE_DIR}/util/wasm/preload/preload_qml_imports.py"
+            "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/preload_qml_imports.py" COPYONLY)
+        configure_file("${CMAKE_CURRENT_SOURCE_DIR}/util/wasm/preload/preload_qt_plugins.py"
+            "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/preload_qt_plugins.py" COPYONLY)
+        configure_file("${CMAKE_CURRENT_SOURCE_DIR}/util/wasm/preload/generate_default_preloads.sh.in"
+            "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/generate_default_preloads.sh.in" COPYONLY)
+        qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/preload_qml_imports.py"
+            DESTINATION "${INSTALL_LIBEXECDIR}")
+        qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/preload_qt_plugins.py"
+            DESTINATION "${INSTALL_LIBEXECDIR}")
+        qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/generate_default_preloads.sh.in"
+            DESTINATION "${INSTALL_LIBEXECDIR}")
+    endif()
 endif()
 
 # Install CI support files to libexec.

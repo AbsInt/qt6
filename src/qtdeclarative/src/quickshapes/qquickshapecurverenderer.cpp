@@ -778,13 +778,13 @@ QQuickShapeCurveRenderer::NodeList QQuickShapeCurveRenderer::addCurveStrokeNodes
                                      [&wfVertices, &node](const std::array<QVector2D, 3> &s,
                                                           const std::array<QVector2D, 3> &p,
                                                           const std::array<QVector2D, 3> &n,
-                                                          bool isLine)
+                                                          QSGCurveStrokeNode::TriangleFlags flags)
                                     {
                                          const QVector2D &p0 = s.at(0);
                                          const QVector2D &p1 = s.at(1);
                                          const QVector2D &p2 = s.at(2);
-                                         if (isLine)
-                                             node->appendTriangle(s, std::array<QVector2D, 2>{p.at(0), p.at(2)}, n);
+                                         if (flags.testFlag(QSGCurveStrokeNode::TriangleFlag::Line))
+                                             node->appendTriangle(s, std::array<QVector2D, 2>{p.at(0), p.at(2)}, n, flags);
                                          else
                                              node->appendTriangle(s, p, n);
 

@@ -652,7 +652,12 @@ namespace QQmlPrivate
 
         QVariant constructValueType(
                 QMetaType resultMetaType, const QMetaObject *resultMetaObject,
+                int ctorIndex, void **args) const;
+#if QT_QML_REMOVED_SINCE(6, 9)
+        QVariant constructValueType(
+                QMetaType resultMetaType, const QMetaObject *resultMetaObject,
                 int ctorIndex, void *ctorArg) const;
+#endif
 
         // Those are explicit arguments to the Date() ctor, not implicit coercions.
         QDateTime constructDateTime(double timestamp) const;
@@ -687,15 +692,26 @@ namespace QQmlPrivate
         // exception is present after the initialization there is no way to carry out the lookup and
         // the exception should be propagated. If not, the original lookup can be tried again.
 
+        bool callQmlContextPropertyLookup(uint index, void **args, int argc) const;
+        void initCallQmlContextPropertyLookup(uint index, int relativeMethodIndex) const;
+
+#if QT_QML_REMOVED_SINCE(6, 9)
         bool callQmlContextPropertyLookup(
                 uint index, void **args, const QMetaType *types, int argc) const;
         void initCallQmlContextPropertyLookup(uint index) const;
+#endif
 
         bool loadContextIdLookup(uint index, void *target) const;
         void initLoadContextIdLookup(uint index) const;
 
-        bool callObjectPropertyLookup(uint index, QObject *object,
-                                      void **args, const QMetaType *types, int argc) const;
+        bool callObjectPropertyLookup(uint index, QObject *object, void **args, int argc) const;
+        void initCallObjectPropertyLookup(
+                uint index, QObject *object, int relativeMethodIndex) const;
+        void initCallObjectPropertyLookupAsVariant(uint index, QObject *object) const;
+
+#if QT_QML_REMOVED_SINCE(6, 9)
+        bool callObjectPropertyLookup(
+                uint index, QObject *object, void **args, const QMetaType *types, int argc) const;
         void initCallObjectPropertyLookup(uint index) const;
 
         bool callGlobalLookup(uint index, void **args, const QMetaType *types, int argc) const;
@@ -703,10 +719,17 @@ namespace QQmlPrivate
 
         bool loadGlobalLookup(uint index, void *target, QMetaType type) const;
         void initLoadGlobalLookup(uint index) const;
+#endif
+
+        bool loadGlobalLookup(uint index, void *target) const;
+        void initLoadGlobalLookup(uint index, QMetaType type) const;
 
         bool loadScopeObjectPropertyLookup(uint index, void *target) const;
         bool writeBackScopeObjectPropertyLookup(uint index, void *source) const;
+        void initLoadScopeObjectPropertyLookup(uint index) const;
+#if QT_QML_REMOVED_SINCE(6, 9)
         void initLoadScopeObjectPropertyLookup(uint index, QMetaType type) const;
+#endif
 
         bool loadSingletonLookup(uint index, void *target) const;
         void initLoadSingletonLookup(uint index, uint importNamespace) const;
@@ -719,11 +742,18 @@ namespace QQmlPrivate
 
         bool getObjectLookup(uint index, QObject *object, void *target) const;
         bool writeBackObjectLookup(uint index, QObject *object, void *source) const;
+        void initGetObjectLookup(uint index, QObject *object) const;
+        void initGetObjectLookupAsVariant(uint index, QObject *object) const;
+#if QT_QML_REMOVED_SINCE(6, 9)
         void initGetObjectLookup(uint index, QObject *object, QMetaType type) const;
+#endif
 
         bool getValueLookup(uint index, void *value, void *target) const;
         bool writeBackValueLookup(uint index, void *value, void *source) const;
+        void initGetValueLookup(uint index, const QMetaObject *metaObject) const;
+#if QT_QML_REMOVED_SINCE(6, 9)
         void initGetValueLookup(uint index, const QMetaObject *metaObject, QMetaType type) const;
+#endif
 
         bool getEnumLookup(uint index, void *target) const;
 #if QT_QML_REMOVED_SINCE(6, 6)
@@ -733,10 +763,22 @@ namespace QQmlPrivate
                                const char *enumerator, const char *enumValue) const;
 
         bool setObjectLookup(uint index, QObject *object, void *value) const;
+        void initSetObjectLookup(uint index, QObject *object) const;
+        void initSetObjectLookupAsVariant(uint index, QObject *object) const;
+#if QT_QML_REMOVED_SINCE(6, 9)
         void initSetObjectLookup(uint index, QObject *object, QMetaType type) const;
+#endif
 
         bool setValueLookup(uint index, void *target, void *value) const;
+        void initSetValueLookup(uint index, const QMetaObject *metaObject) const;
+        void initSetValueLookupAsVariant(uint index, const QMetaObject *metaObject) const;
+#if QT_QML_REMOVED_SINCE(6, 9)
         void initSetValueLookup(uint index, const QMetaObject *metaObject, QMetaType type) const;
+#endif
+
+        bool callValueLookup(uint index, void *target, void **args, int argc) const;
+        void initCallValueLookup(
+                uint index, const QMetaObject *metaObject, int relativeMethodIndex) const;
     };
 
     struct AOTCompiledFunction {

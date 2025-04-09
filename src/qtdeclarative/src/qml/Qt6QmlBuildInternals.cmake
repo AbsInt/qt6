@@ -341,7 +341,8 @@ function(qt_internal_add_qml_module target)
 
                 # Plugin initializers associated with an internal module need the internal
                 # platform flags.
-                qt_internal_link_internal_platform_for_object_library("${output_target}")
+                qt_internal_link_internal_platform_for_object_library("${output_target}"
+                    PARENT_TARGET "${target}")
             else()
                 list(APPEND backing_lib_export_targets ${output_target})
             endif()

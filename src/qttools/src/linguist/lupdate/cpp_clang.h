@@ -87,19 +87,6 @@ struct TranslationRelatedStore
             break;
         case TrFunctionAliasManager::Function_tr:
         case TrFunctionAliasManager::Function_trUtf8:
-            if (lupdateSource.isEmpty()) {
-                if (printwarning) {
-                    std::stringstream warning;
-                    warning << qPrintable(lupdateLocationFile) << ":"
-                        << lupdateLocationLine << ":"
-                        << locationCol << ": "
-                        << " \'" << qPrintable(funcName)
-                        << "\' cannot be called without source."
-                        << " The call is ignored." << std::endl;
-                    lupdateWarning.append(QString::fromStdString(warning.str()));
-                }
-                return false;
-            }
             break;
         // two arguments: the context and the source
         case TrFunctionAliasManager::Function_QT_TRANSLATE_N_NOOP:
@@ -109,14 +96,14 @@ struct TranslationRelatedStore
         case TrFunctionAliasManager::Function_QT_TRANSLATE_NOOP_UTF8:
         case TrFunctionAliasManager::Function_QT_TRANSLATE_NOOP3:
         case TrFunctionAliasManager::Function_QT_TRANSLATE_NOOP3_UTF8:
-            if (contextArg.isEmpty() || lupdateSource.isEmpty()) {
+            if (contextArg.isEmpty()) {
                 if (printwarning) {
                     std::stringstream warning;
                     warning << qPrintable(lupdateLocationFile) << ":"
                         << lupdateLocationLine << ":"
                         << locationCol << ": "
                         << " \'" << qPrintable(funcName)
-                        << "\' cannot be called without context or source."
+                        << "\' cannot be called without context."
                         << " The call is ignored." << std::endl;
                     lupdateWarning.append(QString::fromStdString(warning.str()));
                 }

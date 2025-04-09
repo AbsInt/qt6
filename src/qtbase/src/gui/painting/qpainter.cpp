@@ -2308,6 +2308,8 @@ void QPainter::setBrushOrigin(const QPointF &p)
     where the source is OR'ed with the inverted destination pixels
     (src OR (NOT dst)).
 
+    \omitvalue NCompositionModes
+
     \sa compositionMode(), setCompositionMode(), {QPainter#Composition
     Modes}{Composition Modes}, {Image Composition Example}
 */
@@ -3620,12 +3622,11 @@ void QPainter::setPen(const QColor &color)
         return;
     }
 
-    QPen pen(color.isValid() ? color : QColor(Qt::black));
-
-    if (d->state->pen == pen)
+    const QColor actualColor = color.isValid() ? color : QColor(Qt::black);
+    if (d->state->pen == actualColor)
         return;
 
-    d->state->pen = pen;
+    d->state->pen = actualColor;
     if (d->extended)
         d->extended->penChanged();
     else
@@ -3684,12 +3685,10 @@ void QPainter::setPen(Qt::PenStyle style)
         return;
     }
 
-    QPen pen = QPen(style);
-
-    if (d->state->pen == pen)
+    if (d->state->pen == style)
         return;
 
-    d->state->pen = pen;
+    d->state->pen = style;
 
     if (d->extended)
         d->extended->penChanged();
@@ -3764,9 +3763,7 @@ void QPainter::setBrush(Qt::BrushStyle style)
         qWarning("QPainter::setBrush: Painter not active");
         return;
     }
-    if (d->state->brush.style() == style &&
-        (style == Qt::NoBrush
-         || (style == Qt::SolidPattern && d->state->brush.color() == QColor(0, 0, 0))))
+    if (d->state->brush == style)
         return;
     d->state->brush = QBrush(Qt::black, style);
     if (d->extended)
@@ -3774,6 +3771,42 @@ void QPainter::setBrush(Qt::BrushStyle style)
     else
         d->state->dirtyFlags |= QPaintEngine::DirtyBrush;
 }
+
+/*!
+    \overload
+    \since 6.9
+
+    Sets the painter's brush to a solid brush with the specified
+    \a color.
+*/
+
+void QPainter::setBrush(QColor color)
+{
+    Q_D(QPainter);
+    if (!d->engine) {
+        qWarning("QPainter::setBrush: Painter not active");
+        return;
+    }
+
+    const QColor actualColor = color.isValid() ? color : QColor(Qt::black);
+    if (d->state->brush == actualColor)
+        return;
+    d->state->brush = actualColor;
+    if (d->extended)
+        d->extended->brushChanged();
+    else
+        d->state->dirtyFlags |= QPaintEngine::DirtyBrush;
+}
+
+/*!
+    \fn void QPainter::setBrush(Qt::GlobalColor color)
+    \overload
+    \since 6.9
+
+    Sets the painter's brush to a solid brush with the specified
+    \a color.
+*/
+
 
 /*!
     Returns the painter's current brush.
@@ -6006,11 +6039,16 @@ static void drawTextItemDecoration(QPainter *painter, const QPointF &pos, const 
         painter->fillRect(pos.x(), 0, qCeil(width), qMin(wave.height(), descent), wave);
         painter->restore();
     } else if (underlineStyle != QTextCharFormat::NoUnderline) {
+        const bool isAntialiasing = painter->renderHints().testFlag(QPainter::Antialiasing);
+        if (!isAntialiasing)
+            pen.setWidthF(qMax(fe->lineThickness().round(), QFixed(1)).toReal());
+        const qreal lineThicknessOffset = pen.widthF() / 2.0;
+
         // Deliberately ceil the offset to avoid the underline coming too close to
         // the text above it, but limit it to stay within descent.
-        qreal adjustedUnderlineOffset = std::ceil(underlineOffset) + 0.5;
+        qreal adjustedUnderlineOffset = std::ceil(underlineOffset) + lineThicknessOffset;
         if (underlineOffset <= fe->descent().toReal())
-            adjustedUnderlineOffset = qMin(adjustedUnderlineOffset, fe->descent().toReal() - qreal(0.5));
+            adjustedUnderlineOffset = qMin(adjustedUnderlineOffset, fe->descent().toReal() - lineThicknessOffset);
         const qreal underlinePos = pos.y() + adjustedUnderlineOffset;
         QColor uc = charFormat.underlineColor();
         if (uc.isValid())
@@ -6023,6 +6061,9 @@ static void drawTextItemDecoration(QPainter *painter, const QPointF &pos, const 
             textEngine->addUnderline(painter, underline);
         else
             painter->drawLine(underline);
+
+        if (!isAntialiasing)
+            pen.setWidthF(fe->lineThickness().toReal());
     }
 
     pen.setStyle(Qt::SolidLine);

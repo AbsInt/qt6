@@ -220,7 +220,7 @@ public:
         return (openMode & QFile::WriteOnly) && !(openMode & QFile::ExistingOnly);
     }
 protected:
-    QFSFileEnginePrivate();
+    QFSFileEnginePrivate(QAbstractFileEngine *q);
 
     void init();
 

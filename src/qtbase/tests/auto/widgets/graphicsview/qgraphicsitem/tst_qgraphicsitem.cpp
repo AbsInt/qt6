@@ -469,7 +469,7 @@ private slots:
 
 private:
     GraphicsItems paintedItems;
-    QPointingDevice *m_touchDevice = QTest::createTouchDevice();
+    std::unique_ptr<QPointingDevice> m_touchDevice{QTest::createTouchDevice()};
 };
 
 void tst_QGraphicsItem::cleanup()
@@ -3047,13 +3047,14 @@ void tst_QGraphicsItem::mapRectFromToParent()
     QFETCH(QRectF, inputRect);
     QFETCH(QRectF, outputRect);
 
-    QGraphicsRectItem *rect = new QGraphicsRectItem;
+    std::unique_ptr<QGraphicsRectItem> rectParent; // keep this first
+    const auto rect = std::make_unique<QGraphicsRectItem>();
     rect->setPos(pos);
     rect->setTransform(transform);
 
     if (parent) {
-        QGraphicsRectItem *rectParent = new QGraphicsRectItem;
-        rect->setParentItem(rectParent);
+        rectParent = std::make_unique<QGraphicsRectItem>();
+        rect->setParentItem(rectParent.get());
         rectParent->setPos(parentPos);
         rectParent->setTransform(parentTransform);
     }
@@ -5001,12 +5002,12 @@ void tst_QGraphicsItem::sceneEventFilter()
     //Let check if the items are correctly removed from the sceneEventFilters array
     //to avoid stale pointers.
     QGraphicsView gv;
-    QGraphicsScene *anotherScene = new QGraphicsScene;
-    QGraphicsTextItem *ti = anotherScene->addText("This is a test #1");
+    QGraphicsScene anotherScene;
+    QGraphicsTextItem *ti = anotherScene.addText("This is a test #1");
     ti->moveBy(50, 50);
-    QGraphicsTextItem *ti2 = anotherScene->addText("This is a test #2");
-    QGraphicsTextItem *ti3 = anotherScene->addText("This is a test #3");
-    gv.setScene(anotherScene);
+    QGraphicsTextItem *ti2 = anotherScene.addText("This is a test #2");
+    QGraphicsTextItem *ti3 = anotherScene.addText("This is a test #3");
+    gv.setScene(&anotherScene);
     gv.show();
     QVERIFY(QTest::qWaitForWindowExposed(&gv));
     ti->installSceneEventFilter(ti2);
@@ -11077,13 +11078,14 @@ void tst_QGraphicsItem::touchEventPropagation()
     view.setSceneRect(touchEventReceiver->boundingRect());
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
-    QInputDevicePrivate::get(m_touchDevice)->setAvailableVirtualGeometry(view.screen()->geometry());
+    QInputDevicePrivate::get(m_touchDevice.get())
+            ->setAvailableVirtualGeometry(view.screen()->geometry());
 
     QCOMPARE(touchEventReceiver->touchBeginEventCount(), 0);
 
     const QPointF scenePos = view.sceneRect().center();
     sendMousePress(&scene, scenePos);
-    QMutableTouchEvent touchBegin(QEvent::TouchBegin, m_touchDevice, Qt::NoModifier,
+    QMutableTouchEvent touchBegin(QEvent::TouchBegin, m_touchDevice.get(), Qt::NoModifier,
                                   createTouchPoints(view, scenePos, QSizeF(10, 10)));
     touchBegin.setTarget(view.viewport());
 
@@ -11137,11 +11139,12 @@ void tst_QGraphicsItem::touchEventTransformation()
     view.setTransform(viewTransform);
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
-    QInputDevicePrivate::get(m_touchDevice)->setAvailableVirtualGeometry(view.screen()->geometry());
+    QInputDevicePrivate::get(m_touchDevice.get())
+            ->setAvailableVirtualGeometry(view.screen()->geometry());
 
     QCOMPARE(touchEventReceiver->touchBeginEventCount(), 0);
 
-    QMutableTouchEvent touchBegin(QEvent::TouchBegin, m_touchDevice, Qt::NoModifier,
+    QMutableTouchEvent touchBegin(QEvent::TouchBegin, m_touchDevice.get(), Qt::NoModifier,
                                   createTouchPoints(view, touchScenePos, ellipseDiameters));
     touchBegin.setTarget(view.viewport());
     QCoreApplication::sendEvent(&scene, &touchBegin);
@@ -11155,7 +11158,7 @@ void tst_QGraphicsItem::touchEventTransformation()
     COMPARE_POINTF(touchBeginPoint.position(), expectedItemPos);
     COMPARE_SIZEF(touchBeginPoint.ellipseDiameters(), ellipseDiameters); // Must remain untransformed
 
-    QMutableTouchEvent touchUpdate(QEvent::TouchUpdate, m_touchDevice, Qt::NoModifier,
+    QMutableTouchEvent touchUpdate(QEvent::TouchUpdate, m_touchDevice.get(), Qt::NoModifier,
                                    createTouchPoints(view, touchScenePos, ellipseDiameters, QEventPoint::State::Updated));
     touchUpdate.setTarget(view.viewport());
 
@@ -11628,6 +11631,8 @@ void tst_QGraphicsItem::itemDiesDuringDraggingOperation()
     QCoreApplication::sendEvent(&scene, &dragEnter);
     QGraphicsSceneDragDropEvent event(QEvent::GraphicsSceneDragMove);
     event.setScenePos(item->boundingRect().center());
+    event.setProposedAction(Qt::DropAction::CopyAction); // prevent uninit'ed copy in...
+    event.setDropAction(Qt::DropAction::CopyAction);     // ...QGraphicsScenePrivate::cloneDragDropEvent()
     QCoreApplication::sendEvent(&scene, &event);
     QCOMPARE(QGraphicsScenePrivate::get(&scene)->dragDropItem, item);
     delete item;

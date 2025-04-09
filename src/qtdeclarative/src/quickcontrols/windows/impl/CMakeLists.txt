@@ -3,7 +3,13 @@
 
 set(qml_files
     "CheckIndicator.qml"
+    "CopyAction.qml"
+    "CutAction.qml"
+    "DeleteAction.qml"
+    "PasteAction.qml"
+    "SelectAllAction.qml"
     "SwitchIndicator.qml"
+    "TextEditingContextMenu.qml"
 )
 
 qt_internal_add_qml_module(QuickControls2WindowsStyleImpl

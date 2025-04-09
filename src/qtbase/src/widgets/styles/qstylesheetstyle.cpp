@@ -82,6 +82,7 @@
 #include <QLabel>
 #endif
 #include "qdrawutil.h"
+#include "qstylehelper_p.h"
 
 #include <limits.h>
 #if QT_CONFIG(toolbar)
@@ -108,6 +109,25 @@ class QStyleSheetStylePrivate : public QWindowsStylePrivate
     Q_DECLARE_PUBLIC(QStyleSheetStyle)
 public:
     QStyleSheetStylePrivate() { }
+};
+
+class QStyleSheetProxySaver
+{
+public:
+    QStyleSheetProxySaver(const QStyleSheetStyle *that)
+        : m_that(const_cast<QStyleSheetStyle *>(that))
+        , m_oldProxy(const_cast<QStyle *>(that->baseStyle()->proxy()))
+    {
+        m_that->baseStyle()->setProxy(m_that);
+    }
+    ~QStyleSheetProxySaver()
+    {
+        m_that->baseStyle()->setProxy(m_oldProxy);
+    }
+
+private:
+    QStyleSheetStyle *m_that;
+    QStyle *m_oldProxy;
 };
 
 
@@ -3537,7 +3557,7 @@ void QStyleSheetStyle::drawComplexControl(ComplexControl cc, const QStyleOptionC
                 break;
             subRule.drawRule(p, opt->rect);
             QHash<QStyle::SubControl, QRect> layout = titleBarLayout(w, tb);
-            const auto paintDeviceDpr = p->device()->devicePixelRatio();
+            const auto paintDeviceDpr = QStyleHelper::getDpr(p);
 
             QRect ir;
             ir = layout[SC_TitleBarLabel];
@@ -3618,7 +3638,7 @@ void QStyleSheetStyle::renderMenuItemIcon(const QStyleOptionMenuItem *mi, QPaint
     const bool checked = mi->checkType != QStyleOptionMenuItem::NotCheckable && mi->checked;
     const auto iconSize = pixelMetric(PM_SmallIconSize, mi, w);
     const QSize sz(iconSize, iconSize);
-    const QPixmap pixmap(mi->icon.pixmap(sz, p->device()->devicePixelRatio(), mode,
+    const QPixmap pixmap(mi->icon.pixmap(sz, QStyleHelper::getDpr(p), mode,
                         checked ? QIcon::On : QIcon::Off));
     const int pixw = pixmap.width() / pixmap.devicePixelRatio();
     const int pixh = pixmap.height() / pixmap.devicePixelRatio();
@@ -3753,7 +3773,7 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                     if (button->state & State_On)
                         state = QIcon::On;
 
-                    const auto paintDeviceDpr = p->device()->devicePixelRatio();
+                    const auto paintDeviceDpr = QStyleHelper::getDpr(p);
                     QPixmap pixmap = icon.pixmap(button->iconSize, paintDeviceDpr, mode, state);
                     int pixmapWidth = pixmap.width() / pixmap.devicePixelRatio();
                     int pixmapHeight = pixmap.height() / pixmap.devicePixelRatio();
@@ -4059,7 +4079,7 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                 if (spacing == -1)
                     spacing = 6;
                 QIcon::Mode mode = cb->state & State_Enabled ? QIcon::Normal : QIcon::Disabled;
-                const auto paintDeviceDpr = p->device()->devicePixelRatio();
+                const auto paintDeviceDpr = QStyleHelper::getDpr(p);
                 QPixmap pixmap = cb->currentIcon.pixmap(cb->iconSize, paintDeviceDpr, mode);
                 QRect iconRect(editRect);
                 iconRect.setWidth(cb->iconSize.width());
@@ -4404,6 +4424,7 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                     p->setClipRegion(clipRegion);
                 }
                 subRule.configurePalette(&optCopy.palette, QPalette::Text, QPalette::NoRole);
+                QStyleSheetProxySaver proxySaver(this);
                 baseStyle()->drawControl(ce, &optCopy, p, w);
                 p->restore();
             }
@@ -4854,7 +4875,7 @@ void QStyleSheetStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *op
                 if (rule.background()->brush.color().alpha() != 1.0)
                     baseStyle()->drawPrimitive(pe, opt, p, w);
                 // Skip border for the branch and draw only the brackground
-                if (vopt->features & QStyleOptionViewItem::HasDecoration &&
+                if (vopt->features & QStyleOptionViewItem::IsDecorationForRootColumn &&
                     (vopt->viewItemPosition == QStyleOptionViewItem::Beginning ||
                      vopt->viewItemPosition == QStyleOptionViewItem::OnlyOne) && rule.hasBorder()) {
                     if (rule.hasDrawable()) {
@@ -5436,6 +5457,11 @@ QSize QStyleSheetStyle::sizeFromContents(ContentsType ct, const QStyleOption *op
                     drawCheckMark = false; // ignore the checkmarks provided by the QComboMenuDelegate
 #endif
                 QSize sz(csz);
+                if (subRule.hasFont) {
+                    QFontMetrics fm(subRule.font.resolve(mi->font));
+                    const QRect r = fm.boundingRect(QRect(), Qt::TextSingleLine | Qt::TextShowMnemonic, mi->text);
+                    sz = sz.expandedTo(r.size());
+                }
                 if (mi->text.contains(u'\t'))
                     sz.rwidth() += 12; //as in QCommonStyle
                 if (!mi->icon.isNull()) {
@@ -5448,11 +5474,6 @@ QSize QStyleSheetStyle::sizeFromContents(ContentsType ct, const QStyleOption *op
                     sz.rwidth() += std::max(mi->maxIconWidth, checkmarkRect.width()) + 4;
                 } else {
                     sz.rwidth() += mi->maxIconWidth;
-                }
-                if (subRule.hasFont) {
-                    QFontMetrics fm(subRule.font.resolve(mi->font));
-                    const QRect r = fm.boundingRect(QRect(), Qt::TextSingleLine | Qt::TextShowMnemonic, mi->text);
-                    sz = sz.expandedTo(r.size());
                 }
                 return subRule.boxSize(subRule.adjustSize(sz));
             }
@@ -5662,8 +5683,7 @@ QPixmap QStyleSheetStyle::standardPixmap(StandardPixmap standardPixmap, const QS
         const auto styleHint = renderRule(w, opt).styleHint(s);
         if (styleHint.isValid() && styleHint.canConvert<QIcon>()) {
             QIcon icon = qvariant_cast<QIcon>(styleHint);
-            const auto dpr = w ? w->devicePixelRatio() : qApp->devicePixelRatio();
-            return icon.pixmap(QSize(16, 16), dpr);
+            return icon.pixmap(QSize(16, 16), QStyleHelper::getDpr(w));
         }
     }
     return baseStyle()->standardPixmap(standardPixmap, opt, w);

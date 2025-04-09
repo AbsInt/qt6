@@ -3,6 +3,7 @@
 
 #include "qvulkanwindow_p.h"
 #include "qvulkanfunctions.h"
+#include "qvulkandefaultinstance_p.h"
 #include <QLoggingCategory>
 #include <QTimer>
 #include <QThread>
@@ -10,8 +11,6 @@
 #include <qevent.h>
 
 QT_BEGIN_NAMESPACE
-
-Q_DECLARE_LOGGING_CATEGORY(lcGuiVk)
 
 /*!
   \class QVulkanWindow
@@ -2153,7 +2152,7 @@ void QVulkanWindowPrivate::endFrame()
  */
 void QVulkanWindow::frameReady()
 {
-    Q_ASSERT_X(QThread::currentThread() == QCoreApplication::instance()->thread(),
+    Q_ASSERT_X(QThread::isMainThread(),
         "QVulkanWindow", "frameReady() can only be called from the GUI (main) thread");
 
     Q_D(QVulkanWindow);

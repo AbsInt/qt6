@@ -59,7 +59,7 @@ void tst_focus::init()
 
 void tst_focus::initTestCase()
 {
-    SKIP_IF_NO_WINDOW_ACTIVATION
+    SKIP_IF_NO_WINDOW_ACTIVATION;
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuWindows);
     QQuickStyle::setStyle("Basic");
     QQmlDataTest::initTestCase();
@@ -165,7 +165,7 @@ void tst_focus::policy()
     QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
     QTest::keyClick(window.data(), Qt::Key_Tab);
     QVERIFY(control->hasActiveFocus());
-    QVERIFY(control->hasVisualFocus());
+    VERIFY_VISUAL_FOCUS(control);
     QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusBehavior(-1));
 
     // reset
@@ -472,7 +472,7 @@ void tst_focus::visualFocus()
 
     button->forceActiveFocus(Qt::TabFocusReason);
     QVERIFY(button->hasActiveFocus());
-    QVERIFY(button->hasVisualFocus());
+    VERIFY_VISUAL_FOCUS(button);
     QVERIFY(button->property("showFocus").toBool());
 
     QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, QPoint(textfield->x() + textfield->width() / 2, textfield->y() + textfield->height() / 2));

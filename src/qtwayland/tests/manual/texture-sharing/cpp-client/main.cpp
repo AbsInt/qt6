@@ -13,7 +13,7 @@
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
 #include <QtWaylandClient/private/qwaylandintegration_p.h>
 #include <QtWaylandClient/private/qwaylandserverbufferintegration_p.h>
-#include "texturesharingextension.h"
+#include "texturesharingextension_p.h"
 
 #include <QDebug>
 #include <QtGui/qpa/qplatformnativeinterface.h>

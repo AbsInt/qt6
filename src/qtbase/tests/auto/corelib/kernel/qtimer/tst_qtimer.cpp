@@ -458,10 +458,10 @@ void tst_QTimer::basic_chrono()
 
 void tst_QTimer::livelock_data()
 {
-    QTest::addColumn<int>("interval");
-    QTest::newRow("zero timer") << 0;
-    QTest::newRow("non-zero timer") << 1;
-    QTest::newRow("longer than sleep") << 20;
+    QTest::addColumn<std::chrono::milliseconds>("interval");
+    QTest::newRow("zero timer") << 0ms;
+    QTest::newRow("non-zero timer") << 1ms;
+    QTest::newRow("longer than sleep") << 20ms;
 }
 
 /*!
@@ -473,14 +473,14 @@ void tst_QTimer::livelock_data()
 class LiveLockTester : public QObject
 {
 public:
-    LiveLockTester(int i)
+    LiveLockTester(std::chrono::milliseconds i)
         : interval(i),
           timeoutsForFirst(0), timeoutsForExtra(0), timeoutsForSecond(0),
           postEventAtRightTime(false)
     {
-        firstTimerId = startTimer(interval);
-        extraTimerId = startTimer(interval + 80);
-        secondTimerId = -1; // started later
+        firstTimerId = Qt::TimerId{startTimer(interval)};
+        extraTimerId = Qt::TimerId{startTimer(interval + 80ms)};
+        secondTimerId = Qt::TimerId::Invalid; // started later
     }
 
     bool event(QEvent *e) override
@@ -496,28 +496,28 @@ public:
 
     void timerEvent(QTimerEvent *te) override
     {
-        if (te->timerId() == firstTimerId) {
+        if (te->id() == firstTimerId) {
             if (++timeoutsForFirst == 1) {
                 killTimer(extraTimerId);
-                extraTimerId = -1;
+                extraTimerId = Qt::TimerId::Invalid;
                 QCoreApplication::postEvent(this, new QEvent(static_cast<QEvent::Type>(4002)));
-                secondTimerId = startTimer(interval);
+                secondTimerId = Qt::TimerId{startTimer(interval)};
             }
-        } else if (te->timerId() == secondTimerId) {
+        } else if (te->id() == secondTimerId) {
             ++timeoutsForSecond;
-        } else if (te->timerId() == extraTimerId) {
+        } else if (te->id() == extraTimerId) {
             ++timeoutsForExtra;
         }
 
         // sleep for 2ms
         QTest::qSleep(2);
-        killTimer(te->timerId());
+        killTimer(te->id());
     }
 
-    const int interval;
-    int firstTimerId;
-    int secondTimerId;
-    int extraTimerId;
+    const std::chrono::milliseconds interval;
+    Qt::TimerId firstTimerId;
+    Qt::TimerId secondTimerId;
+    Qt::TimerId extraTimerId;
     int timeoutsForFirst;
     int timeoutsForExtra;
     int timeoutsForSecond;
@@ -533,7 +533,7 @@ void tst_QTimer::livelock()
       events (since new posted events are not sent until the next
       iteration of the eventloop either).
     */
-    QFETCH(int, interval);
+    QFETCH(std::chrono::milliseconds, interval);
     LiveLockTester tester(interval);
     QTest::qWait(180); // we have to use wait here, since we're testing timers with a non-zero timeout
     QTRY_COMPARE(tester.timeoutsForFirst, 1);
@@ -1138,7 +1138,7 @@ DontBlockEvents::DontBlockEvents()
 
 void DontBlockEvents::timerEvent(QTimerEvent* event)
 {
-    if (event->timerId() == m_timer.timerId()) {
+    if (event->id() == m_timer.id()) {
         QMetaObject::invokeMethod(this, "paintEvent", Qt::QueuedConnection);
         m_timer.start(0, this);
         count++;

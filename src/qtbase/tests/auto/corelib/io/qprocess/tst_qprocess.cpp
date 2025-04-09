@@ -55,6 +55,8 @@ private slots:
     void startWithOldOpen();
     void execute();
     void startDetached();
+    void simpleStartFail_data();
+    void simpleStartFail();
     void crashTest();
     void crashTest2();
     void echoTest_data();
@@ -105,8 +107,8 @@ private slots:
     void switchReadChannels();
     void discardUnwantedOutput();
     void setWorkingDirectory();
+    void setNonExistentWorkingDirectory_data();
     void setNonExistentWorkingDirectory();
-    void detachedSetNonExistentWorkingDirectory();
 
     void exitStatus_data();
     void exitStatus();
@@ -368,6 +370,62 @@ void tst_QProcess::startDetached()
     QVERIFY(QProcess::startDetached("testProcessNormal/testProcessNormal",
                                     QStringList() << "arg1" << "arg2"));
     QCOMPARE(QProcess::startDetached("nonexistingexe"), false);
+}
+
+void tst_QProcess::simpleStartFail_data()
+{
+    QTest::addColumn<bool>("detached");
+    QTest::addColumn<bool>("unixCloseFileDescriptors");
+
+    QTest::addRow("normal") << false << false;
+    QTest::addRow("detached") << true << false;
+
+#ifdef Q_OS_UNIX
+    // make sure UnixProcessFlag::CloseFileDescriptors doesn't affect our
+    // error reporting
+    QTest::addRow("normal+closefds") << false << true;
+    QTest::addRow("detached+closefds") << true << true;
+#endif
+}
+
+void tst_QProcess::simpleStartFail()
+{
+    // for more complex and stressful cases, see the other failToStart* tests
+    QFETCH(bool, detached);
+    QProcess process;
+
+#ifdef Q_OS_UNIX
+    QFETCH(bool, unixCloseFileDescriptors);
+    if (unixCloseFileDescriptors)
+        process.setUnixProcessParameters(QProcess::UnixProcessFlag::CloseFileDescriptors);
+#endif
+
+    QSignalSpy stateSpy(&process, &QProcess::stateChanged);
+    QSignalSpy errorOccurredSpy(&process, &QProcess::errorOccurred);
+
+    process.setProgram(nonExistentFileName);
+
+    if (detached) {
+        qint64 pid = -1;
+        QVERIFY(!process.startDetached(&pid));
+        QCOMPARE(pid, -1);
+    } else {
+        process.start();
+        QVERIFY(!process.waitForFinished());
+
+        QCOMPARE(stateSpy.size(), 2);
+        QCOMPARE(stateSpy[0][0].value<QProcess::ProcessState>(), QProcess::Starting);
+        QCOMPARE(stateSpy[1][0].value<QProcess::ProcessState>(), QProcess::NotRunning);
+    }
+
+    QCOMPARE(errorOccurredSpy.size(), 1);
+    QCOMPARE(process.error(), QProcess::FailedToStart);
+    QCOMPARE_NE(process.errorString(), "Unknown error");
+
+#ifdef Q_OS_UNIX
+    QVERIFY2(process.errorString().contains(": execve: "), process.errorString().toLocal8Bit());
+    QVERIFY2(process.errorString().contains(qt_error_string(ENOENT)), process.errorString().toLocal8Bit());
+#endif
 }
 
 void tst_QProcess::readFromProcess()
@@ -1799,6 +1857,7 @@ void tst_QProcess::unixProcessParameters_data()
     addRow("file-descriptors", P::CloseFileDescriptors);
     addRow("setsid", P::CreateNewSession);
     addRow("reset-ids", P::ResetIds);
+    addRow("no-coredumps", P::DisableCoreDumps);
 
     // On FreeBSD, we need to be session leader to disconnect from the CTTY
     addRow("noctty", P::DisconnectControllingTerminal | P::CreateNewSession);
@@ -1813,6 +1872,7 @@ void tst_QProcess::unixProcessParameters()
     struct Scope {
         int devnull;
         struct sigaction old_sigusr1, old_sigpipe;
+        struct rlimit old_corelimit = {};
         Scope()
         {
             int fd = open("/dev/null", O_RDONLY);
@@ -1831,6 +1891,13 @@ void tst_QProcess::unixProcessParameters()
             sigset_t *set = &act.sa_mask;               // reuse this sigset_t
             sigaddset(set, SIGUSR2);
             sigprocmask(SIG_BLOCK, set, nullptr);
+
+            if (getrlimit(RLIMIT_CORE, &old_corelimit) == 0 && old_corelimit.rlim_max) {
+                struct rlimit new_corelimit = old_corelimit;
+                new_corelimit.rlim_cur = new_corelimit.rlim_max;
+                if (setrlimit(RLIMIT_CORE, &new_corelimit) != 0)
+                    old_corelimit = {};
+            }
         }
         ~Scope()
         {
@@ -1847,6 +1914,9 @@ void tst_QProcess::unixProcessParameters()
             sigset_t *set = &old_sigusr1.sa_mask;       // reuse this sigset_t
             sigaddset(set, SIGUSR2);
             sigprocmask(SIG_BLOCK, set, nullptr);
+
+            if (old_corelimit.rlim_max)
+                setrlimit(RLIMIT_CORE, &old_corelimit);
         }
     } scope;
 
@@ -1860,6 +1930,11 @@ void tst_QProcess::unixProcessParameters()
             qInfo("Process has no controlling terminal; this test will do nothing");
             close(fd);
         }
+    }
+
+    if (params.flags & QProcess::UnixProcessFlag::DisableCoreDumps
+            && scope.old_corelimit.rlim_max == 0) {
+        QSKIP("Cannot raise the core size limit (hard limit is set to zero)");
     }
 
     QProcess process;
@@ -2808,7 +2883,7 @@ void tst_QProcess::discardUnwantedOutput()
 void tst_QProcess::setWorkingDirectory()
 {
     QProcess process;
-    process.setWorkingDirectory("test");
+    process.setWorkingDirectory(m_temporaryDir.path());
 
     // use absolute path because on Windows, the executable is relative to the parent's CWD
     // while on Unix with fork it's relative to the child's (with posix_spawn, it could be either).
@@ -2819,52 +2894,49 @@ void tst_QProcess::setWorkingDirectory()
     QCOMPARE(process.exitCode(), 0);
 
     QByteArray workingDir = process.readAllStandardOutput();
-    QCOMPARE(QDir("test").canonicalPath(), QDir(workingDir.constData()).canonicalPath());
+    QCOMPARE(QDir(m_temporaryDir.path()).canonicalPath(), QDir(workingDir.constData()).canonicalPath());
+}
+
+void tst_QProcess::setNonExistentWorkingDirectory_data()
+{
+    simpleStartFail_data();
 }
 
 void tst_QProcess::setNonExistentWorkingDirectory()
 {
+    QFETCH(bool, detached);
     QProcess process;
     process.setWorkingDirectory(nonExistentFileName);
+
+#ifdef Q_OS_UNIX
+    QFETCH(bool, unixCloseFileDescriptors);
+    if (unixCloseFileDescriptors)
+        process.setUnixProcessParameters(QProcess::UnixProcessFlag::CloseFileDescriptors);
+#endif
 
     QSignalSpy stateSpy(&process, &QProcess::stateChanged);
     QSignalSpy errorOccurredSpy(&process, &QProcess::errorOccurred);
 
     // use absolute path because on Windows, the executable is relative to the parent's CWD
     // while on Unix with fork it's relative to the child's (with posix_spawn, it could be either).
-    process.start(QFileInfo("testSetWorkingDirectory/testSetWorkingDirectory").absoluteFilePath());
-
-    QVERIFY(!process.waitForFinished());
-    QCOMPARE(errorOccurredSpy.size(), 1);
-    QCOMPARE(process.error(), QProcess::FailedToStart);
-    QCOMPARE(stateSpy.size(), 2);
-    QCOMPARE(stateSpy[0][0].value<QProcess::ProcessState>(), QProcess::Starting);
-    QCOMPARE(stateSpy[1][0].value<QProcess::ProcessState>(), QProcess::NotRunning);
-
-#ifdef Q_OS_UNIX
-    QVERIFY2(process.errorString().startsWith("chdir:"), process.errorString().toLocal8Bit());
-#endif
-}
-
-void tst_QProcess::detachedSetNonExistentWorkingDirectory()
-{
-    QProcess process;
-    process.setWorkingDirectory(nonExistentFileName);
-
-    QSignalSpy errorOccurredSpy(&process, &QProcess::errorOccurred);
-
-    // use absolute path because on Windows, the executable is relative to the parent's CWD
-    // while on Unix with fork it's relative to the child's (with posix_spawn, it could be either).
     process.setProgram(QFileInfo("testSetWorkingDirectory/testSetWorkingDirectory").absoluteFilePath());
 
-    qint64 pid = -1;
-    QVERIFY(!process.startDetached(&pid));
-    QCOMPARE(pid, -1);
-    QCOMPARE(process.error(), QProcess::FailedToStart);
-    QVERIFY(process.errorString() != "Unknown error");
+    if (detached) {
+        qint64 pid = -1;
+        QVERIFY(!process.startDetached(&pid));
+        QCOMPARE(pid, -1);
+    } else {
+        process.start();
+        QVERIFY(!process.waitForFinished());
+
+        QCOMPARE(stateSpy.size(), 2);
+        QCOMPARE(stateSpy[0][0].value<QProcess::ProcessState>(), QProcess::Starting);
+        QCOMPARE(stateSpy[1][0].value<QProcess::ProcessState>(), QProcess::NotRunning);
+    }
 
     QCOMPARE(errorOccurredSpy.size(), 1);
     QCOMPARE(process.error(), QProcess::FailedToStart);
+    QCOMPARE_NE(process.errorString(), "Unknown error");
 
 #ifdef Q_OS_UNIX
     QVERIFY2(process.errorString().startsWith("chdir:"), process.errorString().toLocal8Bit());

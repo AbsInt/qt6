@@ -33,6 +33,7 @@
 #include "PageAllocation.h"
 #include <errno.h>
 #include <sys/mman.h>
+#include <string.h>
 #include <wtf/Assertions.h>
 #include <wtf/UnusedParam.h>
 
@@ -184,6 +185,11 @@ void* OSAllocator::reserveAndCommit(size_t bytes, Usage usage, bool writable, bo
 #endif
             CRASH();
     }
+#if OS(VXWORKS) && defined(QT_RTP_MEM_FILL) && QT_RTP_MEM_FILL
+    // page allocator expects mmap'ed memory to be zero'ed
+    memset(result, 0, bytes);
+#endif
+
     if (result && includesGuardPages) {
         // We use mmap to remap the guardpages rather than using mprotect as
         // mprotect results in multiple references to the code region.  This

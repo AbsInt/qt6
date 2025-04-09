@@ -145,6 +145,8 @@ private slots:
 #  ifdef QT_BUILD_INTERNAL
     void mySystemLocale_data();
     void mySystemLocale();
+    void systemGrouping_data();
+    void systemGrouping();
 #  endif
 
     void systemLocaleDayAndMonthNames_data();
@@ -159,16 +161,20 @@ private slots:
     void lcsToCode();
     void codeToLcs();
 
-    // *** ORDER-DEPENDENCY *** (This Is Bad.)
-    // Test order is determined by order of declaration here: *all* tests that
-    // QLocale::setDefault() *must* appear *after* all other tests !
-    void defaulted_ctor(); // This one must be the first of these.
+#if QT_CONFIG(icu) || defined(Q_OS_WIN) || defined(Q_OS_APPLE)
+    void toLowerUpper_data();
+    void toLowerUpper();
+
+    void toLowerUpperEszett();
+#endif
+
+    void defaulted_ctor();
     void legacyNames();
     void unixLocaleName_data();
     void unixLocaleName();
     void testNames_data();
     void testNames();
-    // DO NOT add tests here unless they QLocale::setDefault(); see above.
+    void debugOutput();
 private:
     QString m_decimal, m_thousand, m_sdate, m_ldate, m_time;
     QString m_sysapp;
@@ -260,6 +266,7 @@ void tst_QLocale::ctor_data()
     ECHO("zh_Hans_CN", Chinese, SimplifiedHanScript, China);
     ECHO("zh_Hant_TW", Chinese, TraditionalHanScript, Taiwan);
     ECHO("zh_Hant_HK", Chinese, TraditionalHanScript, HongKong);
+    ECHO("en_POSIX", C, AnyScript, AnyTerritory);
 #undef ECHO
 
     // Determine territory from language and script:
@@ -326,6 +333,7 @@ void tst_QLocale::ctor_data()
     LANDFILL("und_CA", English, LatinScript, Canada);
     LANDFILL("und_US", English, LatinScript, UnitedStates);
     LANDFILL("und_GB", English, LatinScript, UnitedKingdom);
+    LANDFILL("und_POSIX", C, AnyScript, AnyTerritory);
 #undef LANDFILL
 }
 
@@ -335,14 +343,14 @@ void tst_QLocale::ctor()
     QFETCH(const QLocale::Script, reqText);
     QFETCH(const QLocale::Territory, reqLand);
 
-    {
+    const QLatin1String request(QTest::currentDataTag());
+    if (request != "und_POSIX"_L1) {
         const QLocale l(reqLang, reqText, reqLand);
         QTEST(l.language(), "expLang");
         QTEST(l.script(), "expText");
         QTEST(l.territory(), "expLand");
     }
-    const QLatin1String request(QTest::currentDataTag());
-    if (!request.startsWith(u"und_")) {
+    if (!request.startsWith("und_"_L1) || request.endsWith("_POSIX"_L1)) {
         const QLocale l(request);
         QTEST(l.language(), "expLang");
         QTEST(l.script(), "expText");
@@ -386,17 +394,20 @@ void tst_QLocale::ctor_match_land()
 
 void tst_QLocale::defaulted_ctor()
 {
-    QLocale default_locale = QLocale::system();
-    QLocale::Language default_lang = default_locale.language();
-    QLocale::Territory default_country = default_locale.territory();
+    QLocale priorDefault;
+    const auto restoreDefault = qScopeGuard([priorDefault]() {
+        QLocale::setDefault(priorDefault);
+    });
+    QLocale::Language defaultLanguage = priorDefault.language();
+    QLocale::Territory defaultTerritory = priorDefault.territory();
 
-    qDebug("Default: %s/%s", QLocale::languageToString(default_lang).toUtf8().constData(),
-            QLocale::territoryToString(default_country).toUtf8().constData());
+    qDebug("Default: %s/%s", QLocale::languageToString(defaultLanguage).toUtf8().constData(),
+            QLocale::territoryToString(defaultTerritory).toUtf8().constData());
 
     {
         QLocale l;
-        QCOMPARE(l.language(), default_lang);
-        QCOMPARE(l.territory(), default_country);
+        QCOMPARE(l.language(), defaultLanguage);
+        QCOMPARE(l.territory(), defaultTerritory);
     }
 
     {
@@ -421,8 +432,8 @@ void tst_QLocale::defaulted_ctor()
 
     TEST_CTOR(AnyLanguage, AnyTerritory, QLocale::English, QLocale::UnitedStates);
     TEST_CTOR(C, AnyTerritory, QLocale::C, QLocale::AnyTerritory);
-    TEST_CTOR(Aymara, AnyTerritory, default_lang, default_country);
-    TEST_CTOR(Aymara, France, default_lang, default_country);
+    TEST_CTOR(Aymara, AnyTerritory, defaultLanguage, defaultTerritory);
+    TEST_CTOR(Aymara, France, defaultLanguage, defaultTerritory);
 
     TEST_CTOR(English, AnyTerritory, QLocale::English, QLocale::UnitedStates);
     TEST_CTOR(English, UnitedStates, QLocale::English, QLocale::UnitedStates);
@@ -497,6 +508,7 @@ void tst_QLocale::defaulted_ctor()
     TEST_CTOR(Swedish, AnyTerritory, QLocale::Swedish, QLocale::Sweden);
     TEST_CTOR(Uzbek, AnyTerritory, QLocale::Uzbek, QLocale::Uzbekistan);
 
+#undef CHECK_DEFAULT
 #undef TEST_CTOR
 #define TEST_CTOR(req_lc, exp_lang, exp_country) \
     do { \
@@ -508,7 +520,6 @@ void tst_QLocale::defaulted_ctor()
         QCOMPARE(qHash(l), qHash(m)); \
     } while (false)
 
-    QLocale::setDefault(QLocale(QLocale::C));
     const QString empty;
 
     TEST_CTOR("C", C, AnyTerritory);
@@ -579,7 +590,6 @@ void tst_QLocale::defaulted_ctor()
     TEST_CTOR("ru_Cyrl", Russian, CyrillicScript, RussianFederation);
 
 #undef TEST_CTOR
-#undef CHECK_DEFAULT
 }
 
 #if QT_CONFIG(process)
@@ -625,12 +635,12 @@ static inline bool runSysAppTest(const QString &binary,
         return false;
 
     if (output.isEmpty()) {
-        *errorMessage = QLatin1String("Empty output received for requested '") + requestedLocale
+        *errorMessage += QLatin1String("Empty output received for requested '") + requestedLocale
             + QLatin1String("' (expected '") + expectedOutput + QLatin1String("')");
         return false;
     }
     if (output != expectedOutput) {
-        *errorMessage = QLatin1String("Output mismatch for requested '") + requestedLocale
+        *errorMessage += QLatin1String("Output mismatch for requested '") + requestedLocale
             + QLatin1String("': Expected '") + expectedOutput + QLatin1String("', got '")
             + output + QLatin1String("'");
         return false;
@@ -742,8 +752,6 @@ void tst_QLocale::systemLocale()
 
 void tst_QLocale::legacyNames()
 {
-    QLocale::setDefault(QLocale(QLocale::C));
-
 #define TEST_CTOR(req_lc, exp_lang, exp_country) \
     do { \
         const QLocale l(req_lc); \
@@ -817,8 +825,8 @@ void tst_QLocale::unixLocaleName_data()
     ADDROW("C_any", C, AnyTerritory, "C");
     ADDROW("en_any", English, AnyTerritory, "en_US");
     ADDROW("en_GB", English, UnitedKingdom, "en_GB");
-    ADDROW("ay_GB", Aymara, UnitedKingdom, "C");
 #undef ADDROW
+    QTest::newRow("ay_GB") << QLocale::Aymara << QLocale::UnitedKingdom << QLocale().name();
 }
 
 void tst_QLocale::unixLocaleName()
@@ -831,8 +839,6 @@ void tst_QLocale::unixLocaleName()
         QString copy = expect;
         return copy.replace(u'_', ch);
     };
-
-    QLocale::setDefault(QLocale(QLocale::C));
 
     const QLocale locale(lang, land);
     QCOMPARE(locale.name(), expect);
@@ -903,6 +909,9 @@ void tst_QLocale::toReal_data()
     QTest::newRow("C 1.")              << QString("C") << QString("1.")              << true  << 1.0;
     QTest::newRow("C 1.E10")           << QString("C") << QString("1.E10")           << true  << 1.0e10;
     QTest::newRow("C 1e+10")           << QString("C") << QString("1e+10")           << true  << 1.0e+10;
+    QTest::newRow("C e+10")            << QString("C") << QString("e+10")            << false << 0.0;
+    QTest::newRow("C .e+10")           << QString("C") << QString(".e+10")           << false << 0.0;
+    QTest::newRow("C 1e+2e+10")        << QString("C") << QString("1e+2e+10")        << false << 0.0;
 
     QTest::newRow("de_DE 1.")          << QString("de_DE") << QString("1.")          << false << 0.0;
     QTest::newRow("de_DE 1.2")         << QString("de_DE") << QString("1.2")         << false << 0.0;
@@ -1019,6 +1028,18 @@ void tst_QLocale::stringToDouble_data()
     }
     if (std::numeric_limits<double>::has_quiet_NaN)
         QTest::newRow("C qnan") << QString("C") << QString("NaN") << true << std::numeric_limits<double>::quiet_NaN();
+
+    // Malformed
+    QTest::newRow("infe10") << QString("C") << QString("infe10") << false << 0.;
+    QTest::newRow("inf.10") << QString("C") << QString("inf.10") << false << 0.;
+    QTest::newRow("i1n0f") << QString("C") << QString("i1n0f") << false << 0.;
+    QTest::newRow("inf,000") << QString("en_US") << QString("inf,000") << false << 0.;
+    QTest::newRow("1,inf") << QString("en_US") << QString("1,inf") << false << 0.;
+    QTest::newRow("NaNe10") << QString("C") << QString("NaNe10") << false << 0.;
+    QTest::newRow("NaN.10") << QString("C") << QString("NaN.10") << false << 0.;
+    QTest::newRow("N1a0N") << QString("C") << QString("N1a0N") << false << 0.;
+    QTest::newRow("NaN,000") << QString("en_US") << QString("NaN,000") << false << 0.;
+    QTest::newRow("1,NaN") << QString("en_US") << QString("1,NaN") << false << 0.;
 
     // In range (but outside float's range):
     QTest::newRow("C big") << QString("C") << QString("3.5e38") << true << 3.5e38;
@@ -1266,8 +1287,10 @@ void tst_QLocale::doubleToString_data()
 
     QTest::newRow("de_DE 3,4 f 1") << QString("de_DE") << QString("3,4")     << 3.4 << 'f' << 1;
     QTest::newRow("de_DE 3,4 f -") << QString("de_DE") << QString("3,4")     << 3.4 << 'f' << shortest;
-    QTest::newRow("de_DE 3,4 e 1") << QString("de_DE") << QString("3,4E+00") << 3.4 << 'e' << 1;
-    QTest::newRow("de_DE 3,4 e -") << QString("de_DE") << QString("3,4E+00") << 3.4 << 'e' << shortest;
+    QTest::newRow("de_DE 3,4 e 1") << QString("de_DE") << QString("3,4e+00") << 3.4 << 'e' << 1;
+    QTest::newRow("de_DE 3,4 E 1") << QString("de_DE") << QString("3,4E+00") << 3.4 << 'E' << 1;
+    QTest::newRow("de_DE 3,4 e -") << QString("de_DE") << QString("3,4e+00") << 3.4 << 'e' << shortest;
+    QTest::newRow("de_DE 3,4 E -") << QString("de_DE") << QString("3,4E+00") << 3.4 << 'E' << shortest;
     QTest::newRow("de_DE 3,4 g 2") << QString("de_DE") << QString("3,4")     << 3.4 << 'g' << 2;
     QTest::newRow("de_DE 3,4 g -") << QString("de_DE") << QString("3,4")     << 3.4 << 'g' << shortest;
 
@@ -1287,29 +1310,33 @@ void tst_QLocale::doubleToString_data()
 
     QTest::newRow("de_DE 0,035003945 f 9") << QString("de_DE") << QString("0,035003945")   << 0.035003945 << 'f' << 9;
     QTest::newRow("de_DE 0,035003945 f -") << QString("de_DE") << QString("0,035003945")   << 0.035003945 << 'f' << shortest;
-    QTest::newRow("de_DE 0,035003945 e 7") << QString("de_DE") << QString("3,5003945E-02") << 0.035003945 << 'e' << 7;
-    QTest::newRow("de_DE 0,035003945 e -") << QString("de_DE") << QString("3,5003945E-02") << 0.035003945 << 'e' << shortest;
+    QTest::newRow("de_DE 0,035003945 e 7") << QString("de_DE") << QString("3,5003945e-02") << 0.035003945 << 'e' << 7;
+    QTest::newRow("de_DE 0,035003945 E 7") << QString("de_DE") << QString("3,5003945E-02") << 0.035003945 << 'E' << 7;
+    QTest::newRow("de_DE 0,035003945 e -") << QString("de_DE") << QString("3,5003945e-02") << 0.035003945 << 'e' << shortest;
+    QTest::newRow("de_DE 0,035003945 E -") << QString("de_DE") << QString("3,5003945E-02") << 0.035003945 << 'E' << shortest;
     QTest::newRow("de_DE 0,035003945 g 8") << QString("de_DE") << QString("0,035003945")   << 0.035003945 << 'g' << 8;
     QTest::newRow("de_DE 0,035003945 g -") << QString("de_DE") << QString("0,035003945")   << 0.035003945 << 'g' << shortest;
     // Check 'f/F' iff (adjusted) precision > exponent >= -4:
-    QTest::newRow("de_DE 12345 g 4") << QString("de_DE") << QString("1,235E+04") << 12345. << 'g' << 4;
+    QTest::newRow("de_DE 12345 g 4") << QString("de_DE") << QString("1,235e+04") << 12345. << 'g' << 4;
+    QTest::newRow("de_DE 12345 G 4") << QString("de_DE") << QString("1,235E+04") << 12345. << 'G' << 4;
     QTest::newRow("de_DE 1e7 g 8")   << QString("de_DE") << QString("10.000.000") << 1e7 << 'g' << 8;
-    QTest::newRow("de_DE 1e8 g 8")   << QString("de_DE") << QString("1E+08") << 1e8  << 'g' << 8;
-    QTest::newRow("de_DE 10.0 g 1")  << QString("de_DE") << QString("1E+01") << 10.0  << 'g' << 1;
-    QTest::newRow("de_DE 10.0 g 0")  << QString("de_DE") << QString("1E+01") << 10.0  << 'g' << 0;
+    QTest::newRow("de_DE 1e8 g 8")   << QString("de_DE") << QString("1e+08") << 1e8  << 'g' << 8;
+    QTest::newRow("de_DE 1e8 G 8")   << QString("de_DE") << QString("1E+08") << 1e8  << 'G' << 8;
+    QTest::newRow("de_DE 10.0 g 1")  << QString("de_DE") << QString("1e+01") << 10.0  << 'g' << 1;
+    QTest::newRow("de_DE 10.0 g 0")  << QString("de_DE") << QString("1e+01") << 10.0  << 'g' << 0;
     QTest::newRow("de_DE 1.0 g 0")   << QString("de_DE") << QString("1") << 1.0  << 'g' << 0;
     QTest::newRow("de_DE 0.0001 g 0")  << QString("de_DE") << QString("0,0001") << 0.0001  << 'g' << 0;
-    QTest::newRow("de_DE 0.00001 g 0") << QString("de_DE") << QString("1E-05") << 0.00001 << 'g' << 0;
+    QTest::newRow("de_DE 0.00001 g 0") << QString("de_DE") << QString("1e-05") << 0.00001 << 'g' << 0;
     // Check transition to exponent form:
     QTest::newRow("de_DE 1245678900 g -")  << QString("de_DE") << QString("1.245.678.900") << 12456789e2 << 'g' << shortest;
     QTest::newRow("de_DE 12456789100 g -") << QString("de_DE") << QString("12.456.789.100") << 124567891e2 << 'g' << shortest;
-    QTest::newRow("de_DE 12456789000 g -") << QString("de_DE") << QString("1,2456789E+10")  << 12456789e3 << 'g' << shortest;
+    QTest::newRow("de_DE 12456789000 g -") << QString("de_DE") << QString("1,2456789e+10")  << 12456789e3 << 'g' << shortest;
     QTest::newRow("de_DE 12000 g -")
         << QString("de_DE") << QString("12.000") << 12e3 << 'g' << shortest;
-    // 12e4 has "120.000" and "1.2E+05" of equal length; which shortest picks is unspecified.
-    QTest::newRow("de_DE 1200000 g -") << QString("de_DE") << QString("1,2E+06") << 12e5 << 'g' << shortest;
+    // 12e4 has "120.000" and "1.2e+05" of equal length; which shortest picks is unspecified.
+    QTest::newRow("de_DE 1200000 g -") << QString("de_DE") << QString("1,2e+06") << 12e5 << 'g' << shortest;
     QTest::newRow("de_DE 1000 g -")  << QString("de_DE") << QString("1.000") << 1e3 << 'g' << shortest;
-    QTest::newRow("de_DE 10000 g -") << QString("de_DE") << QString("1E+04") << 1e4 << 'g' << shortest;
+    QTest::newRow("de_DE 10000 g -") << QString("de_DE") << QString("1e+04") << 1e4 << 'g' << shortest;
 
     QTest::newRow("C 0.000003945 f 12") << QString("C") << QString("0.000003945000") << 0.000003945 << 'f' << 12;
     QTest::newRow("C 0.000003945 f 6")  << QString("C") << QString("0.000004")       << 0.000003945 << 'f' << 6;
@@ -1340,10 +1367,14 @@ void tst_QLocale::doubleToString_data()
 
     QTest::newRow("de_DE 0,000003945 f 9") << QString("de_DE") << QString("0,000003945") << 0.000003945 << 'f' << 9;
     QTest::newRow("de_DE 0,000003945 f -") << QString("de_DE") << QString("0,000003945") << 0.000003945 << 'f' << shortest;
-    QTest::newRow("de_DE 0,000003945 e 3") << QString("de_DE") << QString("3,945E-06")   << 0.000003945 << 'e' << 3;
-    QTest::newRow("de_DE 0,000003945 e -") << QString("de_DE") << QString("3,945E-06")   << 0.000003945 << 'e' << shortest;
-    QTest::newRow("de_DE 0,000003945 g 4") << QString("de_DE") << QString("3,945E-06")   << 0.000003945 << 'g' << 4;
-    QTest::newRow("de_DE 0,000003945 g -") << QString("de_DE") << QString("3,945E-06")   << 0.000003945 << 'g' << shortest;
+    QTest::newRow("de_DE 0,000003945 e 3") << QString("de_DE") << QString("3,945e-06")   << 0.000003945 << 'e' << 3;
+    QTest::newRow("de_DE 0,000003945 E 3") << QString("de_DE") << QString("3,945E-06")   << 0.000003945 << 'E' << 3;
+    QTest::newRow("de_DE 0,000003945 e -") << QString("de_DE") << QString("3,945e-06")   << 0.000003945 << 'e' << shortest;
+    QTest::newRow("de_DE 0,000003945 E -") << QString("de_DE") << QString("3,945E-06")   << 0.000003945 << 'E' << shortest;
+    QTest::newRow("de_DE 0,000003945 g 4") << QString("de_DE") << QString("3,945e-06")   << 0.000003945 << 'g' << 4;
+    QTest::newRow("de_DE 0,000003945 G 4") << QString("de_DE") << QString("3,945E-06")   << 0.000003945 << 'G' << 4;
+    QTest::newRow("de_DE 0,000003945 g -") << QString("de_DE") << QString("3,945e-06")   << 0.000003945 << 'g' << shortest;
+    QTest::newRow("de_DE 0,000003945 G -") << QString("de_DE") << QString("3,945E-06")   << 0.000003945 << 'G' << shortest;
 
     QTest::newRow("C 12456789012 f 3")  << QString("C") << QString("12456789012.000")     << 12456789012.0 << 'f' << 3;
     QTest::newRow("C 12456789012 e 13") << QString("C") << QString("1.2456789012000e+10") << 12456789012.0 << 'e' << 13;
@@ -1377,8 +1408,8 @@ void tst_QLocale::doubleToString_data()
 
     QTest::newRow("de_DE 12456789012 f 0")  << QString("de_DE") << QString("12.456.789.012")   << 12456789012.0 << 'f' << 0;
     QTest::newRow("de_DE 12456789012 f -")  << QString("de_DE") << QString("12.456.789.012")   << 12456789012.0 << 'f' << shortest;
-    QTest::newRow("de_DE 12456789012 e 10") << QString("de_DE") << QString("1,2456789012E+10") << 12456789012.0 << 'e' << 10;
-    QTest::newRow("de_DE 12456789012 e -")  << QString("de_DE") << QString("1,2456789012E+10") << 12456789012.0 << 'e' << shortest;
+    QTest::newRow("de_DE 12456789012 e 10") << QString("de_DE") << QString("1,2456789012e+10") << 12456789012.0 << 'e' << 10;
+    QTest::newRow("de_DE 12456789012 e -")  << QString("de_DE") << QString("1,2456789012e+10") << 12456789012.0 << 'e' << shortest;
     QTest::newRow("de_DE 12456789012 g 11") << QString("de_DE") << QString("12.456.789.012")   << 12456789012.0 << 'g' << 11;
     QTest::newRow("de_DE 12456789012 g -")  << QString("de_DE") << QString("12.456.789.012")   << 12456789012.0 << 'g' << shortest;
 }
@@ -2143,22 +2174,18 @@ void tst_QLocale::formatTimeZone()
         // Time definitely in Standard Time
         const QStringList knownCETus = {
             u"GMT+1"_s, // ICU
-            u"Central Europe Standard Time"_s, // MS (lacks abbreviations)
-            u"Central European Standard Time"_s,
             u"CET"_s // Standard abbreviation
         };
         const QString cet = enUS.toString(QDate(2013, 1, 1).startOfDay(), u"t");
-        QVERIFY2(knownCETus.contains(cet), qPrintable(cet));
+        QVERIFY2(knownCETus.contains(cet), cet.isEmpty() ? "[empty]" : qPrintable(cet));
 
         // Time definitely in Daylight Time
         const QStringList knownCESTus = {
             u"GMT+2"_s, // ICU
-            u"Central Europe Summer Time"_s, // MS (lacks abbreviations)
-            u"Central European Summer Time"_s,
             u"CEST"_s // Standard abbreviation
         };
         const QString cest = enUS.toString(QDate(2013, 6, 1).startOfDay(), u"t");
-        QVERIFY2(knownCESTus.contains(cest), qPrintable(cest));
+        QVERIFY2(knownCESTus.contains(cest), cest.isEmpty() ? "[empty]" : qPrintable(cest));
     } else {
         qDebug("(Skipped some CET-only tests)");
     }
@@ -3073,8 +3100,6 @@ void tst_QLocale::testNames_data()
     QTest::addColumn<QLocale::Language>("language");
     QTest::addColumn<QLocale::Territory>("country");
 
-    QLocale::setDefault(QLocale(QLocale::C)); // Ensures predictable fall-backs
-
 #ifdef QT_BUILD_INTERNAL
     bool ok = QLocaleData::allLocaleDataRows([](qsizetype index, const QLocaleData &item) {
         const QByteArray lang =
@@ -3128,6 +3153,34 @@ void tst_QLocale::testNames()
         QCOMPARE(QLocale(lang).language(), language);
         QCOMPARE(QLocale(lang + QLatin1String("@foo")).language(), language);
         QCOMPARE(QLocale(lang + QLatin1String(".foo")).language(), language);
+    }
+}
+
+void tst_QLocale::debugOutput()
+{
+    // Test operator<<(QDebug, const QLocale &) works as intended:
+    QTest::failOnWarning();
+    {
+        const QLocale en(QLocale::English, QLocale::LatinScript, QLocale::UnitedStates);
+        QTest::ignoreMessage(QtMsgType::QtWarningMsg,
+                             "QLocale(English, Latin, United States)");
+        qWarning() << en;
+    }
+    {
+        const auto params = [](const QLocale &loc) {
+            return (QLocale::languageToString(loc.language())
+                    + u", " + QLocale::scriptToString(loc.script())
+                    + u", " + QLocale::territoryToString(loc.territory())).toUtf8();
+        };
+        const QLocale sys = QLocale::system();
+        QTest::ignoreMessage(QtMsgType::QtWarningMsg,
+                             ("QLocale::system()/* " + params(sys) + " */").constData());
+        // QTBUG-133922: system and its CLDR counterpart should differ.
+        qWarning() << sys;
+        const QLocale match(sys.language(), sys.script(), sys.territory());
+        QTest::ignoreMessage(QtMsgType::QtWarningMsg,
+                             ("QLocale(" + params(match) + ')').constData());
+        qWarning() << match;
     }
 }
 
@@ -3686,7 +3739,7 @@ void tst_QLocale::uiLanguages_data()
     QTest::addColumn<QLocale>("locale");
     QTest::addColumn<QStringList>("all");
 
-    QTest::newRow("C") << QLocale::c() << QStringList{QString("C")};
+    QTest::newRow("C") << QLocale::c() << QStringList{u"C"_s};
 
     QTest::newRow("en_US")
         << QLocale("en_US") << QStringList{u"en-Latn-US"_s, u"en-US"_s, u"en-Latn"_s, u"en"_s};
@@ -3695,22 +3748,19 @@ void tst_QLocale::uiLanguages_data()
         << QStringList{u"en-Latn-US"_s, u"en-US"_s, u"en-Latn"_s, u"en"_s};
 
     QTest::newRow("en_GB")
-        << QLocale("en_GB")
-        << QStringList{QString("en-Latn-GB"), QString("en-GB")};
-
+        << QLocale("en_GB") << QStringList{u"en-Latn-GB"_s, u"en-GB"_s, u"en-Latn"_s, u"en"_s};
     QTest::newRow("en_Dsrt_US")
-        << QLocale("en_Dsrt_US")
-        << QStringList{QString("en-Dsrt-US"), QString("en-Dsrt")};
+        << QLocale("en_Dsrt_US") << QStringList{u"en-Dsrt-US"_s, u"en-Dsrt"_s, u"en"_s};
 
     QTest::newRow("ru_RU")
         << QLocale("ru_RU") << QStringList{u"ru-Cyrl-RU"_s, u"ru-RU"_s, u"ru-Cyrl"_s, u"ru"_s};
 
     QTest::newRow("zh_Hant")
         << QLocale("zh_Hant")
-        << QStringList{u"zh-Hant-TW"_s, u"zh-TW"_s, u"zh-Hant"_s};
+        << QStringList{u"zh-Hant-TW"_s, u"zh-TW"_s, u"zh-Hant"_s, u"zh"_s};
     QTest::newRow("zh_TW")
         << QLocale("zh_TW")
-        << QStringList{u"zh-Hant-TW"_s, u"zh-TW"_s, u"zh-Hant"_s};
+        << QStringList{u"zh-Hant-TW"_s, u"zh-TW"_s, u"zh-Hant"_s, u"zh"_s};
 
     QTest::newRow("zh_Hans_CN")
         << QLocale(QLocale::Chinese, QLocale::SimplifiedHanScript, QLocale::China)
@@ -3718,18 +3768,22 @@ void tst_QLocale::uiLanguages_data()
 
     QTest::newRow("pa_IN")
         << QLocale("pa_IN") << QStringList{u"pa-Guru-IN"_s, u"pa-IN"_s, u"pa-Guru"_s, u"pa"_s};
+    QTest::newRow("pa_Guru")
+        << QLocale("pa_Guru") << QStringList{u"pa-Guru-IN"_s, u"pa-IN"_s, u"pa-Guru"_s, u"pa"_s};
     QTest::newRow("pa_PK")
-        << QLocale("pa_PK") << QStringList{u"pa-Arab-PK"_s, u"pa-PK"_s, u"pa-Arab"_s};
-    // GB has no native Punjabi locales, so is eliminated by likely subtag rules:
+        << QLocale("pa_PK") << QStringList{u"pa-Arab-PK"_s, u"pa-PK"_s, u"pa-Arab"_s, u"pa"_s};
+    QTest::newRow("pa_Arab")
+        << QLocale("pa_Arab") << QStringList{u"pa-Arab-PK"_s, u"pa-PK"_s, u"pa-Arab"_s, u"pa"_s};
+    // GB has no native Punjabi locales, so GB is eliminated by likely subtag rules:
     QTest::newRow("pa_GB")
         << QLocale("pa_GB") << QStringList{u"pa-Guru-IN"_s, u"pa-IN"_s, u"pa-Guru"_s, u"pa"_s};
     QTest::newRow("pa_Arab_GB")
-        << QLocale("pa_Arab_GB") << QStringList{u"pa-Arab-PK"_s, u"pa-PK"_s, u"pa-Arab"_s};
+        << QLocale("pa_Arab_GB") << QStringList{u"pa-Arab-PK"_s, u"pa-PK"_s, u"pa-Arab"_s, u"pa"_s};
 
     // We presently map und (or any other unrecognized language) to C, ignoring
     // what a sub-tag lookup would surely find us.
-    QTest::newRow("und_US") << QLocale("und_US") << QStringList{QString("C")};
-    QTest::newRow("und_Latn") << QLocale("und_Latn") << QStringList{QString("C")};
+    QTest::newRow("und_US") << QLocale("und_US") << QStringList{u"C"_s};
+    QTest::newRow("und_Latn") << QLocale("und_Latn") << QStringList{u"C"_s};
 }
 
 void tst_QLocale::uiLanguages()
@@ -3930,7 +3984,7 @@ void tst_QLocale::formattedDataSize_data()
     QTest::addColumn<QLocale::Language>("language");
     QTest::addColumn<int>("decimalPlaces");
     QTest::addColumn<QLocale::DataSizeFormats>("units");
-    QTest::addColumn<int>("bytes");
+    QTest::addColumn<qint64>("bytes");
     QTest::addColumn<QString>("output");
 
     struct {
@@ -3945,45 +3999,60 @@ void tst_QLocale::formattedDataSize_data()
         { "C", QLocale::C, "bytes", 'B', '.' }
     };
 
+    constexpr auto min64 = (std::numeric_limits<qint64>::min)();
+    constexpr auto max64 = (std::numeric_limits<qint64>::max)();
+
     for (const auto row : data) {
 #define ROWB(id, deci, num, text)                 \
         QTest::addRow("%s-%s", row.name, id)      \
             << row.lang << deci << format         \
-            << num << (QString(text) + QChar(' ') + QString(row.bytes))
+            << qint64{num} << (QString(text) + QChar(' ') + QString(row.bytes))
 #define ROWQ(id, deci, num, head, tail)           \
         QTest::addRow("%s-%s", row.name, id)      \
             << row.lang << deci << format         \
-            << num << (QString(head) + QChar(row.sep) + QString(tail) + QChar(row.abbrev))
+            << qint64{num} << (QString(head) + QChar(row.sep) + QString(tail) + QChar(row.abbrev))
 
         // Metatype system fails to handle raw enum members as format; needs variable
         {
             const QLocale::DataSizeFormats format = QLocale::DataSizeIecFormat;
             ROWB("IEC-0", 2, 0, "0");
             ROWB("IEC-10", 2, 10, "10");
+            ROWB("IEC--10", 2, -10, "-10");
             ROWQ("IEC-12Ki", 2, 12345, "12", "06 Ki");
             ROWQ("IEC-16Ki", 2, 16384, "16", "00 Ki");
+            ROWQ("IEC--16Ki", 2, -16384, "-16", "00 Ki");
             ROWQ("IEC-1235k", 2, 1234567, "1", "18 Mi");
             ROWQ("IEC-1374k", 2, 1374744, "1", "31 Mi");
             ROWQ("IEC-1234M", 2, 1234567890, "1", "15 Gi");
+            ROWQ("IEC-min", 2, min64, "-8", "00 Ei");
+            ROWQ("IEC-max", 2, max64, "8", "00 Ei");
         }
         {
             const QLocale::DataSizeFormats format = QLocale::DataSizeTraditionalFormat;
             ROWB("Trad-0", 2, 0, "0");
             ROWB("Trad-10", 2, 10, "10");
+            ROWB("Trad--10", 2, -10, "-10");
             ROWQ("Trad-12Ki", 2, 12345, "12", "06 k");
             ROWQ("Trad-16Ki", 2, 16384, "16", "00 k");
             ROWQ("Trad-1235k", 2, 1234567, "1", "18 M");
+            ROWQ("Trad--1235k", 2, -1234567, "-1", "18 M");
             ROWQ("Trad-1374k", 2, 1374744, "1", "31 M");
             ROWQ("Trad-1234M", 2, 1234567890, "1", "15 G");
+            ROWQ("Trad-min", 2, min64, "-8", "00 E");
+            ROWQ("Trad-max", 2, max64, "8", "00 E");
         }
         {
             const QLocale::DataSizeFormats format = QLocale::DataSizeSIFormat;
             ROWB("Decimal-0", 2, 0, "0");
             ROWB("Decimal-10", 2, 10, "10");
+            ROWB("Decimal--10", 2, -10, "-10");
             ROWQ("Decimal-16Ki", 2, 16384, "16", "38 k");
             ROWQ("Decimal-1234k", 2, 1234567, "1", "23 M");
             ROWQ("Decimal-1374k", 2, 1374744, "1", "37 M");
             ROWQ("Decimal-1234M", 2, 1234567890, "1", "23 G");
+            ROWQ("Decimal--1234M", 2, -1234567890, "-1", "23 G");
+            ROWQ("Decimal-min", 2, min64, "-9", "22 E");
+            ROWQ("Decimal-max", 2, max64, "9", "22 E");
         }
 #undef ROWQ
 #undef ROWB
@@ -3996,29 +4065,29 @@ void tst_QLocale::formattedDataSize_data()
     const QLocale::DataSizeFormats siFormat = QLocale::DataSizeSIFormat;
     const QLocale::Language lang = QLocale::Russian;
 
-    QTest::newRow("Russian-IEC-0") << lang << 2 << iecFormat << 0 << QString("0 \u0431\u0430\u0439\u0442\u044B");
-    QTest::newRow("Russian-IEC-10") << lang << 2 << iecFormat << 10 << QString("10 \u0431\u0430\u0439\u0442\u044B");
+    QTest::newRow("Russian-IEC-0") << lang << 2 << iecFormat << 0LL << QString("0 \u0431\u0430\u0439\u0442\u044B");
+    QTest::newRow("Russian-IEC-10") << lang << 2 << iecFormat << 10LL << QString("10 \u0431\u0430\u0439\u0442\u044B");
     // CLDR doesn't provide IEC prefixes (yet?) so they aren't getting translated
-    QTest::newRow("Russian-IEC-12Ki") << lang << 2 << iecFormat << 12345 << QString("12,06 KiB");
-    QTest::newRow("Russian-IEC-16Ki") << lang << 2 << iecFormat << 16384 << QString("16,00 KiB");
-    QTest::newRow("Russian-IEC-1235k") << lang << 2 << iecFormat << 1234567 << QString("1,18 MiB");
-    QTest::newRow("Russian-IEC-1374k") << lang << 2 << iecFormat << 1374744 << QString("1,31 MiB");
-    QTest::newRow("Russian-IEC-1234M") << lang << 2 << iecFormat << 1234567890 << QString("1,15 GiB");
+    QTest::newRow("Russian-IEC-12Ki") << lang << 2 << iecFormat << 12345LL << QString("12,06 KiB");
+    QTest::newRow("Russian-IEC-16Ki") << lang << 2 << iecFormat << 16384LL << QString("16,00 KiB");
+    QTest::newRow("Russian-IEC-1235k") << lang << 2 << iecFormat << 1234567LL << QString("1,18 MiB");
+    QTest::newRow("Russian-IEC-1374k") << lang << 2 << iecFormat << 1374744LL << QString("1,31 MiB");
+    QTest::newRow("Russian-IEC-1234M") << lang << 2 << iecFormat << 1234567890LL << QString("1,15 GiB");
 
-    QTest::newRow("Russian-Trad-0") << lang << 2 << traditionalFormat << 0 << QString("0 \u0431\u0430\u0439\u0442\u044B");
-    QTest::newRow("Russian-Trad-10") << lang << 2 << traditionalFormat << 10 << QString("10 \u0431\u0430\u0439\u0442\u044B");
-    QTest::newRow("Russian-Trad-12Ki") << lang << 2 << traditionalFormat << 12345 << QString("12,06 \u043A\u0411");
-    QTest::newRow("Russian-Trad-16Ki") << lang << 2 << traditionalFormat << 16384 << QString("16,00 \u043A\u0411");
-    QTest::newRow("Russian-Trad-1235k") << lang << 2 << traditionalFormat << 1234567 << QString("1,18 \u041C\u0411");
-    QTest::newRow("Russian-Trad-1374k") << lang << 2 << traditionalFormat << 1374744 << QString("1,31 \u041C\u0411");
-    QTest::newRow("Russian-Trad-1234M") << lang << 2 << traditionalFormat << 1234567890 << QString("1,15 \u0413\u0411");
+    QTest::newRow("Russian-Trad-0") << lang << 2 << traditionalFormat << 0LL << QString("0 \u0431\u0430\u0439\u0442\u044B");
+    QTest::newRow("Russian-Trad-10") << lang << 2 << traditionalFormat << 10LL << QString("10 \u0431\u0430\u0439\u0442\u044B");
+    QTest::newRow("Russian-Trad-12Ki") << lang << 2 << traditionalFormat << 12345LL << QString("12,06 \u043A\u0411");
+    QTest::newRow("Russian-Trad-16Ki") << lang << 2 << traditionalFormat << 16384LL << QString("16,00 \u043A\u0411");
+    QTest::newRow("Russian-Trad-1235k") << lang << 2 << traditionalFormat << 1234567LL << QString("1,18 \u041C\u0411");
+    QTest::newRow("Russian-Trad-1374k") << lang << 2 << traditionalFormat << 1374744LL << QString("1,31 \u041C\u0411");
+    QTest::newRow("Russian-Trad-1234M") << lang << 2 << traditionalFormat << 1234567890LL << QString("1,15 \u0413\u0411");
 
-    QTest::newRow("Russian-Decimal-0") << lang << 2 << siFormat << 0 << QString("0 \u0431\u0430\u0439\u0442\u044B");
-    QTest::newRow("Russian-Decimal-10") << lang << 2 << siFormat << 10 << QString("10 \u0431\u0430\u0439\u0442\u044B");
-    QTest::newRow("Russian-Decimal-16Ki") << lang << 2 << siFormat << 16384 << QString("16,38 \u043A\u0411");
-    QTest::newRow("Russian-Decimal-1234k") << lang << 2 << siFormat << 1234567 << QString("1,23 \u041C\u0411");
-    QTest::newRow("Russian-Decimal-1374k") << lang << 2 << siFormat << 1374744 << QString("1,37 \u041C\u0411");
-    QTest::newRow("Russian-Decimal-1234M") << lang << 2 << siFormat << 1234567890 << QString("1,23 \u0413\u0411");
+    QTest::newRow("Russian-Decimal-0") << lang << 2 << siFormat << 0LL << QString("0 \u0431\u0430\u0439\u0442\u044B");
+    QTest::newRow("Russian-Decimal-10") << lang << 2 << siFormat << 10LL << QString("10 \u0431\u0430\u0439\u0442\u044B");
+    QTest::newRow("Russian-Decimal-16Ki") << lang << 2 << siFormat << 16384LL << QString("16,38 \u043A\u0411");
+    QTest::newRow("Russian-Decimal-1234k") << lang << 2 << siFormat << 1234567LL << QString("1,23 \u041C\u0411");
+    QTest::newRow("Russian-Decimal-1374k") << lang << 2 << siFormat << 1374744LL << QString("1,37 \u041C\u0411");
+    QTest::newRow("Russian-Decimal-1234M") << lang << 2 << siFormat << 1234567890LL << QString("1,23 \u0413\u0411");
 }
 
 void tst_QLocale::formattedDataSize()
@@ -4026,7 +4095,7 @@ void tst_QLocale::formattedDataSize()
     QFETCH(QLocale::Language, language);
     QFETCH(int, decimalPlaces);
     QFETCH(QLocale::DataSizeFormats, units);
-    QFETCH(int, bytes);
+    QFETCH(const qint64, bytes);
 
     QTEST(QLocale(language).formattedDataSize(bytes, decimalPlaces, units), "output");
 }
@@ -4035,7 +4104,7 @@ void tst_QLocale::bcp47Name_data()
 {
     QTest::addColumn<QString>("expect");
 
-    QTest::newRow("C") << QStringLiteral("en");
+    QTest::newRow("C") << QStringLiteral("en-POSIX");
     QTest::newRow("en") << QStringLiteral("en");
     QTest::newRow("en_US") << QStringLiteral("en");
     QTest::newRow("en_GB") << QStringLiteral("en-GB");
@@ -4091,7 +4160,7 @@ public:
             if (m_name == u"en-Latn")
                 return QVariant(QStringList{u"en-NO"_s});
             if (m_name == u"en-DE") // QTBUG-104930: simulate macOS's list not including m_name.
-                return QVariant(QStringList{QStringLiteral("en-GB"), QStringLiteral("de-DE")});
+                return QVariant(QStringList{u"en-GB"_s, u"de-DE"_s});
             if (m_name == u"en-Dsrt-GB")
                 return QVariant(QStringList{u"en-Dsrt-GB"_s, u"en-GB"_s});
             if (m_name == u"en-FO") { // Nominally Faroe Islands, used for en-mixed test
@@ -4117,7 +4186,18 @@ public:
             return m_id.territory_id;
         case ScriptId:
             return m_id.script_id;
-
+        case Grouping:
+            if (m_name == u"en-ES") // CLDR: 1,3,3
+                return QVariant::fromValue(QLocaleData::GroupSizes{2,3,3});
+            if (m_name == u"en-BD") // CLDR: 1,3,3
+                return QVariant::fromValue(QLocaleData::GroupSizes{1,2,3});
+            if (m_name == u"ccp") // CLDR: 1,3,3
+                return QVariant::fromValue(QLocaleData::GroupSizes{2,2,3});
+            if (m_name == u"en-BT") // CLDR: 1,3,3
+                return QVariant::fromValue(QLocaleData::GroupSizes{0,2,3});
+            if (m_name == u"en-NP") // CLDR: 1,3,3
+                return QVariant::fromValue(QLocaleData::GroupSizes{0,2,0});
+            break;
         default:
             break;
         }
@@ -4148,104 +4228,106 @@ void tst_QLocale::mySystemLocale_data()
                        u"nb-Latn-NO"_s, u"nb-NO"_s, u"nb-Latn"_s, u"nb"_s};
     QTest::addRow("no") // QTBUG-131127
         << u"no"_s << QLocale::NorwegianBokmal
-        << QStringList{u"no"_s, u"nb-Latn-NO"_s, u"nb-NO"_s, u"nb-Latn"_s, u"nb"_s,
-                       u"en-Latn-US"_s, u"en-US"_s, u"en-Latn"_s, u"en"_s };
+        << QStringList{u"no"_s, u"nb-Latn-NO"_s, u"nb-NO"_s, u"nb-Latn"_s,
+                       u"en-Latn-US"_s, u"en-US"_s, u"en-Latn"_s, u"en"_s,
+                       u"nb"_s};
     QTest::addRow("en-Latn") // Android crash
         << u"en-Latn"_s << QLocale::English
-        << QStringList{u"en-Latn-US"_s, u"en-Latn"_s, u"en-US"_s, u"en"_s,
+        << QStringList{u"en-Latn-US"_s, u"en-US"_s, u"en-Latn"_s, u"en"_s,
                        u"en-Latn-NO"_s, u"en-NO"_s};
 
     QTest::addRow("anglo-dutch") // QTBUG-131894
         << u"en-NL"_s << QLocale::English
         << QStringList{u"en-Latn-NL"_s, u"en-NL"_s,
+                       // No later en-Latn-* or en-* in the list, so include truncations now:
+                       u"en-Latn"_s, u"en"_s,
                        u"nl-Latn-NL"_s, u"nl-NL"_s, u"nl-Latn"_s, u"nl"_s};
     QTest::addRow("anglo-dutch-GB")
         << u"en-NL-GB"_s << QLocale::English
         << QStringList{u"en-Latn-NL"_s, u"en-NL"_s,
                        u"nl-Latn-NL"_s, u"nl-NL"_s, u"nl-Latn"_s, u"nl"_s,
-                       u"en-Latn-GB"_s, u"en-GB"_s};
+                       u"en-Latn-GB"_s, u"en-GB"_s, u"en-Latn"_s, u"en"_s};
 
     QTest::addRow("catalan")
-        << QString("ca") << QLocale::Catalan
+        << u"ca"_s << QLocale::Catalan
         << QStringList{u"ca-Latn-ES"_s, u"ca-ES"_s, u"ca-Latn"_s, u"ca"_s};
     QTest::addRow("catalan-spain")
         << u"ca-ES"_s << QLocale::Catalan
         << QStringList{u"ca-Latn-ES"_s, u"ca-ES"_s, u"ca-Latn"_s, u"ca"_s};
     QTest::addRow("catalan-latin")
-        << QString("ca-Latn") << QLocale::Catalan
-        << QStringList{QStringLiteral("ca-Latn-ES"), QStringLiteral("ca-Latn"),
-                       QStringLiteral("ca-ES"), QStringLiteral("ca")};
+        << u"ca-Latn"_s << QLocale::Catalan
+        << QStringList{u"ca-Latn-ES"_s, u"ca-ES"_s, u"ca-Latn"_s, u"ca"_s};
     QTest::addRow("ukrainian")
-        << QString("uk") << QLocale::Ukrainian
+        << u"uk"_s << QLocale::Ukrainian
         << QStringList{u"uk-Cyrl-UA"_s, u"uk-UA"_s, u"uk-Cyrl"_s, u"uk"_s};
+
     QTest::addRow("english-germany")
-        << QString("en-DE") << QLocale::English
+        << u"en-DE"_s << QLocale::English
         // First two were missed out before fix to QTBUG-104930:
         << QStringList{u"en-Latn-DE"_s, u"en-DE"_s,
                        u"en-Latn-GB"_s, u"en-GB"_s,
-                       u"de-Latn-DE"_s, u"de-DE"_s, u"de-Latn"_s, u"de"_s};
+                       u"de-Latn-DE"_s, u"de-DE"_s, u"de-Latn"_s, u"de"_s,
+                       // Fallbacks implied by those:
+                       u"en-Latn"_s, u"en"_s};
 
     QTest::addRow("german")
-        << QString("de") << QLocale::German
+        << u"de"_s << QLocale::German
         << QStringList{u"de-Latn-DE"_s, u"de-DE"_s, u"de-Latn"_s, u"de"_s};
     QTest::addRow("german-britain")
-        << QString("de-GB") << QLocale::German
-        << QStringList{u"de-Latn-GB"_s, u"de-GB"_s};
+        << u"de-GB"_s << QLocale::German
+        << QStringList{u"de-Latn-GB"_s, u"de-GB"_s, u"de-Latn"_s, u"de"_s};
     QTest::addRow("chinese-min")
-        << QString("zh") << QLocale::Chinese
+        << u"zh"_s << QLocale::Chinese
         << QStringList{u"zh-Hans-CN"_s, u"zh-CN"_s, u"zh-Hans"_s, u"zh"_s};
     QTest::addRow("chinese-full")
         << u"zh-Hans-CN"_s << QLocale::Chinese
         << QStringList{u"zh-Hans-CN"_s, u"zh-CN"_s, u"zh-Hans"_s, u"zh"_s};
     QTest::addRow("chinese-taiwan")
         << u"zh-TW"_s << QLocale::Chinese
-        // Not ideal: want zh-TW before zh-Hant, but zh-TW is minimal so last
-        << QStringList{u"zh-Hant-TW"_s, u"zh-Hant"_s, u"zh-TW"_s};
+        << QStringList{u"zh-Hant-TW"_s, u"zh-TW"_s, u"zh-Hant"_s, u"zh"_s};
+    QTest::addRow("chinese-trad")
+        << u"zh-Hant"_s << QLocale::Chinese
+        << QStringList{u"zh-Hant-TW"_s, u"zh-TW"_s, u"zh-Hant"_s, u"zh"_s};
 
     // For C, it should preserve what the system gave us but only add "C", never anything more:
-    QTest::addRow("C") << QString("C") << QLocale::C << QStringList{QStringLiteral("C")};
-    QTest::addRow("C-Latn")
-        << QString("C-Latn") << QLocale::C
-        << QStringList{QStringLiteral("C-Latn"), QStringLiteral("C")};
-    QTest::addRow("C-US")
-        << QString("C-US") << QLocale::C
-        << QStringList{QStringLiteral("C-US"), QStringLiteral("C")};
+    QTest::addRow("C") << u"C"_s << QLocale::C << QStringList{u"C"_s};
+    QTest::addRow("C-Latn") << u"C-Latn"_s << QLocale::C << QStringList{u"C-Latn"_s, u"C"_s};
+    QTest::addRow("C-US") << u"C-US"_s << QLocale::C << QStringList{u"C-US"_s, u"C"_s};
     QTest::addRow("C-Latn-US")
-        << QString("C-Latn-US") << QLocale::C
-        << QStringList{QStringLiteral("C-Latn-US"), QStringLiteral("C")};
-    QTest::addRow("C-Hans")
-        << QString("C-Hans") << QLocale::C
-        << QStringList{QStringLiteral("C-Hans"), QStringLiteral("C")};
-    QTest::addRow("C-CN")
-        << QString("C-CN") << QLocale::C
-        << QStringList{QStringLiteral("C-CN"), QStringLiteral("C")};
+        << u"C-Latn-US"_s << QLocale::C << QStringList{u"C-Latn-US"_s, u"C"_s};
+    QTest::addRow("C-Hans") << u"C-Hans"_s << QLocale::C << QStringList{u"C-Hans"_s, u"C"_s};
+    QTest::addRow("C-CN") << u"C-CN"_s << QLocale::C << QStringList{u"C-CN"_s, u"C"_s};
     QTest::addRow("C-Hans-CN")
         << u"C-Hans-CN"_s << QLocale::C << QStringList{u"C-Hans-CN"_s, u"C"_s};
 
     QTest::newRow("en-Dsrt-GB")
         << u"en-Dsrt-GB"_s << QLocale::English
-        << QStringList{u"en-Dsrt-GB"_s, u"en-Latn-GB"_s, u"en-GB"_s};
+        << QStringList{u"en-Dsrt-GB"_s, u"en-Dsrt"_s,
+                       u"en-Latn-GB"_s, u"en-GB"_s, u"en-Latn"_s, u"en"_s};
     QTest::newRow("en-mixed")
         << u"en-FO"_s << QLocale::English
         << QStringList{u"en-Latn-FO"_s, u"en-FO"_s, u"en-Latn-DK"_s, u"en-DK"_s,
                        u"en-Latn-GB"_s, u"en-GB"_s,
                        u"fo-Latn-FO"_s, u"fo-FO"_s, u"fo-Latn"_s, u"fo"_s,
                        u"da-Latn-FO"_s, u"da-FO"_s,
-                       u"da-Latn-DK"_s, u"da-DK"_s, u"da-Latn"_s, u"da"_s};
+                       u"da-Latn-DK"_s, u"da-DK"_s, u"da-Latn"_s, u"da"_s,
+                       // Fallbacks implied by those:
+                       u"en-Latn"_s, u"en"_s};
     QTest::newRow("polylingual-CA")
         << u"de-CA"_s << QLocale::German
         << QStringList{u"de-Latn-CA"_s, u"de-CA"_s, u"en-Latn-CA"_s, u"en-CA"_s,
                        u"fr-Latn-CA"_s, u"fr-CA"_s, u"de-Latn-AT"_s, u"de-AT"_s,
                        u"en-Latn-GB"_s, u"en-GB"_s,
-                       u"fr-Latn-FR"_s, u"fr-FR"_s, u"fr-Latn"_s, u"fr"_s};
+                       u"fr-Latn-FR"_s, u"fr-FR"_s, u"fr-Latn"_s, u"fr"_s,
+                       // Fallbacks:
+                       u"de-Latn"_s, u"de"_s, u"en-Latn"_s, u"en"_s};
 
     QTest::newRow("und-US")
-        << QString("und-US") << QLocale::C
-        << QStringList{QStringLiteral("und-US"), QStringLiteral("C")};
-
+        << u"und-US"_s << QLocale::C
+        << QStringList{u"und-US"_s, u"C"_s};
     QTest::newRow("und-Latn")
-        << QString("und-Latn") << QLocale::C
-        << QStringList{QStringLiteral("und-Latn"), QStringLiteral("C")};
+        << u"und-Latn"_s << QLocale::C
+        << QStringList{u"und-Latn"_s, u"C"_s};
 
     // TODO: test actual system backends correctly handle locales with
     // script-specificity (script listed first is the default, in CLDR v40):
@@ -4264,16 +4346,22 @@ void tst_QLocale::mySystemLocale()
     QFETCH(QLocale::Language, language);
     QFETCH(QStringList, uiLanguages);
 
+    const QLocale::NumberOptions eno
+        = language == QLocale::C ? QLocale::OmitGroupSeparator : QLocale::DefaultNumberOptions;
+
     {
         MySystemLocale sLocale(name);
         QCOMPARE(QLocale().language(), language);
-        QCOMPARE(QLocale::system().language(), language);
+        const QLocale sys = QLocale::system();
+        QCOMPARE(sys.language(), language);
         auto reporter = qScopeGuard([]() {
-            qDebug("\n\t%s", qPrintable(QLocale::system().uiLanguages().join(u"\n\t")));
+            qDebug("Actual entries:\n\t%s",
+                   qPrintable(QLocale::system().uiLanguages().join(u"\n\t")));
         });
-        QCOMPARE(QLocale::system().uiLanguages(), uiLanguages);
-        QCOMPARE(QLocale::system().uiLanguages(QLocale::TagSeparator::Underscore),
+        QCOMPARE(sys.uiLanguages(), uiLanguages);
+        QCOMPARE(sys.uiLanguages(QLocale::TagSeparator::Underscore),
                  uiLanguages.replaceInStrings(u"-", u"_"));
+        QCOMPARE(sys.numberOptions(), eno);
         reporter.dismiss();
     }
 
@@ -4281,6 +4369,89 @@ void tst_QLocale::mySystemLocale()
     QT_TEST_EQUALITY_OPS(QLocale(), originalLocale, true);
     QT_TEST_EQUALITY_OPS(QLocale::system(), originalSystemLocale, true);
 }
+
+void tst_QLocale::systemGrouping_data()
+{
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<QString>("separator");
+    QTest::addColumn<QString>("zeroDigit");
+    QTest::addColumn<int>("number");
+    QTest::addColumn<QString>("formattedString");
+
+    // Testing locales with non {1, 3, 3} groupe sizes, plus some locales
+    // that return invalid group sizes to test that we fallbakc to CLDR data.
+    QTest::newRow("en-ES") // {2,3,3}
+            << u"en-ES"_s << u","_s << u"0"_s << 1234 << u"1234"_s;
+    QTest::newRow("en-ES-grouped")
+            << u"en-ES"_s << u","_s << u"0"_s << 12345 << u"12,345"_s;
+    QTest::newRow("en-ES-long")
+            << u"en-ES"_s << u","_s << u"0"_s << 1234567 << u"1,234,567"_s;
+    QTest::newRow("en-BD") // {1,2,3}
+            << u"en-BD"_s << u","_s << u"0"_s << 123456789 << u"12,34,56,789"_s;
+    QTest::newRow("en-BT") // {1,2,3}
+            << u"en-BT"_s << u","_s << u"0"_s << 123456789 << u"12,34,56,789"_s;
+    QTest::newRow("en-NP") // {1,2,3}
+            << u"en-NP"_s << u","_s << u"0"_s << 123456789 << u"12,34,56,789"_s;
+
+    // Testing with Chakma locale
+    const char32_t zeroVal = 0x11136; // Chakma zero
+    const QChar data[] = {
+        QChar::highSurrogate(zeroVal), QChar::lowSurrogate(zeroVal),
+        QChar::highSurrogate(zeroVal + 1), QChar::lowSurrogate(zeroVal + 1),
+        QChar::highSurrogate(zeroVal + 2), QChar::lowSurrogate(zeroVal + 2),
+        QChar::highSurrogate(zeroVal + 3), QChar::lowSurrogate(zeroVal + 3),
+        QChar::highSurrogate(zeroVal + 4), QChar::lowSurrogate(zeroVal + 4),
+        QChar::highSurrogate(zeroVal + 5), QChar::lowSurrogate(zeroVal + 5),
+        QChar::highSurrogate(zeroVal + 6), QChar::lowSurrogate(zeroVal + 6),
+    };
+    const QChar separator(QLatin1Char(',')); // Separator for the Chakma locale
+    const QString
+        // Copy zero so it persists through QFETCH(), after data falls off the stack.
+        zero = QString(data, 2),
+        one = QString::fromRawData(data + 2, 2),
+        two = QString::fromRawData(data + 4, 2),
+        three = QString::fromRawData(data + 6, 2),
+        four = QString::fromRawData(data + 8, 2),
+        five = QString::fromRawData(data + 10, 2),
+        six = QString::fromRawData(data + 12, 2);
+    QString fourDigit = one + two + three + four;
+    QString fiveDigit = one + two  + separator + three + four + five;
+    // Leading group can have single digit as long as there's a later separator:
+    QString sixDigit =  one + separator  + two + three + separator + four + five + six;
+
+    QTest::newRow("Chakma-short") // {2,2,3}
+            << u"ccp"_s << QString(separator)
+            << zero << 1234 << fourDigit;
+    QTest::newRow("Chakma")
+            << u"ccp"_s << QString(separator)
+            << zero << 12345 << fiveDigit;
+    QTest::newRow("Chakma-long")
+            << u"ccp"_s << QString(separator) << zero
+            << 123456 << sixDigit;
+}
+
+void tst_QLocale::systemGrouping()
+{
+    QFETCH(QString, name);
+    QFETCH(QString, separator);
+    QFETCH(QString, zeroDigit);
+    QFETCH(int, number);
+    QFETCH(QString, formattedString);
+
+    {
+        MySystemLocale sLocale(name);
+        QLocale sys = QLocale::system();
+        QCOMPARE(sys.groupSeparator(), separator);
+        QCOMPARE(sys.zeroDigit(), zeroDigit);
+
+        QCOMPARE(sys.toString(number), formattedString);
+        bool ok;
+        int count = sys.toInt(formattedString, &ok);
+        QVERIFY2(ok, "Integer didn't round-trip");
+        QCOMPARE(count, number);
+    }
+}
+
 #  endif // QT_BUILD_INTERNAL
 
 void tst_QLocale::systemLocaleDayAndMonthNames_data()
@@ -4508,6 +4679,11 @@ void tst_QLocale::numberGrouping()
             QCOMPARE(u"%L1"_s.arg(double(number), 0, 'f', 0), string);
         }
     }
+    // Check round-trip via toInt():
+    bool ok;
+    int actual = locale.toInt(string, &ok);
+    QVERIFY(ok);
+    QCOMPARE(actual, number);
 }
 
 void tst_QLocale::numberGroupingIndia()
@@ -4553,6 +4729,13 @@ void tst_QLocale::numberGroupingIndia()
     const uint uInteger32 = 2030405010u;
     QCOMPARE(indian.toString(uInteger32), strResult32);
     QCOMPARE(indian.toUInt(strResult32), uInteger32);
+
+    bool ok = false;
+    QCOMPARE(indian.toInt(u"1,23,45,678"_s, &ok), 12345678);
+    QVERIFY(ok);
+    // Malformed (bad grouping):
+    QCOMPARE(indian.toInt(u"123,45,678"_s, &ok), 0);
+    QVERIFY(!ok);
 
     // 63-bit:
     const QString strResult64("60,05,00,40,03,00,20,01,000");
@@ -4625,6 +4808,29 @@ void tst_QLocale::numberFormatChakma()
     const int integer32 = 2030405010;
     QCOMPARE(chakma.toString(integer32), strResult32);
     QCOMPARE(chakma.toInt(strResult32), integer32);
+
+    bool ok = false; // Lakh is the Hindi name for 1,00,000
+    const QString goodLakh = one + separator + two + three + separator + four + five + six;
+    QCOMPARE(chakma.toInt(goodLakh, &ok), 123456);
+    QVERIFY(ok);
+    const QString longThousand = one + two + three + separator + four + five + six;
+    QCOMPARE(chakma.toInt(longThousand, &ok), 0);
+    QVERIFY(!ok);
+    const QString goodCrore // Crore is Hindi for 1,00,00,000
+        = one + separator + two + three + separator + zero + zero + separator + four + five + six;
+    QCOMPARE(chakma.toInt(goodCrore, &ok), 12300456);
+    QVERIFY(ok);
+    // Officially should be grouped, but we tolerate a complete lack of grouping
+    // for backwards-compatibility reasons.
+    const QString badLakh
+        = one + two + three + four + five + six;
+    QCOMPARE(chakma.toInt(badLakh, &ok), 123456);
+    QVERIFY(ok);
+    // However, even one group separator requires all to be correctly placed:
+    const QString longLakh
+        = one + two + three + separator + zero + zero + separator + four + five + six;
+    QCOMPARE(chakma.toInt(longLakh, &ok), 0);
+    QVERIFY(!ok);
 
     const uint uInteger32 = 2030405010u;
     QCOMPARE(chakma.toString(uInteger32), strResult32);
@@ -4719,6 +4925,95 @@ void tst_QLocale::codeToLcs()
     QCOMPARE(QLocale::codeToScript(QString("Zzzz")), QLocale::AnyScript);
     QCOMPARE(QLocale::codeToScript(QString("Hans")), QLocale::SimplifiedHanScript);
 }
+
+#if QT_CONFIG(icu) || defined(Q_OS_WIN) || defined(Q_OS_APPLE)
+void tst_QLocale::toLowerUpper_data()
+{
+    QTest::addColumn<QLocale>("locale");
+    QTest::addColumn<QString>("lower");
+    QTest::addColumn<QString>("upper");
+
+    const QLocale germanLocale = QLocale(u"de_DE"_s);
+    const QLocale turkishLocale = QLocale(u"tr_TR"_s);
+
+    QTest::newRow("null string default locale") << QLocale() << QString() << QString();
+    QTest::newRow("null string Turkish") << turkishLocale << QString() << QString();
+    QTest::newRow("null string German") << germanLocale << QString() << QString();
+
+    QTest::newRow("empty string default locale") << QLocale() << u""_s << u""_s;
+    QTest::newRow("empty string Turkish") << turkishLocale << u""_s << u""_s;
+    QTest::newRow("empty string German") << germanLocale << u""_s << u""_s;
+
+    QTest::newRow("ASCII i Turkish") << turkishLocale << u"i"_s << u"İ"_s;
+    QTest::newRow("ASCII i German") << germanLocale << u"i"_s << u"I"_s;
+    QTest::newRow("ASCII ı Turkish") << turkishLocale << u"ı"_s << u"I"_s;
+
+    QTest::newRow("Latin1 default locale") << QLocale() << u"é"_s << u"É"_s;
+    QTest::newRow("Latin1 Turkish") << turkishLocale << u"é"_s << u"É"_s;
+    QTest::newRow("Latin1 German") << germanLocale << u"é"_s << u"É"_s;
+
+    QTest::newRow("Replacement default locale") << QLocale() << u"\uFFFD"_s << u"\uFFFD"_s;
+    QTest::newRow("Replacement Turkish") << turkishLocale << u"\uFFFD"_s << u"\uFFFD"_s;
+    QTest::newRow("Replacement German") << germanLocale << u"\uFFFD"_s << u"\uFFFD"_s;
+
+    QTest::newRow("non-Latin1 default locale") << QLocale() << u"δ"_s << u"Δ"_s;
+    QTest::newRow("non-Latin1 Turkish") << turkishLocale << u"δ"_s << u"Δ"_s;
+    QTest::newRow("non-Latin1 German") << germanLocale << u"δ"_s << u"Δ"_s;
+    // Vithkuqi a/A:
+    QTest::newRow("non-BMP default locale") << QLocale() << u"\u10597"_s << u"\u10570"_s;
+    QTest::newRow("non-BMP Turkish") << turkishLocale << u"\u10597"_s << u"\u10570"_s;
+    QTest::newRow("non-BMP German") << germanLocale << u"\u10597"_s << u"\u10570"_s;
+
+    const QString pLowerString = QString(16, QChar('p'));
+    const QString pUpperString = QString(16, QChar('P'));
+    QTest::newRow("16 letters default locale") << QLocale() << pLowerString << pUpperString;
+    QTest::newRow("16 letters Turkish") << turkishLocale << pLowerString << pUpperString;
+    QTest::newRow("16 letters German") << germanLocale << pLowerString << pUpperString;
+
+    const QString zLowerString = QString(4096, QChar('z'));
+    const QString zUpperString = QString(4096, QChar('Z'));
+    QTest::newRow("4096 letters default locale") << QLocale() << zLowerString << zUpperString;
+    QTest::newRow("4096 letters Turkish") << turkishLocale << zLowerString << zUpperString;
+    QTest::newRow("4096 letters German") << germanLocale << zLowerString << zUpperString;
+}
+
+void tst_QLocale::toLowerUpper()
+{
+    QFETCH(QLocale, locale);
+    QFETCH(QString, lower);
+    QFETCH(QString, upper);
+
+    QEXPECT_FAIL("non-BMP default locale",
+                 "QTBUG-131489: Handling of code points outside BMP is broken",
+                 Abort);
+    QEXPECT_FAIL("non-BMP Turkish",
+                 "QTBUG-131489: Handling of code points outside BMP is broken",
+                 Abort);
+    QEXPECT_FAIL("non-BMP German",
+                 "QTBUG-131489: Handling of code points outside BMP is broken",
+                 Abort);
+
+    QCOMPARE(locale.toLower(upper), lower);
+    QCOMPARE(locale.toUpper(lower), upper);
+}
+
+void tst_QLocale::toLowerUpperEszett()
+{
+    const QString eszettLowerString = u"\u00DF"_s;
+    const QString eszettUpperString = u"SS"_s;
+
+#if defined(Q_OS_WIN)
+    QEXPECT_FAIL("",
+                 "Conversion of \u00DF currently returns \u00DF instead of SS or \u1E9E with "
+                 "Windows internal API",
+                 Abort);
+#endif
+
+    QCOMPARE(QLocale().toUpper(eszettLowerString), eszettUpperString);
+    QCOMPARE(QLocale(u"de_DE"_s).toUpper(eszettLowerString), eszettUpperString);
+    QCOMPARE(QLocale(u"tr_TR"_s).toUpper(eszettLowerString), eszettUpperString);
+}
+#endif
 
 QTEST_MAIN(tst_QLocale)
 #include "tst_qlocale.moc"

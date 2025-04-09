@@ -12,6 +12,8 @@ sudo yum -y remove PackageKit gnome-software
 sudo yum -y update
 
 installPackages=()
+# Make sure needed ca-certificates are available
+installPackages+=(ca-certificates)
 installPackages+=(git)
 installPackages+=(zlib-devel)
 installPackages+=(glib2-devel)
@@ -86,7 +88,6 @@ installPackages+=(libXtst-devel)
 installPackages+=(libxshmfence-devel)
 installPackages+=(nspr-devel)
 installPackages+=(nss-devel)
-installPackages+=(python3-html5lib)
 installPackages+=(libatomic)
 installPackages+=(mesa-libgbm-devel-21.3.4-1.el8.x86_64)
 # For Android builds
@@ -169,13 +170,16 @@ sudo pip config --user set global.index https://ci-files01-hki.ci.qt.io/input/py
 sudo pip config --user set global.extra-index-url https://pypi.org/simple/
 
 sudo pip3 install virtualenv wheel
-sudo python3.11 -m pip install virtualenv wheel
+sudo python3.11 -m pip install virtualenv wheel html5lib
 sudo python3.11 -m pip install -r "${BASH_SOURCE%/*}/../common/shared/sbom_requirements.txt"
 # For now we don't set QT_SBOM_PYTHON_APPS_PATH here, and rely on the build system to find the
 # system python3.11.
 
 sudo /usr/bin/pip3 install wheel
 sudo /usr/bin/pip3 install dataclasses
+
+gccVersion="$(gcc --version |grep -Eo '[0-9]+\.[0-9]+(\.[0-9]+)?' |head -n 1)"
+echo "GCC = $gccVersion" >> versions.txt
 
 OpenSSLVersion="$(openssl3 version |cut -b 9-14)"
 echo "System's OpenSSL = $OpenSSLVersion" >> ~/versions.txt

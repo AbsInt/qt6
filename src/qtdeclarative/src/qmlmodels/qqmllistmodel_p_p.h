@@ -91,7 +91,11 @@ public:
     ModelNodeMetaObject(QObject *object, QQmlListModel *model, int elementIndex);
     ~ModelNodeMetaObject();
 
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
+    const QMetaObject *toDynamicMetaObject(QObject *object) const override;
+#else
     QMetaObject *toDynamicMetaObject(QObject *object) override;
+#endif
 
     static ModelNodeMetaObject *get(QObject *obj);
 
@@ -113,7 +117,7 @@ private:
     void emitDirectNotifies(const int *changedRoles, int roleCount);
 
     void initialize();
-    bool m_initialized;
+    mutable bool m_initialized;
 };
 
 namespace QV4 {

@@ -111,10 +111,10 @@ AotStats AotStats::fromJsonDocument(const QJsonDocument &document)
             }
 
             std::sort(stats.begin(), stats.end());
-            files[filepath] = stats;
+            files[filepath] = std::move(stats);
         }
 
-        result.m_entries[moduleId] = files;
+        result.m_entries[moduleId] = std::move(files);
     }
 
     return result;
@@ -165,8 +165,8 @@ void AotStats::registerFile(const QString &moduleId, const QString &filepath)
     m_entries[moduleId][filepath] = {};
 }
 
-void AotStats::addEntry(const QString &moduleId, const QString &filepath,
-                        const AotStatsEntry &entry)
+void AotStats::addEntry(
+        const QString &moduleId, const QString &filepath, const AotStatsEntry &entry)
 {
     m_entries[moduleId][filepath].append(entry);
 }
@@ -190,8 +190,7 @@ void QQmlJSAotCompilerStats::registerFile(const QString &filepath)
 
 void QQmlJSAotCompilerStats::addEntry(const QString &filepath, const QQmlJS::AotStatsEntry &entry)
 {
-    auto *aotstats = QQmlJSAotCompilerStats::instance();
-    aotstats->addEntry(s_moduleId, filepath, entry);
+    QQmlJSAotCompilerStats::instance()->addEntry(s_moduleId, filepath, entry);
 }
 
 } // namespace QQmlJS

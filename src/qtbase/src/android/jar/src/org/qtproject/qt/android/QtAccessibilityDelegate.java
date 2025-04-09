@@ -4,7 +4,6 @@
 
 package org.qtproject.qt.android;
 
-import android.app.Activity;
 import android.content.Context;
 import android.graphics.Rect;
 import android.os.Build;
@@ -82,54 +81,62 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
         }
     }
 
-    private class AccessibilityManagerListener implements AccessibilityManager.AccessibilityStateChangeListener
+    private class AccessibilityManagerListener
+            implements AccessibilityManager.AccessibilityStateChangeListener
     {
         @Override
         public void onAccessibilityStateChanged(boolean enabled)
         {
-            if (m_layout == null || Os.getenv("QT_ANDROID_DISABLE_ACCESSIBILITY") != null)
+            if (m_layout == null)
                 return;
-            if (enabled) {
-                try {
-                        View view = m_view;
-                        if (view == null) {
-                            view = new View(m_layout.getContext());
-                            view.setId(View.NO_ID);
-                        }
 
-                        // ### Keep this for debugging for a while. It allows us to visually see that our View
-                        // ### is on top of the surface(s)
-                        //noinspection CommentedOutCode
-                        {
-                            // ColorDrawable color = new ColorDrawable(0x80ff8080);    //0xAARRGGBB
-                            // view.setBackground(color);
-                        }
-                        view.setAccessibilityDelegate(QtAccessibilityDelegate.this);
+            final String isA11yOff = Os.getenv("QT_ANDROID_DISABLE_ACCESSIBILITY");
+            if (isA11yOff != null && (isA11yOff.equalsIgnoreCase("true") || isA11yOff.equals("1")))
+                return;
 
-                        // if all is fine, add it to the layout
-                        if (m_view == null) {
-                            //m_layout.addAccessibilityView(view);
-                            m_layout.addView(view, m_layout.getChildCount(),
-                                             new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-                        }
-                        m_view = view;
-
-                        m_view.setOnHoverListener(new HoverEventListener());
-                    } catch (Exception e) {
-                        // Unknown exception means something went wrong.
-                        Log.w("Qt A11y", "Unknown exception: " + e);
-                    }
-            } else {
+            if (!enabled) {
                 if (m_view != null) {
                     m_layout.removeView(m_view);
                     m_view = null;
                 }
+                QtNativeAccessibility.setActive(enabled);
+                return;
+            }
+
+            try {
+                View view = m_view;
+                if (view == null) {
+                    view = new View(m_layout.getContext());
+                    view.setId(View.NO_ID);
+                }
+
+                // ### Keep this for debugging for a while. It allows us to visually see that our View
+                // ### is on top of the surface(s)
+                //noinspection CommentedOutCode
+                {
+                    // ColorDrawable color = new ColorDrawable(0x80ff8080);    //0xAARRGGBB
+                    // view.setBackground(color);
+                }
+                view.setAccessibilityDelegate(QtAccessibilityDelegate.this);
+
+                // if all is fine, add it to the layout
+                if (m_view == null) {
+                    //m_layout.addAccessibilityView(view);
+                    m_layout.addView(view, m_layout.getChildCount(),
+                            new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT));
+                }
+                m_view = view;
+
+                m_view.setOnHoverListener(new HoverEventListener());
+            } catch (Exception e) {
+                // Unknown exception means something went wrong.
+                Log.w("Qt A11y", "Unknown exception: " + e);
             }
 
             QtNativeAccessibility.setActive(enabled);
         }
     }
-
 
     @Override
     public AccessibilityNodeProvider getAccessibilityNodeProvider(View host)
@@ -271,7 +278,8 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
         final ViewGroup group = (ViewGroup) m_view.getParent();
         if (group == null) {
-            Log.w(TAG, "Could not send AccessibilityEvent because group was null. This should really not happen.");
+            Log.w(TAG, "Could not send AccessibilityEvent because group was null. " +
+                    "This should really not happen.");
             return;
         }
 
@@ -280,7 +288,8 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
     void invalidateVirtualViewId(int virtualViewId)
     {
-        final AccessibilityEvent event = getEventForVirtualViewId(virtualViewId, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+        final AccessibilityEvent event = getEventForVirtualViewId(virtualViewId,
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
 
         if (event == null)
             return;

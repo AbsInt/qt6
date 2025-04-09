@@ -212,9 +212,23 @@ void QWindowsUiaMainProvider::raiseNotification(QAccessibleAnnouncementEvent *ev
                     ? NotificationProcessing_ImportantAll
                     : NotificationProcessing_All;
             QBStr activityId{ QString::fromLatin1("") };
+#if !defined(Q_CC_MSVC) || !defined(QT_WIN_SERVER_2016_COMPAT)
             UiaRaiseNotificationEvent(provider.Get(), NotificationKind_Other, processing, message.bstr(),
                                       activityId.bstr());
+#else
+            HMODULE uiautomationcore = GetModuleHandleW(L"UIAutomationCore.dll");
+            if (uiautomationcore != NULL) {
+                typedef HRESULT (WINAPI *EVENTFUNC)(IRawElementProviderSimple *, NotificationKind,
+                                                    NotificationProcessing, BSTR, BSTR);
 
+                EVENTFUNC uiaRaiseNotificationEvent =
+                    (EVENTFUNC)GetProcAddress(uiautomationcore, "UiaRaiseNotificationEvent");
+                if (uiaRaiseNotificationEvent != NULL) {
+                    uiaRaiseNotificationEvent(provider.Get(), NotificationKind_Other, processing,
+                                              message.bstr(), activityId.bstr());
+                }
+            }
+#endif
         }
     }
 }
@@ -587,6 +601,12 @@ HRESULT QWindowsUiaMainProvider::GetPropertyValue(PROPERTYID idProp, VARIANT *pR
         break;
     case UIA_FullDescriptionPropertyId:
         *pRetVal = QComVariant{ accessible->text(QAccessible::Description) }.release();
+        break;
+    case UIA_LocalizedControlTypePropertyId:
+        // see Core Accessibility API Mappings spec:
+        // https://www.w3.org/TR/core-aam-1.2/#role-map-blockquote
+        if (accessible->role() == QAccessible::BlockQuote)
+            *pRetVal = QComVariant{ tr("blockquote") }.release();
         break;
     case UIA_NamePropertyId: {
         QString name = accessible->text(QAccessible::Name);

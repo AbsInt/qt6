@@ -23,9 +23,6 @@ import android.view.WindowManager;
 import android.view.ViewTreeObserver;
 import android.view.inputmethod.InputMethodManager;
 
-import org.qtproject.qt.android.QtInputConnection.QtInputConnectionListener;
-
-/** @noinspection FieldCanBeLocal*/
 class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, QtInputInterface
 {
 
@@ -153,6 +150,7 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
                     return;
                 m_imm.showSoftInput(m_currentEditText, 0, new ResultReceiver(new Handler()) {
                     @Override
+                    @SuppressWarnings("fallthrough")
                     protected void onReceiveResult(int resultCode, Bundle resultData) {
                         switch (resultCode) {
                             case InputMethodManager.RESULT_SHOWN:

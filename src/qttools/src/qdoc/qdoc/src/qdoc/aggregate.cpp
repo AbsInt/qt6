@@ -296,14 +296,18 @@ void Aggregate::normalizeOverloads()
 /*!
   Returns a const reference to the list of child nodes of this
   aggregate that are not function nodes. Duplicate nodes are
-  removed from the list.
+  removed from the list and the list is sorted.
  */
 const NodeList &Aggregate::nonfunctionList()
 {
     m_nonfunctionList = m_nonfunctionMap.values();
-    std::sort(m_nonfunctionList.begin(), m_nonfunctionList.end(), Node::nodeNameLessThan);
+    // Erase duplicates
+    std::sort(m_nonfunctionList.begin(), m_nonfunctionList.end());
     m_nonfunctionList.erase(std::unique(m_nonfunctionList.begin(), m_nonfunctionList.end()),
                             m_nonfunctionList.end());
+
+    // Sort based on node name
+    std::sort(m_nonfunctionList.begin(), m_nonfunctionList.end(), Node::nodeNameLessThan);
     return m_nonfunctionList;
 }
 
@@ -686,30 +690,34 @@ void Aggregate::resolveQmlInheritance()
 
 /*!
   Returns a word representing the kind of Aggregate this node is.
-  Currently only works for class, struct, and union, but it can
-  easily be extended. If \a cap is true, the word is capitalised.
+  Currently recognizes class, struct, union, and namespace.
+  If \a cap is true, the word is capitalised.
  */
 QString Aggregate::typeWord(bool cap) const
 {
     if (cap) {
         switch (nodeType()) {
         case Node::Class:
-            return QLatin1String("Class");
+            return "Class"_L1;
         case Node::Struct:
-            return QLatin1String("Struct");
+            return "Struct"_L1;
         case Node::Union:
-            return QLatin1String("Union");
+            return "Union"_L1;
+        case Node::Namespace:
+            return "Namespace"_L1;
         default:
             break;
         }
     } else {
         switch (nodeType()) {
         case Node::Class:
-            return QLatin1String("class");
+            return "class"_L1;
         case Node::Struct:
-            return QLatin1String("struct");
+            return "struct"_L1;
         case Node::Union:
-            return QLatin1String("union");
+            return "union"_L1;
+        case Node::Namespace:
+            return "namespace"_L1;
         default:
             break;
         }

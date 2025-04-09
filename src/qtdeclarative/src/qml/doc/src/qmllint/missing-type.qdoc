@@ -22,7 +22,7 @@ actually installed, and that their modules end up in an
 
 The warning might also indicate that the type of the property referenced by the alias does not have
 a QML counterpart. The referenced property type might be missing the
-\l{QQmlEngine::}{QML_ELEMENT} macro, for example. Refer to
+QML_ELEMENT macro, for example. Refer to
 \l{Defining QML Types from C++} or \l{Overview - QML and C++ Integration} in this case.
 
 \section2 Why is this bad?
@@ -131,7 +131,7 @@ actually installed, and that their modules end up in an
 
 The warning might also indicate that the type of the property does not have
 a QML counterpart. The property type might be missing the
-\l{QQmlEngine::}{QML_ELEMENT} macro, for example. Refer to
+QML_ELEMENT macro, for example. Refer to
 \l{Defining QML Types from C++} or \l{Overview - QML and C++ Integration} in this case.
 
 \section2 Why is this bad?

@@ -129,7 +129,12 @@ public:
     QList<Script> scripts() const { return _scripts; }
     QList<Plugin> plugins() const { return _plugins; }
     bool designerSupported() const { return _designerSupported; }
+
+    // A static module has side effects outside the mere importing of types. We shall not warn
+    // about it being being "unused". The builtins are also a static module.
     bool isStaticModule() const { return _isStaticModule; }
+
+    // A system module includes the JavaScript root object
     bool isSystemModule() const { return _isSystemModule; }
 
     QStringList typeInfos() const { return _typeInfos; }

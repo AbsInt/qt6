@@ -3074,6 +3074,42 @@ private:
     std::vector<std::vector<int>> m_list;
 };
 
+class VariantAssociationProvider : public QObject {
+
+    Q_OBJECT
+    Q_PROPERTY(QVariantMap variantMap READ getMap WRITE setMap)
+    Q_PROPERTY(QVariantHash variantHash READ getHash WRITE setHash)
+
+    QML_ELEMENT
+
+    QVariantMap m_variantMap;
+    QVariantHash m_variantHash;
+
+public:
+    VariantAssociationProvider(QObject* parent = nullptr) : QObject(parent)
+    {}
+
+    QVariantMap getMap() { return m_variantMap; }
+    void setMap(const QVariantMap& map) { m_variantMap = map; }
+
+    QVariantHash getHash() { return m_variantHash; }
+    void setHash(const QVariantHash& hash) { m_variantHash = hash; }
+
+    Q_INVOKABLE QVariantList getListOfMap() const {
+        return QVariantList{
+            QVariantMap{},
+            QVariantMap{ { "email", "Alice Smith"} }
+        };
+    }
+
+    Q_INVOKABLE QVariantList getListOfHash() const {
+        return QVariantList{
+            QVariantHash{},
+            QVariantHash{ { "email", "Alice Smith"} }
+        };
+    }
+};
+
 namespace YepNamespaceA {
 class YepAttached : public QObject
 {
@@ -3113,5 +3149,19 @@ public:
     Q_INVOKABLE QString s() const { return QStringLiteral("StaticTest"); }
 };
 } // namespace YepNamespaceA
+
+class BindablePoint : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+    Q_PROPERTY(QPointF point BINDABLE bindablePoint READ default WRITE default)
+public:
+    BindablePoint(QObject *parent = nullptr) : QObject(parent), m_point(QPointF(101, 102)) {}
+
+    QBindable<QPointF> bindablePoint() { return QBindable<QPointF>(&m_point); }
+
+private:
+    QProperty<QPointF> m_point;
+};
 
 #endif // TESTTYPES_H

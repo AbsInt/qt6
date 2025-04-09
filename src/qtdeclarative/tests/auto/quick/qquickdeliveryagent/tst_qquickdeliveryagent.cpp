@@ -148,7 +148,7 @@ private slots:
     void compoundControlsFocusInSubscene();
 
 private:
-    QScopedPointer<QPointingDevice> touchDevice = QScopedPointer<QPointingDevice>(QTest::createTouchDevice());
+    std::unique_ptr<QPointingDevice> touchscreen{QTest::createTouchDevice()};
 };
 
 void tst_qquickdeliveryagent::passiveGrabberOrder()
@@ -426,7 +426,7 @@ void tst_qquickdeliveryagent::touchCompression()
     QVERIFY(root);
     QQuickPointHandler *rootHandler = root->findChild<QQuickPointHandler *>();
     QVERIFY(rootHandler);
-    QTest::QTouchEventSequence touch = QTest::touchEvent(&window, touchDevice.data());
+    QTest::QTouchEventSequence touch = QTest::touchEvent(&window, touchscreen.get());
     QPoint pt1(30, 50);
     QPoint pt2(70, 50);
     // Press and drag fast, alternating moving and stationary points

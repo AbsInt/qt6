@@ -85,8 +85,8 @@ using namespace Qt::StringLiterals;
 
 Q_LOGGING_CATEGORY(lcWidgetPainting, "qt.widgets.painting", QtWarningMsg);
 Q_LOGGING_CATEGORY(lcWidgetShowHide, "qt.widgets.showhide", QtWarningMsg);
-Q_LOGGING_CATEGORY(lcWidgetWindow, "qt.widgets.window", QtWarningMsg);
-Q_LOGGING_CATEGORY(lcWidgetFocus, "qt.widgets.focus")
+Q_STATIC_LOGGING_CATEGORY(lcWidgetWindow, "qt.widgets.window", QtWarningMsg);
+Q_STATIC_LOGGING_CATEGORY(lcWidgetFocus, "qt.widgets.focus")
 
 #ifndef QT_NO_DEBUG_STREAM
 namespace {
@@ -102,6 +102,9 @@ static inline bool qRectIntersects(const QRect &r1, const QRect &r2)
 }
 
 extern bool qt_sendSpontaneousEvent(QObject*, QEvent*); // qapplication.cpp
+
+static void setAttribute_internal(Qt::WidgetAttribute attribute,
+    bool on, QWidgetData *data, QWidgetPrivate *d);
 
 QWidgetPrivate::QWidgetPrivate(int version)
     : QObjectPrivate(version)
@@ -853,14 +856,8 @@ struct QWidgetExceptionCleaner
     \sa windowFlags
 */
 QWidget::QWidget(QWidget *parent, Qt::WindowFlags f)
-    : QObject(*new QWidgetPrivate, nullptr), QPaintDevice()
+    : QWidget(*new QWidgetPrivate, parent, f)
 {
-    QT_TRY {
-        d_func()->init(parent, f);
-    } QT_CATCH(...) {
-        QWidgetExceptionCleaner::cleanup(this, d_func());
-        QT_RETHROW;
-    }
 }
 
 
@@ -868,6 +865,7 @@ QWidget::QWidget(QWidget *parent, Qt::WindowFlags f)
 */
 QWidget::QWidget(QWidgetPrivate &dd, QWidget* parent, Qt::WindowFlags f)
     : QObject(dd, nullptr), QPaintDevice()
+    , data(&dd.data)
 {
     Q_D(QWidget);
     QT_TRY {
@@ -951,11 +949,9 @@ void QWidgetPrivate::init(QWidget *parentWidget, Qt::WindowFlags f)
     if (allWidgets)
         allWidgets->insert(q);
 
-    q->data = &data;
-
 #if QT_CONFIG(thread)
     if (!parent) {
-        Q_ASSERT_X(q->thread() == qApp->thread(), "QWidget",
+        Q_ASSERT_X(QThread::isMainThread(), "QWidget",
                    "Widgets must be created in the GUI thread.");
     }
 #endif
@@ -985,7 +981,6 @@ void QWidgetPrivate::init(QWidget *parentWidget, Qt::WindowFlags f)
     q->setAttribute(Qt::WA_QuitOnClose); // might be cleared in adjustQuitOnCloseAttribute()
     adjustQuitOnCloseAttribute();
 
-    q->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea);
     q->setAttribute(Qt::WA_WState_Hidden);
 
     //give potential windows a bigger "pre-initial" size; create() will give them a new size later
@@ -1212,6 +1207,15 @@ void QWidget::create(WId window, bool initializeWindow, bool destroyOldWindow)
     if (QApplicationPrivate::testAttribute(Qt::AA_NativeWindows))
         setAttribute(Qt::WA_NativeWindow);
 
+    if (isWindow()) {
+        // Make top levels automatically respect safe areas by default
+        auto *topExtra = d->maybeTopData();
+        if (!topExtra || !topExtra->explicitContentsMarginsRespectsSafeArea) {
+            setAttribute_internal(Qt::WA_ContentsMarginsRespectsSafeArea,
+                true, data, d);
+        }
+    }
+
     d->updateIsOpaque();
 
     setAttribute(Qt::WA_WState_Created);                        // set created flag
@@ -1303,7 +1307,7 @@ void QWidgetPrivate::create()
 
 #if defined(QT_PLATFORM_UIKIT)
     if (q->testAttribute(Qt::WA_ContentsMarginsRespectsSafeArea))
-        flags |= Qt::MaximizeUsingFullscreenGeometryHint;
+        flags |= Qt::ExpandedClientAreaHint;
 #endif
 
     if (q->testAttribute(Qt::WA_ShowWithoutActivating))
@@ -1630,6 +1634,7 @@ void QWidgetPrivate::createTLExtra()
         x->posIncludesFrame = 0;
         x->sizeAdjusted = false;
         x->embedded = 0;
+        x->explicitContentsMarginsRespectsSafeArea = 0;
         x->window = nullptr;
         x->initialScreen = nullptr;
 
@@ -2129,7 +2134,7 @@ void QWidgetPrivate::clipToEffectiveMask(QRegion &region) const
     QPoint offset;
 
 #if QT_CONFIG(graphicseffect)
-    if (graphicsEffect) {
+    if (graphicsEffect && !w->isWindow()) {
         w = q->parentWidget();
         offset -= data.crect.topLeft();
     }
@@ -6065,8 +6070,25 @@ void QWidgetPrivate::setWindowTitle_sys(const QString &caption)
         return;
 
     if (QWindow *window = q->windowHandle())
+    {
+#if QT_CONFIG(accessibility)
+        QString oldAccessibleName;
+        const QAccessibleInterface *accessible = QAccessible::isActive()
+                                               ? QAccessible::queryAccessibleInterface(q)
+                                               : nullptr;
+        if (accessible)
+            oldAccessibleName = accessible->text(QAccessible::Name);
+#endif
+
         window->setTitle(caption);
 
+#if QT_CONFIG(accessibility)
+        if (accessible && accessible->text(QAccessible::Name) != oldAccessibleName) {
+            QAccessibleEvent event(q, QAccessible::NameChanged);
+            QAccessible::updateAccessibility(&event);
+        }
+#endif
+    }
 }
 
 void QWidgetPrivate::setWindowIconText_helper(const QString &title)
@@ -6132,13 +6154,6 @@ void QWidget::setWindowTitle(const QString &title)
     if (QWidget::windowTitle() == title && !title.isEmpty() && !title.isNull())
         return;
 
-#if QT_CONFIG(accessibility)
-    QString oldAccessibleName;
-    const QAccessibleInterface *accessible = QAccessible::queryAccessibleInterface(this);
-    if (accessible)
-        oldAccessibleName = accessible->text(QAccessible::Name);
-#endif
-
     Q_D(QWidget);
     d->topData()->caption = title;
     d->setWindowTitle_helper(title);
@@ -6147,13 +6162,6 @@ void QWidget::setWindowTitle(const QString &title)
     QCoreApplication::sendEvent(this, &e);
 
     emit windowTitleChanged(title);
-
-#if QT_CONFIG(accessibility)
-    if (accessible && accessible->text(QAccessible::Name) != oldAccessibleName) {
-        QAccessibleEvent event(this, QAccessible::NameChanged);
-        QAccessible::updateAccessibility(&event);
-    }
-#endif
 }
 
 
@@ -7353,6 +7361,12 @@ void QWidgetPrivate::setGeometry_sys(int x, int y, int w, int h, bool isMove)
             q->setAttribute(Qt::WA_PendingResizeEvent, true);
     }
 
+#if QT_CONFIG(accessibility)
+    if (QAccessible::isActive() && q->isVisible()) {
+        QAccessibleEvent event(q, QAccessible::LocationChanged);
+        QAccessible::updateAccessibility(&event);
+    }
+#endif
 }
 
 /*!
@@ -8487,7 +8501,7 @@ void QWidgetPrivate::hideChildren(bool spontaneous)
             continue;
         qCDebug(lcWidgetShowHide) << "Considering" << widget
               << "with attributes" << WidgetAttributes{widget};
-        if (widget->isWindow() || widget->testAttribute(Qt::WA_WState_Hidden))
+        if (widget->isWindow() || !widget->isVisible())
             continue;
 
         if (spontaneous)
@@ -11365,10 +11379,18 @@ void QWidgetPrivate::macUpdateSizeAttribute()
 */
 void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
 {
+    Q_D(QWidget);
+
+    if (attribute == Qt::WA_ContentsMarginsRespectsSafeArea) {
+        if (isWindow()) {
+            auto *topExtra = d->topData();
+            topExtra->explicitContentsMarginsRespectsSafeArea = true;
+        }
+    }
+
     if (testAttribute(attribute) == on)
         return;
 
-    Q_D(QWidget);
     static_assert(sizeof(d->high_attributes)*8 >= (Qt::WA_AttributeCount - sizeof(uint)*8),
                       "QWidget::setAttribute(WidgetAttribute, bool): "
                       "QWidgetPrivate::high_attributes[] too small to contain all attributes in WidgetAttribute");
@@ -11827,6 +11849,9 @@ QString QWidget::whatsThis() const
 void QWidget::setAccessibleName(const QString &name)
 {
     Q_D(QWidget);
+    if (d->accessibleName == name)
+        return;
+
     d->accessibleName = name;
     QAccessibleEvent event(this, QAccessible::NameChanged);
     QAccessible::updateAccessibility(&event);
@@ -11857,6 +11882,9 @@ QString QWidget::accessibleName() const
 void QWidget::setAccessibleDescription(const QString &description)
 {
     Q_D(QWidget);
+    if (d->accessibleDescription == description)
+        return;
+
     d->accessibleDescription = description;
     QAccessibleEvent event(this, QAccessible::DescriptionChanged);
     QAccessible::updateAccessibility(&event);
@@ -11867,6 +11895,35 @@ QString QWidget::accessibleDescription() const
     Q_D(const QWidget);
     return d->accessibleDescription;
 }
+
+/*!
+  \property QWidget::accessibleIdentifier
+
+  \brief the widget's identifier as seen by assistive technologies
+
+  If set, the accessible identifier of a widget can be used by assistive
+  technologies in order to identify a specific widget, e.g. in automated
+  tests.
+
+  \since 6.9
+*/
+void QWidget::setAccessibleIdentifier(const QString &identifier)
+{
+    Q_D(QWidget);
+    if (d->accessibleIdentifier == identifier)
+        return;
+
+    d->accessibleIdentifier = identifier;
+    QAccessibleEvent event(this, QAccessible::IdentifierChanged);
+    QAccessible::updateAccessibility(&event);
+}
+
+QString QWidget::accessibleIdentifier() const
+{
+    Q_D(const QWidget);
+    return d->accessibleIdentifier;
+}
+
 #endif // QT_CONFIG(accessibility)
 
 #ifndef QT_NO_SHORTCUT
@@ -12722,7 +12779,6 @@ QPoint QWidget::mapFromGlobal(const QPoint &pos) const
    return mapFromGlobal(QPointF(pos)).toPoint();
 }
 
-QWidget *qt_pressGrab = nullptr;
 QWidget *qt_mouseGrb = nullptr;
 static bool mouseGrabWithCursor = false;
 static QWidget *keyboardGrb = nullptr;
@@ -12757,7 +12813,6 @@ static void grabMouseForWidget(QWidget *widget)
     }
 
     qt_mouseGrb = widget;
-    qt_pressGrab = nullptr;
 }
 
 static void releaseMouseGrabOfWidget(QWidget *widget)
@@ -12918,9 +12973,7 @@ void QWidget::releaseKeyboard()
 */
 QWidget *QWidget::mouseGrabber()
 {
-    if (qt_mouseGrb)
-        return qt_mouseGrb;
-    return qt_pressGrab;
+    return qt_mouseGrb;
 }
 
 /*!

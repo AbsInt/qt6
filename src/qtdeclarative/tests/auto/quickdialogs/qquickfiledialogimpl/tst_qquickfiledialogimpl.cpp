@@ -10,11 +10,12 @@
 #include <QtQuickControlsTestUtils/private/controlstestutils_p.h>
 #include <QtQuickControlsTestUtils/private/dialogstestutils_p.h>
 #include <QtQuickDialogs2/private/qquickfiledialog_p.h>
-#include <QtQuickDialogs2QuickImpl/private/qquickplatformfiledialog_p.h>
 #include <QtQuickDialogs2QuickImpl/private/qquickfiledialogdelegate_p.h>
 #include <QtQuickDialogs2QuickImpl/private/qquickfiledialogimpl_p_p.h>
 #include <QtQuickDialogs2QuickImpl/private/qquickfolderbreadcrumbbar_p.h>
 #include <QtQuickDialogs2QuickImpl/private/qquickfolderbreadcrumbbar_p_p.h>
+#include <QtQuickDialogs2QuickImpl/private/qquickplatformfiledialog_p.h>
+#include <QtQuickDialogs2QuickImpl/private/qquicksidebar_p.h>
 #include <QtQuickDialogs2Utils/private/qquickfilenamefilter_p.h>
 #include <QtQuickTemplates2/private/qquickapplicationwindow_p.h>
 #include <QtQuickTemplates2/private/qquickcombobox_p.h>
@@ -93,6 +94,7 @@ private slots:
     void fileNameTextFieldOnlyChangesWhenSelectingFiles();
     void setSchemeForSelectedFile();
     void reopenAfterHideEvent();
+    void sidebarStandardPaths();
 
 private:
     enum DelegateOrderPolicy
@@ -1745,6 +1747,31 @@ void tst_QQuickFileDialogImpl::reopenAfterHideEvent()
     QVERIFY(dialogHelper.dialog->isVisible());
 
     dialogHelper.dialog->close();
+}
+
+void tst_QQuickFileDialogImpl::sidebarStandardPaths()
+{
+    // Open the dialog.
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
+    QVERIFY(dialogHelper.waitForPopupWindowActiveAndPolished());
+
+    QQuickWindow *popupWindow = dialogHelper.popupWindow();
+    QVERIFY(popupWindow);
+    QVERIFY(dialogHelper.dialog->isVisible());
+    QVERIFY(popupWindow->isVisible());
+
+    QQuickSideBar *sideBar = dialogHelper.quickDialog->findChild<QQuickSideBar *>();
+
+    auto paths = sideBar->effectiveFolderPaths();
+    int sideBarCount = paths.count();
+    for (int i = 0; i < sideBarCount; ++i) {
+        auto *button = qobject_cast<QQuickAbstractButton *>(sideBar->itemAt(i));
+        QVERIFY(button);
+        QVERIFY(clickButton(button));
+        QCOMPARE(dialogHelper.dialog->currentFolder().toLocalFile(), QStandardPaths::writableLocation(paths[i]));
+        QCOMPARE(dialogHelper.quickDialog->currentFolder().toLocalFile(), QStandardPaths::writableLocation(paths[i]));
+    }
 }
 
 QTEST_MAIN(tst_QQuickFileDialogImpl)

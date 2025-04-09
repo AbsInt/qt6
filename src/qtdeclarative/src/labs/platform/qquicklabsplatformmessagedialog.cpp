@@ -3,6 +3,8 @@
 
 #include "qquicklabsplatformmessagedialog_p.h"
 
+#if QT_DEPRECATED_SINCE(6, 9)
+
 #include <QtQml/qqmlinfo.h>
 
 QT_BEGIN_NAMESPACE
@@ -13,6 +15,7 @@ QT_BEGIN_NAMESPACE
 //!     \nativetype QQuickLabsPlatformMessageDialog
     \inqmlmodule Qt.labs.platform
     \since 5.8
+    \deprecated [6.9] Use QtQuick.Dialogs::MessageDialog instead.
     \brief A native message dialog.
 
     The MessageDialog type provides a QML API for native platform message dialogs.
@@ -72,6 +75,8 @@ QT_BEGIN_NAMESPACE
     \input includes/widgets.qdocinc 1
 
     \labs
+
+    \sa QtQuick.Dialogs::MessageDialog
 */
 
 /*!
@@ -350,3 +355,5 @@ void QQuickLabsPlatformMessageDialog::handleClick(QPlatformDialogHelper::Standar
 QT_END_NAMESPACE
 
 #include "moc_qquicklabsplatformmessagedialog_p.cpp"
+
+#endif // QT_DEPRECATED_SINCE(6, 9)

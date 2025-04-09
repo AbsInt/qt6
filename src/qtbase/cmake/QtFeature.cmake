@@ -47,13 +47,56 @@ function(qt_feature feature)
     qt_feature_normalize_name("${feature}" feature)
     set_property(GLOBAL PROPERTY QT_FEATURE_ORIGINAL_NAME_${feature} "${original_name}")
 
+    set(no_value_options
+        PRIVATE
+        PUBLIC
+        SYSTEM_LIBRARY
+    )
+    set(single_value_options
+        LABEL
+        PURPOSE
+        SECTION
+    )
+    set(multi_value_options
+        AUTODETECT
+        CONDITION
+        ENABLE
+        DISABLE
+        EMIT_IF
+    )
     cmake_parse_arguments(PARSE_ARGV 1 arg
-        "PRIVATE;PUBLIC"
-        "LABEL;PURPOSE;SECTION"
-        "AUTODETECT;CONDITION;ENABLE;DISABLE;EMIT_IF")
+        "${no_value_options}" "${single_value_options}" "${multi_value_options}"
+    )
     _qt_internal_validate_all_args_are_parsed(arg)
 
-    set(_QT_FEATURE_DEFINITION_${feature} ${ARGN} PARENT_SCOPE)
+    if(arg_SYSTEM_LIBRARY)
+        # Enable SYSTEM_LIBRARY features if the 'force-system-libs' feature is enabled.
+        if(DEFINED arg_ENABLE)
+            list(PREPEND arg_ENABLE OR)
+        endif()
+        list(PREPEND arg_ENABLE QT_FEATURE_force_system_libs)
+
+        # Disable SYSTEM_LIBRARY features if the 'force-bundled-libs' feature is enabled.
+        if(DEFINED arg_DISABLE)
+            list(PREPEND arg_DISABLE OR)
+        endif()
+        list(PREPEND arg_DISABLE QT_FEATURE_force_bundled_libs)
+
+        qt_remove_args(forward_args
+            ARGS_TO_REMOVE ENABLE DISABLE
+            ALL_ARGS ${no_value_options} ${single_value_options} ${multi_value_options}
+            ARGS ${ARGN}
+        )
+
+        list(APPEND forward_args
+            ENABLE ${arg_ENABLE}
+            DISABLE ${arg_DISABLE}
+        )
+    else()
+        set(forward_args ${ARGN})
+    endif()
+
+    set(_QT_FEATURE_DEFINITION_${feature} ${forward_args} PARENT_SCOPE)
 
     # Register feature for future use:
     if (arg_PUBLIC)
@@ -84,6 +127,7 @@ function(qt_internal_evaluate_config_expression resultVar outIdx startIdx)
     set(result "")
     set(expression "${ARGN}")
     list(LENGTH expression length)
+    get_property(known_compile_tests GLOBAL PROPERTY _qtfeature_known_compile_tests)
 
     math(EXPR memberIdx "${startIdx} - 1")
     math(EXPR length "${length}-1")
@@ -134,8 +178,13 @@ function(qt_internal_evaluate_config_expression resultVar outIdx startIdx)
             string(COMPARE EQUAL "${lhs}" "${rhs}" stringCompareResult)
             list(APPEND result ${stringCompareResult})
         else()
-            string(FIND "${member}" "QT_FEATURE_" idx)
-            if(idx EQUAL 0)
+            if(member MATCHES "^TEST_")
+                # Remove the TEST_ prefix
+                string(SUBSTRING "${member}" 5 -1 test_name)
+                if(test_name IN_LIST known_compile_tests)
+                    qt_run_config_compile_test("${test_name}")
+                endif()
+            elseif(member MATCHES "^QT_FEATURE_")
                 # Remove the QT_FEATURE_ prefix
                 string(SUBSTRING "${member}" 11 -1 feature)
                 qt_evaluate_feature(${feature})
@@ -915,13 +964,33 @@ endfunction()
 #
 # Sets a TEST_${name}_OUTPUT variable with the build output, to the scope of the calling function.
 # Sets a TEST_${name} cache variable to either TRUE or FALSE if the build is successful or not.
-function(qt_config_compile_test name)
+#
+# The test is only run if a feature condition needs to evaluate the TEST_${name} variable. If you
+# need the test result regardless of any feature conditions, call
+# qt_run_config_compile_test right after qt_config_compile_test.
+macro(qt_config_compile_test name)
+    set_property(GLOBAL APPEND PROPERTY _qtfeature_known_compile_tests ${name})
+    set_property(GLOBAL PROPERTY _qtfeature_compile_test_args_${name} ${ARGN})
+    if(QT_RUN_COMPILE_TESTS_IMMEDIATELY)
+        qt_run_config_compile_test(${name})
+    endif()
+endmacro()
+
+# Runs a compile test that was defined with qt_config_compile_test.
+function(qt_run_config_compile_test name)
     if(DEFINED "TEST_${name}")
         return()
     endif()
 
+    get_property(test_args GLOBAL PROPERTY _qtfeature_compile_test_args_${name})
+    if("${test_args}" STREQUAL "")
+        message(FATAL_ERROR
+            "Can't find definition for compile test '${name}'. "
+            "The test probably wasn't defined with qt_config_compile_test."
+        )
+    endif()
     cmake_parse_arguments(arg "" "LABEL;PROJECT_PATH;C_STANDARD;CXX_STANDARD"
-        "COMPILE_OPTIONS;LIBRARIES;CODE;PACKAGES;CMAKE_FLAGS" ${ARGN})
+        "COMPILE_OPTIONS;LIBRARIES;CODE;PACKAGES;CMAKE_FLAGS" ${test_args})
 
     if(arg_PROJECT_PATH)
         message(STATUS "Performing Test ${arg_LABEL}")
@@ -1247,6 +1316,56 @@ function(qt_config_compile_test_x86simd extension label)
     endif()
     message(STATUS "Performing Test ${label} intrinsics - ${status_label}")
     set(TEST_subarch_${extension} "${TEST_X86SIMD_${extension}}" CACHE INTERNAL "${label}")
+endfunction()
+
+function(qt_config_compile_test_armintrin extension label)
+    if (DEFINED TEST_ARMINTRIN_${extension})
+        return()
+    endif()
+
+    set(flags "-DSIMD:string=${extension}")
+
+    qt_get_platform_try_compile_vars(platform_try_compile_vars)
+    list(APPEND flags ${platform_try_compile_vars})
+
+    message(STATUS "Performing Test ${label} intrinsics")
+    try_compile("TEST_ARMINTRIN_${extension}"
+        "${CMAKE_CURRENT_BINARY_DIR}/config.tests/armintrin_${extension}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config.tests/armintrin"
+        armintrin
+        CMAKE_FLAGS ${flags})
+    if(${TEST_ARMINTRIN_${extension}})
+        set(status_label "Success")
+    else()
+        set(status_label "Failed")
+    endif()
+    message(STATUS "Performing Test ${label} intrinsics - ${status_label}")
+    set(TEST_subarch_${extension} "${TEST_ARMINTRIN_${extension}}" CACHE INTERNAL "${label}")
+endfunction()
+
+function(qt_config_compile_test_loongarchsimd extension label)
+        if (DEFINED TEST_LOONGARCHSIMD_${extension})
+        return()
+    endif()
+
+    set(flags "-DSIMD:string=${extension}")
+
+    qt_get_platform_try_compile_vars(platform_try_compile_vars)
+    list(APPEND flags ${platform_try_compile_vars})
+
+    message(STATUS "Performing Test ${label} intrinsics")
+    try_compile("TEST_LOONGARCHSIMD_${extension}"
+        "${CMAKE_CURRENT_BINARY_DIR}/config.tests/loongarch_simd_${extension}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config.tests/loongarch_simd"
+        loongarch_simd
+        CMAKE_FLAGS ${flags})
+    if(${TEST_LOONGARCHSIMD_${extension}})
+        set(status_label "Success")
+    else()
+        set(status_label "Failed")
+    endif()
+    message(STATUS "Performing Test ${label} intrinsics - ${status_label}")
+    set(TEST_subarch_${extension} "${TEST_LOONGARCHSIMD_${extension}}" CACHE INTERNAL "${label}")
 endfunction()
 
 function(qt_config_compile_test_machine_tuple label)

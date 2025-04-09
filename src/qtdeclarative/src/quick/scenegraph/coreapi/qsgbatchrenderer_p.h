@@ -25,6 +25,7 @@
 #include <private/qsgtexture_p.h>
 
 #include <QtCore/QBitArray>
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QStack>
 
 #include <rhi/qrhi.h>

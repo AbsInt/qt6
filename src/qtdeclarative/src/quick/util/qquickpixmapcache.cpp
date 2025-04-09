@@ -58,8 +58,6 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::Literals::StringLiterals;
 
-Q_DECLARE_LOGGING_CATEGORY(lcQsgLeak)
-
 #if defined(QT_DEBUG) && QT_CONFIG(thread)
 class ThreadAffinityMarker
 {
@@ -98,7 +96,7 @@ private:
 
 const QLatin1String QQuickPixmap::itemGrabberScheme = QLatin1String("itemgrabber");
 
-Q_LOGGING_CATEGORY(lcImg, "qt.quick.image")
+Q_STATIC_LOGGING_CATEGORY(lcImg, "qt.quick.image")
 
 /*! \internal
     The maximum currently-unused image data that can be stored for potential
@@ -2088,4 +2086,5 @@ QT_END_NAMESPACE
 
 #include <qquickpixmapcache.moc>
 
+#include "moc_qquickpixmap_p.cpp"
 #include "moc_qquickpixmapcache_p.cpp"

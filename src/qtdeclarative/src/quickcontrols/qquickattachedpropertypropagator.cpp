@@ -13,7 +13,7 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcAttached, "qt.quick.controls.attachedpropertypropagator")
+Q_STATIC_LOGGING_CATEGORY(lcAttached, "qt.quick.controls.attachedpropertypropagator")
 
 /*!
     \class QQuickAttachedPropertyPropagator
@@ -276,7 +276,8 @@ static QQuickItem *findAttachedItem(QObject *parent)
     return item;
 }
 
-class QQuickAttachedPropertyPropagatorPrivate : public QObjectPrivate, public QQuickItemChangeListener
+class QQuickAttachedPropertyPropagatorPrivate : public QObjectPrivate,
+                                                public QSafeQuickItemChangeListener<QQuickAttachedPropertyPropagatorPrivate>
 {
 public:
     Q_DECLARE_PUBLIC(QQuickAttachedPropertyPropagator)

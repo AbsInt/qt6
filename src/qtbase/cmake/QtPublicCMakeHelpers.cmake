@@ -536,8 +536,14 @@ endfunction()
 
 # Takes a list of path components and joins them into one path separated by forward slashes "/",
 # and saves the path in out_var.
+# Filters out any path parts that are bare "."s.
 function(_qt_internal_path_join out_var)
-    string(JOIN "/" path ${ARGN})
+    set(args ${ARGN})
+
+    # Remove any bare ".", to avoid any CMP0177 warnings for paths passed to install().
+    list(REMOVE_ITEM args ".")
+
+    string(JOIN "/" path ${args})
     set(${out_var} ${path} PARENT_SCOPE)
 endfunction()
 
@@ -713,6 +719,29 @@ function(_qt_internal_forward_function_args)
     endif()
 
     set(${arg_FORWARD_OUT_VAR} "${forward_args}" PARENT_SCOPE)
+endfunction()
+
+# Function adds the transitive property of the specified type to a target, avoiding duplicates.
+# Supported types: COMPILE, LINK
+#
+# See:
+#   https://cmake.org/cmake/help/latest/prop_tgt/TRANSITIVE_COMPILE_PROPERTIES.html
+#   https://cmake.org/cmake/help/latest/prop_tgt/TRANSITIVE_LINK_PROPERTIES.html
+function(_qt_internal_add_transitive_property target type property)
+    if(CMAKE_VERSION VERSION_LESS 3.30)
+        return()
+    endif()
+    if(NOT type MATCHES "^(COMPILE|LINK)$")
+        message(FATAL_ERROR "Attempt to assign unknown TRANSITIVE_${type}_PROPERTIES property")
+    endif()
+
+    _qt_internal_dealias_target(target)
+    get_target_property(transitive_properties ${target}
+        TRANSITIVE_${type}_PROPERTIES)
+    if(NOT "${property}" IN_LIST transitive_properties)
+        set_property(TARGET ${target}
+            APPEND PROPERTY TRANSITIVE_${type}_PROPERTIES ${property})
+    endif()
 endfunction()
 
 # Compatibility of `cmake_path(RELATIVE_PATH)`

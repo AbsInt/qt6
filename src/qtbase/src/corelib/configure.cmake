@@ -104,18 +104,6 @@ clock_gettime(CLOCK_MONOTONIC, &ts);
 }
 ")
 
-# close_range
-qt_config_compile_test(close_range
-    LABEL "close_range()"
-    CODE
-"#include <unistd.h>
-
-int main()
-{
-    return close_range(3, 1024, 0) != 0;
-}
-")
-
 # cloexec
 qt_config_compile_test(cloexec
     LABEL "O_CLOEXEC"
@@ -452,6 +440,58 @@ poll(&pfd, 1, 0);
 }
 ")
 
+# pthread_clockjoin
+# As of GCC 15, TSAN does not support pthread_clockjoin_np,
+# so disable it in a TSAN build. Unfortunately there doesn't
+# seem to be a version check possible, just check the
+# TSAN_INTERCEPT macros into tsan_interceptors_posix.cpp.
+qt_config_compile_test(pthread_clockjoin
+    LABEL "pthread_clockjoin()"
+    LIBRARIES Threads::Threads
+    CODE
+"#include <pthread.h>
+#if __has_feature(thread_sanitizer) || defined(__SANITIZE_THREAD__)
+#error
+#endif
+int main()
+{
+    void *ret;
+    const struct timespec ts = {};
+    return pthread_clockjoin_np(pthread_self(), &ret, CLOCK_MONOTONIC, &ts);
+}
+")
+
+# pthread_condattr_setclock
+qt_config_compile_test(pthread_condattr_setclock
+    LABEL "pthread_condattr_setclock()"
+    LIBRARIES Threads::Threads
+    CODE
+"#include <pthread.h>
+#include <time.h>
+int main()
+{
+    pthread_condattr_t condattr;
+    return pthread_condattr_setclock(&condattr, CLOCK_REALTIME);
+}
+")
+
+# pthread_timedjoin
+qt_config_compile_test(pthread_timedjoin
+    LABEL "pthread_timedjoin()"
+    LIBRARIES Threads::Threads
+    CODE
+"#include <pthread.h>
+#if __has_include(<pthread_np.h>)
+#  include <pthread_np.h>
+#endif
+int main()
+{
+    void *ret;
+    const struct timespec ts = {};
+    return pthread_timedjoin_np(pthread_self(), &ret, &ts);
+}
+")
+
 # renameat2
 qt_config_compile_test(renameat2
     LABEL "renameat2()"
@@ -532,6 +572,28 @@ int main(int argc, char** argv) {
 }
 ")
 
+# <chrono>
+qt_config_compile_test(chrono_tzdb
+    LABEL "Support for timezones in C++20 <chrono>"
+    CODE
+"#include <chrono>
+#if __cpp_lib_chrono < 201907L
+#error
+#endif
+
+int main(void)
+{
+    /* BEGIN TEST: */
+    const std::chrono::tzdb &tzdb = std::chrono::get_tzdb();
+    auto when = std::chrono::system_clock::now();
+    const std::chrono::time_zone *currentZone = tzdb.current_zone();
+    auto zoneInfo = currentZone->get_info(when);
+    /* END TEST: */
+    return 0;
+}
+"
+)
+
 #### Features
 
 qt_feature("clock-gettime" PRIVATE
@@ -543,16 +605,11 @@ qt_feature("clock-monotonic" PUBLIC
     CONDITION QT_FEATURE_clock_gettime AND TEST_clock_monotonic
 )
 qt_feature_definition("clock-monotonic" "QT_NO_CLOCK_MONOTONIC" NEGATE VALUE "1")
-qt_feature("close_range" PRIVATE
-    LABEL "close_range()"
-    CONDITION QT_FEATURE_process AND TEST_close_range
-    AUTODETECT UNIX
-)
 qt_feature("doubleconversion" PRIVATE
     LABEL "DoubleConversion"
 )
 qt_feature_definition("doubleconversion" "QT_NO_DOUBLECONVERSION" NEGATE VALUE "1")
-qt_feature("system-doubleconversion" PRIVATE
+qt_feature("system-doubleconversion" PRIVATE SYSTEM_LIBRARY
     LABEL "  Using system DoubleConversion"
     CONDITION QT_FEATURE_doubleconversion AND WrapSystemDoubleConversion_FOUND
     ENABLE INPUT_doubleconversion STREQUAL 'system'
@@ -568,7 +625,7 @@ qt_feature("cxx17_filesystem" PUBLIC
 )
 qt_feature("broken-threadlocal-dtors" PRIVATE
     LABEL "Broken execution of thread_local destructors at exit() time"
-    # Windows broken in different ways from Unix
+    # Windows is broken in different ways from Unix
     CONDITION WIN32 OR NOT (TEST_cxa_thread_atexit OR TEST_cxa_thread_atexit_impl)
 )
 qt_feature("dladdr" PRIVATE
@@ -621,7 +678,7 @@ qt_feature("journald" PRIVATE
     CONDITION Libsystemd_FOUND
 )
 # Used by QCryptographicHash for the BLAKE2 hashing algorithms
-qt_feature("system-libb2" PRIVATE
+qt_feature("system-libb2" PRIVATE SYSTEM_LIBRARY
     LABEL "Using system libb2"
     CONDITION Libb2_FOUND
     ENABLE INPUT_libb2 STREQUAL 'system'
@@ -661,7 +718,7 @@ qt_feature("pcre2"
     DISABLE INPUT_pcre STREQUAL 'no'
 )
 qt_feature_config("pcre2" QMAKE_PRIVATE_CONFIG)
-qt_feature("system-pcre2" PRIVATE
+qt_feature("system-pcre2" PRIVATE SYSTEM_LIBRARY
     LABEL "  Using system PCRE2"
     CONDITION WrapSystemPCRE2_FOUND
     ENABLE INPUT_pcre STREQUAL 'system'
@@ -695,6 +752,21 @@ qt_feature("posix_sem" PRIVATE
 qt_feature("posix_shm" PRIVATE
     LABEL "POSIX shared memory"
     CONDITION TEST_posix_shm AND UNIX
+)
+qt_feature("pthread_clockjoin" PRIVATE
+    LABEL "pthread_clockjoin() function"
+    AUTODETECT UNIX
+    CONDITION UNIX AND QT_FEATURE_thread AND TEST_pthread_clockjoin
+)
+qt_feature("pthread_condattr_setclock" PRIVATE
+    LABEL "pthread_condattr_setclock() function"
+    AUTODETECT UNIX
+    CONDITION UNIX AND QT_FEATURE_thread AND TEST_pthread_condattr_setclock
+)
+qt_feature("pthread_timedjoin" PRIVATE
+    LABEL "pthread_timedjoin() function"
+    AUTODETECT UNIX
+    CONDITION UNIX AND QT_FEATURE_thread AND TEST_pthread_timedjoin
 )
 qt_feature("qqnx_pps" PRIVATE
     LABEL "PPS"
@@ -949,10 +1021,19 @@ qt_feature("timezone" PUBLIC
 )
 qt_feature("timezone_locale" PRIVATE
     SECTION "Utilities"
-    LABEL "QTimeZone"
+    LABEL "QTimeZoneLocale"
     PURPOSE "Provides support for localized time-zone display names."
     CONDITION
-        QT_FEATURE_timezone AND ( ( UNIX AND NOT APPLE AND NOT ANDROID ) OR QT_FEATURE_icu )
+        QT_FEATURE_timezone AND NOT APPLE AND NOT ANDROID
+)
+qt_feature("timezone_tzdb" PUBLIC
+    SECTION "Utilities"
+    LABEL "std::chrono::tzdb QTZ backend"
+    PURPOSE "Provides support for a timezone backend using std::chrono."
+    CONDITION TEST_chrono_tzdb
+    # See QTBUG-127598 for gcc's libstdc++'s deficiencies.
+    # Update src/corelib/doc/src/cpp20-overview.qdoc before enabling this:
+    AUTODETECT OFF
 )
 qt_feature("datetimeparser" PRIVATE
     SECTION "Utilities"
@@ -1025,6 +1106,7 @@ qt_configure_add_summary_entry(ARGS "system-doubleconversion")
 qt_configure_add_summary_entry(ARGS "forkfd_pidfd" CONDITION LINUX)
 qt_configure_add_summary_entry(ARGS "glib")
 qt_configure_add_summary_entry(ARGS "icu")
+qt_configure_add_summary_entry(ARGS "timezone_tzdb")
 qt_configure_add_summary_entry(ARGS "system-libb2")
 qt_configure_add_summary_entry(ARGS "mimetype-database")
 qt_configure_add_summary_entry(ARGS "permissions")

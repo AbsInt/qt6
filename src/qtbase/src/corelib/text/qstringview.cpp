@@ -196,7 +196,7 @@ QT_BEGIN_NAMESPACE
     The behavior is undefined if \a len is negative or, when positive, if \a str is \nullptr.
 
 //! [compatible-char-types]
-    This constructor only participates in overload resolution if \c Char is a compatible
+    \constraints \c Char is a compatible
     character type. The compatible character types are: \c QChar, \c ushort, \c char16_t and
     (on platforms, such as Windows, where it is a 16-bit type) \c wchar_t.
 //! [compatible-char-types]
@@ -265,14 +265,14 @@ QT_BEGIN_NAMESPACE
 
     \c{std::data(str)} must remain valid for the lifetime of this string view object.
 
-    This constructor only participates in overload resolution if \c Container is a
-    container with a compatible character type as \c{value_type}. The
-    compatible character types are: \c QChar, \c ushort, \c char16_t and
-    (on platforms, such as Windows, where it is a 16-bit type) \c wchar_t.
-
     The string view will be empty if and only if \c{std::size(str) == 0}. It is unspecified
     whether this constructor can result in a null string view (\c{std::data(str)} would
     have to return \nullptr for this).
+
+    \constraints \c Container is a
+    container with a compatible character type as \c{value_type}. The
+    compatible character types are: \c QChar, \c ushort, \c char16_t and
+    (on platforms, such as Windows, where it is a 16-bit type) \c wchar_t.
 
     \sa isNull(), isEmpty()
 */
@@ -511,15 +511,18 @@ QT_BEGIN_NAMESPACE
     \fn template <typename...Args> QString QString::arg(Args &&...args) const
     \since 5.14
 
+//![qstring-multi-arg]
     Replaces occurrences of \c{%N} in this string with the corresponding
     argument from \a args. The arguments are not positional: the first of
     the \a args replaces the \c{%N} with the lowest \c{N} (all of them), the
     second of the \a args the \c{%N} with the next-lowest \c{N} etc.
 
-    \c Args can consist of anything that implicitly converts to QString,
-    QStringView or QLatin1StringView.
+    \c Args can consist of anything that implicitly converts to QAnyStringView.
+//![qstring-multi-arg]
 
-    In addition, the following types are also supported: QChar, QLatin1Char.
+    \note In Qt versions prior to 6.9, QAnyStringView and UTF-8 strings
+    (QUtf8StringView, QByteArray, QByteArrayView, \c{const char8_t*}, etc) were
+    not supported as \a args.
 
     \sa QString::arg()
 */

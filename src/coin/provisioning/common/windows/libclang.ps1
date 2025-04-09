@@ -1,11 +1,11 @@
 param(
     [string]$archVer="32",
-    [string]$toolchain="vs2019",
+    [string]$toolchain="vs2022",
     [bool]$setDefault=$true
 )
 . "$PSScriptRoot\helpers.ps1"
 
-$libclang_version="18.1.7"
+$libclang_version="19.1.7"
 Write-Output "libClang = $libclang_version" >> ~/versions.txt
 
 # PySide versions following 5.6 use a C++ parser based on Clang (http://clang.org/).
@@ -24,8 +24,8 @@ function install() {
 
     $zip = "c:\users\qt\downloads\libclang.7z"
 
-    $script:OfficialUrl = "https://download.qt.io/development_releases/prebuilt/libclang/qt/libclang-release_$libclang_version-based-windows-$toolchain`_$archVer.7z"
-    $script:CachedUrl = "http://ci-files01-hki.ci.qt.io/input/libclang/qt/libclang-release_$libclang_version-based-windows-$toolchain`_$archVer.7z"
+    $script:OfficialUrl = "https://download.qt.io/development_releases/prebuilt/libclang/qt/libclang-llvmorg-$libclang_version-windows-$toolchain`_$archVer.7z"
+    $script:CachedUrl = "http://ci-files01-hki.ci.qt.io/input/libclang/qt/libclang-llvmorg-$libclang_version-windows-$toolchain`_$archVer.7z"
 
     Download $OfficialUrl $CachedUrl $zip
     Verify-Checksum $zip $sha1
@@ -38,20 +38,10 @@ $toolchainSuffix = ""
 
 if ( $toolchain -eq "vs2022" ) {
     if ( $archVer -eq "64" ) {
-        $sha1 = "7e51f0eabdfe8eea17aaf1dce7b2ffe1ea064f66"
+        $sha1 = "f56057b8679e21a44b341bb1041cb03fbe6f5c0d"
     }
     elseif ( $archVer -eq "arm64" ) {
-        $sha1 = "986d4d0f253de505ef499345238c101dac1ca3a6"
-    }
-    else {
-        $sha1 = ""
-    }
-    $toolchainSuffix = "msvc"
-}
-
-if ( $toolchain -eq "vs2019" ) {
-    if ( $archVer -eq "64" ) {
-        $sha1 = "8e0862386caef7e4537599ef980eeb6ebee8767f"
+        $sha1 = "89fddd8c4bde3e8b70382e21059743637c27d38d"
     }
     else {
         $sha1 = ""
@@ -61,7 +51,7 @@ if ( $toolchain -eq "vs2019" ) {
 
 if ( $toolchain -eq "mingw" ) {
     if ( $archVer -eq "64" ) {
-        $sha1 = "a23cbb0822cf2eb8d1cecf26e8614ef37a7611e3"
+        $sha1 = "fcc1f06bd395bc133b7828d0be48e8492b9ba807"
     }
     else {
         $sha1 = ""
@@ -72,7 +62,7 @@ if ( $toolchain -eq "mingw" ) {
 
 if ( $toolchain -eq "llvm-mingw" ) {
     if ( $archVer -eq "64" ) {
-        $sha1 = "9c34f99eb575b42c2befe27829c08e6d3f01ae58"
+        $sha1 = "ee01352eb68bee252cefb1b8ff4ad086baa8ab5f"
     }
     else {
         $sha1 = ""

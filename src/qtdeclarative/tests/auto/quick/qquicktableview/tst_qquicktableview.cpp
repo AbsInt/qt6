@@ -139,6 +139,7 @@ private slots:
     void fillTableViewButNothingMore();
     void checkInitialAttachedProperties_data();
     void checkInitialAttachedProperties();
+    void checkNoAttachedObjectByDefault();
     void checkSpacingValues();
     void checkDelegateParent();
     void flick_data();
@@ -297,6 +298,7 @@ private slots:
     void checkScroll();
     void checkRebuildJsModel();
     void invalidateTableInstanceModelContextObject();
+    void transposed();
 
     // Row and column reordering
     void checkVisualRowColumnAfterReorder();
@@ -326,7 +328,7 @@ void tst_QQuickTableView::cleanupTestCase()
 
 QQuickTableViewAttached *tst_QQuickTableView::getAttachedObject(const QObject *object) const
 {
-    QObject *attachedObject = qmlAttachedPropertiesObject<QQuickTableView>(object);
+    QObject *attachedObject = qmlAttachedPropertiesObject<QQuickTableView>(object, false);
     return static_cast<QQuickTableViewAttached *>(attachedObject);
 }
 
@@ -1742,6 +1744,19 @@ void tst_QQuickTableView::checkInitialAttachedProperties()
         QCOMPARE(contextModelData, QStringLiteral("%1").arg(cell.y()));
         QCOMPARE(getAttachedObject(item)->view(), tableView);
     }
+}
+
+void tst_QQuickTableView::checkNoAttachedObjectByDefault()
+{
+    // Check that we don't create an attached object for every
+    // delegate, if the application is not using them.
+    LOAD_TABLEVIEW("tableviewimplicitsize.qml");
+    auto model = TestModelAsVariant(2, 2);
+    tableView->setModel(model);
+    WAIT_UNTIL_POLISHED;
+
+    for (auto fxItem : tableViewPrivate->loadedItems)
+        QVERIFY(!getAttachedObject(fxItem->item));
 }
 
 void tst_QQuickTableView::checkSpacingValues()
@@ -7759,7 +7774,7 @@ void tst_QQuickTableView::attachedPropertiesOnEditDelegate()
     QQuickItem *editItem3 = tableView->property(kEditItem).value<QQuickItem *>();
     QVERIFY(editItem3);
     const auto attached3 = getAttachedObject(editItem3);
-    QVERIFY(editItem3);
+    QVERIFY(attached3);
     QSignalSpy commitSpy3(attached3, &QQuickTableViewAttached::commit);
 
     QTest::keyClick(window, Qt::Key_Escape);
@@ -7768,20 +7783,37 @@ void tst_QQuickTableView::attachedPropertiesOnEditDelegate()
     QCOMPARE(commitSpy3.count(), 0);
 
     // Repeat once more, but tap outside the edit item.
-    // This should close the edit, but without an accepted signal.
+    // This should close the edit with an accepted signal.
     tableView->edit(index);
     QCOMPARE(tableView->property(kEditIndex).value<QModelIndex>(), index);
     QQuickItem *editItem4 = tableView->property(kEditItem).value<QQuickItem *>();
     QVERIFY(editItem4);
     const auto attached4 = getAttachedObject(editItem4);
-    QVERIFY(editItem4);
+    QVERIFY(attached4);
     QSignalSpy commitSpy4(attached4, &QQuickTableViewAttached::commit);
 
     const QPoint tapPos = window->contentItem()->mapFromItem(editItem4, QPointF(-10, -10)).toPoint();
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, tapPos);
     QVERIFY(!tableView->property(kEditItem).value<QQuickItem *>());
     QVERIFY(!tableView->property(kEditIndex).value<QModelIndex>().isValid());
-    QCOMPARE(commitSpy4.count(), 0);
+    QCOMPARE(commitSpy4.count(), 1);
+
+    // Repeat once more, but transfer focus to a different text input
+    // This should close the edit with an accepted signal.
+    tableView->edit(index);
+    QCOMPARE(tableView->property(kEditIndex).value<QModelIndex>(), index);
+    QQuickItem *editItem5 = tableView->property(kEditItem).value<QQuickItem *>();
+    QVERIFY(editItem5);
+    const auto attached5 = getAttachedObject(editItem5);
+    QVERIFY(attached5);
+    QSignalSpy commitSpy5(attached5, &QQuickTableViewAttached::commit);
+
+    auto *textInput = view->rootObject()->property("textInput").value<QQuickTextInput *>();
+    QVERIFY(textInput);
+    textInput->forceActiveFocus();
+    QVERIFY(!tableView->property(kEditItem).value<QQuickItem *>());
+    QVERIFY(!tableView->property(kEditIndex).value<QModelIndex>().isValid());
+    QCOMPARE(commitSpy5.count(), 1);
 }
 
 void tst_QQuickTableView::requiredPropertiesOnEditDelegate()
@@ -7916,6 +7948,48 @@ void tst_QQuickTableView::invalidateTableInstanceModelContextObject()
 
     window.reset();
     QTRY_COMPARE(tableViewDestroyed, true);
+}
+
+void tst_QQuickTableView::transposed()
+{
+    // Check that TableView will be transposed if isTransposed is set to true.
+    // This is used by HorizontalHeaderView to be able to use e.g a JavaScript
+    // Array as model.
+    LOAD_TABLEVIEW("plaintableview.qml");
+
+    const QStringList stringModel = {"one", "two", "three"};
+    tableView->setModel(QVariant::fromValue(stringModel));
+    WAIT_UNTIL_POLISHED;
+
+    // First, check that the elements are laid out in a
+    // column-major order when not transposed.
+    QCOMPARE(tableView->columns(), 1);
+    QCOMPARE(tableView->rows(), stringModel.count());
+
+    for (int row = 0; row < 3; ++row) {
+        auto item = tableView->itemAtCell({0, row});
+        QVERIFY(item);
+        const QPoint contextCell = getContextRowAndColumn(item);
+        QCOMPARE(contextCell, QPoint(0, row));
+    }
+
+    // Now transpose the model
+    tableViewPrivate->isTransposed = true;
+    tableView->forceLayout();
+
+    // Check that the elements are laid out in a row-major order
+    QCOMPARE(tableView->columns(), stringModel.count());
+    QCOMPARE(tableView->rows(), 1);
+
+    for (int col = 0; col < 3; ++col) {
+        auto item = tableView->itemAtCell({col, 0});
+        QVERIFY(item);
+        const QPoint contextCell = getContextRowAndColumn(item);
+        QCOMPARE(contextCell, QPoint(0, col));
+    }
+    // Also sanity-check that the old column-major items are removed
+    for (int row = 1; row < 3; ++row)
+        QVERIFY(!tableView->itemAtCell({0, row}));
 }
 
 void tst_QQuickTableView::checkVisualRowColumnAfterReorder()

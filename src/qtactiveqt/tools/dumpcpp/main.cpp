@@ -154,6 +154,20 @@ static void formatConstructorSignature(QTextStream &out, ObjectCategories catego
     out << ')';
 }
 
+static void formatMetaFunctions(QTextStream &out, const QByteArray &nameSpace,
+                             const QByteArray &className, ObjectCategories category)
+{
+    // add a replacement qt_metacall()
+    QStringView parentClass = (category & ActiveX) ? u"QAxWidget" : u"QAxObject";
+    out << "int ";
+    if (!nameSpace.isEmpty())
+        out << nameSpace << "::";
+    out << className << "::qt_metacall(QMetaObject::Call _c, int _id, void **_a)\n"
+           "{\n"
+           "    return " << parentClass << "::qt_metacall(_c, _id, _a);\n"
+           "}\n\n";
+}
+
 static void formatConstructorBody(QTextStream &out, const QByteArray &nameSpace,
                                   const QByteArray &className,
                                   const QString &controlID, ObjectCategories category, bool useControlName)
@@ -497,9 +511,7 @@ void generateClassDecl(QTextStream &out, const QMetaObject *mo,
     if (!(category & OnlyInlines)) {
         if (!(category & NoMetaObject)) {
             out << "// meta object functions" << Qt::endl;
-            out << "    static const QMetaObject staticMetaObject;" << Qt::endl;
-            out << "    const QMetaObject *metaObject() const override { return &staticMetaObject; }" << Qt::endl;
-            out << "    void *qt_metacast(const char *) override;" << Qt::endl;
+            out << "    Q_OBJECT_FAKE" << Qt::endl;
         }
 
         out << "};" << Qt::endl;
@@ -512,7 +524,7 @@ bool generateClassImpl(QTextStream &out, const QMetaObject *mo, const QByteArray
                        bool useControlName,
                        QString *errorString)
 {
-    Q_STATIC_ASSERT_X(QMetaObjectPrivate::OutputRevision == 12, "dumpcpp should generate the same version as moc");
+    Q_STATIC_ASSERT_X(QMetaObjectPrivate::OutputRevision == 13, "dumpcpp should generate the same version as moc");
 
     QByteArray qualifiedClassName;
     if (!nameSpace.isEmpty())
@@ -525,49 +537,10 @@ bool generateClassImpl(QTextStream &out, const QMetaObject *mo, const QByteArray
         out << "#error moc error\n";
         return false;
     }
-
-    // Postprocess the moc output to fully qualify types. This works around moc
-    // not having any semantic type information, and a fix for QTBUG-100145.
-    constexpr QStringView typeAndForceComplete(u"QtPrivate::TypeAndForceComplete<");
-    qsizetype nextTypeAndForceComplete = 0;
-    do {
-        nextTypeAndForceComplete = moCode.indexOf(typeAndForceComplete, nextTypeAndForceComplete);
-        if (nextTypeAndForceComplete == -1)
-            break;
-        const auto startType = nextTypeAndForceComplete + typeAndForceComplete.length();
-        const auto lengthType = moCode.indexOf(u',', startType) - startType;
-        if (lengthType == -1)
-            break;
-
-        QString type = moCode.sliced(startType, lengthType);
-        if (type.endsWith(u'*'))
-            type.chop(1);
-        type = type.trimmed();
-
-        // If ActiveQt thinks it's a nested type within the class, but it really is a type in the
-        // namespace, then we need to replace the nested type qualifier with the real namespace.
-        const bool isNestedType = type.startsWith(QString::fromUtf8(nestedQualifier));
-        auto namespaceForTypeEntry = namespaceForType.constEnd();
-        if (isNestedType) {
-            const QString rawType = type.mid(nestedQualifier.length());
-            namespaceForTypeEntry = namespaceForType.constFind(rawType.toUtf8());
-            if (namespaceForTypeEntry != namespaceForType.constEnd()) {
-                moCode.remove(startType, nestedQualifier.length());
-                type = rawType;
-            }
-        }
-        if (namespaceForTypeEntry == namespaceForType.constEnd())
-            namespaceForTypeEntry = namespaceForType.constFind(type.toUtf8());
-        if (namespaceForTypeEntry != namespaceForType.constEnd()) {
-            const auto ns = QString::fromUtf8(namespaceForTypeEntry.value());
-            moCode.insert(startType, ns + QStringView(u"::"));
-        }
-        nextTypeAndForceComplete = startType + lengthType;
-    } while (true);
-
     out << moCode << "\n\n";
 
     formatConstructorBody(out, nameSpace, className, controlID, category, useControlName);
+    formatMetaFunctions(out, nameSpace, className, category);
 
     return true;
 }

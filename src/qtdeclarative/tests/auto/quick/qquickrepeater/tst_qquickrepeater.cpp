@@ -61,6 +61,7 @@ private slots:
     void contextProperties();
     void innerRequired();
     void boundDelegateComponent();
+    void setDelegateAfterModel();
 };
 
 class TestObject : public QObject
@@ -1183,6 +1184,33 @@ void tst_QQuickRepeater::boundDelegateComponent()
     QCOMPARE(b->itemAt(0)->objectName(), QStringLiteral("rootaa"));
     QCOMPARE(b->itemAt(1)->objectName(), QStringLiteral("rootbb"));
     QCOMPARE(b->itemAt(2)->objectName(), QStringLiteral("rootcc"));
+}
+
+void tst_QQuickRepeater::setDelegateAfterModel()
+{
+    QQmlEngine engine;
+    const QUrl url = testFileUrl("setDelegateAfterModel.qml");
+    QQmlComponent component(&engine, url);
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+
+    // If the model was lost by setting the delegate, the count would be 0.
+    QCOMPARE(object->property("count").toInt(), 3);
+
+    QTest::ignoreMessage(
+            QtWarningMsg,
+            qPrintable(url.toString() + ":17:5: QML Repeater: Cannot retain explicitly set "
+                                        "delegate on non-DelegateModel"));
+    object->setProperty("useObjectModel", QVariant::fromValue<bool>(true));
+    QCOMPARE(object->property("count").toInt(), 2);
+
+    // The old model must not mess with the view anymore.
+    QTest::failOnWarning(qPrintable(url.toString() + ":17:5: QML Repeater: Explicitly set delegate "
+                                                     "is externally overridden"));
+    QMetaObject::invokeMethod(object.data(), "plantDelegate");
+    QCOMPARE(object->property("count").toInt(), 4);
 }
 
 QTEST_MAIN(tst_QQuickRepeater)

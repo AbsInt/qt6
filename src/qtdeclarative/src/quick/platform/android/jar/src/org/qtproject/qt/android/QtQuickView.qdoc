@@ -39,6 +39,11 @@
     of Qt Quick into your Android app, making it possible to use various Qt Quick
     APIs in Android apps.
 
+    \note Although we try to keep QtQuickView as thread-safe as possible, that
+        can't be guaranteed since it follows the same considerations as
+        \l {Android: View}{View}. See {Android: Event Handling and Threading}
+        {Event Handling and Threading}.
+
     A typical use of the class:
 
     \code
@@ -93,7 +98,7 @@
 
     Orientation and other configuration changes will recreate the Activity.
 
-    See {https://bugreports.qt.io/browse/QTBUG-123711}{QTBUG-123711} for more information.
+    See \l{https://bugreports.qt.io/browse/QTBUG-123711}{QTBUG-123711} for more information.
 
     See \l{Qt Quick for Android Studio Projects} for an example of how to handle rotation
     manually inside an application without recreating the Activity.
@@ -256,8 +261,8 @@
     \section2 Status values
     \target Status values
 
-    The status can be \e STATUS_NULL, \e STATUS_READY, \e STATUS_LOADING or
-    \e STATUS_ERROR. For more information, see \l {QQuickView::Status}.
+    The status can be \e NULL, \e READY, \e LOADING or \e ERROR.
+    For more information, see \l {QQuickView::Status}.
 
     \section1 Methods
 

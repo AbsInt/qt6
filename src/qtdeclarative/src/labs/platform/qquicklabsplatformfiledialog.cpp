@@ -3,6 +3,8 @@
 
 #include "qquicklabsplatformfiledialog_p.h"
 
+#if QT_DEPRECATED_SINCE(6, 9)
+
 #include <QtCore/qlist.h>
 
 QT_BEGIN_NAMESPACE
@@ -15,6 +17,7 @@ using namespace Qt::StringLiterals;
 //!     \nativetype QQuickLabsPlatformFileDialog
     \inqmlmodule Qt.labs.platform
     \since 5.8
+    \deprecated [6.9] Use QtQuick.Dialogs::FileDialog instead.
     \brief A native file dialog.
 
     The FileDialog type provides a QML API for native platform file dialogs.
@@ -62,7 +65,7 @@ using namespace Qt::StringLiterals;
 
     \labs
 
-    \sa FolderDialog, StandardPaths
+    \sa QtQuick.Dialogs::FileDialog, FolderDialog, StandardPaths
 */
 
 QQuickLabsPlatformFileDialog::QQuickLabsPlatformFileDialog(QObject *parent)
@@ -637,3 +640,5 @@ QString QQuickLabsPlatformFileNameFilter::nameFilter(int index) const
 QT_END_NAMESPACE
 
 #include "moc_qquicklabsplatformfiledialog_p.cpp"
+
+#endif // QT_DEPRECATED_SINCE(6, 9)

@@ -19,6 +19,7 @@
 #include <QtQuickTestUtils/private/viewtestutils_p.h>
 #include <QSignalSpy>
 #include <private/qquickwindow_p.h>
+#include <private/qquickscreen_p.h>
 #include <private/qguiapplication_p.h>
 #include <QtGui/qpa/qplatformintegration.h>
 #include <QRunnable>
@@ -554,6 +555,9 @@ private slots:
     void showMethodSetsVisibility();
 
     void eventTypes();
+
+    void screenReusesQQuickScreenInfoInstance();
+    void screenInfoInstanceIsDestroyedAfterAScreenChange();
 
     void dataIsNotAList();
 
@@ -1557,6 +1561,8 @@ void tst_qquickwindow::grab_data()
 
 void tst_qquickwindow::grab()
 {
+    // This test fails when running with the offscreen and minimal platform plugins,
+    // so we can't use SKIP_IF_NO_WINDOW_GRAB here.
     if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
         || (QGuiApplication::platformName() == QLatin1String("minimal")))
         QSKIP("Skipping due to grabWindow not functional on offscreen/minimal platforms");
@@ -1630,8 +1636,7 @@ public:
 
 void tst_qquickwindow::earlyGrab()
 {
-    if (QGuiApplication::platformName() == QLatin1String("minimal"))
-        QSKIP("Skipping due to grabWindow not functional on minimal platforms");
+    SKIP_IF_NO_WINDOW_GRAB;
 
     qmlRegisterType<Grabber>("Test", 1, 0, "Grabber");
     QQmlEngine engine;
@@ -3338,7 +3343,7 @@ protected:
     }
 
 private:
-    static void appendEvent(QQuickItem *filter, QQuickItem *receiver, QEvent *event) {
+    static void appendEvent(QQuickItem *filter, QQuickItem *receiver, QEvent *) {
         auto record = DeliveryRecord(filter ? filter->objectName() : QString(), receiver ? receiver->objectName() : QString());
         int i = m_deliveryList.size();
         if (m_expectedDeliveryList.size() > i && m_expectedDeliveryList[i] == record)
@@ -3388,7 +3393,11 @@ void tst_qquickwindow::testChildMouseEventFilter_data()
     QTest::addColumn<InputState>("inputState");
     QTest::addColumn<DeliveryRecordVector>("expectedDeliveryOrder");
 
-    for (const QString &eventMode : {"mouse", "touch", "touchToMouse"}) {
+    for (const QString &eventMode : {
+            QStringLiteral("mouse"),
+            QStringLiteral("touch"),
+            QStringLiteral("touchToMouse")
+        }) {
 
     #define desc(txt) qPrintable(QString("%1 events, ").arg(eventMode) + txt)
 
@@ -4217,6 +4226,42 @@ void tst_qquickwindow::eventTypes()
     QObject *created = component.create();
     QScopedPointer<QObject> cleanup(created);
     QVERIFY(created);
+}
+
+void tst_qquickwindow::screenReusesQQuickScreenInfoInstance()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    component.loadUrl(testFileUrl("screenInfoSpaceLeak.qml"));
+    QObject *created = component.create();
+    QScopedPointer<QObject> cleanup(created);
+
+    QVERIFY(created);
+
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(created);
+    QVERIFY(window);
+
+    QCOMPARE(window->findChildren<QQuickScreenInfo*>().size(), 1);
+}
+
+void tst_qquickwindow::screenInfoInstanceIsDestroyedAfterAScreenChange()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    component.loadUrl(testFileUrl("screenChangesDestroyScreenInfo.qml"));
+    QObject *created = component.create();
+    QScopedPointer<QObject> cleanup(created);
+
+    QVERIFY(created);
+
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(created);
+    QVERIFY(window);
+
+    QVERIFY(window->findChild<QQuickScreenInfo*>());
+
+    emit window->screenChanged(nullptr);
+
+    QCOMPARE(window->findChild<QQuickScreenInfo*>(), nullptr);
 }
 
 void tst_qquickwindow::dataIsNotAList()

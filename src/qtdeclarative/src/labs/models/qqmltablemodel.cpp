@@ -9,7 +9,7 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcTableModel, "qt.qml.tablemodel")
+Q_STATIC_LOGGING_CATEGORY(lcTableModel, "qt.qml.tablemodel")
 
 /*!
     \qmltype TableModel
@@ -758,10 +758,10 @@ QVariant QQmlTableModel::data(const QModelIndex &index, int role) const
     if (column < 0 || column >= columnCount())
         return QVariant();
 
-    const ColumnMetadata columnMetadata = mColumnMetadata.at(index.column());
+    const ColumnMetadata columnMetadata = mColumnMetadata.at(column);
     const QString roleName = QString::fromUtf8(mRoleNames.value(role));
     if (!columnMetadata.roles.contains(roleName)) {
-        qmlWarning(this) << "setData(): no role named " << roleName
+        qmlWarning(this) << "data(): no role named " << roleName
             << " at column index " << column << ". The available roles for that column are: "
             << columnMetadata.roles.keys();
         return QVariant();

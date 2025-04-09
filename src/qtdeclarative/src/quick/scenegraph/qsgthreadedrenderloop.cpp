@@ -1464,13 +1464,11 @@ void QSGThreadedRenderLoop::update(QQuickWindow *window)
 
     const bool isRenderThread = QThread::currentThread() == w->thread;
 
-#if defined(Q_OS_MACOS)
-    using namespace QNativeInterface::Private;
-    if (auto *cocoaWindow = dynamic_cast<QCocoaWindow*>(window->handle())) {
+    if (QPlatformWindow *platformWindow = window->handle()) {
         // If the window is being resized we don't want to schedule unthrottled
         // updates on the render thread, as this will starve the main thread
         // from getting drawables for displaying the updated window size.
-        if (isRenderThread && cocoaWindow->inLiveResize()) {
+        if (isRenderThread && !platformWindow->allowsIndependentThreadedRendering()) {
             // In most cases the window will already have update requested
             // due to the animator triggering a sync, but just in case we
             // schedule an update request on the main thread explicitly.
@@ -1479,7 +1477,6 @@ void QSGThreadedRenderLoop::update(QQuickWindow *window)
             return;
         }
     }
-#endif
 
     if (isRenderThread) {
        qCDebug(QSG_LOG_RENDERLOOP) << "update on window - on render thread" << w->window;

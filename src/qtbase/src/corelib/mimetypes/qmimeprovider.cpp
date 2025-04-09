@@ -458,8 +458,8 @@ void QMimeBinaryProvider::loadMimeTypeList()
         // So we have to parse the plain-text files called "types".
         QFile file(m_directory + QStringView(u"/types"));
         if (file.open(QIODevice::ReadOnly)) {
-            while (!file.atEnd()) {
-                const QByteArray line = file.readLine();
+            QByteArray line;
+            while (file.readLineInto(&line)) {
                 auto lineView = QByteArrayView(line);
                 if (lineView.endsWith('\n'))
                     lineView.chop(1);
@@ -729,11 +729,9 @@ void QMimeXMLProvider::ensureLoaded()
 {
     QStringList allFiles;
     const QString packageDir = m_directory + QStringView(u"/packages");
-    QDir dir(packageDir);
-    const QStringList files = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
-    allFiles.reserve(files.size());
-    for (const QString &xmlFile : files)
-        allFiles.append(packageDir + u'/' + xmlFile);
+    for (const auto &entry : QDirListing(packageDir, QDirListing::IteratorFlag::FilesOnly
+                                         | QDirListing::IteratorFlag::ResolveSymlinks))
+        allFiles.emplace_back(packageDir + u'/' + entry.fileName());
 
     if (m_allFiles == allFiles)
         return;

@@ -16,7 +16,7 @@
     "Comment": {
         "Version": [ "Don't use the Unicode standard version;",
                      "UCD has its own 'Revision' numbers",
-                     "see the 'UAX #44, UCD' page (https://www.unicode.org/reports/tr44/)" ] },
+                     "see the 'UAX #44, UCD' page (https://www.unicode.org/reports/tr44/)" ]},
     "Version": "34",
     "License": "Unicode License Agreement - Data Files and Software (2016)",
     "LicenseId": "Unicode-3.0",
@@ -32,8 +32,9 @@
         "General": "no relevant CPE and PURL found"
     },
     "Files": [ "qlocale_data_p.h",
-               "../time/qtimezoneprivate_data_p.h", "../time/qhijricalendar_data_p.h",
-               "../time/qjalalicalendar_data_p.h", "../time/qromancalendar_data_p.h",
+               "../time/qtimezoneprivate_data_p.h", "../time/qtimezonelocale_data_p.h",
+               "../time/qhijricalendar_data_p.h", "../time/qjalalicalendar_data_p.h",
+               "../time/qromancalendar_data_p.h",
                "../../../util/locale_database/testlocales/localemodel.cpp" ],
 
     "Description": "The Unicode CLDR provides key building blocks for software to support the

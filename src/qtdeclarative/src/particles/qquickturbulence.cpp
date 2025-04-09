@@ -16,7 +16,7 @@ QT_BEGIN_NAMESPACE
     \nativetype QQuickTurbulenceAffector
     \inqmlmodule QtQuick.Particles
     \ingroup qtquick-particles
-    \inherits Affector
+    \inherits ParticleAffector
     \brief Provides fluid-like forces from a noise image.
 
     The Turbulence Element scales the noise source over the area it affects,

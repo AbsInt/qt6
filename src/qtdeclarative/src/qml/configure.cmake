@@ -175,6 +175,12 @@ qt_feature("qml-xmllistmodel" PRIVATE
     PURPOSE "Enable XmlListModel in QML"
     CONDITION QT_FEATURE_qml_itemmodel AND QT_FEATURE_future
 )
+qt_feature("qml-type-loader-thread" PRIVATE
+    SECTION "QML"
+    LABEL "QmlTypeLoader on separate thread."
+    PURPOSE "Run QmlTypeLoader on separate thread."
+    CONDITION QT_FEATURE_thread AND NOT WASM
+)
 
 qt_feature("qml-python" PRIVATE
     LABEL "python"

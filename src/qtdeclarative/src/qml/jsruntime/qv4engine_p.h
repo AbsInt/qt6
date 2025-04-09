@@ -207,6 +207,7 @@ public:
         URIErrorProto,
         PromiseProto,
         VariantProto,
+        VariantAssociationProto,
         SequenceProto,
         SharedArrayBufferProto,
         ArrayBufferProto,
@@ -329,6 +330,7 @@ public:
     Object *uRIErrorPrototype() const { return reinterpret_cast<Object *>(jsObjects + URIErrorProto); }
     Object *promisePrototype() const { return reinterpret_cast<Object *>(jsObjects + PromiseProto); }
     Object *variantPrototype() const { return reinterpret_cast<Object *>(jsObjects + VariantProto); }
+    Object *variantAssociationPrototype() const { return reinterpret_cast<Object *>(jsObjects + VariantAssociationProto); }
     Object *sequencePrototype() const { return reinterpret_cast<Object *>(jsObjects + SequenceProto); }
 
     Object *sharedArrayBufferPrototype() const { return reinterpret_cast<Object *>(jsObjects + SharedArrayBufferProto); }
@@ -673,6 +675,8 @@ public:
     // Use only inside catch(...) -- will re-throw if no JS exception
     QQmlError catchExceptionAsQmlError();
 
+    void amendException();
+
     // variant conversions
     static QVariant toVariant(
         const QV4::Value &value, QMetaType typeHint, bool createJSValueForObjectsAndSymbols = true);
@@ -769,8 +773,9 @@ public:
     {
         return m_compilationUnits;
     }
-    void trimCompilationUnits();
 
+    void trimCompilationUnits();
+    void trimCompilationUnitsForUrl(const QUrl &url);
 
     using Module = QQmlRefPointer<ExecutableCompilationUnit>;
 

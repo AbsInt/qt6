@@ -19,6 +19,7 @@ ApplicationWindow {
     readonly property point positionOffset: useOffset.checked ? Qt.point(10, 10) : Qt.point(0, 0)
     readonly property rect positionSubRect: useSubRect.checked ? Qt.rect(10, 10, 10, 10) : Qt.rect(0, 0, 0, 0)
     property int hiddenColumn: -1
+    property int hiddenRow: -1
 
     ScrollView {
         id: menu
@@ -36,6 +37,13 @@ ApplicationWindow {
                 Layout.fillWidth: false
                 Layout.fillHeight: false
                 ColumnLayout {
+                    ComboBox {
+                        id: delegateComboBox
+                        model: ["TableViewDelegate", "Custom TableViewDelegate", "Custom Item"]
+                        Layout.fillWidth: true
+                        currentIndex: 2
+                    }
+
                     CheckBox {
                         text: "Use Syncview"
                         checkable: true
@@ -339,6 +347,36 @@ ApplicationWindow {
                             tableView.forceLayout()
                         }
                     }
+
+                    Button {
+                        text: "Hide row"
+                        enabled: currentIndex.valid
+                        Layout.fillWidth: false
+                        onClicked: {
+                            hiddenRow = currentIndex.row
+                            tableView.forceLayout()
+                        }
+                    }
+
+                    Button {
+                        text: "Show hidden column"
+                        enabled: hiddenColumn >= 0
+                        Layout.fillWidth: false
+                        onClicked: {
+                            hiddenColumn = -1
+                            tableView.forceLayout()
+                        }
+                    }
+
+                    Button {
+                        text: "Show hidden row"
+                        enabled: hiddenRow >= 0
+                        Layout.fillWidth: false
+                        onClicked: {
+                            hiddenRow = -1
+                            tableView.forceLayout()
+                        }
+                    }
                 }
             }
 
@@ -413,7 +451,11 @@ ApplicationWindow {
                         enabled: currentIndex.valid
                         Layout.fillWidth: false
                         onClicked: {
-                            tableView.edit(currentIndex, true)
+                            const currentItem = tableView.itemAtIndex(currentIndex)
+                            // check item is visible
+                            if (!currentItem)
+                                return
+                            tableView.edit(currentIndex)
                         }
                     }
                     Button {
@@ -428,7 +470,7 @@ ApplicationWindow {
                         text: "Set current index"
                         Layout.fillWidth: false
                         onClicked: {
-                            let index = tableView.modelIndex(1, 1);
+                            let index = tableView.index(1, 1);
                             tableView.selectionModel.setCurrentIndex(index, ItemSelectionModel.NoUpdate)
                         }
                     }
@@ -566,7 +608,7 @@ ApplicationWindow {
             anchors.fill: parent
             objectName: "tableview"
             clip: true
-            delegate: tableViewDelegate
+            delegate: [defaultTableViewDelegate, customTableViewDelegate, customDelegateItem][delegateComboBox.currentIndex]
             columnSpacing: spaceSpinBox.value
             rowSpacing: spaceSpinBox.value
             interactive: flickingMode.checked
@@ -600,6 +642,13 @@ ApplicationWindow {
             topMargin: marginsSpinBox.value
             rightMargin: marginsSpinBox.value
             bottomMargin: marginsSpinBox.value
+
+            columnWidthProvider: function(column) {
+                return (column === window.hiddenColumn) ? 0 : explicitColumnWidth(column)
+            }
+            rowHeightProvider: function(row) {
+                return (row === window.hiddenRow) ? 0 : explicitRowHeight(row)
+            }
 
             ScrollBar.horizontal: ScrollBar { visible: !flickingMode.checked }
             ScrollBar.vertical: ScrollBar { visible: !flickingMode.checked }
@@ -643,7 +692,45 @@ ApplicationWindow {
     }
 
     Component {
-        id: tableViewDelegate
+        id: defaultTableViewDelegate
+        TableViewDelegate { }
+    }
+
+    Component {
+        id: customTableViewDelegate
+        TableViewDelegate {
+            id: delegate
+            implicitWidth: useLargeCells.checked ? 1000 : 50
+            implicitHeight: useLargeCells.checked ? 1000 : 30
+
+            property var randomColor: Qt.rgba(0.6 + (0.4 * Math.random()), 0.6 + (0.4 * Math.random()), 0.6 + (0.4 * Math.random()), 1)
+            property color backgroundColor: selected ? window.palette.highlight
+                                                     : (highlightCurrentRow.checked && (row === tableView.currentRow || column === tableView.currentColumn)) ? "lightgray"
+                                                     : useRandomColor.checked ? randomColor
+                                                     : model.display === "added" ? "lightblue"
+                                                     : window.palette.window.lighter(1.3)
+            onBackgroundColorChanged: background.color = backgroundColor
+
+            contentItem.visible: drawText.checked && !editing
+
+            Component.onCompleted: {
+                contentItem.verticalAlignment = Text.AlignVCenter
+                contentItem.horizontalAlignment = Text.AlignHCenter
+            }
+
+            Rectangle {
+                x: positionSubRect.x
+                y: positionSubRect.y
+                width: positionSubRect.width
+                height: positionSubRect.height
+                border.color: "red"
+                visible: useSubRect.checked
+            }
+        }
+    }
+
+    Component {
+        id: customDelegateItem
         Rectangle {
             id: delegate
             implicitWidth: useLargeCells.checked ? 1000 : 50

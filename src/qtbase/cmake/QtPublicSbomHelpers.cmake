@@ -346,6 +346,46 @@ function(_qt_internal_sbom_setup_project_ops)
     _qt_internal_sbom_setup_project_ops_generation(${options})
 endfunction()
 
+# Sets up SBOM generation and verification options.
+# By default SBOM generation is disabled.
+# By default JSON generation and SBOM verification are enabled by default, if the dependencies
+# are present, otherwise they will be silently skipped. Unless the user explicitly requests to
+# fail the build if the dependencies are not found.
+#
+# The QT_GENERATE_SBOM_DEFAULT option can be set by a project to change the default value.
+function(_qt_internal_setup_sbom)
+    set(opt_args "")
+    set(single_args
+        GENERATE_SBOM_DEFAULT
+    )
+    set(multi_args "")
+
+    cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    set(default_value "OFF")
+    if(NOT "${arg_GENERATE_SBOM_DEFAULT}" STREQUAL "")
+        set(default_value "${arg_GENERATE_SBOM_DEFAULT}")
+    endif()
+
+    option(QT_GENERATE_SBOM "Generate SBOM documents in SPDX v2.3 tag:value format."
+        "${default_value}")
+
+    string(CONCAT help_string
+        "Generate SBOM documents in SPDX v2.3 JSON format if required python dependency "
+        "spdx-tools is available"
+    )
+
+    option(QT_SBOM_GENERATE_JSON
+        "${help_string}" ON)
+    option(QT_SBOM_REQUIRE_GENERATE_JSON
+        "Error out if JSON SBOM generation depdendency is not found." OFF)
+
+    option(QT_SBOM_VERIFY "Verify generated SBOM documents using python spdx-tools package." ON)
+    option(QT_SBOM_REQUIRE_VERIFY
+        "Error out if SBOM verification dependencies are not found." OFF)
+endfunction()
+
 # Ends repo sbom project generation.
 # Should be called after all relevant targets are added to the sbom.
 # Handles registering sbom info for recorded system libraries and then creates the sbom build
@@ -478,14 +518,14 @@ function(_qt_internal_sbom_setup_fake_deterministic_build)
     set(QT_SBOM_FAKE_CHECKSUM "${value}" CACHE BOOL "SBOM fake checksums")
 endfunction()
 
-# Helper to get purl parsing options.
+# Helper to get purl entry-specific options.
 macro(_qt_internal_get_sbom_purl_parsing_options opt_args single_args multi_args)
     set(${opt_args}
-        NO_PURL
         NO_DEFAULT_QT_PURL
         PURL_USE_PACKAGE_VERSION
     )
     set(${single_args}
+        PURL_ID
         PURL_TYPE
         PURL_NAMESPACE
         PURL_NAME
@@ -498,7 +538,7 @@ macro(_qt_internal_get_sbom_purl_parsing_options opt_args single_args multi_args
     )
 endmacro()
 
-# Helper to get the purl variant option names that should be recongized by sbom functions like
+# Helper to get the purl options that should be recongized by sbom functions like
 # _qt_internal_sbom_add_target.
 macro(_qt_internal_get_sbom_purl_add_target_options opt_args single_args multi_args)
     set(${opt_args}
@@ -506,25 +546,19 @@ macro(_qt_internal_get_sbom_purl_add_target_options opt_args single_args multi_a
     )
     set(${single_args} "")
     set(${multi_args}
-        PURL_QT_ARGS
-        PURL_3RDPARTY_UPSTREAM_ARGS
-        PURL_MIRROR_ARGS
-        PURL_QT_VALUES
-        PURL_3RDPARTY_UPSTREAM_VALUES
-        PURL_MIRROR_VALUES
+        PURLS
+        PURL_VALUES
     )
 endmacro()
 
 # Helper to get purl options that should be forwarded from _qt_internal_sbom_add_target to
 # _qt_internal_sbom_handle_purl_values.
 macro(_qt_internal_get_sbom_purl_handling_options opt_args single_args multi_args)
-    set(${opt_args}
-        IS_QT_ENTITY_TYPE
-    )
+    set(${opt_args} "")
     set(${single_args}
         SUPPLIER
         TYPE
-        VERSION
+        PACKAGE_VERSION
     )
     set(${multi_args} "")
 
@@ -551,6 +585,7 @@ macro(_qt_internal_get_sbom_add_target_common_options opt_args single_args multi
         SBOM_INCOMPLETE_3RD_PARTY_DEPENDENCIES
         IS_QT_3RD_PARTY_HEADER_MODULE
         USE_ATTRIBUTION_FILES
+        CREATE_SBOM_FOR_EACH_ATTRIBUTION
         __QT_INTERNAL_HANDLE_QT_ENTITY_TYPE_PACKAGE_VERSION
         __QT_INTERNAL_HANDLE_QT_ENTITY_TYPE_SUPPLIER
         __QT_INTERNAL_HANDLE_QT_ENTITY_TYPE_DOWNLOAD_LOCATION
@@ -569,6 +604,7 @@ macro(_qt_internal_get_sbom_add_target_common_options opt_args single_args multi
         QT_LICENSE_ID
         DOWNLOAD_LOCATION
         ATTRIBUTION_ENTRY_INDEX
+        ATTRIBUTION_PARENT_TARGET
         SBOM_PACKAGE_COMMENT
     )
     set(${multi_args}
@@ -577,6 +613,7 @@ macro(_qt_internal_get_sbom_add_target_common_options opt_args single_args multi
         SBOM_DEPENDENCIES
         ATTRIBUTION_FILE_PATHS
         ATTRIBUTION_FILE_DIR_PATHS
+        ATTRIBUTION_IDS
         SBOM_RELATIONSHIPS
     )
 
@@ -656,9 +693,6 @@ function(_qt_internal_sbom_add_target target)
 
     set(project_package_options "")
 
-    _qt_internal_sbom_is_qt_entity_type("${arg_TYPE}" is_qt_entity_type)
-    _qt_internal_sbom_is_qt_3rd_party_entity_type("${arg_TYPE}" is_qt_3rd_party_entity_type)
-
     if(arg_FRIENDLY_PACKAGE_NAME)
         set(package_name_for_spdx_id "${arg_FRIENDLY_PACKAGE_NAME}")
     else()
@@ -699,12 +733,8 @@ function(_qt_internal_sbom_add_target target)
 
     if(arg_USE_ATTRIBUTION_FILES)
         set(attribution_args
-            PARENT_TARGET "${target}"
+            ATTRIBUTION_PARENT_TARGET "${target}"
         )
-
-        if(is_qt_entity_type AND arg___QT_INTERNAL_HANDLE_QT_ENTITY_ATTRIBUTION_FILES)
-            list(APPEND attribution_args CREATE_SBOM_FOR_EACH_ATTRIBUTION)
-        endif()
 
         # Forward the sbom specific options when handling attribution files because those might
         # create other sbom targets that need to inherit the parent ones.
@@ -771,10 +801,18 @@ function(_qt_internal_sbom_add_target target)
 
     if(license_expression)
         list(APPEND project_package_options LICENSE_CONCLUDED "${license_expression}")
+    endif()
 
-        # For qt entities we know the license we provide, so we mark it as declared as well.
-        if(arg___QT_INTERNAL_HANDLE_QT_ENTITY_TYPE_LICENSE AND is_qt_entity_type)
-            list(APPEND project_package_options LICENSE_DECLARED "${license_expression}")
+    if(license_expression AND
+            arg___QT_INTERNAL_HANDLE_QT_ENTITY_TYPE_LICENSE)
+        _qt_internal_sbom_forward_sbom_add_target_options(sbom_add_target_args)
+        _qt_internal_sbom_handle_qt_entity_license_declared_expression(${target}
+            ${sbom_add_target_args}
+            LICENSE_CONCLUDED_EXPRESSION "${license_expression}"
+            OUT_VAR qt_entity_license_declared_expression)
+        if(qt_entity_license_declared_expression)
+            list(APPEND project_package_options
+                LICENSE_DECLARED "${qt_entity_license_declared_expression}")
         endif()
     endif()
 
@@ -853,9 +891,7 @@ function(_qt_internal_sbom_add_target target)
         endif()
     endif()
 
-    if(arg_USE_ATTRIBUTION_FILES
-            AND (arg_TYPE STREQUAL "QT_THIRD_PARTY_MODULE"
-                OR arg_TYPE STREQUAL "QT_THIRD_PARTY_SOURCES"))
+    if(arg_USE_ATTRIBUTION_FILES)
         if(qa_download_location)
             set(download_location "${qa_download_location}")
         elseif(qa_homepage)
@@ -900,9 +936,13 @@ function(_qt_internal_sbom_add_target target)
     endif()
 
     if(arg_USE_ATTRIBUTION_FILES AND qa_cpes)
+        set(placeholder_args "")
+        if(package_version)
+            list(APPEND placeholder_args VERSION "${package_version}")
+        endif()
         _qt_internal_sbom_replace_qa_placeholders(
             VALUES ${qa_cpes}
-            VERSION "${package_version}"
+            ${placeholder_args}
             OUT_VAR qa_cpes_replaced
         )
         list(APPEND cpe_values "${qa_cpes_replaced}")
@@ -943,21 +983,21 @@ function(_qt_internal_sbom_add_target target)
     endif()
 
     if(package_version)
-        list(APPEND purl_args VERSION "${package_version}")
-    endif()
-
-    if(is_qt_entity_type)
-        list(APPEND purl_args IS_QT_ENTITY_TYPE)
+        list(APPEND purl_args PACKAGE_VERSION "${package_version}")
     endif()
 
     if(arg_USE_ATTRIBUTION_FILES AND qa_purls)
+        set(placeholder_args "")
+        if(package_version)
+            list(APPEND placeholder_args VERSION "${package_version}")
+        endif()
         _qt_internal_sbom_replace_qa_placeholders(
             VALUES ${qa_purls}
-            VERSION "${package_version}"
+            ${placeholder_args}
             OUT_VAR qa_purls_replaced
         )
 
-        list(APPEND purl_args PURL_3RDPARTY_UPSTREAM_VALUES "${qa_purls_replaced}")
+        list(APPEND purl_args PURL_VALUES ${qa_purls_replaced})
     endif()
     list(APPEND purl_args OUT_VAR purl_package_options)
 
@@ -967,12 +1007,24 @@ function(_qt_internal_sbom_add_target target)
         list(APPEND project_package_options ${purl_package_options})
     endif()
 
-    if(arg_USE_ATTRIBUTION_FILES
-            AND (is_qt_3rd_party_entity_type
-                OR arg_TYPE STREQUAL "SYSTEM_LIBRARY"
-                OR arg_TYPE STREQUAL "THIRD_PARTY_LIBRARY"
-                OR arg_TYPE STREQUAL "THIRD_PARTY_LIBRARY_WITH_FILES")
-        )
+    if(arg_USE_ATTRIBUTION_FILES)
+        if(qa_chosen_attribution_file_path)
+            _qt_internal_sbom_map_path_to_reproducible_relative_path(relative_attribution_path
+                PATH "${qa_chosen_attribution_file_path}"
+            )
+            string(APPEND package_comment
+                "    Information extracted from:\n     ${relative_attribution_path}\n")
+        endif()
+
+        if(NOT "${qa_chosen_attribution_entry_index}" STREQUAL "")
+            string(APPEND package_comment
+                "    Entry index: ${qa_chosen_attribution_entry_index}\n")
+        endif()
+
+        if(qa_attribution_id)
+            string(APPEND package_comment "    Id: ${qa_attribution_id}\n")
+        endif()
+
         if(qa_attribution_name)
             string(APPEND package_comment "    Name: ${qa_attribution_name}\n")
         endif()
@@ -985,17 +1037,12 @@ function(_qt_internal_sbom_add_target target)
             string(APPEND package_comment "    Qt usage: ${qa_qt_usage}\n")
         endif()
 
-        if(qa_chosen_attribution_file_path)
-            _qt_internal_sbom_map_path_to_reproducible_relative_path(relative_attribution_path
-                PATH "${qa_chosen_attribution_file_path}"
-            )
-            string(APPEND package_comment
-                "    Information extracted from:\n     ${relative_attribution_path}\n")
+        if(qa_license)
+            string(APPEND package_comment "    License: ${qa_license}\n")
         endif()
 
-        if(NOT "${qa_chosen_attribution_entry_index}" STREQUAL "")
-            string(APPEND package_comment
-                "    Entry index: ${qa_chosen_attribution_entry_index}\n")
+        if(qa_license_file)
+            string(APPEND package_comment "    License file: ${qa_license_file}\n")
         endif()
     endif()
 
@@ -1469,10 +1516,7 @@ function(_qt_internal_sbom_save_spdx_id_for_target target spdx_id)
     message(DEBUG "Saving spdx id for target ${target}: ${spdx_id}")
 
     set(target_unaliased "${target}")
-    get_target_property(aliased_target "${target}" ALIASED_TARGET)
-    if(aliased_target)
-        set(target_unaliased ${aliased_target})
-    endif()
+    _qt_internal_dealias_target(target_unaliased)
 
     set_target_properties(${target_unaliased} PROPERTIES
         _qt_sbom_spdx_id "${spdx_id}")
@@ -1618,6 +1662,8 @@ function(_qt_internal_sbom_get_package_infix type out_infix)
         set(package_infix "3rdparty-library")
     elseif(type STREQUAL "THIRD_PARTY_LIBRARY_WITH_FILES")
         set(package_infix "3rdparty-library-with-files")
+    elseif(type STREQUAL "THIRD_PARTY_SOURCES")
+        set(package_infix "3rdparty-sources")
     elseif(type STREQUAL "TRANSLATIONS")
         set(package_infix "translations")
     elseif(type STREQUAL "RESOURCES")
@@ -1666,6 +1712,8 @@ function(_qt_internal_sbom_get_package_purpose type out_purpose)
     elseif(type STREQUAL "THIRD_PARTY_LIBRARY")
         set(package_purpose "LIBRARY")
     elseif(type STREQUAL "THIRD_PARTY_LIBRARY_WITH_FILES")
+        set(package_purpose "LIBRARY")
+    elseif(type STREQUAL "THIRD_PARTY_SOURCES")
         set(package_purpose "LIBRARY")
     elseif(type STREQUAL "TRANSLATIONS")
         set(package_purpose "OTHER")

@@ -14,7 +14,7 @@ QT_BEGIN_NAMESPACE
     \nativetype QQuickGroupGoalAffector
     \inqmlmodule QtQuick.Particles
     \ingroup qtquick-particles
-    \inherits Affector
+    \inherits ParticleAffector
     \brief For changing the state of a group of a particle.
 
 */

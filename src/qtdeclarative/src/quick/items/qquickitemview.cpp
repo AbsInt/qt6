@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickitemview_p_p.h"
+#include <QtQml/qqmlcomponent.h>
 #include "qquickitemviewfxitem_p_p.h"
 #include <QtQuick/private/qquicktransition_p.h>
 #include <QtQml/QQmlInfo>
@@ -10,7 +11,7 @@
 QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcItemViewDelegateLifecycle, "qt.quick.itemview.lifecycle")
-Q_LOGGING_CATEGORY(lcCount, "qt.quick.itemview.count")
+Q_STATIC_LOGGING_CATEGORY(lcCount, "qt.quick.itemview.count")
 
 // Default cacheBuffer for all views.
 #ifndef QML_VIEW_DEFAULTCACHEBUFFER
@@ -163,6 +164,9 @@ void QQuickItemView::setModel(const QVariant &m)
         if (QQmlDelegateModel *delegateModel = qobject_cast<QQmlDelegateModel*>(d->model)) {
             disconnect(delegateModel, SIGNAL(itemPooled(int,QObject*)), this, SLOT(onItemPooled(int,QObject*)));
             disconnect(delegateModel, SIGNAL(itemReused(int,QObject*)), this, SLOT(onItemReused(int,QObject*)));
+            QObjectPrivate::disconnect(
+                    delegateModel, &QQmlDelegateModel::delegateChanged,
+                    d, &QQuickItemViewPrivate::applyDelegateChange);
         }
     }
 
@@ -176,19 +180,36 @@ void QQuickItemView::setModel(const QVariant &m)
     QObject *object = qvariant_cast<QObject*>(model);
     QQmlInstanceModel *vim = nullptr;
     if (object && (vim = qobject_cast<QQmlInstanceModel *>(object))) {
+        if (d->explicitDelegate) {
+            QQmlComponent *delegate = nullptr;
+            if (QQmlDelegateModel *old = qobject_cast<QQmlDelegateModel *>(oldModel))
+                delegate = old->delegate();
+
+            if (QQmlDelegateModel *newModel = qobject_cast<QQmlDelegateModel *>(vim)) {
+                newModel->setDelegate(delegate);
+            } else if (delegate) {
+                qmlWarning(this) << "Cannot retain explicitly set delegate on non-DelegateModel";
+                d->explicitDelegate = false;
+            }
+        }
+
         if (d->ownModel) {
             delete oldModel;
             d->ownModel = false;
         }
         d->model = vim;
     } else {
-        if (!d->ownModel) {
-            d->model = new QQmlDelegateModel(qmlContext(this), this);
-            d->ownModel = true;
-            if (isComponentComplete())
-                static_cast<QQmlDelegateModel *>(d->model.data())->componentComplete();
-        } else {
+        if (d->ownModel) {
             d->model = oldModel;
+        } else {
+            if (d->explicitDelegate) {
+                QQmlComponent *delegate = nullptr;
+                if (QQmlDelegateModel *old = qobject_cast<QQmlDelegateModel *>(oldModel))
+                    delegate = old->delegate();
+                QQmlDelegateModel::createForView(this, d)->setDelegate(delegate);
+            } else {
+                QQmlDelegateModel::createForView(this, d);
+            }
         }
         if (QQmlDelegateModel *dataModel = qobject_cast<QQmlDelegateModel*>(d->model))
             dataModel->setModel(model);
@@ -244,22 +265,41 @@ QQmlComponent *QQuickItemView::delegate() const
 void QQuickItemView::setDelegate(QQmlComponent *delegate)
 {
     Q_D(QQuickItemView);
-    if (delegate == this->delegate())
-        return;
-    if (!d->ownModel) {
-        d->model = new QQmlDelegateModel(qmlContext(this));
-        d->ownModel = true;
-        if (isComponentComplete())
-            static_cast<QQmlDelegateModel *>(d->model.data())->componentComplete();
-    }
-    if (QQmlDelegateModel *dataModel = qobject_cast<QQmlDelegateModel*>(d->model)) {
-        int oldCount = dataModel->count();
-        dataModel->setDelegate(delegate);
-        if (oldCount != dataModel->count())
+    const auto setExplicitDelegate = [&](QQmlDelegateModel *delegateModel) {
+        int oldCount = delegateModel->count();
+        delegateModel->setDelegate(delegate);
+        if (oldCount != delegateModel->count())
             d->emitCountChanged();
+        d->explicitDelegate = true;
+        d->delegateValidated = false;
+    };
+
+    if (!d->model) {
+        if (!delegate) {
+            // Explicitly set a null delegate. We can do this without model.
+            d->explicitDelegate = true;
+            return;
+        }
+
+        setExplicitDelegate(QQmlDelegateModel::createForView(this, d));
+        // The new model is not connected to applyDelegateChange, yet. We only do this once
+        // there is actual data, via an explicit setModel(). So we have to manually emit the
+        // delegateChanged() here.
+        emit delegateChanged();
+        return;
     }
-    emit delegateChanged();
-    d->delegateValidated = false;
+
+    if (QQmlDelegateModel *delegateModel = qobject_cast<QQmlDelegateModel *>(d->model)) {
+        // Disable the warning in applyDelegateChange since the new delegate is also explicit.
+        d->explicitDelegate = false;
+        setExplicitDelegate(delegateModel);
+        return;
+    }
+
+    if (delegate)
+        qmlWarning(this) << "Cannot set a delegate on an explicitly provided non-DelegateModel";
+    else
+        d->explicitDelegate = true; // Explicitly set null delegate always works
 }
 
 
@@ -1086,6 +1126,10 @@ qreal QQuickItemViewPrivate::calculatedMaxExtent() const
 
 void QQuickItemViewPrivate::applyDelegateChange()
 {
+    Q_Q(QQuickItemView);
+
+    QQmlDelegateModel::applyDelegateChangeOnView(q, this);
+
     releaseVisibleItems(QQmlDelegateModel::NotReusable);
     releaseCurrentItem(QQmlDelegateModel::NotReusable);
     updateSectionCriteria();
@@ -1527,7 +1571,9 @@ QQuickItemViewPrivate::QQuickItemViewPrivate()
 #if QT_CONFIG(quick_viewtransitions)
     , runDelayedRemoveTransition(false)
 #endif
-    , delegateValidated(false), isClearing(false)
+    , delegateValidated(false)
+    , isClearing(false)
+    , explicitDelegate(false)
 {
     bufferPause.addAnimationChangeListener(this, QAbstractAnimationJob::Completion);
     bufferPause.setLoopCount(1);

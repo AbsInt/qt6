@@ -53,7 +53,7 @@ struct QT_MYSQL_TIME
 
 QT_BEGIN_NAMESPACE
 
-static Q_LOGGING_CATEGORY(lcMysql, "qt.sql.mysql")
+Q_STATIC_LOGGING_CATEGORY(lcMysql, "qt.sql.mysql")
 
 using namespace Qt::StringLiterals;
 
@@ -1519,7 +1519,7 @@ QSqlRecord QMYSQLDriver::record(const QString &tablename) const
     const auto len = mysql_real_escape_string_quote(d->mysql, tableNameQuoted.data(),
                                                     baTableName.data(), baTableName.size(), '\'');
 #endif
-    if (i.exec(stmt.arg(QString::fromUtf8(tableNameQuoted.data(), len)))) {
+    if (i.exec(stmt.arg(QUtf8StringView(tableNameQuoted.data(), len)))) {
         while (i.next()) {
             const auto colName = i.value(0).toString();
             const auto recordIdx = r.indexOf(colName);
@@ -1614,7 +1614,7 @@ QString QMYSQLDriver::formatValue(const QSqlField &field, bool trimStrings) cons
             }
             Q_FALLTHROUGH();
         case QMetaType::QDateTime:
-            if (QDateTime dt = field.value().toDateTime(); dt.isValid()) {
+            if (QDateTime dt = field.value().toDateTime().toUTC(); dt.isValid()) {
                 // MySQL format doesn't like the "Z" at the end, but does allow
                 // "+00:00" starting in version 8.0.19. However, if we got here,
                 // it's because the MySQL server is too old for prepared queries

@@ -1,5 +1,6 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qwindowsfontdatabasebase_p.h"
 #include "qwindowsfontdatabase_p.h"
@@ -871,6 +872,14 @@ QFontEngine *QWindowsFontDatabaseBase::fontEngine(const QByteArray &fontData, qr
 #endif
 
     return fontEngine;
+}
+
+QStringList QWindowsFontDatabaseBase::familiesForScript(QFontDatabasePrivate::ExtendedScript script)
+{
+    if (script == QFontDatabasePrivate::Script_Emoji)
+        return QStringList{} << QStringLiteral("Segoe UI Emoji");
+    else
+        return QStringList{};
 }
 
 QString QWindowsFontDatabaseBase::familyForStyleHint(QFont::StyleHint styleHint)

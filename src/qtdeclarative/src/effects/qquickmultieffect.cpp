@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtypes.h"
+#include <QtQml/qqmlcomponent.h>
 #include <private/qquickmultieffect_p_p.h>
 #include <private/qquickshadereffect_p.h>
 #include <private/qquickshadereffectsource_p.h>
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcQuickEffect, "qt.quick.effects")
+Q_STATIC_LOGGING_CATEGORY(lcQuickEffect, "qt.quick.effects")
 
 /*!
     \keyword Qt Quick Effects

@@ -37,7 +37,6 @@
 #include <qvarlengtharray.h>
 #include <qstack.h>
 #include <qmap.h>
-#include <qtimer.h>
 #include <qpointer.h>
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -681,7 +680,7 @@ bool QDockWidgetGroupWindow::eventFilter(QObject *obj, QEvent *event)
     case QEvent::Close:
         // We don't want closed dock widgets in a floating tab
         // => dock it to the main dock, before closing;
-        reparent(dockWidget);
+        reparentToMainWindow(dockWidget);
         dockWidget->setFloating(false);
         break;
 
@@ -726,7 +725,7 @@ void QDockWidgetGroupWindow::destroyIfSingleItemLeft()
     QDockAreaLayoutInfo &parentInfo = mwLayout->layoutState.dockAreaLayout.docks[layoutInfo()->dockPos];
 
     // Re-parent last dock widget
-    reparent(lastDockWidget);
+    reparentToMainWindow(lastDockWidget);
 
     // the group window could still have placeholder items => clear everything
     layoutInfo()->item_list.clear();
@@ -736,7 +735,7 @@ void QDockWidgetGroupWindow::destroyIfSingleItemLeft()
     destroyOrHideIfEmpty();
 }
 
-void QDockWidgetGroupWindow::reparent(QDockWidget *dockWidget)
+void QDockWidgetGroupWindow::reparentToMainWindow(QDockWidget *dockWidget)
 {
     // reparent a dockWidget to the main window
     // - remove it from the floating dock's layout info
@@ -1710,6 +1709,10 @@ QRect QMainWindowLayout::dockWidgetAreaRect(const Qt::DockWidgetArea area, DockW
     return (size == Maximum) ? dl.gapRect(dockPosition) : dl.docks[dockPosition].rect;
 }
 
+/*!
+    \internal
+    Add \a dockwidget to \a area in \a orientation.
+ */
 void QMainWindowLayout::addDockWidget(Qt::DockWidgetArea area,
                                              QDockWidget *dockwidget,
                                              Qt::Orientation orientation)
@@ -1722,7 +1725,6 @@ void QMainWindowLayout::addDockWidget(Qt::DockWidgetArea area,
         endSeparatorMove(movingSeparatorPos);
 
     layoutState.dockAreaLayout.addDockWidget(toDockPos(area), dockwidget, orientation);
-    emit dockwidget->dockLocationChanged(area);
     invalidate();
 }
 
@@ -1868,7 +1870,7 @@ void QMainWindowLayout::splitDockWidget(QDockWidget *after,
     invalidate();
 }
 
-Qt::DockWidgetArea QMainWindowLayout::dockWidgetArea(QWidget *widget) const
+Qt::DockWidgetArea QMainWindowLayout::dockWidgetArea(const QWidget *widget) const
 {
     const QList<int> pathToWidget = layoutState.dockAreaLayout.indexOf(widget);
     if (pathToWidget.isEmpty())
@@ -2031,7 +2033,9 @@ void QMainWindowTabBar::mouseMoveEvent(QMouseEvent *e)
 
 QMainWindowTabBar::~QMainWindowTabBar()
 {
-    if (!mainWindow || mainWindow == parentWidget())
+    // Use qobject_cast to verify that we are not already in the (QWidget)
+    // destructor of mainWindow
+    if (!qobject_cast<QMainWindow *>(mainWindow) || mainWindow == parentWidget())
         return;
 
     // tab bar is not parented to the main window
@@ -2722,6 +2726,13 @@ QMainWindowLayout::~QMainWindowLayout()
     layoutState.deleteCentralWidgetItem();
 
     delete statusbar;
+
+#if QT_CONFIG(dockwidget) && QT_CONFIG(tabwidget)
+    // unusedTabBars contains unparented tab bars, which need to be removed manually.
+    // ~QMainWindowTabBar() removes the bar from unusedTabBars => call qDeleteAll() on a copy.
+    const auto bars = unusedTabBars;
+    qDeleteAll(bars);
+#endif // QT_CONFIG(dockwidget) && QT_CONFIG(tabwidget)
 }
 
 void QMainWindowLayout::setDockOptions(QMainWindow::DockOptions opts)

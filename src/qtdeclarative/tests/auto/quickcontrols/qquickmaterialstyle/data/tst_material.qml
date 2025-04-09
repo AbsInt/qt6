@@ -1082,6 +1082,11 @@ TestCase {
         verify(placeholderTextItem as MaterialImpl.FloatingPlaceholderText)
         // This is the default value returned by textFieldHorizontalPadding when using a non-dense variant.
         compare(placeholderTextItem.x, 16)
+
+        // When the text is cleared, the placeholder text should appear in the previous text position.
+        // If left padding is set, use its value; otherwise, use the default from textFieldHorizontalPadding.
+        control.text = ""
+        compare(placeholderTextItem.x, data.leftPadding != undefined ? data.leftPadding : 16)
     }
 
     Component {

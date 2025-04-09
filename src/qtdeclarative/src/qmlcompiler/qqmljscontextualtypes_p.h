@@ -31,9 +31,11 @@ struct ContextualTypes
 
     ContextualTypes(
             CompileContext context,
-            const QHash<QString, ImportedScope<QQmlJSScope::ConstPtr>> types,
+            const QHash<QString, ImportedScope<QQmlJSScope::ConstPtr>> &types,
+            const QMultiHash<QQmlJSScope::ConstPtr, QString> &names,
             const QQmlJSScope::ConstPtr &arrayType)
         : m_types(types)
+        , m_names(names)
         , m_context(context)
         , m_arrayType(arrayType)
     {}

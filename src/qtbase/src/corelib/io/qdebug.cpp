@@ -512,6 +512,46 @@ void QDebug::putUInt128([[maybe_unused]] const void *p)
     stream->ts << int128Warning();
 }
 
+/*!
+    \since 6.9
+    \internal
+    Helper to the <Std/Qt>::<>_ordering debug output.
+    It generates the string in following format:
+    <Qt/Std>::<weak/partial/strong>_ordering::<less/equal/greater/unordered>
+ */
+void QDebug::putQtOrdering(QtOrderingPrivate::QtOrderingTypeFlag flags, Qt::partial_ordering order)
+{
+    using QtOrderingPrivate::QtOrderingType;
+    std::string result;
+    if ((flags & QtOrderingType::StdOrder) == QtOrderingType::StdOrder)
+        result += "std";
+    else if ((flags & QtOrderingType::QtOrder) == QtOrderingType::QtOrder)
+        result += "Qt";
+
+    result += "::";
+    const bool isStrong = ((flags & QtOrderingType::Strong) == QtOrderingType::Strong);
+    if (isStrong)
+        result += "strong";
+    else if ((flags & QtOrderingType::Weak) == QtOrderingType::Weak)
+        result += "weak";
+    else if ((flags & QtOrderingType::Partial) == QtOrderingType::Partial)
+        result += "partial";
+    result += "_ordering::";
+
+    if (order == Qt::partial_ordering::equivalent) {
+        if (isStrong)
+            result += "equal";
+        else
+            result += "equivalent";
+    } else if (order == Qt::partial_ordering::greater) {
+        result += "greater";
+    } else if (order == Qt::partial_ordering::less) {
+        result += "less";
+    } else {
+        result += "unordered";
+    }
+    stream->ts << result.data();
+}
 
 /*!
     \fn QDebug::swap(QDebug &other)
@@ -948,6 +988,14 @@ QDebug &QDebug::resetFormat()
 */
 
 /*!
+    \fn template <typename T, QDebug::if_ordering_type<T>> QDebug::operator<<(QDebug debug, T t)
+    \since 6.9
+    Prints the Qt or std ordering value \a t to the \a debug object.
+
+    \constraints \c T is one of <Qt/Std>::<weak/partial/strong>_ordering.
+*/
+
+/*!
     \since 6.5
     \fn template <typename Char, typename...Args> QDebug &QDebug::operator<<(const std::basic_string<Char, Args...> &s)
     \fn template <typename Char, typename...Args> QDebug &QDebug::operator<<(std::basic_string_view<Char, Args...> s)
@@ -999,6 +1047,8 @@ QDebug &QDebug::resetFormat()
     \since 6.0
 
     \include qdebug-toString.qdocinc
+
+    \sa toBytes()
 */
 
 /*! \internal */
@@ -1010,6 +1060,54 @@ QString QDebug::toStringImpl(StreamTypeErased s, const void *obj)
         s(d.nospace(), obj);
     }
     return result;
+}
+
+/*!
+    \fn template <class T> QByteArray QDebug::toBytes(const T &object)
+    \since 6.9
+
+    This is equivalent to passing \a object to
+    \c{QDebug::toString(object).toUtf8()}, but more efficient.
+
+    \sa toString()
+*/
+
+/*! \internal */
+QByteArray QDebug::toBytesImpl(StreamTypeErased s, const void *obj)
+{
+    QByteArray result;
+    {
+        QDebug d(&result);
+        s(d.nospace(), obj);
+    }
+    return result;
+}
+
+/*!
+    \internal
+    \since 6.9
+
+    Outputs a heterogeneous product type (pair, tuple, or anything that
+    implements the Tuple Protocol). The class name is described by "\a ns
+    \c{::} \a what", while the addresses of the \a n elements are stored in the
+    array \a data. The formatters are stored in the array \a ops.
+
+    If \a ns is empty, only \a what is used.
+*/
+QDebug &QDebug::putTupleLikeImplImpl(const char *ns, const char *what,
+                                     size_t n, StreamTypeErased *ops, const void **data)
+{
+    const QDebugStateSaver saver(*this);
+    nospace();
+    if (ns && *ns)
+        *this << ns << "::";
+    *this << what << '(';
+    while (n--) {
+        (*ops++)(*this, *data++);
+        if (n)
+            *this << ", ";
+    }
+    return *this << ')';
 }
 
 /*!
@@ -1044,6 +1142,15 @@ QString QDebug::toStringImpl(StreamTypeErased s, const void *obj)
     \since 5.7
 
     Writes the contents of vector \a vec to \a debug. \c T needs to
+    support streaming into QDebug.
+*/
+
+/*!
+    \fn template <typename T, std::size_t N> QDebug operator<<(QDebug debug, const std::array<T, N> &array)
+    \relates QDebug
+    \since 6.9
+
+    Writes the contents of \a array to \a debug. \c T needs to
     support streaming into QDebug.
 */
 
@@ -1090,6 +1197,43 @@ QString QDebug::toStringImpl(StreamTypeErased s, const void *obj)
 */
 
 /*!
+    \fn template <typename Key, typename Compare, typename Alloc> QDebug operator<<(QDebug debug, const std::multiset<Key, Compare, Alloc> &multiset)
+    \relates QDebug
+    \since 6.9
+
+    Writes the contents of \a multiset to \a debug. The \c Key type
+    needs to support streaming into QDebug.
+*/
+
+/*!
+    \fn template <typename Key, typename Compare, typename Alloc> QDebug operator<<(QDebug debug, const std::set<Key, Compare, Alloc> &set)
+    \relates QDebug
+    \since 6.9
+
+    Writes the contents of \a set to \a debug. The \c Key type
+    needs to support streaming into QDebug.
+*/
+
+/*!
+    \fn template <typename Key, typename T, typename Hash, typename KeyEqual, typename Alloc> QDebug operator<<(QDebug debug, const std::unordered_map<Key, T, Hash, KeyEqual, Alloc> &map)
+    \relates QDebug
+    \since 6.9
+
+ Writes the contents of \a map to \a debug. Both \c Key and
+ \c T need to support streaming into QDebug.
+*/
+
+/*!
+    \fn template <typename Key, typename Hash, typename KeyEqual, typename Alloc> QDebug operator<<(QDebug debug, const std::unordered_set<Key, Hash, KeyEqual, Alloc> &unordered_set)
+    \relates QDebug
+    \since 6.9
+
+Writes the contents of \a unordered_set to \a debug. The \c Key type
+needs to support streaming into QDebug.
+*/
+
+
+/*!
     \fn template <class Key, class T> QDebug operator<<(QDebug debug, const QHash<Key, T> &hash)
     \relates QDebug
 
@@ -1106,6 +1250,14 @@ QString QDebug::toStringImpl(StreamTypeErased s, const void *obj)
 */
 
 /*!
+    \fn template <class...Ts, QDebug::if_streamable<Ts...>> QDebug &QDebug::operator<<(const std::tuple<Ts...> &tuple)
+    \since 6.9
+
+    Writes the contents of \a tuple to the stream. All \c Ts... need to support
+    streaming into QDebug.
+*/
+
+/*!
     \fn template <class T1, class T2> QDebug operator<<(QDebug debug, const std::pair<T1, T2> &pair)
     \relates QDebug
 
@@ -1115,10 +1267,9 @@ QString QDebug::toStringImpl(StreamTypeErased s, const void *obj)
 
 /*!
     \since 6.7
-    \fn template <class T> QDebug operator<<(QDebug debug, const std::optional<T> &opt)
-    \relates QDebug
+    \fn template <class T, QDebug::if_streamable<T>> QDebug::operator<<(const std::optional<T> &opt)
 
-    Writes the contents of \a opt (or \c nullopt if not set) to \a debug.
+    Writes the contents of \a opt (or \c nullopt if not set) to this stream.
     \c T needs to support streaming into QDebug.
 */
 
@@ -1255,8 +1406,18 @@ QDebugStateSaver::~QDebugStateSaver()
 */
 void qt_QMetaEnum_flagDebugOperator(QDebug &debug, size_t sizeofT, uint value)
 {
-    qt_QMetaEnum_flagDebugOperator<uint>(debug, sizeofT, value);
+    qt_QMetaEnum_flagDebugOperator(debug, sizeofT, quint64(value));
 }
+
+/*!
+    \internal
+    Ditto, for 64-bit.
+*/
+void qt_QMetaEnum_flagDebugOperator(QDebug &debug, size_t sizeofT, quint64 value)
+{
+    qt_QMetaEnum_flagDebugOperator<quint64>(debug, sizeofT, value);
+}
+
 
 #ifndef QT_NO_QOBJECT
 /*!
@@ -1375,7 +1536,7 @@ QDebug qt_QMetaEnum_flagDebugOperator(QDebug &debug, quint64 value, const QMetaO
         debug << '(';
     }
 
-    debug << me.valueToKeys(static_cast<int>(value));
+    debug << me.valueToKeys(value);
 
     if (enumScope)
         debug << ')';

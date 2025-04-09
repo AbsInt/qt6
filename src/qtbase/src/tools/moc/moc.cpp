@@ -13,6 +13,7 @@
 #include <QtCore/qjsondocument.h>
 
 // for normalizeTypeInternal
+#include <private/qmetaobject_p.h>
 #include <private/qmetaobject_moc_p.h>
 #include <private/qduplicatetracker_p.h>
 
@@ -161,7 +162,12 @@ Type Moc::parseType()
     }
 
     skipCxxAttributes();
-    test(ENUM) || test(CLASS) || test(STRUCT);
+    if (test(ENUM))
+        type.typeTag = TypeTag::HasEnum;
+    if (test(CLASS))
+        type.typeTag |= TypeTag::HasClass;
+    if (test(STRUCT))
+        type.typeTag |= TypeTag::HasStruct;
     for(;;) {
         skipCxxAttributes();
         switch (next()) {
@@ -242,7 +248,7 @@ bool Moc::parseEnum(EnumDef *def)
     bool isTypdefEnum = false; // typedef enum { ... } Foo;
 
     if (test(CLASS) || test(STRUCT))
-        def->isEnumClass = true;
+        def->flags |= EnumIsScoped;
 
     if (test(IDENTIFIER)) {
         def->name = lexem();
@@ -741,14 +747,14 @@ void Moc::parse()
                                 break;
                             case Q_ENUMS_TOKEN:
                             case Q_ENUM_NS_TOKEN:
-                                parseEnumOrFlag(&def, false);
+                                parseEnumOrFlag(&def, {});
                                 break;
                             case Q_ENUM_TOKEN:
                                 error("Q_ENUM can't be used in a Q_NAMESPACE, use Q_ENUM_NS instead");
                                 break;
                             case Q_FLAGS_TOKEN:
                             case Q_FLAG_NS_TOKEN:
-                                parseEnumOrFlag(&def, true);
+                                parseEnumOrFlag(&def, EnumIsFlag);
                                 break;
                             case Q_FLAG_TOKEN:
                                 error("Q_FLAG can't be used in a Q_NAMESPACE, use Q_FLAG_NS instead");
@@ -863,6 +869,7 @@ void Moc::parse()
             continue;
         ClassDef def;
         if (parseClassHead(&def)) {
+            Symbol qmlRegistrationMacroSymbol = {};
             prependNamespaces(def, namespaceList);
 
             FunctionDef::Access access = FunctionDef::Private;
@@ -937,14 +944,14 @@ void Moc::parse()
                     break;
                 case Q_ENUMS_TOKEN:
                 case Q_ENUM_TOKEN:
-                    parseEnumOrFlag(&def, false);
+                    parseEnumOrFlag(&def, {});
                     break;
                 case Q_ENUM_NS_TOKEN:
                     error("Q_ENUM_NS can't be used in a Q_OBJECT/Q_GADGET, use Q_ENUM instead");
                     break;
                 case Q_FLAGS_TOKEN:
                 case Q_FLAG_TOKEN:
-                    parseEnumOrFlag(&def, true);
+                    parseEnumOrFlag(&def, EnumIsFlag);
                     break;
                 case Q_FLAG_NS_TOKEN:
                     error("Q_FLAG_NS can't be used in a Q_OBJECT/Q_GADGET, use Q_FLAG instead");
@@ -978,6 +985,17 @@ void Moc::parse()
                 case SEMIC:
                 case COLON:
                     break;
+                case IDENTIFIER:
+                {
+                    const QByteArray lex = lexem();
+                    if (lex.startsWith("QML_")) {
+                        if (   lex == "QML_ELEMENT" || lex == "QML_NAMED_ELEMENT"
+                            || lex == "QML_ANONYMOUS" || lex == "QML_VALUE_TYPE") {
+                            qmlRegistrationMacroSymbol = symbol();
+                        }
+                    }
+                }
+                Q_FALLTHROUGH();
                 default:
                     FunctionDef funcDef;
                     funcDef.access = access;
@@ -1017,6 +1035,17 @@ void Moc::parse()
             }
 
             next(RBRACE);
+
+            /* if the header is available, moc will see a Q_CLASSINFO entry; the
+               token is only visible if the header is missing
+               To avoid false positives, we only warn when encountering the token in a QObject or gadget
+            */
+            if ((def.hasQObject || def.hasQGadget) && qmlRegistrationMacroSymbol.token != NOTOKEN) {
+                QByteArray msg("Potential QML registration macro was found, but no header containing it was included.\n"
+                               "This might cause runtime errors in QML applications\n"
+                               "Include <QtQmlIntegration/qqmlintegration.h> or <QtQml/qqmlregistration.h> to fix this.");
+                warning(qmlRegistrationMacroSymbol, msg.constData());
+            }
 
             if (!def.hasQObject && !def.hasQGadget && def.signalList.isEmpty() && def.slotList.isEmpty()
                 && def.propertyList.isEmpty() && def.enumDeclarations.isEmpty())
@@ -1325,9 +1354,11 @@ void Moc::createPropertyDef(PropertyDef &propDef, int propertyIndex, Moc::Proper
     propDef.location = index;
     propDef.relativeIndex = propertyIndex;
 
-    QByteArray type = parseType().name;
+    Type t = parseType();
+    QByteArray type = t.name;
     if (type.isEmpty())
         error();
+    propDef.typeTag = t.typeTag;
     propDef.designable = propDef.scriptable = propDef.stored = "true";
     propDef.user = "false";
     /*
@@ -1341,8 +1372,6 @@ void Moc::createPropertyDef(PropertyDef &propDef, int propertyIndex, Moc::Proper
     type = normalizeType(type);
     if (type == "QMap")
         type = "QMap<QString,QVariant>";
-    else if (type == "QValueList")
-        type = "QValueList<QVariant>";
     else if (type == "LongLong")
         type = "qlonglong";
     else if (type == "ULongLong")
@@ -1600,7 +1629,7 @@ void Moc::parsePrivateProperty(ClassDef *def, Moc::PropertyMode mode)
     def->propertyList += propDef;
 }
 
-void Moc::parseEnumOrFlag(BaseDef *def, bool isFlag)
+void Moc::parseEnumOrFlag(BaseDef *def, EnumFlags flags)
 {
     next(LPAREN);
     QByteArray identifier;
@@ -1610,7 +1639,7 @@ void Moc::parseEnumOrFlag(BaseDef *def, bool isFlag)
             identifier += "::";
             identifier += lexem();
         }
-        def->enumDeclarations[identifier] = isFlag;
+        def->enumDeclarations[identifier] = flags;
     }
     next(RPAREN);
 }
@@ -2100,6 +2129,8 @@ QJsonObject FunctionDef::toJson(int index) const
     if (!tag.isEmpty())
         fdef["tag"_L1] = QString::fromUtf8(tag);
     fdef["returnType"_L1] = QString::fromUtf8(normalizedType);
+    if (isConst)
+        fdef["isConst"_L1] = true;
 
     QJsonArray args;
     for (const ArgumentDef &arg: arguments)
@@ -2185,13 +2216,14 @@ QJsonObject PropertyDef::toJson() const
 QJsonObject EnumDef::toJson(const ClassDef &cdef) const
 {
     QJsonObject def;
+    uint flags = this->flags | cdef.enumDeclarations.value(name);
     def["name"_L1] = QString::fromUtf8(name);
     if (!enumName.isEmpty())
         def["alias"_L1] = QString::fromUtf8(enumName);
     if (!type.isEmpty())
         def["type"_L1] = QString::fromUtf8(type);
-    def["isFlag"_L1] = cdef.enumDeclarations.value(name);
-    def["isClass"_L1] = isEnumClass;
+    def["isFlag"_L1] = (flags & EnumIsFlag) != 0;
+    def["isClass"_L1] = (flags & EnumIsScoped) != 0;
 
     QJsonArray valueArr;
     for (const QByteArray &value: values)

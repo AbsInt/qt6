@@ -10,7 +10,7 @@ QT_BEGIN_NAMESPACE
     \nativetype QQuickAttractorAffector
     \inqmlmodule QtQuick.Particles
     \ingroup qtquick-particles
-    \inherits Affector
+    \inherits ParticleAffector
     \brief Attracts particles towards a specific point.
 
     Like other affectors, Attractor has the standard properties x, y, width,

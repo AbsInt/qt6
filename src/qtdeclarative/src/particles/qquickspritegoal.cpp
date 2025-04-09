@@ -14,7 +14,7 @@ QT_BEGIN_NAMESPACE
     \nativetype QQuickSpriteGoalAffector
     \inqmlmodule QtQuick.Particles
     \ingroup qtquick-images-sprites
-    \inherits Affector
+    \inherits ParticleAffector
     \brief For changing the state of a sprite particle.
 
 */

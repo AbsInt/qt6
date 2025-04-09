@@ -90,7 +90,10 @@ public:
 
     QList<QQmlImportInstance *> imports;
 
-    QQmlImportInstance *findImport(const QString &uri) const;
+    QQmlImportInstance *findImportByModuleUri(
+            const QString &moduleUri, QTypeRevision version) const;
+    QQmlImportInstance *findImportByLocation(
+            const QString &location, QTypeRevision version) const;
 
     bool resolveType(QQmlTypeLoader *typeLoader, const QHashedStringRef& type,
                      QTypeRevision *version_return, QQmlType* type_return,
@@ -157,21 +160,23 @@ public:
     }
 
     bool addInlineComponentImport(
-            QQmlImportInstance  *const importInstance, const QString &name, const QUrl importUrl);
+            QQmlImportInstance  *const importInstance, const QString &name, const QUrl &importUrl);
 
     QTypeRevision addFileImport(
             QQmlTypeLoader *typeLoader, const QString &uri, const QString &prefix,
-            QTypeRevision version, ImportFlags flags, quint16 precedence, QString *localQmldir,
-            QList<QQmlError> *errors);
+            QTypeRevision requestedVersion, ImportFlags flags, quint16 precedence,
+            QString *localQmldir, QList<QQmlError> *errors);
 
     QTypeRevision addLibraryImport(
             QQmlTypeLoader *typeLoader, const QString &uri, const QString &prefix,
-            QTypeRevision version, const QString &qmldirIdentifier, const QString &qmldirUrl,
-            ImportFlags flags, quint16 precedence, QList<QQmlError> *errors);
+            QTypeRevision requestedVersion, const QString &qmldirIdentifier,
+            const QString &qmldirUrl, ImportFlags flags, quint16 precedence,
+            QList<QQmlError> *errors);
 
     QTypeRevision updateQmldirContent(
-            QQmlTypeLoader *typeLoader, const QString &uri, const QString &prefix,
-            const QString &qmldirIdentifier, const QString &qmldirUrl, QList<QQmlError> *errors);
+            QQmlTypeLoader *typeLoader, const QString &uri, QTypeRevision version,
+            const QString &prefix, const QString &qmldirIdentifier, const QString &qmldirUrl,
+            QList<QQmlError> *errors);
 
     void populateCache(QQmlTypeNameCache *cache) const;
 
@@ -228,10 +233,6 @@ private:
 
     QQmlImportNamespace *findQualifiedNamespace(const QHashedStringRef &) const;
 
-    static QTypeRevision matchingQmldirVersion(
-            const QQmlTypeLoaderQmldirContent &qmldir, const QString &uri,
-            QTypeRevision version, QList<QQmlError> *errors);
-
     QTypeRevision importExtension(
             QQmlTypeLoader *typeLoader, const QString &uri, QTypeRevision version,
             const QQmlTypeLoaderQmldirContent *qmldir, QList<QQmlError> *errors);
@@ -240,8 +241,7 @@ private:
             const QQmlTypeLoaderQmldirContent &qmldir, QTypeRevision version);
 
     QString redirectQmldirContent(
-            QQmlTypeLoader *typeLoader, QQmlTypeLoaderQmldirContent *qmldir,
-            QQmlImportInstance *inserted);
+            QQmlTypeLoader *typeLoader, QQmlTypeLoaderQmldirContent *qmldir);
 
     bool getQmldirContent(
             QQmlTypeLoader *typeLoader,  const QString &qmldirIdentifier, const QString &uri,

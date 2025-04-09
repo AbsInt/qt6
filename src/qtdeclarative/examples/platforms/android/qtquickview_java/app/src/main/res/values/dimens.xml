@@ -2,7 +2,7 @@
 <resources>
     <dimen name="title_text_size">56sp</dimen>
     <dimen name="other_text_size">30sp</dimen>
-    <dimen name="title_margin_top">8dp</dimen>
+    <dimen name="title_margin_top">20dp</dimen>
     <dimen name="smaller_top_margin">16dp</dimen>
     <dimen name="bigger_top_margin">32dp</dimen>
     <dimen name="change_color_button_width">225dp</dimen>
@@ -16,4 +16,5 @@
     <dimen name="switch_thumb_size">45dp</dimen>
     <dimen name="switch_thumb_border">2dp</dimen>
     <dimen name="switch_text_size">24sp</dimen>
+    <dimen name="layout_margins">5dp</dimen>
 </resources>

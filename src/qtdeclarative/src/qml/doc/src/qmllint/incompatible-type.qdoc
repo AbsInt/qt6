@@ -98,7 +98,7 @@ Item {
 \section1 Construction from string is deprecated; Use structured value type construction instead
 
 \section2 What happened?
-You constructed a \l{QQmlEngine::}{QML_STRUCTURED_VALUE} using a string.
+You constructed a QML_STRUCTURED_VALUE using a string.
 
 \section2 Why is this bad?
 This is deprecated and prone to typos.
@@ -113,8 +113,7 @@ Item {
 
 \endqml
 To fix this warning, populate the structured value type as explained in the
-\l{QQmlEngine::}{QML_STRUCTURED_VALUE} description instead of binding a string
-to the property:
+QML_STRUCTURED_VALUE description instead of binding a string to the property:
 
 \qml
 import QtQuick

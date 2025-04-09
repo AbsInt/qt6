@@ -158,6 +158,8 @@ private slots:
     void clipRect();
     void implicitSizeBinding_data();
     void implicitSizeBinding();
+    void textEditedSignal();
+    void textEditedSignalNotEmittedOnProgrammaticChange();
     void largeTextObservesViewport_data();
     void largeTextObservesViewport();
     void largeTextSelection();
@@ -983,6 +985,8 @@ static inline QByteArray msgNotLessThan(int n1, int n2)
 
 void tst_qquicktextedit::hAlignVisual()
 {
+    SKIP_IF_NO_WINDOW_GRAB;
+
     QQuickView view(testFileUrl("hAlignVisual.qml"));
     view.setFlags(view.flags() | Qt::WindowStaysOnTopHint); // Prevent being obscured by other windows.
     view.showNormal();
@@ -1003,9 +1007,6 @@ void tst_qquicktextedit::hAlignVisual()
     const int centeredSection3End = centeredSection3 + sectionWidth;
 
     {
-        if (QGuiApplication::platformName() == QLatin1String("minimal"))
-            QSKIP("Skipping due to grabWindow not functional on minimal platforms");
-
         // Left Align
         QImage image = view.grabWindow();
         const int left = numberOfNonWhitePixels(centeredSection1, centeredSection2, image);
@@ -3343,7 +3344,7 @@ void tst_qquicktextedit::textInput()
     QVERIFY(QQuickTest::showView(window, testFileUrl("inputMethodEvent.qml")));
     QQuickTextEdit *edit = qobject_cast<QQuickTextEdit *>(window.rootObject());
     QVERIFY(edit);
-    QVERIFY(edit->hasActiveFocus());
+    QTRY_VERIFY(edit->hasActiveFocus());
 
     // test that input method event is committed and change signal is emitted
     QSignalSpy spy(edit, SIGNAL(textChanged()));
@@ -3545,6 +3546,75 @@ void tst_qquicktextedit::openInputPanel()
     QCOMPARE(qApp->inputMethod()->isVisible(), false);
 
     inputMethodPrivate->testContext = nullptr;
+}
+
+void tst_qquicktextedit::textEditedSignal(){
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("textEdit.qml")));
+
+    QQuickTextEdit *textEdit = qmlobject_cast<QQuickTextEdit *>(window.rootObject());
+    QVERIFY(textEdit != nullptr);
+
+    textEdit->forceActiveFocus();
+    QVERIFY(textEdit->hasActiveFocus());
+
+    QSignalSpy textEditedSpy(textEdit, &QQuickTextEdit::textEdited);
+
+    QTest::keyPress(&window, Qt::Key_A);
+    QTest::keyRelease(&window, Qt::Key_A);
+
+    QCOMPARE(textEditedSpy.count(), 1);
+
+    QCOMPARE(textEdit->text(), "a");
+}
+
+void tst_qquicktextedit::textEditedSignalNotEmittedOnProgrammaticChange()
+{
+    // Test data
+    const QString initialText = "Initial text";
+    const QString newText = "Appended text";
+
+    // Create a QML component for TextEdit
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("textEdit.qml")));
+
+    QQuickTextEdit *textEdit = qmlobject_cast<QQuickTextEdit *>(window.rootObject());
+    QVERIFY(textEdit != nullptr);
+
+    textEdit->setText(initialText);
+
+    textEdit->forceActiveFocus();
+    QVERIFY(textEdit->hasActiveFocus());
+
+    QSignalSpy textEditedSpy(textEdit, &QQuickTextEdit::textEdited);
+
+    QTest::keyPress(&window, Qt::Key_Alt);
+    QTest::keyRelease(&window, Qt::Key_Alt);
+    QCOMPARE(textEditedSpy.count(), 0);
+
+    // Test Case 1: Call insert() and check that textEdited signal is not emitted
+    textEdit->insert(initialText.size(), newText);
+    QCOMPARE(textEdit->text(), initialText + newText);
+    QCOMPARE(textEditedSpy.count(), 0);
+
+    // Test Case 2: Call remove() and check that textEdited signal is not emitted
+    textEdit->remove(0, newText.size());
+    QCOMPARE(textEdit->text(), "ppended text");
+    QCOMPARE(textEditedSpy.count(), 0);
+
+    // Test Case 3: Call clear() and check that textEdited signal is not emitted
+    textEdit->clear();
+    QCOMPARE(textEdit->text(), QString());
+    QCOMPARE(textEditedSpy.count(), 0);
+
+    // Test Case 4 : Call append() and check that textEdited signal is not emitted
+    textEdit->append(newText);
+    QCOMPARE(textEditedSpy.count(), 0);
+
+    // Test Case 5 : Call textFormat and check that textEdited signal is not emitted
+    textEdit->setTextFormat(QQuickTextEdit::RichText);
+    QCOMPARE(textEditedSpy.count(), 0);
 }
 
 void tst_qquicktextedit::geometrySignals()
@@ -3756,9 +3826,8 @@ void tst_qquicktextedit::largeTextObservesViewport_data()
 
 void tst_qquicktextedit::largeTextObservesViewport()
 {
-    if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
-        || (QGuiApplication::platformName() == QLatin1String("minimal")))
-        QSKIP("Skipping due to grabWindow not functional on offscreen/minimal platforms");
+    SKIP_IF_NO_WINDOW_GRAB;
+
     QFETCH(QString, text);
     QFETCH(QQuickTextEdit::TextFormat, textFormat);
     QFETCH(bool, parentIsViewport);
@@ -6367,8 +6436,7 @@ void tst_qquicktextedit::keys_shortcutoverride()
 
 void tst_qquicktextedit::transparentSelectionColor()
 {
-    if (QGuiApplication::platformName() == QLatin1String("minimal"))
-        QSKIP("Skipping due to grabWindow not functional on minimal platforms");
+    SKIP_IF_NO_WINDOW_GRAB;
 
     QQuickView window;
     QVERIFY(QQuickTest::showView(window, testFileUrl("transparentSelectionColor.qml")));
@@ -6543,7 +6611,7 @@ void tst_qquicktextedit::touchscreenDoesNotSelect()
 
 void tst_qquicktextedit::touchscreenSetsFocusAndMovesCursor()
 {
-    SKIP_IF_NO_WINDOW_ACTIVATION
+    SKIP_IF_NO_WINDOW_ACTIVATION;
 
     QQuickView window;
     QVERIFY(QQuickTest::showView(window, testFileUrl("twoInAColumn.qml")));

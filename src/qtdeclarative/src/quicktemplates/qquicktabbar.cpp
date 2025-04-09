@@ -167,6 +167,9 @@ void QQuickTabBarPrivate::updateLayout()
 
 qreal QQuickTabBarPrivate::getContentWidth() const
 {
+    if (hasContentWidth)
+        return contentWidth;
+
     Q_Q(const QQuickTabBar);
     const int count = contentModel->count();
     qreal totalWidth = qMax(0, count - 1) * spacing;
@@ -185,6 +188,9 @@ qreal QQuickTabBarPrivate::getContentWidth() const
 
 qreal QQuickTabBarPrivate::getContentHeight() const
 {
+    if (hasContentHeight)
+        return contentHeight;
+
     Q_Q(const QQuickTabBar);
     const int count = contentModel->count();
     qreal maxHeight = 0;

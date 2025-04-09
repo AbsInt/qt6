@@ -272,22 +272,31 @@ QString QQmlJSScope::prettyName(QAnyStringView name)
 
 /*!
     \internal
-    Returns true if the scope is the outermost element of a separate Component
+    Returns \c Yes if the scope is the outermost element of a separate Component
     Either because it has been implicitly wrapped, e.g. due to an assignment to
     a Component property, or because it is the first (and only) child of a
     Component.
+    Returns \c No if we can clearly determine that this is not the case.
+    Returns \c Maybe if the scope is assigned to an unknown property. This may
+    or may not be a Component.
     For visitors: This method should only be called after implicit components
     are detected, that is, after QQmlJSImportVisitor::endVisit(UiProgram *)
     was called.
  */
-bool QQmlJSScope::isComponentRootElement() const {
+QQmlJSScope::IsComponentRoot QQmlJSScope::componentRootStatus() const {
     if (m_flags.testFlag(WrappedInImplicitComponent))
-        return true;
+        return IsComponentRoot::Yes;
+
+    // If the object is assigned to an unknown property, assume it's Component.
+    if (m_flags.testFlag(AssignedToUnknownProperty))
+        return IsComponentRoot::Maybe;
 
     auto base = nonCompositeBaseType(parentScope()); // handles null parentScope()
     if (!base)
-        return false;
-    return base->internalName() == u"QQmlComponent";
+        return IsComponentRoot::No;
+    return base->internalName() == u"QQmlComponent"
+            ? IsComponentRoot::Yes
+            : IsComponentRoot::No;
 }
 
 std::optional<QQmlJSScope::JavaScriptIdentifier>
@@ -695,8 +704,10 @@ void QQmlJSScope::resolveList(const QQmlJSScope::Ptr &self, const QQmlJSScope::C
     const QQmlJSImportedScope element = {self, QTypeRevision()};
     const QQmlJSImportedScope array = {arrayType, QTypeRevision()};
     QQmlJS::ContextualTypes contextualTypes(
-                QQmlJS::ContextualTypes::INTERNAL, { { self->internalName(), element }, },
-                arrayType);
+            QQmlJS::ContextualTypes::INTERNAL,
+            { { self->internalName(), element }, },
+            { { self, self->internalName() }, },
+            arrayType);
     QQmlJSScope::resolveTypes(listType, contextualTypes);
 
     Q_ASSERT(listType->valueType() == self);
@@ -1283,6 +1294,20 @@ QVector<QQmlJSScope::ConstPtr> QQmlJSScope::childScopes() const
     for (const auto &child : m_childScopes)
         result.append(child);
     return result;
+}
+
+QVector<QQmlJSScope::ConstPtr> QQmlJSScope::descendantScopes() const
+{
+    QVector<QQmlJSScope::ConstPtr> descendants;
+    QVector<QQmlJSScope::ConstPtr> toVisit(m_childScopes.cbegin(), m_childScopes.cend());
+
+    while (!toVisit.isEmpty()) {
+        QQmlJSScope::ConstPtr scope = toVisit.takeLast();
+        descendants << scope;
+        toVisit << scope->childScopes();
+    }
+
+    return descendants;
 }
 
 /*!

@@ -1,81 +1,88 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
-#include <qv4engine_p.h>
 
+#include "qv4engine_p.h"
+
+#include <private/qjsvalue_p.h>
+#include <private/qqmlbuiltinfunctions_p.h>
+#include <private/qqmlengine_p.h>
 #include <private/qqmljsdiagnosticmessage_p.h>
+#include <private/qqmllist_p.h>
+#include <private/qqmllistwrapper_p.h>
+#include <private/qqmltypeloader_p.h>
+#include <private/qqmltypewrapper_p.h>
+#include <private/qqmlvaluetype_p.h>
+#include <private/qqmlvaluetypewrapper_p.h>
+#include <private/qv4argumentsobject_p.h>
+#include <private/qv4arraybuffer_p.h>
+#include <private/qv4arrayiterator_p.h>
+#include <private/qv4arrayobject_p.h>
+#include <private/qv4atomics_p.h>
+#include <private/qv4booleanobject_p.h>
 #include <private/qv4codegen_p.h>
 #include <private/qv4compileddata_p.h>
-#include <private/qv4module_p.h>
-
-#include <QtCore/QTextStream>
-#include <QDateTime>
-#include <QDir>
-#include <QFileInfo>
-#include <QLoggingCategory>
-#if QT_CONFIG(regularexpression)
-#include <QRegularExpression>
-#endif
-#include <QtCore/QTimeZone>
-#include <QtCore/qiterable.h>
-
-#include <qv4qmlcontext_p.h>
-#include <qv4value_p.h>
-#include <qv4object_p.h>
-#include <qv4objectproto_p.h>
-#include <qv4objectiterator_p.h>
-#include <qv4setiterator_p.h>
-#include <qv4mapiterator_p.h>
-#include <qv4arrayiterator_p.h>
-#include <qv4arrayobject_p.h>
-#include <qv4booleanobject_p.h>
-#include <qv4globalobject_p.h>
-#include <qv4errorobject_p.h>
-#include <qv4functionobject_p.h>
-#include "qv4function_p.h"
-#include <qv4mathobject_p.h>
-#include <qv4numberobject_p.h>
-#include <qv4regexpobject_p.h>
-#include <qv4regexp_p.h>
-#include "qv4symbol_p.h"
-#include "qv4setobject_p.h"
-#include "qv4mapobject_p.h"
-#include <qv4variantobject_p.h>
-#include <qv4runtime_p.h>
+#include <private/qv4dataview_p.h>
+#include <private/qv4dateobject_p.h>
+#include <private/qv4debugging_p.h>
+#include <private/qv4errorobject_p.h>
+#include <private/qv4executableallocator_p.h>
+#include <private/qv4function_p.h>
+#include <private/qv4functionobject_p.h>
+#include <private/qv4generatorobject_p.h>
+#include <private/qv4globalobject_p.h>
+#include <private/qv4identifiertable_p.h>
+#include <private/qv4iterator_p.h>
+#include <private/qv4jsonobject_p.h>
+#include <private/qv4mapiterator_p.h>
+#include <private/qv4mapobject_p.h>
+#include <private/qv4mathobject_p.h>
+#include <private/qv4memberdata_p.h>
 #include <private/qv4mm_p.h>
-#include <qv4argumentsobject_p.h>
-#include <qv4dateobject_p.h>
-#include <qv4jsonobject_p.h>
-#include <qv4stringobject_p.h>
-#include <qv4identifiertable_p.h>
-#include "qv4debugging_p.h"
-#include "qv4profiling_p.h"
-#include "qv4executableallocator_p.h"
-#include "qv4iterator_p.h"
-#include "qv4stringiterator_p.h"
-#include "qv4generatorobject_p.h"
-#include "qv4reflect_p.h"
-#include "qv4proxy_p.h"
-#include "qv4stackframe_p.h"
-#include "qv4stacklimits_p.h"
-#include "qv4atomics_p.h"
-#include "qv4urlobject_p.h"
-#include "qv4variantobject_p.h"
-#include "qv4sequenceobject_p.h"
-#include "qv4qobjectwrapper_p.h"
-#include "qv4qmetaobjectwrapper_p.h"
-#include "qv4memberdata_p.h"
-#include "qv4arraybuffer_p.h"
-#include "qv4dataview_p.h"
-#include "qv4promiseobject_p.h"
-#include "qv4typedarray_p.h"
-#include <private/qjsvalue_p.h>
-#include <private/qqmltypewrapper_p.h>
-#include <private/qqmlvaluetypewrapper_p.h>
-#include <private/qqmlvaluetype_p.h>
-#include <private/qqmllistwrapper_p.h>
-#include <private/qqmllist_p.h>
-#include <private/qqmltypeloader_p.h>
-#include <private/qqmlbuiltinfunctions_p.h>
+#include <private/qv4module_p.h>
+#include <private/qv4numberobject_p.h>
+#include <private/qv4object_p.h>
+#include <private/qv4objectiterator_p.h>
+#include <private/qv4objectproto_p.h>
+#include <private/qv4profiling_p.h>
+#include <private/qv4promiseobject_p.h>
+#include <private/qv4proxy_p.h>
+#include <private/qv4qmetaobjectwrapper_p.h>
+#include <private/qv4qmlcontext_p.h>
+#include <private/qv4qobjectwrapper_p.h>
+#include <private/qv4reflect_p.h>
+#include <private/qv4regexp_p.h>
+#include <private/qv4regexpobject_p.h>
+#include <private/qv4runtime_p.h>
+#include <private/qv4sequenceobject_p.h>
+#include <private/qv4setiterator_p.h>
+#include <private/qv4setobject_p.h>
+#include <private/qv4sqlerrors_p.h>
+#include <private/qv4stackframe_p.h>
+#include <private/qv4stacklimits_p.h>
+#include <private/qv4stringiterator_p.h>
+#include <private/qv4stringobject_p.h>
+#include <private/qv4symbol_p.h>
+#include <private/qv4typedarray_p.h>
+#include <private/qv4urlobject_p.h>
+#include <private/qv4value_p.h>
+#include <private/qv4variantassociationobject_p.h>
+#include <private/qv4variantobject_p.h>
+
+#include <QtQml/qqmlfile.h>
+
+#include <QtCore/qdatetime.h>
+#include <QtCore/qdir.h>
+#include <QtCore/qfileinfo.h>
+#include <QtCore/qiterable.h>
+#include <QtCore/qloggingcategory.h>
+#include <QtCore/qmetatype.h>
+#include <QtCore/qsequentialiterable.h>
+#include <QtCore/qtextstream.h>
+#include <QtCore/qtimezone.h>
+
+#if QT_CONFIG(regularexpression)
+#include <QtCore/qregularexpression.h>
+#endif
 #if QT_CONFIG(qml_locale)
 #include <private/qqmllocale_p.h>
 #endif
@@ -83,13 +90,6 @@
 #include <private/qv4domerrors_p.h>
 #include <private/qqmlxmlhttprequest_p.h>
 #endif
-#include <private/qv4sqlerrors_p.h>
-#include <qqmlfile.h>
-#include <qmetatype.h>
-#include <qsequentialiterable.h>
-
-#include <private/qqmlengine_p.h>
-
 #ifdef V4_USE_VALGRIND
 #include <valgrind/memcheck.h>
 #endif
@@ -324,6 +324,8 @@ void ExecutionEngine::initializeStaticMembers()
 
     if (!QMetaType::hasRegisteredConverterFunction<QJSValue, QVariantMap>())
         QMetaType::registerConverter<QJSValue, QVariantMap>(convertJSValueToVariantType<QVariantMap>);
+    if (!QMetaType::hasRegisteredConverterFunction<QJSValue, QVariantHash>())
+        QMetaType::registerConverter<QJSValue, QVariantHash>(convertJSValueToVariantType<QVariantHash>);
     if (!QMetaType::hasRegisteredConverterFunction<QJSValue, QVariantList>())
         QMetaType::registerConverter<QJSValue, QVariantList>(convertJSValueToVariantType<QVariantList>);
     if (!QMetaType::hasRegisteredConverterFunction<QJSValue, QStringList>())
@@ -625,6 +627,9 @@ ExecutionEngine::ExecutionEngine(QJSEngine *jsEngine)
 
     jsObjects[VariantProto] = memoryManager->allocate<VariantPrototype>();
     Q_ASSERT(variantPrototype()->getPrototypeOf() == objectPrototype()->d());
+
+    jsObjects[VariantAssociationProto] = memoryManager->allocate<VariantAssociationPrototype>();
+    Q_ASSERT(variantAssociationPrototype()->getPrototypeOf() == objectPrototype()->d());
 
     ic = newInternalClass(SequencePrototype::staticVTable(), SequencePrototype::defaultPrototype(this));
     jsObjects[SequenceProto] = ScopedValue(scope, memoryManager->allocObject<SequencePrototype>(ic->d()));
@@ -1484,6 +1489,29 @@ QQmlError ExecutionEngine::catchExceptionAsQmlError()
     return error;
 }
 
+void ExecutionEngine::amendException()
+{
+    const int missingLineNumber = currentStackFrame->missingLineNumber();
+    const int lineNumber = currentStackFrame->lineNumber();
+    Q_ASSERT(missingLineNumber != lineNumber);
+
+    auto amendStackTrace = [&](QV4::StackTrace *stackTrace) {
+        for (auto it = stackTrace->begin(), end = stackTrace->end(); it != end; ++it) {
+            if (it->line == missingLineNumber) {
+                it->line = lineNumber;
+                break;
+            }
+        }
+    };
+
+    amendStackTrace(&exceptionStackTrace);
+
+    QV4::Scope scope(this);
+    QV4::Scoped<QV4::ErrorObject> error(scope, *exceptionValue);
+    if (error) // else some other value was thrown
+        amendStackTrace(error->d()->stackTrace);
+}
+
 // Variant conversion code
 
 typedef QSet<QV4::Heap::Object *> V4ObjectSet;
@@ -1495,11 +1523,6 @@ static QObject *qtObjectFromJS(const QV4::Value &value);
 static QVariant objectToVariant(const QV4::Object *o, V4ObjectSet *visitedObjects = nullptr,
                                 JSToQVariantConversionBehavior behavior = JSToQVariantConversionBehavior::Safish);
 static bool convertToNativeQObject(const QV4::Value &value, QMetaType targetType, void **result);
-static QV4::ReturnedValue variantMapToJS(QV4::ExecutionEngine *v4, const QVariantMap &vmap);
-static QV4::ReturnedValue variantToJS(QV4::ExecutionEngine *v4, const QVariant &value)
-{
-    return v4->metaTypeToJS(value.metaType(), value.constData());
-}
 
 static QVariant toVariant(const QV4::Value &value, QMetaType metaType, JSToQVariantConversionBehavior conversionBehavior,
         V4ObjectSet *visitedObjects)
@@ -1552,6 +1575,10 @@ static QVariant toVariant(const QV4::Value &value, QMetaType metaType, JSToQVari
 
             // Otherwise produce the "natural" type of the sequence.
             return QV4::SequencePrototype::toVariant(s);
+        } else if (auto association = object->as<QV4::VariantAssociationObject>()) {
+            if (conversionBehavior == JSToQVariantConversionBehavior::Never)
+                return QVariant::fromValue(QJSValuePrivate::fromReturnedValue(association->asReturnedValue()));
+            return association->d()->toVariant();
         }
     }
 
@@ -1821,7 +1848,15 @@ QV4::ReturnedValue ExecutionEngine::fromData(
             case QMetaType::QVariantList:
                 return createSequence(QMetaSequence::fromContainer<QVariantList>());
             case QMetaType::QVariantMap:
-                return variantMapToJS(this, *reinterpret_cast<const QVariantMap *>(ptr));
+                return VariantAssociationPrototype::fromQVariantMap(
+                    this,
+                    *reinterpret_cast<const QVariantMap *>(ptr),
+                    container, property, Heap::ReferenceObject::Flags(flags));
+            case QMetaType::QVariantHash:
+                return VariantAssociationPrototype::fromQVariantHash(
+                    this,
+                    *reinterpret_cast<const QVariantHash *>(ptr),
+                    container, property, Heap::ReferenceObject::Flags(flags));
             case QMetaType::QJsonValue:
                 return QV4::JsonObject::fromJsonValue(this, *reinterpret_cast<const QJsonValue *>(ptr));
             case QMetaType::QJsonObject:
@@ -1948,29 +1983,6 @@ QVariantMap ExecutionEngine::variantMapFromJS(const Object *o)
     V4ObjectSet visitedObjects;
     visitedObjects.insert(o->d());
     return objectToVariantMap(o, &visitedObjects, JSToQVariantConversionBehavior::Safish);
-}
-
-// Converts a QVariantMap to JS.
-// The result is a new Object object with property names being
-// the keys of the QVariantMap, and values being the values of
-// the QVariantMap converted to JS, recursively.
-static QV4::ReturnedValue variantMapToJS(QV4::ExecutionEngine *v4, const QVariantMap &vmap)
-{
-    QV4::Scope scope(v4);
-    QV4::ScopedObject o(scope, v4->newObject());
-    QV4::ScopedString s(scope);
-    QV4::ScopedPropertyKey key(scope);
-    QV4::ScopedValue v(scope);
-    for (QVariantMap::const_iterator it = vmap.constBegin(), cend = vmap.constEnd(); it != cend; ++it) {
-        s = v4->newIdentifier(it.key());
-        key = s->propertyKey();
-        v = variantToJS(v4, it.value());
-        if (key->isArrayIndex())
-            o->arraySet(key->asArrayIndex(), v);
-        else
-            o->insertMember(s, v);
-    }
-    return o.asReturnedValue();
 }
 
 // Converts the meta-type defined by the given type and data to JS.
@@ -2116,6 +2128,17 @@ QQmlRefPointer<ExecutableCompilationUnit> ExecutionEngine::insertCompilationUnit
 void ExecutionEngine::trimCompilationUnits()
 {
     for (auto it = m_compilationUnits.begin(); it != m_compilationUnits.end();) {
+        if ((*it)->count() == 1)
+            it = m_compilationUnits.erase(it);
+        else
+            ++it;
+    }
+}
+
+void ExecutionEngine::trimCompilationUnitsForUrl(const QUrl &url)
+{
+    auto it = m_compilationUnits.find(url);
+    while (it != m_compilationUnits.end() && it.key() == url) {
         if ((*it)->count() == 1)
             it = m_compilationUnits.erase(it);
         else

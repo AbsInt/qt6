@@ -1756,7 +1756,6 @@ QDateTimeEditPrivate::QDateTimeEditPrivate(const QTimeZone &zone)
     type = QMetaType::QDateTime;
     currentSectionIndex = FirstSectionIndex;
 
-    first.pos = 0;
     minimum = QDATETIMEEDIT_COMPAT_DATE_MIN.startOfDay(timeZone);
     maximum = QDATETIMEEDIT_DATE_MAX.endOfDay(timeZone);
     readLocaleSettings();

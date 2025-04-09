@@ -57,6 +57,8 @@ public:
     static void recursivelyDestroyNativeSubMenus(QQuickMenu *menu);
     void setNativeMenuVisible(bool visible);
 
+    void makeEditMenu();
+
     QQuickItem *itemAt(int index) const;
     void insertItem(int index, QQuickItem *item);
     void maybeCreateAndInsertNativeItem(int index, QQuickItem *item);
@@ -104,6 +106,8 @@ public:
     QQuickMenu *currentSubMenu() const;
     void setParentMenu(QQuickMenu *parent);
     void resolveParentItem();
+
+    void popup(QQuickItem *menuItem = nullptr);
 
     void propagateKeyEvent(QKeyEvent *event);
 

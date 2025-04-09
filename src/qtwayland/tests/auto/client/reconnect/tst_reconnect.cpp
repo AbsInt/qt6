@@ -121,12 +121,15 @@ tst_WaylandReconnect::tst_WaylandReconnect()
     qputenv("WAYLAND_DISPLAY", socketName);
 
     m_comp.reset(new DefaultCompositor(CoreCompositor::Default, dup(socketFd)));
+    m_comp->m_config.autoEnter = false;
 }
 
 void tst_WaylandReconnect::triggerReconnect()
 {
     const int socketFd = wl_socket_get_fd(m_socket);
     m_comp.reset(new DefaultCompositor(CoreCompositor::Default, dup(socketFd)));
+    m_comp->m_config.autoEnter = false;
+
     QTest::qWait(50); //we need to spin the main loop to actually reconnect
 }
 
@@ -136,6 +139,7 @@ void tst_WaylandReconnect::basicWindow()
     window.resize(64, 48);
     window.show();
     QCOMPOSITOR_TRY_VERIFY(m_comp->xdgToplevel());
+    m_comp->surface(0)->sendEnter(m_comp->output(0));
 
     triggerReconnect();
 

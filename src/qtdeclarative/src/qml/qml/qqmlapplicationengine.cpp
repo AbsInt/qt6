@@ -118,7 +118,9 @@ void QQmlApplicationEnginePrivate::startLoad(QAnyStringView uri, QAnyStringView 
     ensureInitialized();
 
     auto *componentPriv = QQmlComponentPrivate::get(c);
-    const auto [status, type] = componentPriv->prepareLoadFromModule(uri, typeName);
+    componentPriv->prepareLoadFromModule(uri, typeName, QQmlTypeLoader::Synchronous);
+
+    const QQmlType type = componentPriv->loadHelper->type();
 
     if (type.sourceUrl().isValid()) {
         const auto qmlDirData = typeLoader.getQmldir(type.sourceUrl());
@@ -137,7 +139,7 @@ void QQmlApplicationEnginePrivate::startLoad(QAnyStringView uri, QAnyStringView 
      * loading because the translation directory needs to be set in between.
      */
     _q_loadTranslations();
-    componentPriv->completeLoadFromModule(uri, typeName, type, status);
+    componentPriv->completeLoadFromModule(uri, typeName);
 
     ensureLoadingFinishes(c);
 }
@@ -219,9 +221,6 @@ void QQmlApplicationEnginePrivate::ensureLoadingFinishes(QQmlComponent *c)
   \list
   \li Connecting Qt.quit() to QCoreApplication::quit()
   \li Automatically loads translation files from an i18n directory adjacent to the main QML file.
-      \list
-          \li Translation files must have "qml_" prefix e.g. qml_ja_JP.qm.
-      \endlist
   \li Translations are reloaded when the \c QJSEngine::uiLanguage / \c Qt.uiLanguage property is changed.
   \li Automatically sets an incubation controller if the scene contains a QQuickWindow.
   \li Automatically sets a \c QQmlFileSelector as the url interceptor, applying file selectors to all
@@ -230,6 +229,15 @@ void QQmlApplicationEnginePrivate::ensureLoadingFinishes(QQmlComponent *c)
 
   The engine behavior can be further tweaked by using the inherited methods from QQmlEngine.
 
+  \note Translation files must have a \e qml_ prefix in order to be recognized,
+        e.g. \e{qml_ja_JP.qm}.
+
+  \note Placing translation files relative to the main QML file involves adding
+        a \e RESOURCE_PREFIX to the relevant \l qt_add_translations call. This
+        needs to include the resource prefix of the main file's QML module
+        (\e{/qt/qml} by default) and the module URI. For example, to provide
+        translation files for a module called "Translated":
+        \snippet qml-i18n/CMakeLists.txt 0
 */
 
 /*!

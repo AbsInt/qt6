@@ -14,7 +14,7 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcPopupPositioner, "qt.quick.controls.popuppositioner")
+Q_STATIC_LOGGING_CATEGORY(lcPopupPositioner, "qt.quick.controls.popuppositioner")
 
 static const QQuickItemPrivate::ChangeTypes AncestorChangeTypes = QQuickItemPrivate::Geometry
                                                                   | QQuickItemPrivate::Parent
@@ -325,14 +325,20 @@ void QQuickPopupPositioner::repositionPopupWindow()
         const QScreen *screen = screenAtPopupPosition ? screenAtPopupPosition : QGuiApplication::primaryScreen();
         const QRectF bounds = screen->availableGeometry().toRectF();
 
-        // When flipping menus, we need to take the overlap into account.
+        // When flipping menus, we need to take both the overlap and padding into account.
         const qreal overlap = popup()->property("overlap").toReal();
+        qreal padding = 0;
+        qreal scale = 1.0;
+        if (const QQuickPopup *parentPopup = qobject_cast<QQuickPopup *>(popup()->parent())) {
+            padding = parentPopup->leftPadding();
+            scale = parentPopup->scale();
+        }
 
         if (p->allowHorizontalFlip && (rect.left() < bounds.left() || rect.right() > bounds.right()))
-            rect.moveLeft(rect.left() - requestedPos.x() - rect.width() + overlap);
+            rect.moveLeft(rect.left() - requestedPos.x() - rect.width() + overlap * scale - padding);
 
         if (p->allowVerticalFlip && (rect.top() < bounds.top() || rect.bottom() > bounds.bottom()))
-            rect.moveTop(rect.top() - requestedPos.y() - rect.height() + overlap);
+            rect.moveTop(rect.top() - requestedPos.y() - rect.height() + overlap * scale);
 
         if (rect.left() < bounds.left() || rect.right() > bounds.right()) {
             if (p->allowHorizontalMove) {

@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:network-protocol
 
 //#define QNETWORKACCESSHTTPBACKEND_DEBUG
 
@@ -1046,7 +1047,7 @@ void QNetworkReplyHttpImplPrivate::initCacheSaveDevice()
     if (cacheSaveDevice)
         q->connect(cacheSaveDevice, SIGNAL(aboutToClose()), SLOT(_q_cacheSaveDeviceAboutToClose()));
 
-    if (!cacheSaveDevice || (cacheSaveDevice && !cacheSaveDevice->isOpen())) {
+    if (!cacheSaveDevice || !cacheSaveDevice->isOpen()) {
         if (Q_UNLIKELY(cacheSaveDevice && !cacheSaveDevice->isOpen()))
             qCritical("QNetworkReplyImpl: network cache returned a device that is not open -- "
                   "class %s probably needs to be fixed",
@@ -1167,9 +1168,10 @@ void QNetworkReplyHttpImplPrivate::replyDownloadData(QByteArray d)
     emit q->readyRead();
     // emit readyRead before downloadProgress in case this will cause events to be
     // processed and we get into a recursive call (as in QProgressDialog).
-    if (downloadProgressSignalChoke.elapsed() >= progressSignalInterval
+    if (downloadProgressSignalChoke.isValid() &&
+        downloadProgressSignalChoke.elapsed() >= progressSignalInterval
         && (!decompressHelper.isValid() || decompressHelper.isCountingBytes())) {
-        downloadProgressSignalChoke.restart();
+        downloadProgressSignalChoke.start();
         emit q->downloadProgress(bytesDownloaded, totalSizeOpt.value_or(-1));
     }
 }
@@ -1259,10 +1261,10 @@ void QNetworkReplyHttpImplPrivate::onRedirected(const QUrl &redirectUrl, int htt
         return;
     }
 
-    // If the original operation was a GET with a body and the status code is either
-    // 307 or 308 then keep the message body
+    // If the original operation was a GET with a body and the status code is
+    // 308 then keep the message body
     const bool getOperationKeepsBody = (operation == QNetworkAccessManager::GetOperation)
-                          && (httpStatus == 307 || httpStatus == 308);
+                                    && httpStatus == 308;
 
     redirectRequest = createRedirectRequest(originalRequest, url, maxRedirectsRemaining);
     operation = getRedirectOperation(operation, httpStatus);
@@ -1500,8 +1502,9 @@ void QNetworkReplyHttpImplPrivate::replyDownloadProgressSlot(qint64 bytesReceive
     // processed and we get into a recursive call (as in QProgressDialog).
     if (bytesDownloaded > 0)
         emit q->readyRead();
-    if (downloadProgressSignalChoke.elapsed() >= progressSignalInterval) {
-        downloadProgressSignalChoke.restart();
+    if (downloadProgressSignalChoke.isValid() &&
+        downloadProgressSignalChoke.elapsed() >= progressSignalInterval) {
+        downloadProgressSignalChoke.start();
         emit q->downloadProgress(bytesDownloaded, bytesTotal);
     }
 }
@@ -1937,8 +1940,9 @@ void QNetworkReplyHttpImplPrivate::_q_cacheLoadReadyRead()
         // This readyRead() goes to the user. The user then may or may not read() anything.
         emit q->readyRead();
 
-        if (downloadProgressSignalChoke.elapsed() >= progressSignalInterval) {
-            downloadProgressSignalChoke.restart();
+        if (downloadProgressSignalChoke.isValid() &&
+            downloadProgressSignalChoke.elapsed() >= progressSignalInterval) {
+            downloadProgressSignalChoke.start();
             emit q->downloadProgress(bytesDownloaded, totalSizeOpt.value_or(-1));
         }
     }
@@ -2084,10 +2088,8 @@ void QNetworkReplyHttpImplPrivate::emitReplyUploadProgress(qint64 bytesSent, qin
             if (bytesSent != bytesTotal && uploadProgressSignalChoke.elapsed() < progressSignalInterval) {
                 return;
             }
-            uploadProgressSignalChoke.restart();
-        } else {
-            uploadProgressSignalChoke.start();
         }
+        uploadProgressSignalChoke.start();
     }
     emit q->uploadProgress(bytesSent, bytesTotal);
 }

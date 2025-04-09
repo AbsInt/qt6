@@ -71,6 +71,7 @@ private slots:
 #endif
 
     void addApplicationFontFallback();
+    void addApplicationEmojiFontFamily();
 
 private:
     QString m_ledFont;
@@ -80,6 +81,7 @@ private:
     QString m_testFontVariable;
     QString m_limitedFont;
     QString m_fallbackFont;
+    QString m_emojiFont;
 };
 
 tst_QFontDatabase::tst_QFontDatabase()
@@ -95,6 +97,7 @@ void tst_QFontDatabase::initTestCase()
     m_testFontVariable = QFINDTESTDATA("testfont_variable.ttf");
     m_limitedFont = QFINDTESTDATA("QtTestLimitedFont-Regular.ttf");
     m_fallbackFont = QFINDTESTDATA("QtTestFallbackFont-Regular.ttf");
+    m_emojiFont = QFINDTESTDATA("QtEmojiTestFont-Regular.ttf");
     QVERIFY(!m_ledFont.isEmpty());
     QVERIFY(!m_testFont.isEmpty());
     QVERIFY(!m_testFontCondensed.isEmpty());
@@ -102,6 +105,7 @@ void tst_QFontDatabase::initTestCase()
     QVERIFY(!m_testFontVariable.isEmpty());
     QVERIFY(!m_limitedFont.isEmpty());
     QVERIFY(!m_fallbackFont.isEmpty());
+    QVERIFY(!m_emojiFont.isEmpty());
 }
 
 void tst_QFontDatabase::styles_data()
@@ -164,6 +168,9 @@ void tst_QFontDatabase::fixedPitch()
 
 void tst_QFontDatabase::systemFixedFont() // QTBUG-54623
 {
+#if defined(Q_OS_VXWORKS)
+    QSKIP("QTBUG-130071: VxWorks doesn't support fixed system font out of the box");
+#endif
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     QFontInfo fontInfo(font);
     bool fdbSaysFixed = QFontDatabase::isFixedPitch(fontInfo.family(), fontInfo.styleName());
@@ -758,6 +765,72 @@ void tst_QFontDatabase::addApplicationFontFallback()
 
     QVERIFY(QFontDatabase::removeApplicationFallbackFontFamily(QChar::Script_Cyrillic, u"QtTestFallbackFont"_s));
     QVERIFY(QFontDatabase::removeApplicationFallbackFontFamily(QChar::Script_Latin, u"QtTestFallbackFont"_s));
+}
+
+void tst_QFontDatabase::addApplicationEmojiFontFamily()
+{
+    {
+        QPlatformFontDatabase *pfdb = QGuiApplicationPrivate::platformIntegration()->fontDatabase();
+        if (!pfdb->supportsColrv0Fonts())
+            QSKIP("This test depends on COLRv0 support.");
+    }
+
+    int id = -1;
+    auto cleanup = qScopeGuard([&id] {
+        if (id >= 0)
+            QFontDatabase::removeApplicationFont(id);
+    });
+
+    id = QFontDatabase::addApplicationFont(m_emojiFont);
+    QVERIFY(id >= 0);
+
+    QStringList families = QFontDatabase::applicationFontFamilies(id);
+    QVERIFY(families.size() > 0);
+
+    const QChar airplane(0x2708);
+    const QChar vs16(0xfe0f);
+
+    QFontDatabase::addApplicationEmojiFontFamily(families.first());
+
+    // Get emoji version of regular airplane symbol
+    {
+        QTextLayout layout;
+        layout.setText(QString(airplane) + vs16);
+        layout.beginLayout();
+        layout.createLine();
+        layout.endLayout();
+
+        QList<QGlyphRun> glyphRuns = layout.glyphRuns();
+        QCOMPARE(glyphRuns.size(), 1);
+
+        QGlyphRun glyphRun = glyphRuns.first();
+        QList<quint32> glyphIndexes = glyphRun.glyphIndexes();
+
+        QCOMPARE(glyphIndexes.size(), 1);
+        QCOMPARE(glyphIndexes.at(0), 237);
+    }
+
+    const QChar asterisk('*');
+    const QChar enclosingKeyCap(0x20e3);
+
+    // Get emoji keycap ligature (vs16 should be ignored when evaluating ligature substitution)
+    {
+        QTextLayout layout;
+        layout.setText(QString(asterisk) + vs16 + enclosingKeyCap);
+        layout.beginLayout();
+        layout.createLine();
+        layout.endLayout();
+
+        QList<QGlyphRun> glyphRuns = layout.glyphRuns();
+        QCOMPARE(glyphRuns.size(), 1);
+
+        QGlyphRun glyphRun = glyphRuns.first();
+        QList<quint32> glyphIndexes = glyphRun.glyphIndexes();
+
+        QCOMPARE(glyphIndexes.size(), 1);
+        QCOMPARE(glyphIndexes.at(0), 238);
+    }
+
 }
 
 QTEST_MAIN(tst_QFontDatabase)

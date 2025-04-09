@@ -36,7 +36,7 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcRootProperties, "qt.qml.rootObjectProperties");
+Q_STATIC_LOGGING_CATEGORY(lcRootProperties, "qt.qml.rootObjectProperties");
 Q_LOGGING_CATEGORY(lcQml, "qml");
 Q_LOGGING_CATEGORY(lcJs, "js");
 
@@ -118,7 +118,7 @@ of their use.
 
 \list
     \li \l{Qt::createComponent()}{object Qt.createComponent(url)}
-    \li \l{Qt::createQmlObject()}{object Qt.createQmlObject(string qml, object parent, string filepath)}
+    \li \l{Qt::createQmlObject()}{object Qt.createQmlObject(string qml, object parent, url url)}
 \endlist
 
 
@@ -1277,12 +1277,18 @@ void QtObject::exit(int retCode) const
 }
 
 /*!
-\qmlmethod object Qt::createQmlObject(string qml, object parent, string filepath)
+\qmlmethod object Qt::createQmlObject(string qml, object parent, url url)
 
-Returns a new object created from the given \a qml string which will have the specified \a parent,
-or \c null if there was an error in creating the object.
+Compiles the given \a qml string into a component and then returns a new object created from
+that component. The new object will have the specified \a parent. Returns \c null if there was
+an error in creating the component or the object.
 
-If \a filepath is specified, it will be used for error reporting for the created object.
+If \a url is specified, it will be used as URL of the component. This is useful for error
+reporting.
+
+\warning The new component will shadow any existing component of the same URL. You should not
+pass a URL of an existing component. In particular, by passing the URL of the surrounding QML
+file, you prevent access to the surrounding component from the new one.
 
 Example (where \c parentItem is the id of an existing QML item):
 
@@ -1369,7 +1375,14 @@ QObject *QtObject::createQmlObject(const QString &qml, QObject *parent, const QU
 
     QQmlRefPointer<QQmlTypeData> typeData = QQmlEnginePrivate::get(engine)->typeLoader.getType(
                 qml.toUtf8(), resolvedUrl, QQmlTypeLoader::Synchronous);
-    Q_ASSERT(typeData->isCompleteOrError());
+
+    if (!typeData->isCompleteOrError()) {
+        v4Engine()->throwError(
+                QStringLiteral("Qt.createQmlObject(): Failed to force synchronous loading "
+                               "of asynchronous URL '%1'").arg(resolvedUrl.toString()));
+        return nullptr;
+    }
+
     QQmlComponent component(engine);
     QQmlComponentPrivate *componentPrivate = QQmlComponentPrivate::get(&component);
     componentPrivate->fromTypeData(typeData);
@@ -1494,11 +1507,18 @@ QQmlComponent *QtObject::createComponent(const QUrl &url, QObject *parent) const
     return createComponent(url, QQmlComponent::PreferSynchronous, parent);
 }
 
+Q_DECL_COLD_FUNCTION
+static void throw_invalid_compilation_mode(QV4::ExecutionEngine *engine, QQmlComponent::CompilationMode mode)
+{
+    engine->throwError(QStringLiteral("Invalid compilation mode %1").arg(int(mode)));
+    //                                                                   ^ QTBUG-131906
+}
+
 QQmlComponent *QtObject::createComponent(const QUrl &url, QQmlComponent::CompilationMode mode,
                                          QObject *parent) const
 {
     if (mode != QQmlComponent::Asynchronous && mode != QQmlComponent::PreferSynchronous) {
-        v4Engine()->throwError(QStringLiteral("Invalid compilation mode %1").arg(mode));
+        throw_invalid_compilation_mode(v4Engine(), mode);
         return nullptr;
     }
 
@@ -1529,7 +1549,7 @@ QQmlComponent *QtObject::createComponent(const QString &moduleUri, const QString
 QQmlComponent *QtObject::createComponent(const QString &moduleUri, const QString &typeName, QQmlComponent::CompilationMode mode, QObject *parent) const
 {
     if (mode != QQmlComponent::Asynchronous && mode != QQmlComponent::PreferSynchronous) {
-        v4Engine()->throwError(QStringLiteral("Invalid compilation mode %1").arg(mode));
+        throw_invalid_compilation_mode(v4Engine(), mode);
         return nullptr;
     }
 
@@ -2006,7 +2026,7 @@ ReturnedValue ConsoleObject::method_trace(const FunctionObject *b, const Value *
     QV4::CppStackFrame *frame = v4->currentStackFrame;
     QMessageLogger(frame->source().toUtf8().constData(), frame->lineNumber(),
                    frame->function().toUtf8().constData())
-        .debug(v4->qmlEngine() ? lcQml : lcJs, "%s", qPrintable(stack));
+            .debug(v4->qmlEngine() ? lcQml() : lcJs(), "%s", qPrintable(stack));
 
     return QV4::Encode::undefined();
 }

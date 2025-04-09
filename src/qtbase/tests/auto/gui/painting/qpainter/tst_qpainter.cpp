@@ -2848,7 +2848,7 @@ void tst_QPainter::monoImages()
 
 #if defined(Q_OS_DARWIN) || defined(Q_OS_FREEBSD) || defined(Q_OS_ANDROID)
 #  define TEST_FPE_EXCEPTIONS
-#elif defined(Q_OS_LINUX) && defined(__GLIBC__)
+#elif defined(__GLIBC__)
 #  define TEST_FPE_EXCEPTIONS
 #elif defined(Q_OS_WIN) && defined(Q_CC_GNU)
 #  define TEST_FPE_EXCEPTIONS
@@ -3865,7 +3865,7 @@ void tst_QPainter::linearGradientSymmetry()
     pb.fillRect(b.rect(), inverseGradient(gradient));
     pb.end();
 
-    b = b.mirrored(true);
+    b = b.flipped(Qt::Horizontal | Qt::Vertical);
     QCOMPARE(a, b);
 }
 

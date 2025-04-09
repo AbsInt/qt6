@@ -672,9 +672,13 @@ void tst_qqmlmetatype::revisionedGroupedProperties()
     }
 
     {
+        // This is _not_ invalid. The grouped property is clearly qualified and so the
+        // version shall be ignored. It's the same as retrieving a versioned property from an
+        // object identified by ID, for example.
+
         QQmlEngine engine;
-        QQmlComponent invalid(&engine, testFileUrl("revisionedGroupedPropertiesInvalid.qml"));
-        QVERIFY(invalid.isError());
+        QQmlComponent valid2(&engine, testFileUrl("revisionedGroupedPropertiesValid2.qml"));
+        QVERIFY2(!valid2.isError(), qPrintable(valid2.errorString()));
     }
 
     {

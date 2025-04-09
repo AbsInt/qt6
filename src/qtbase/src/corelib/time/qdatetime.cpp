@@ -1,6 +1,7 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // Copyright (C) 2021 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qdatetime.h"
 
@@ -2829,11 +2830,13 @@ QDateTimePrivate::ZoneState QDateTimePrivate::expressUtcAsLocal(qint64 utcMSecs)
 #if QT_CONFIG(timezone) // Use the system time-zone.
     if (const auto sys = QTimeZone::systemTimeZone(); sys.isValid()) {
         result.offset = sys.d->offsetFromUtc(utcMSecs);
-        if (qAddOverflow(utcMSecs, result.offset * MSECS_PER_SEC, &result.when))
+        if (result.offset != QTimeZonePrivate::invalidSeconds()) {
+            if (qAddOverflow(utcMSecs, result.offset * MSECS_PER_SEC, &result.when))
+                return result;
+            result.dst = sys.d->isDaylightTime(utcMSecs) ? DaylightTime : StandardTime;
+            result.valid = true;
             return result;
-        result.dst = sys.d->isDaylightTime(utcMSecs) ? DaylightTime : StandardTime;
-        result.valid = true;
-        return result;
+        }
     }
 #endif // timezone
 
@@ -4144,7 +4147,7 @@ QTime QDateTime::time() const
     details of that time zone). Equivalent to
     \c{timeRepresentation().timeSpec()}.
 
-    \sa setTimeSpec(), timeRepresentation(), date(), time()
+    \sa setTimeZone(), timeRepresentation(), date(), time()
 */
 
 Qt::TimeSpec QDateTime::timeSpec() const
@@ -4274,6 +4277,12 @@ QString QDateTime::timeZoneAbbreviation() const
         return d->m_timeZone.abbreviation(*this);
 #endif // timezone
     case Qt::LocalTime:
+#if defined(Q_OS_WIN) && QT_CONFIG(timezone)
+        // MS's tzname is a full MS-name, not an abbreviation:
+        if (QString sys = QTimeZone::systemTimeZone().abbreviation(*this); !sys.isEmpty())
+            return sys;
+        // ... but, even so, a full name isn't as bad as empty.
+#endif
         return QDateTimePrivate::localNameAtMillis(getMSecs(d),
                                                    extractDaylightStatus(getStatus(d)));
     }
@@ -5321,7 +5330,7 @@ Qt::weak_ordering compareThreeWay(const QDateTime &lhs, const QDateTime &rhs)
     Returns the system clock's current datetime, using the time representation
     described by \a zone. If \a zone is omitted, local time is used.
 
-    \sa currentDateTimeUtc(), QDate::currentDate(), QTime::currentTime(), toTimeSpec()
+    \sa currentDateTimeUtc(), QDate::currentDate(), QTime::currentTime(), toTimeZone()
 */
 
 /*!
@@ -5340,7 +5349,7 @@ QDateTime QDateTime::currentDateTime()
 
     Equivalent to \c{currentDateTime(QTimeZone::UTC)}.
 
-    \sa currentDateTime(), QDate::currentDate(), QTime::currentTime(), toTimeSpec()
+    \sa currentDateTime(), QDate::currentDate(), QTime::currentTime(), toTimeZone()
 */
 
 QDateTime QDateTime::currentDateTimeUtc()
@@ -5357,7 +5366,7 @@ QDateTime QDateTime::currentDateTimeUtc()
     This number is like the POSIX time_t variable, but expressed in milliseconds
     instead of seconds.
 
-    \sa currentDateTime(), currentDateTimeUtc(), toTimeSpec()
+    \sa currentDateTime(), currentDateTimeUtc(), toTimeZone()
 */
 
 /*!

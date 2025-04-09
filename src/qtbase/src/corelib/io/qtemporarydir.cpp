@@ -67,12 +67,11 @@ static QString defaultTemplateName()
 void QTemporaryDirPrivate::create(const QString &templateName)
 {
     QTemporaryFileName tfn(templateName);
+    constexpr auto perms = QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner;
     for (int i = 0; i < 256; ++i) {
         tfn.generateNext();
         QFileSystemEntry fileSystemEntry(tfn.path, QFileSystemEntry::FromNativePath());
-        if (QFileSystemEngine::createDirectory(fileSystemEntry, false,
-                                               QFile::ReadOwner | QFile::WriteOwner
-                                                       | QFile::ExeOwner)) {
+        if (QFileSystemEngine::mkdir(fileSystemEntry, perms)) {
             success = true;
             pathOrError = fileSystemEntry.filePath();
             return;

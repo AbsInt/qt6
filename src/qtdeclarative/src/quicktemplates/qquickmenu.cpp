@@ -11,6 +11,8 @@
 #endif
 #include "qquickmenuseparator_p.h"
 #include "qquicknativemenuitem_p.h"
+#include "qquickoverlay_p.h"
+#include "qquickoverlay_p_p.h"
 #include "qquickpopupitem_p_p.h"
 #include "qquickpopuppositioner_p_p.h"
 #include "qquickaction_p.h"
@@ -41,8 +43,8 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcMenu, "qt.quick.controls.menu")
-Q_LOGGING_CATEGORY(lcNativeMenus, "qt.quick.controls.nativemenus")
+Q_STATIC_LOGGING_CATEGORY(lcMenu, "qt.quick.controls.menu")
+Q_STATIC_LOGGING_CATEGORY(lcNativeMenus, "qt.quick.controls.nativemenus")
 
 // copied from qfusionstyle.cpp
 static const int SUBMENU_DELAY = 225;
@@ -71,89 +73,23 @@ static const int SUBMENU_DELAY = 225;
         \li Popup menus; for example, a menu that is shown after clicking a button
     \endlist
 
-    When used as a context menu, the recommended way of opening the menu is to call
-    \l popup(). Unless a position is explicitly specified, the menu is positioned at
-    the mouse cursor on desktop platforms that have a mouse cursor available, and
-    otherwise centered over its parent item.
-
-    \code
-    MouseArea {
-        anchors.fill: parent
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onClicked: {
-            if (mouse.button === Qt.RightButton)
-                contextMenu.popup()
-        }
-        onPressAndHold: {
-            if (mouse.source === Qt.MouseEventNotSynthesized)
-                contextMenu.popup()
-        }
-
-        Menu {
-            id: contextMenu
-            MenuItem { text: "Cut" }
-            MenuItem { text: "Copy" }
-            MenuItem { text: "Paste" }
-        }
-    }
-    \endcode
+    For context menus, see \l {Context Menus}.
 
     When used as a popup menu, it is easiest to specify the position by specifying
     the desired \l {Popup::}{x} and \l {Popup::}{y} coordinates using the respective
     properties, and call \l {Popup::}{open()} to open the menu.
 
-    \code
-    Button {
-        id: fileButton
-        text: "File"
-        onClicked: menu.open()
-
-        Menu {
-            id: menu
-            y: fileButton.height
-
-            MenuItem {
-                text: "New..."
-            }
-            MenuItem {
-                text: "Open..."
-            }
-            MenuItem {
-                text: "Save"
-            }
-        }
-    }
-    \endcode
+    \snippet qtquickcontrols-menu-button-menu.qml root
 
     If the button should also close the menu when clicked, use the
     \c Popup.CloseOnPressOutsideParent flag:
-    \code
-    onClicked: menu.visible = !menu.visible
 
-    Menu {
-        // ...
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
-    \endcode
+    \snippet qtquickcontrols-menu-closepolicy.qml closePolicy
 
     Since QtQuick.Controls 2.3 (Qt 5.10), it is also possible to create sub-menus
     and declare Action objects inside Menu:
 
-    \code
-    Menu {
-        Action { text: "Cut" }
-        Action { text: "Copy" }
-        Action { text: "Paste" }
-
-        MenuSeparator { }
-
-        Menu {
-            title: "Find/Replace"
-            Action { text: "Find Next" }
-            Action { text: "Find Previous" }
-            Action { text: "Replace" }
-        }
-    }
-    \endcode
+    \snippet qtquickcontrols-menu-submenus-and-actions.qml root
 
     Sub-menus are \l {cascade}{cascading} by default on desktop platforms
     that have a mouse cursor available. Non-cascading menus are shown one
@@ -167,6 +103,26 @@ static const int SUBMENU_DELAY = 225;
 
     Although \l {MenuItem}{MenuItems} are most commonly used with Menu, it can
     contain any type of item.
+
+    \section1 Context Menus
+
+    For context menus, it is easier to use the \l ContextMenu attached type,
+    which creates a menu upon a platform-specific event. In addition, text
+    editing controls such as \l TextField and \l TextArea provide their own
+    context menus by default.
+
+    If not using \c ContextMenu, the recommended way of opening the menu is to
+    call \l popup(). Unless a position is explicitly specified, the menu is
+    positioned at the mouse cursor on desktop platforms that have a mouse
+    cursor available, and otherwise centered over its parent item:
+
+    \snippet qtquickcontrols-menu-contextmenu.qml children
+
+    Note that if you are implementing your own context menu for text editing
+    controls, you only need to provide a \c TapHandler for desktop platforms,
+    as iOS and Android have their own native context menus:
+
+    \snippet qtquickcontrols-menu-text-editing-contextmenu.qml children
 
     \section1 Margins
 
@@ -218,12 +174,6 @@ static const int SUBMENU_DELAY = 225;
     \l {Qt::ApplicationAttribute}{application attribute}. This will disable native context
     menus for the whole application, irrespective of the style.
 
-    The default \l [QML] {Popup::}{popupType} is decided by the style. The \l {macOS Style}, for example,
-    sets it to be \c Popup.Native, while the \l{Imagine Style} uses \c Popup.Window (which
-    is the default when the style doesn't set a popup type).
-    If you add customizations to a menu, and want those to be used regardless of the
-    style, you should set the popup type to be \c Popup.Window (or \c Popup.Item) explicitly.
-
     Whether a menu will be able to use the preferred type depends on the platform.
     \c Popup.Item is supported on all platforms, but \c Popup.Window is
     normally only supported on desktop platforms. Additionally, if the menu is inside
@@ -259,8 +209,8 @@ static const int SUBMENU_DELAY = 225;
     \li \l {Popup::}{aboutToHide()}
     \endlist
 
-    In addition, showing a popup (using for example \l {Popup::}{open()} or
-    \l popup() will, on some platforms, be a blocking call. This means that the
+    In addition, showing a popup (using, for example, \l {Popup::}{open()} or \l
+    {popup()}) will be a blocking call on some platforms. This means that the
     call will not return before the menu is closed again, which can affect the
     logic in your application. This is especially important to take into
     consideration if your application is targeting multiple
@@ -451,14 +401,20 @@ bool QQuickMenuPrivate::createNativeMenu()
         emit q->openedChanged();
         opened();
     });
-    q->connect(handle.get(), &QPlatformMenu::aboutToHide, q, [q, this](){
+    q->connect(handle.get(), &QPlatformMenu::aboutToHide, q, [q](){
         qCDebug(lcNativeMenus) << "QPlatformMenu::aboutToHide called; about to call setVisible(false) on Menu";
         emit q->aboutToHide();
+    });
+    // On some platforms (Windows and macOS), it can happen that QPlatformMenuItem::activated
+    // is emitted after QPlatformMenu::aboutToHide. Since sending signals out of order can
+    // cause an application to fail (QTBUG-128158) we use Qt::QueuedConnection to work around
+    // this, so that we emit the signals in the right order.
+    q->connect(handle.get(), &QPlatformMenu::aboutToHide, q, [q, this](){
         visible = false;
         emit q->visibleChanged();
         emit q->openedChanged();
         emit q->closed();
-    });
+    }, Qt::QueuedConnection);
 
     recursivelyCreateNativeMenuItems(q);
     syncWithNativeMenu();
@@ -655,6 +611,12 @@ void QQuickMenuPrivate::setNativeMenuVisible(bool visible)
     } else {
         handle->dismiss();
     }
+}
+
+// Used by QQuickContextMenu when it's opened on a text-editing control.
+void QQuickMenuPrivate::makeEditMenu()
+{
+    handle->setMenuType(QPlatformMenu::EditMenu);
 }
 
 QQuickItem *QQuickMenuPrivate::itemAt(int index) const
@@ -1078,7 +1040,9 @@ bool QQuickMenuPrivate::handleReleaseWithoutGrab(const QEventPoint &eventPoint)
         return false;
 
     const QPointF listPos = list->mapFromScene(scenePos);
-    if (auto *menuItem = qobject_cast<QQuickMenuItem *>(list->itemAt(listPos.x(), listPos.y()))) {
+
+    auto *menuItem = qobject_cast<QQuickMenuItem *>(list->itemAt(listPos.x(), listPos.y()));
+    if (menuItem && menuItem->isHighlighted()) {
         menuItem->animateClick();
         return true;
     }
@@ -1122,7 +1086,7 @@ void QQuickMenuPrivate::onItemTriggered()
 
     if (QQuickMenu *subMenu = item->subMenu()) {
         auto subMenuPrivate = QQuickMenuPrivate::get(subMenu);
-        subMenu->popup(subMenuPrivate->firstEnabledMenuItem());
+        subMenuPrivate->popup(subMenuPrivate->firstEnabledMenuItem());
     } else {
         q->dismiss();
     }
@@ -1259,8 +1223,10 @@ void QQuickMenuPrivate::setCurrentIndex(int index, Qt::FocusReason reason)
             currentItem->setHighlighted(false);
             if (!newCurrentItem && window) {
                 QQuickItem *focusItem = QQuickItemPrivate::get(contentItem)->subFocusItem;
-                if (focusItem)
-                    QQuickWindowPrivate::get(window)->clearFocusInScope(contentItem, focusItem, Qt::OtherFocusReason);
+                if (focusItem) {
+                    auto *daPriv = QQuickWindowPrivate::get(window)->deliveryAgentPrivate();
+                    daPriv->clearFocusInScope(contentItem, focusItem, Qt::OtherFocusReason);
+                }
             }
         }
         if (newCurrentItem) {
@@ -1716,6 +1682,27 @@ void QQuickMenu::setVisible(bool visible)
         qmlWarning(this) << "cannot show menu: parent is null";
         return;
     }
+    if (visible) {
+        // If a right mouse button event opens a menu, don't synthesize QContextMenuEvent
+        // (avoid opening redundant menus, e.g. in parent items).
+        auto *window = this->window();
+        Q_ASSERT(window);
+        QQuickWindowPrivate::get(window)->rmbContextMenuEventEnabled = false;
+        // Also, if users have their own custom non-ContextMenu-based text editing context menus,
+        // we want those to take priority over our own. The check above handles that when
+        // the user opens their menu on press, but not on release. For that, we close all
+        // other menus that are open, assuming that we're not a sub-menu.
+        if (!d->parentMenu) {
+            QQuickOverlay *overlay = QQuickOverlay::overlay(window);
+            if (overlay) {
+                const QList<QQuickPopup *> allPopups = QQuickOverlayPrivate::get(overlay)->allPopups;
+                for (auto *popup : allPopups) {
+                    if (popup != this && qobject_cast<QQuickMenu *>(popup))
+                        popup->close();
+                }
+            }
+        }
+    }
 
     if (visible && ((d->useNativeMenu() && !d->maybeNativeHandle())
             || (!d->useNativeMenu() && d->maybeNativeHandle()))) {
@@ -1995,25 +1982,25 @@ int QQuickMenu::count() const
     return d->contentModel->count();
 }
 
-void QQuickMenu::popup(QQuickItem *menuItem)
+void QQuickMenuPrivate::popup(QQuickItem *menuItem)
 {
-    Q_D(QQuickMenu);
+    Q_Q(QQuickMenu);
     // No position has been explicitly specified, so position the menu at the mouse cursor
     // on desktop platforms that have a mouse cursor available and support multiple windows.
     QQmlNullableValue<QPointF> pos;
 #if QT_CONFIG(cursor)
-    if (d->parentItem && QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::MultipleWindows))
-        pos = d->parentItem->mapFromGlobal(QCursor::pos());
+    if (parentItem && QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::MultipleWindows))
+        pos = parentItem->mapFromGlobal(QCursor::pos());
 #endif
 
     // As a fallback, center the menu over its parent item.
-    if (!pos.isValid() && d->parentItem)
-        pos = QPointF((d->parentItem->width() - width()) / 2, (d->parentItem->height() - height()) / 2);
+    if (!pos.isValid() && parentItem)
+        pos = QPointF((parentItem->width() - q->width()) / 2, (parentItem->height() - q->height()) / 2);
 
-    popup(pos.isValid() ? pos.value() : QPointF(), menuItem);
+    q->popup(pos.isValid() ? pos.value() : QPointF(), menuItem);
 }
 
-void QQuickMenu::popup(const QPointF &pos, QQuickItem *menuItem)
+void QQuickMenu::popup(const QPointF &position, QQuickItem *menuItem)
 {
     Q_D(QQuickMenu);
     qreal offset = 0;
@@ -2021,7 +2008,7 @@ void QQuickMenu::popup(const QPointF &pos, QQuickItem *menuItem)
     if (menuItem)
         offset = d->popupItem->mapFromItem(menuItem, QPointF(0, 0)).y();
 #endif
-    setPosition(pos - QPointF(0, offset));
+    setPosition(position - QPointF(0, offset));
 
     if (menuItem)
         d->setCurrentIndex(d->contentModel->indexOf(menuItem, nullptr), Qt::PopupFocusReason);
@@ -2075,66 +2062,49 @@ void QQuickMenu::popup(const QPointF &pos, QQuickItem *menuItem)
 
     \sa dismiss(), Popup::open()
 */
-void QQuickMenu::popup(QQmlV4FunctionPtr args)
+
+void QQuickMenu::popup(QQuickItem *parent, qreal x, qreal y, QQuickItem *menuItem)
+{
+    popup(parent, QPointF {x, y}, menuItem);
+}
+
+void QQuickMenu::popup(QQuickItem *parent, const QPointF &position, QQuickItem *menuItem)
 {
     Q_D(QQuickMenu);
-    const int len = args->length();
-    if (len > 4) {
-        args->v4engine()->throwTypeError();
-        return;
-    }
+    if (parent && !d->popupItem->isAncestorOf(parent))
+        setParentItem(parent);
+    popup(position, menuItem);
+}
 
-    QV4::ExecutionEngine *v4 = args->v4engine();
-    QV4::Scope scope(v4);
-
-    QQmlNullableValue<QPointF> pos;
-    QQuickItem *menuItem = nullptr;
+void QQuickMenu::popup(QQuickItem *parent, QQuickItem *menuItem)
+{
+    Q_D(QQuickMenu);
     QQuickItem *parentItem = nullptr;
-
-    if (len > 0) {
-        // Item parent
-        QV4::ScopedValue firstArg(scope, (*args)[0]);
-        if (const QV4::QObjectWrapper *obj = firstArg->as<QV4::QObjectWrapper>()) {
-            QQuickItem *item = qobject_cast<QQuickItem *>(obj->object());
-            if (item && !d->popupItem->isAncestorOf(item))
-                parentItem = item;
-        } else if (firstArg->isUndefined()) {
-            resetParentItem();
-            parentItem = d->parentItem;
-        }
-
-        // MenuItem item
-        QV4::ScopedValue lastArg(scope, (*args)[len - 1]);
-        if (const QV4::QObjectWrapper *obj = lastArg->as<QV4::QObjectWrapper>()) {
-            QQuickItem *item = qobject_cast<QQuickItem *>(obj->object());
-            if (item && d->popupItem->isAncestorOf(item))
-                menuItem = item;
-        }
-    }
-
-    if (len >= 3 || (!parentItem && len >= 2)) {
-        // real x, real y
-        QV4::ScopedValue xArg(scope, (*args)[parentItem ? 1 : 0]);
-        QV4::ScopedValue yArg(scope, (*args)[parentItem ? 2 : 1]);
-        if (xArg->isNumber() && yArg->isNumber())
-            pos = QPointF(xArg->asDouble(), yArg->asDouble());
-    }
-
-    if (!pos.isValid() && (len >= 2 || (!parentItem && len >= 1))) {
-        // point pos
-        QV4::ScopedValue posArg(scope, (*args)[parentItem ? 1 : 0]);
-        const QVariant var = QV4::ExecutionEngine::toVariant(posArg, QMetaType {});
-        if (var.userType() == QMetaType::QPointF)
-            pos = var.toPointF();
-    }
-
+    if (parent && !d->popupItem->isAncestorOf(parent))
+        parentItem = parent;
     if (parentItem)
         setParentItem(parentItem);
+    d->popup(menuItem);
+}
 
-    if (pos.isValid())
-        popup(pos, menuItem);
-    else
-        popup(menuItem);
+// if a single argument is given, it is treated as both the parent _and_ the menu item
+// note: This differs from QQuickMenuPrivate::popup, which doesn't do parent handling
+void QQuickMenu::popup(QQuickItem *parent)
+{
+    Q_D(QQuickMenu);
+    QQuickItem *menuItem = nullptr;
+    if (parent) {
+        if (!d->popupItem->isAncestorOf(parent))
+            setParentItem(parent);
+        if (d->popupItem->isAncestorOf(parent))
+            menuItem = parent;
+    }
+    d->popup(menuItem);
+}
+
+void QQuickMenu::popup(qreal x, qreal y, QQuickItem *menuItem)
+{
+    popup(QPointF {x, y}, menuItem);
 }
 
 /*!
@@ -2239,7 +2209,7 @@ void QQuickMenu::keyPressEvent(QKeyEvent *event)
         } else {
             if (QQuickMenu *subMenu = d->currentSubMenu()) {
                 auto subMenuPrivate = QQuickMenuPrivate::get(subMenu);
-                subMenu->popup(subMenuPrivate->firstEnabledMenuItem());
+                subMenuPrivate->popup(subMenuPrivate->firstEnabledMenuItem());
                 event->accept();
             }
         }

@@ -99,5 +99,5 @@ sudo zypper -nq install nodejs16
 # OpenSSL 3
 sudo zypper -nq install openssl-3
 
-gccVersion="$(gcc --version |grep gcc |cut -b 17-23)"
+gccVersion="$(gcc --version |grep -Eo '[0-9]+\.[0-9]+(\.[0-9]+)?' |head -n 1)"
 echo "GCC = $gccVersion" >> versions.txt

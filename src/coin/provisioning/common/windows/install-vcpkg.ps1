@@ -1,5 +1,7 @@
 # Copyright (C) 2023 The Qt Company Ltd.
 # SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+param([string]$arch="x64")
+
 . "$PSScriptRoot\helpers.ps1"
 
 # This script will install vcpkg
@@ -26,9 +28,19 @@ $n = $n.Split('=')
 $vcpkgExeReleaseTag = $n[1]
 $nonDottedReleaseTag = $vcpkgExeReleaseTag.replace('-', "")
 
-$vcpkgExeOfficialUrl = "https://github.com/microsoft/vcpkg-tool/releases/download/$vcpkgExeReleaseTag/vcpkg.exe"
-$vcpkgExeCacheUrl = "\\ci-files01-hki.ci.qt.io\provisioning\vcpkg\vcpkg-$nonDottedReleaseTag-windows-x64.exe"
-$vcpkgExeSHA1 = "F74DCDE7F6F5082EF6DC31FED486FAD69BE8D442"
+$suffix = "-$arch"
+if($arch -eq "x64") {
+    $suffix = ""
+}
+
+if($arch -eq "x64") {
+    $vcpkgExeSHA1 = "F74DCDE7F6F5082EF6DC31FED486FAD69BE8D442"
+} elseif($arch -eq "arm64") {
+    $vcpkgExeSHA1 = "75049DC9A6FB813EFB7B48B2140DE067E73E977C"
+}
+
+$vcpkgExeOfficialUrl = "https://github.com/microsoft/vcpkg-tool/releases/download/$vcpkgExeReleaseTag/vcpkg$suffix.exe"
+$vcpkgExeCacheUrl = "\\ci-files01-hki.ci.qt.io\provisioning\vcpkg\vcpkg-$nonDottedReleaseTag-windows-$arch.exe"
 $vcpkgExe = "C:\Windows\Temp\vcpkg.exe"
 
 Download "$vcpkgExeOfficialUrl" "$vcpkgExeCacheUrl" "$vcpkgExe"

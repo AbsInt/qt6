@@ -985,7 +985,7 @@ void tst_QTextStream::performance()
     };
     int elapsed[N] = {0, 0, 0};
 
-        stopWatch.restart();
+        stopWatch.start();
         int nlines1 = 0;
         QFile file(m_rfc3261FilePath);
         QVERIFY(file.open(QFile::ReadOnly));
@@ -995,8 +995,7 @@ void tst_QTextStream::performance()
             file.readLine();
         }
 
-        elapsed[0] = stopWatch.elapsed();
-        stopWatch.restart();
+        elapsed[0] = stopWatch.restart();
 
         int nlines2 = 0;
         QFile file2(m_rfc3261FilePath);
@@ -1008,8 +1007,7 @@ void tst_QTextStream::performance()
             stream.readLine();
         }
 
-        elapsed[1] = stopWatch.elapsed();
-        stopWatch.restart();
+        elapsed[1] = stopWatch.restart();
 
         int nlines3 = 0;
         QFile file3(m_rfc3261FilePath);
@@ -1020,7 +1018,7 @@ void tst_QTextStream::performance()
         while (stream2.readLineInto(&line))
             ++nlines3;
 
-        elapsed[2] = stopWatch.elapsed();
+        elapsed[2] = stopWatch.restart();
 
         QCOMPARE(nlines1, nlines2);
         QCOMPARE(nlines2, nlines3);
@@ -1123,6 +1121,7 @@ void tst_QTextStream::octTest_data()
     QTest::addColumn<QByteArray>("data");
 
     QTest::newRow("0") << 0 << QByteArray("00");
+    QTest::newRow("40") << 40 << QByteArray("050");
 }
 
 // ------------------------------------------------------------------------------
@@ -1443,7 +1442,7 @@ void tst_QTextStream::pos3LargeFile()
 void tst_QTextStream::readStdin()
 {
 #if !QT_CONFIG(process)
-    QSKIP("No qprocess support", SkipAll);
+    QSKIP("No qprocess support");
 #else
     QProcess stdinProcess;
     stdinProcess.start("stdinProcess/stdinProcess");
@@ -1470,7 +1469,7 @@ void tst_QTextStream::readStdin()
 void tst_QTextStream::readAllFromStdin()
 {
 #if !QT_CONFIG(process)
-    QSKIP("No qprocess support", SkipAll);
+    QSKIP("No qprocess support");
 #else
     QProcess stdinProcess;
     stdinProcess.start("readAllStdinProcess/readAllStdinProcess", {}, QIODevice::ReadWrite | QIODevice::Text);
@@ -1491,7 +1490,7 @@ void tst_QTextStream::readAllFromStdin()
 void tst_QTextStream::readLineFromStdin()
 {
 #if !QT_CONFIG(process)
-    QSKIP("No qprocess support", SkipAll);
+    QSKIP("No qprocess support");
 #else
     QProcess stdinProcess;
     stdinProcess.start("readLineStdinProcess/readLineStdinProcess", {}, QIODevice::ReadWrite | QIODevice::Text);
@@ -2428,8 +2427,8 @@ void tst_QTextStream::generateRealNumbersDataWrite()
     QTest::newRow("0") << 0.0 << QByteArray("0") << QByteArray("0");
     QTest::newRow("3.14") << 3.14 << QByteArray("3.14") << QByteArray("3.14");
     QTest::newRow("-3.14") << -3.14 << QByteArray("-3.14") << QByteArray("-3.14");
-    QTest::newRow("1.2e+10") << 1.2e+10 << QByteArray("1.2e+10") << QByteArray("1.2E+10");
-    QTest::newRow("-1.2e+10") << -1.2e+10 << QByteArray("-1.2e+10") << QByteArray("-1.2E+10");
+    QTest::newRow("1.2e+10") << 1.2e+10 << QByteArray("1.2e+10") << QByteArray("1.2e+10");
+    QTest::newRow("-1.2e+10") << -1.2e+10 << QByteArray("-1.2e+10") << QByteArray("-1.2e+10");
     QTest::newRow("12345") << 12345. << QByteArray("12345") << QByteArray("12,345");
 }
 
@@ -2447,7 +2446,7 @@ void tst_QTextStream::generateRealNumbersDataWrite()
         buffer.open(QBuffer::WriteOnly); \
         QTextStream stream(&buffer); \
         stream.setLocale(QLocale::c()); \
-        float f = (float)number; \
+        type f = type(number); \
         stream << f; \
         stream.flush(); \
         QCOMPARE(buffer.data().constData(), data.constData()); \
@@ -2459,7 +2458,7 @@ void tst_QTextStream::generateRealNumbersDataWrite()
         QCOMPARE(buffer.data(), dataWithSeparators); \
     }
 IMPLEMENT_STREAM_LEFT_REAL_OPERATOR_TEST(float, float)
-IMPLEMENT_STREAM_LEFT_REAL_OPERATOR_TEST(double, float)
+IMPLEMENT_STREAM_LEFT_REAL_OPERATOR_TEST(double, double)
     ;
 
 // ------------------------------------------------------------------------------
@@ -2716,7 +2715,6 @@ void tst_QTextStream::manipulators()
     stream << textData;
     stream.flush();
 
-    QEXPECT_FAIL("hex-negative", "Discovered while fixing QTBUG-133269", Continue);
     QCOMPARE(buffer.data(), result);
 }
 

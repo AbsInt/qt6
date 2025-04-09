@@ -745,6 +745,10 @@ public:
     TypeAnnotationStyle typeAnnotationStyle = TypeAnnotationStyle::Suffix;
 };
 
+// TODO (QTBUG-128423)
+// Refactor to differentiate between Signals and Methods easily,
+// considering their distinct handling and formatting needs.
+// Explore separating Signal functionality or unifying shared methods.
 class QMLDOM_EXPORT MethodInfo : public AttributeInfo
 {
     Q_GADGET
@@ -764,6 +768,8 @@ public:
     QString postCode(const DomItem &) const;
     void writePre(const DomItem &self, OutWriter &ow) const;
     void writeOut(const DomItem &self, OutWriter &ow) const;
+    QString signature(const DomItem &self) const;
+
     void setCode(const QString &code)
     {
         body = std::make_shared<ScriptExpression>(
@@ -778,6 +784,11 @@ public:
     std::shared_ptr<ScriptExpression> body;
     std::shared_ptr<ScriptExpression> returnType;
     bool isConstructor = false;
+
+private:
+    void writeOutArguments(const DomItem &self, OutWriter &ow) const;
+    void writeOutReturnType(OutWriter &ow) const;
+    void writeOutBody(const DomItem &self, OutWriter &ow) const;
 };
 
 class QMLDOM_EXPORT EnumItem
@@ -947,6 +958,19 @@ public:
         return appendUpdatableElementInQList(pathFromOwner().field(Fields::annotations),
                                              m_annotations, annotation, aPtr);
     }
+
+    QList<QPair<SourceLocation, DomItem>> orderOfAttributes(const DomItem &self,
+                                                            const DomItem &component) const;
+    void writeOutAttributes(const DomItem &self, OutWriter &ow, const DomItem &component,
+                            const QString &code) const;
+
+    void writeOutSortedEnumerations(const DomItem &component, OutWriter &ow) const;
+    void writeOutSortedAttributes(const DomItem &self, OutWriter &ow,
+                                  const DomItem &component) const;
+    void writeOutSortedPropertyDefinition(const DomItem &self, OutWriter &ow,
+                                          QSet<QString> &mergedDefBinding) const;
+
+    void writeOutId(const DomItem &self, OutWriter &ow) const;
     void writeOut(const DomItem &self, OutWriter &ow, const QString &onTarget) const;
     void writeOut(const DomItem &self, OutWriter &lw) const override { writeOut(self, lw, QString()); }
 
@@ -974,6 +998,8 @@ private:
     QList<QmlObject> m_annotations;
     QQmlJSScope::ConstPtr m_scope;
     ScriptElementVariant m_nameIdentifiers;
+
+    static constexpr quint32 posOfNewElements = std::numeric_limits<quint32>::max();
 };
 
 class Export

@@ -1,5 +1,6 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qplatformdefs.h"
 #include "private/qdatetimeparser_p.h"
@@ -303,6 +304,9 @@ int QDateTimeParser::absoluteMin(int s) const
 
 const QDateTimeParser::SectionNode &QDateTimeParser::sectionNode(int sectionIndex) const
 {
+    static constexpr SectionNode first{FirstSection, 0, -1, 0};
+    static constexpr SectionNode last{LastSection, -1, -1, 0};
+    static constexpr SectionNode none{NoSection, -1, -1, 0};
     if (sectionIndex < 0) {
         switch (sectionIndex) {
         case FirstSectionIndex:
@@ -456,7 +460,7 @@ bool QDateTimeParser::parseFormat(QStringView newFormat)
             case 'h':
                 if (parserType != QMetaType::QDate) {
                     const Section hour = (sect == 'h') ? Hour12Section : Hour24Section;
-                    const SectionNode sn = { hour, i - add, countRepeat(newFormat, i, 2), 0 };
+                    const SectionNode sn{hour, i - add, countRepeat(newFormat, i, 2)};
                     newSectionNodes.append(sn);
                     appendSeparator(&newSeparators, newFormat, index, i - index, lastQuote);
                     i += sn.count - 1;
@@ -466,7 +470,7 @@ bool QDateTimeParser::parseFormat(QStringView newFormat)
                 break;
             case 'm':
                 if (parserType != QMetaType::QDate) {
-                    const SectionNode sn = { MinuteSection, i - add, countRepeat(newFormat, i, 2), 0 };
+                    const SectionNode sn{MinuteSection, i - add, countRepeat(newFormat, i, 2)};
                     newSectionNodes.append(sn);
                     appendSeparator(&newSeparators, newFormat, index, i - index, lastQuote);
                     i += sn.count - 1;
@@ -476,7 +480,7 @@ bool QDateTimeParser::parseFormat(QStringView newFormat)
                 break;
             case 's':
                 if (parserType != QMetaType::QDate) {
-                    const SectionNode sn = { SecondSection, i - add, countRepeat(newFormat, i, 2), 0 };
+                    const SectionNode sn{SecondSection, i - add, countRepeat(newFormat, i, 2)};
                     newSectionNodes.append(sn);
                     appendSeparator(&newSeparators, newFormat, index, i - index, lastQuote);
                     i += sn.count - 1;
@@ -488,7 +492,7 @@ bool QDateTimeParser::parseFormat(QStringView newFormat)
             case 'z':
                 if (parserType != QMetaType::QDate) {
                     const int repeat = countRepeat(newFormat, i, 3);
-                    const SectionNode sn = { MSecSection, i - add, repeat < 3 ? 1 : 3, 0 };
+                    const SectionNode sn{MSecSection, i - add, repeat < 3 ? 1 : 3};
                     newSectionNodes.append(sn);
                     appendSeparator(&newSeparators, newFormat, index, i - index, lastQuote);
                     i += repeat - 1;
@@ -509,7 +513,7 @@ bool QDateTimeParser::parseFormat(QStringView newFormat)
                         if (newFormat.at(i) != QLatin1Char(caseOpt == UpperCase ? 'P' : 'p'))
                             caseOpt = NativeCase;
                     }
-                    const SectionNode sn = { AmPmSection, pos, int(caseOpt), 0 };
+                    const SectionNode sn{AmPmSection, pos, int(caseOpt)};
                     newSectionNodes.append(sn);
                     index = i + 1;
                 }
@@ -518,8 +522,8 @@ bool QDateTimeParser::parseFormat(QStringView newFormat)
                 if (parserType != QMetaType::QTime) {
                     const int repeat = countRepeat(newFormat, i, 4);
                     if (repeat >= 2) {
-                        const SectionNode sn = { repeat == 4 ? YearSection : YearSection2Digits,
-                                                 i - add, repeat == 4 ? 4 : 2, 0 };
+                        const SectionNode sn{repeat == 4 ? YearSection : YearSection2Digits,
+                                             i - add, repeat == 4 ? 4 : 2};
                         newSectionNodes.append(sn);
                         appendSeparator(&newSeparators, newFormat, index, i - index, lastQuote);
                         i += sn.count - 1;
@@ -530,7 +534,7 @@ bool QDateTimeParser::parseFormat(QStringView newFormat)
                 break;
             case 'M':
                 if (parserType != QMetaType::QTime) {
-                    const SectionNode sn = { MonthSection, i - add, countRepeat(newFormat, i, 4), 0 };
+                    const SectionNode sn{MonthSection, i - add, countRepeat(newFormat, i, 4)};
                     newSectionNodes.append(sn);
                     newSeparators.append(unquote(newFormat.first(i).sliced(index)));
                     i += sn.count - 1;
@@ -543,7 +547,7 @@ bool QDateTimeParser::parseFormat(QStringView newFormat)
                     const int repeat = countRepeat(newFormat, i, 4);
                     const Section sectionType = (repeat == 4 ? DayOfWeekSectionLong
                         : (repeat == 3 ? DayOfWeekSectionShort : DaySection));
-                    const SectionNode sn = { sectionType, i - add, repeat, 0 };
+                    const SectionNode sn{sectionType, i - add, repeat};
                     newSectionNodes.append(sn);
                     appendSeparator(&newSeparators, newFormat, index, i - index, lastQuote);
                     i += sn.count - 1;
@@ -553,8 +557,7 @@ bool QDateTimeParser::parseFormat(QStringView newFormat)
                 break;
             case 't':
                 if (parserType == QMetaType::QDateTime) {
-                    const SectionNode sn
-                        = { TimeZoneSection, i - add, countRepeat(newFormat, i, 4), 0 };
+                    const SectionNode sn{TimeZoneSection, i - add, countRepeat(newFormat, i, 4)};
                     newSectionNodes.append(sn);
                     appendSeparator(&newSeparators, newFormat, index, i - index, lastQuote);
                     i += sn.count - 1;
@@ -588,7 +591,6 @@ bool QDateTimeParser::parseFormat(QStringView newFormat)
     separators = newSeparators;
     sectionNodes = newSectionNodes;
     display = newDisplay;
-    last.pos = -1;
 
 //     for (int i=0; i<sectionNodes.size(); ++i) {
 //         QDTPDEBUG << sectionNodes.at(i).name() << sectionNodes.at(i).count;
@@ -784,7 +786,7 @@ QDateTimeParser::parseSection(const QDateTime &currentValue, int sectionIndex, i
 
     const int sectionmaxsize = sectionMaxSize(sectionIndex);
     const bool negate = (sn.type == YearSection && m_text.size() > offset
-                         && m_text.at(offset) == u'-');
+                         && calendar.isProleptic() && m_text.at(offset) == u'-');
     const int negativeYearOffset = negate ? 1 : 0;
 
     QStringView sectionTextRef =
@@ -947,6 +949,12 @@ QDateTimeParser::parseSection(const QDateTime &currentValue, int sectionIndex, i
                     } else {
                         result = ParsedSection(Intermediate, lastVal, used);
                     }
+                } else if (!lastVal && !calendar.hasYearZero()
+                           && (sn.type == YearSection
+                               || (sn.type == YearSection2Digits && currentValue.isValid()
+                                   && currentValue.date().year() / 100 == 0))) {
+                    // Year zero prohibited
+                    result = ParsedSection(unfilled ? Acceptable : Invalid, lastVal, used);
                 } else {
                     result = ParsedSection(Acceptable, lastVal, used);
                 }

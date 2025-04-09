@@ -1759,6 +1759,77 @@ void TlsCryptographSchannel::startServerEncryption()
     continueHandshake();
 }
 
+auto TlsCryptographSchannel::getNextEncryptedMessage() -> MessageBufferResult
+{
+    MessageBufferResult result;
+    QByteArray &fullMessage = result.messageBuffer;
+
+    Q_ASSERT(d);
+    auto &writeBuffer = d->tlsWriteBuffer();
+
+    auto allocateMessage = [&fullMessage](qsizetype size) -> QSpan<char> {
+        auto targetSize = fullMessage.size() + size;
+        if (fullMessage.capacity() < targetSize) {
+            qsizetype newSize = fullMessage.capacity() * 2;
+            if (newSize < targetSize)
+                newSize = targetSize;
+            fullMessage.reserve(newSize);
+        }
+        fullMessage.resizeForOverwrite(targetSize);
+        return QSpan(fullMessage).subspan(fullMessage.size() - size);
+    };
+
+    const int headerSize = int(streamSizes.cbHeader);
+    const int trailerSize = int(streamSizes.cbTrailer);
+    constexpr qsizetype MessageBufferThreshold = 128 * 1024;
+
+    qint64 writeBufferSize = 0;
+    while ((writeBufferSize = writeBuffer.size()) > 0
+           && fullMessage.size() < MessageBufferThreshold) {
+        // Try to read 'cbMaximumMessage' bytes from buffer before encrypting.
+        const int bodySize = int(std::min(writeBufferSize, qint64(streamSizes.cbMaximumMessage)));
+        const qsizetype messageSize = headerSize + bodySize + trailerSize;
+        QSpan buffer = allocateMessage(messageSize);
+        char *header = buffer.data();
+        char *body = header + headerSize;
+        char *trailer = body + bodySize;
+        {
+            // Use peek() here instead of read() so we don't lose data if encryption fails.
+            qint64 copied = writeBuffer.peek(body, bodySize);
+            Q_ASSERT(copied == bodySize);
+        }
+
+        SecBuffer inputBuffers[] = {
+            createSecBuffer(header, headerSize, SECBUFFER_STREAM_HEADER),
+            createSecBuffer(body, bodySize, SECBUFFER_DATA),
+            createSecBuffer(trailer, trailerSize, SECBUFFER_STREAM_TRAILER),
+            createSecBuffer(nullptr, 0, SECBUFFER_EMPTY)
+        };
+        SecBufferDesc message = {
+            SECBUFFER_VERSION,
+            ARRAYSIZE(inputBuffers),
+            inputBuffers
+        };
+
+        if (auto status = EncryptMessage(&contextHandle, 0, &message, 0); status != SEC_E_OK) {
+            setErrorAndEmit(d, QAbstractSocket::SslInternalError,
+                            QSslSocket::tr("Schannel failed to encrypt data: %1")
+                                    .arg(schannelErrorToString(status)));
+            result.messageBuffer.chop(messageSize);
+            return result;
+        }
+        // Data was encrypted successfully, so we free() what we peek()ed earlier
+        writeBuffer.free(bodySize);
+
+        // The trailer's size is not final, so resize fullMessage to not send trailing junk
+        auto finalSize = qsizetype(inputBuffers[0].cbBuffer + inputBuffers[1].cbBuffer
+                                   + inputBuffers[2].cbBuffer);
+        fullMessage.chop(messageSize - finalSize);
+    }
+    result.ok = true;
+    return result;
+}
+
 void TlsCryptographSchannel::transmit()
 {
     Q_ASSERT(q);
@@ -1780,50 +1851,20 @@ void TlsCryptographSchannel::transmit()
         return;
     }
 
-    auto &writeBuffer = d->tlsWriteBuffer();
     auto &buffer = d->tlsBuffer();
     if (q->isEncrypted()) { // encrypt data in writeBuffer and write it to plainSocket
         qint64 totalBytesWritten = 0;
-        qint64 writeBufferSize;
-        while ((writeBufferSize = writeBuffer.size()) > 0) {
-            const int headerSize = int(streamSizes.cbHeader);
-            const int trailerSize = int(streamSizes.cbTrailer);
-            // Try to read 'cbMaximumMessage' bytes from buffer before encrypting.
-            const int size = int(std::min(writeBufferSize, qint64(streamSizes.cbMaximumMessage)));
-            QByteArray fullMessage(headerSize + trailerSize + size, Qt::Uninitialized);
-            {
-                // Use peek() here instead of read() so we don't lose data if encryption fails.
-                qint64 copied = writeBuffer.peek(fullMessage.data() + headerSize, size);
-                Q_ASSERT(copied == size);
-            }
-
-            SecBuffer inputBuffers[4]{
-                createSecBuffer(fullMessage.data(), headerSize, SECBUFFER_STREAM_HEADER),
-                createSecBuffer(fullMessage.data() + headerSize, size, SECBUFFER_DATA),
-                createSecBuffer(fullMessage.data() + headerSize + size, trailerSize, SECBUFFER_STREAM_TRAILER),
-                createSecBuffer(nullptr, 0, SECBUFFER_EMPTY)
-            };
-            SecBufferDesc message{
-                SECBUFFER_VERSION,
-                ARRAYSIZE(inputBuffers),
-                inputBuffers
-            };
-            auto status = EncryptMessage(&contextHandle, 0, &message, 0);
-            if (status != SEC_E_OK) {
-                setErrorAndEmit(d, QAbstractSocket::SslInternalError,
-                                QSslSocket::tr("Schannel failed to encrypt data: %1")
-                                        .arg(schannelErrorToString(status)));
+        while (d->tlsWriteBuffer().size() > 0) {
+            MessageBufferResult r = getNextEncryptedMessage();
+            if (r.messageBuffer.isEmpty() && !r.ok)
                 return;
-            }
-            // Data was encrypted successfully, so we free() what we peek()ed earlier
-            writeBuffer.free(size);
-
-            // The trailer's size is not final, so resize fullMessage to not send trailing junk
-            fullMessage.resize(inputBuffers[0].cbBuffer + inputBuffers[1].cbBuffer + inputBuffers[2].cbBuffer);
+            QByteArray fullMessage = std::move(r.messageBuffer);
             const qint64 bytesWritten = plainSocket->write(fullMessage);
+            if (!r.ok && bytesWritten < 0)
+                break; // We might have to emit bytesWritten, so break instead of return
 #ifdef QSSLSOCKET_DEBUG
             qCDebug(lcTlsBackendSchannel, "Wrote %lld of total %d bytes", bytesWritten,
-                    fullMessage.length());
+                    fullMessage.size());
 #endif
             if (bytesWritten >= 0) {
                 totalBytesWritten += bytesWritten;

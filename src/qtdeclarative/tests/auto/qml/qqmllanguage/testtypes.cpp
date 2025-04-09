@@ -186,6 +186,9 @@ void registerTypes()
             InvokableValueType
     >("Test", 1);
     qmlRegisterTypesAndRevisions<NestedVectors>("Test", 1);
+    qmlRegisterTypesAndRevisions<VariantAssociationProvider>("Test", 1);
+
+    qmlRegisterTypesAndRevisions<BindablePoint>("Test", 1);
 }
 
 QVariant myCustomVariantTypeConverter(const QString &data)

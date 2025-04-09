@@ -10,6 +10,7 @@
 
 #include "qquickevents_p_p.h"
 #include "qquickscreen_p.h"
+#include "qquicksafearea_p.h"
 
 #include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlcomponent.h>
@@ -57,13 +58,9 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_DECLARE_LOGGING_CATEGORY(lcMouseTarget)
-Q_DECLARE_LOGGING_CATEGORY(lcHoverTrace)
-Q_DECLARE_LOGGING_CATEGORY(lcPtr)
-Q_DECLARE_LOGGING_CATEGORY(lcTransient)
 Q_LOGGING_CATEGORY(lcHandlerParent, "qt.quick.handler.parent")
 Q_LOGGING_CATEGORY(lcVP, "qt.quick.viewport")
-Q_LOGGING_CATEGORY(lcChangeListeners, "qt.quick.item.changelisteners")
+Q_STATIC_LOGGING_CATEGORY(lcChangeListeners, "qt.quick.item.changelisteners")
 
 // after 100ms, a mouse/non-mouse cursor conflict is resolved in favor of the mouse handler
 static const quint64 kCursorOverrideTimeout = 100;
@@ -92,7 +89,7 @@ static void setActiveFocus(QQuickItem *item, Qt::FocusReason reason)
 {
     QQuickItemPrivate *d = QQuickItemPrivate::get(item);
     if (d->subFocusItem && d->window && d->flags & QQuickItem::ItemIsFocusScope)
-        QQuickWindowPrivate::get(d->window)->clearFocusInScope(item, d->subFocusItem, reason);
+        d->deliveryAgentPrivate()->clearFocusInScope(item, d->subFocusItem, reason);
     item->forceActiveFocus(reason);
 }
 
@@ -110,6 +107,7 @@ static void setActiveFocus(QQuickItem *item, Qt::FocusReason reason)
     \li \l Rotation
     \li \l Scale
     \li \l Translate
+    \li \l Shear
     \li \l Matrix4x4
     \endlist
 
@@ -159,6 +157,7 @@ QQuickContents::QQuickContents(QQuickItem *item)
 
 QQuickContents::~QQuickContents()
 {
+    inDestructor = true;
     QList<QQuickItem *> children = m_item->childItems();
     for (int i = 0; i < children.size(); ++i) {
         QQuickItem *child = children.at(i);
@@ -2132,6 +2131,14 @@ bool QQuickItemPrivate::setLastFocusChangeReason(Qt::FocusReason reason)
 
     \value ItemEnabledHasChanged The item's enabled state has changed.
     ItemChangeData::boolValue contains the new enabled state. (since Qt 5.10)
+
+    \value ItemScaleHasChanged The item's scale has changed.
+    ItemChangeData::realValue contains the scale. (since Qt 6.9)
+
+    \value ItemTransformHasChanged The item's transform has changed. This
+    occurs when the item's position, size, rotation, scale, transformOrigin
+    or attached transforms change. ItemChangeData::item contains the item
+    that caused the change. (since Qt 6.9)
 */
 
 /*!
@@ -2169,6 +2176,7 @@ bool QQuickItemPrivate::setLastFocusChangeReason(Qt::FocusReason reason)
     \variable QQuickItem::ItemChangeData::realValue
     The numeric value that has changed: \l {QQuickItem::opacity()}{opacity},
     \l {QQuickItem::rotation()}{rotation}, or
+    \l {QQuickItem::scale()}{scale}, or
     \l {QScreen::devicePixelRatio}{device pixel ratio}.
     \sa QQuickItem::ItemChange
  */
@@ -4031,7 +4039,9 @@ while (false)
 
 void QQuickItemPrivate::addItemChangeListener(QQuickItemChangeListener *listener, ChangeTypes types)
 {
+    Q_Q(QQuickItem);
     changeListeners.append(ChangeListener(listener, types));
+    listener->addSourceItem(q);
 
     if (lcChangeListeners().isDebugEnabled())
         PRINT_LISTENERS();
@@ -4039,12 +4049,16 @@ void QQuickItemPrivate::addItemChangeListener(QQuickItemChangeListener *listener
 
 void QQuickItemPrivate::updateOrAddItemChangeListener(QQuickItemChangeListener *listener, ChangeTypes types)
 {
+    Q_Q(QQuickItem);
+
     const ChangeListener changeListener(listener, types);
     const int index = changeListeners.indexOf(changeListener);
-    if (index > -1)
+    if (index > -1) {
         changeListeners[index].types = changeListener.types;
-    else
+    } else {
         changeListeners.append(changeListener);
+        listener->addSourceItem(q);
+    }
 
     if (lcChangeListeners().isDebugEnabled())
         PRINT_LISTENERS();
@@ -4052,8 +4066,11 @@ void QQuickItemPrivate::updateOrAddItemChangeListener(QQuickItemChangeListener *
 
 void QQuickItemPrivate::removeItemChangeListener(QQuickItemChangeListener *listener, ChangeTypes types)
 {
+    Q_Q(QQuickItem);
+
     ChangeListener change(listener, types);
     changeListeners.removeOne(change);
+    listener->removeSourceItem(q);
 
     if (lcChangeListeners().isDebugEnabled())
         PRINT_LISTENERS();
@@ -4062,12 +4079,16 @@ void QQuickItemPrivate::removeItemChangeListener(QQuickItemChangeListener *liste
 void QQuickItemPrivate::updateOrAddGeometryChangeListener(QQuickItemChangeListener *listener,
                                                           QQuickGeometryChange types)
 {
+    Q_Q(QQuickItem);
+
     ChangeListener change(listener, types);
     int index = changeListeners.indexOf(change);
-    if (index > -1)
+    if (index > -1) {
         changeListeners[index].gTypes = change.gTypes;  //we may have different GeometryChangeTypes
-    else
+    } else {
         changeListeners.append(change);
+        listener->addSourceItem(q);
+    }
 
     if (lcChangeListeners().isDebugEnabled())
         PRINT_LISTENERS();
@@ -4076,9 +4097,12 @@ void QQuickItemPrivate::updateOrAddGeometryChangeListener(QQuickItemChangeListen
 void QQuickItemPrivate::updateOrRemoveGeometryChangeListener(QQuickItemChangeListener *listener,
                                                              QQuickGeometryChange types)
 {
+    Q_Q(QQuickItem);
+
     ChangeListener change(listener, types);
     if (types.noChange()) {
         changeListeners.removeOne(change);
+        listener->removeSourceItem(q);
     } else {
         int index = changeListeners.indexOf(change);
         if (index > -1)
@@ -5307,17 +5331,7 @@ void QQuickItem::setState(const QString &state)
     This property is specified as a list of \l {Transform}-derived objects.
     For example:
 
-    \qml
-    import QtQuick
-
-    Item {
-        width: 100; height: 100
-        transform: [
-            Scale { origin.x: 25; origin.y: 25; xScale: 3},
-            Rotation { origin.x: 25; origin.y: 25; angle: 45}
-        ]
-    }
-    \endqml
+    \snippet qml/two-transforms.qml entire
 
     For more information see \l Transform.
 */
@@ -5370,6 +5384,9 @@ void QQuickItem::componentComplete()
         d->_anchors->componentComplete();
         QQuickAnchorsPrivate::get(d->_anchors)->updateOnComplete();
     }
+
+    if (auto *safeArea = findChild<QQuickSafeArea*>(Qt::FindDirectChildrenOnly))
+        safeArea->updateSafeArea();
 
     if (d->extra.isAllocated()) {
 #if QT_CONFIG(quick_shadereffect)
@@ -5454,6 +5471,15 @@ bool QQuickItemPrivate::transformChanged(QQuickItem *transformedItem)
 {
     Q_Q(QQuickItem);
 
+#if QT_CONFIG(quick_shadereffect)
+    if (q == transformedItem) {
+        if (extra.isAllocated() && extra->layer)
+            extra->layer->updateMatrix();
+    }
+#endif
+
+    itemChange(QQuickItem::ItemTransformHasChanged, transformedItem);
+
     bool childWantsIt = false;
     if (subtreeTransformChangedEnabled) {
         // Inform the children in paint order: by the time we visit leaf items,
@@ -5463,12 +5489,6 @@ bool QQuickItemPrivate::transformChanged(QQuickItem *transformedItem)
             childWantsIt |= QQuickItemPrivate::get(child)->transformChanged(transformedItem);
     }
 
-#if QT_CONFIG(quick_shadereffect)
-    if (q == transformedItem) {
-        if (extra.isAllocated() && extra->layer)
-            extra->layer->updateMatrix();
-    }
-#endif
     const bool thisWantsIt = q->flags().testFlag(QQuickItem::ItemObservesViewport);
     const bool ret = childWantsIt || thisWantsIt;
     if (!ret && componentComplete && subtreeTransformChangedEnabled) {
@@ -5479,6 +5499,7 @@ bool QQuickItemPrivate::transformChanged(QQuickItem *transformedItem)
     // so each time the item moves in the viewport, its clipnode needs to be updated.
     if (thisWantsIt && q->clip() && !(dirtyAttributes & QQuickItemPrivate::Clip))
         dirty(QQuickItemPrivate::Clip);
+
     return ret;
 }
 
@@ -5785,6 +5806,18 @@ bool QQuickItemPrivate::handlePointerEvent(QPointerEvent *event, bool avoidGrabb
         }
     }
     return delivered;
+}
+
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
+bool QQuickItemPrivate::handleContextMenuEvent(QContextMenuEvent *event)
+#else
+bool QQuickItem::contextMenuEvent(QContextMenuEvent *event)
+#endif
+{
+    if (extra.isAllocated() && extra->contextMenu)
+        return extra->contextMenu->event(event);
+    event->ignore();
+    return false;
 }
 
 /*!
@@ -6317,6 +6350,8 @@ void QQuickItem::setScale(qreal s)
 
     d->dirty(QQuickItemPrivate::BasicTransform);
 
+    d->itemChange(ItemScaleHasChanged, s);
+
     emit scaleChanged();
 }
 
@@ -6439,7 +6474,7 @@ qreal QQuickItem::opacity() const
 void QQuickItem::setOpacity(qreal newOpacity)
 {
     Q_D(QQuickItem);
-    qreal o = qBound<qreal>(0, newOpacity, 1);
+    qreal o = std::clamp(newOpacity, qreal(0.0), qreal(1.0));
     if (d->opacity() == o)
         return;
 
@@ -6911,6 +6946,16 @@ void QQuickItemPrivate::itemChange(QQuickItem::ItemChange change, const QQuickIt
     case QQuickItem::ItemRotationHasChanged: {
         q->itemChange(change, data);
         notifyChangeListeners(QQuickItemPrivate::Rotation, &QQuickItemChangeListener::itemRotationChanged, q);
+        break;
+    }
+    case QQuickItem::ItemScaleHasChanged: {
+        q->itemChange(change, data);
+        notifyChangeListeners(QQuickItemPrivate::Scale, &QQuickItemChangeListener::itemScaleChanged, q);
+        break;
+    }
+    case QQuickItem::ItemTransformHasChanged: {
+        q->itemChange(change, data);
+        notifyChangeListeners(QQuickItemPrivate::Matrix, &QQuickItemChangeListener::itemTransformChanged, q, data.item);
         break;
     }
     case QQuickItem::ItemAntialiasingHasChanged:
@@ -9157,6 +9202,10 @@ bool QQuickItem::event(QEvent *ev)
         for (QQuickItem *item : std::as_const(d->childItems))
             QCoreApplication::sendEvent(item, ev);
         break;
+    case QEvent::ContextMenu:
+        // ### Qt 7: add virtual contextMenuEvent (and to QWindow?)
+        d->handleContextMenuEvent(static_cast<QContextMenuEvent*>(ev));
+        break;
     default:
         return QObject::event(ev);
     }
@@ -9459,6 +9508,17 @@ void QQuickItemPrivate::removePointerHandler(QQuickPointerHandler *h)
     QObject::disconnect(h, &QObject::destroyed, q, nullptr);
     if (handlers.isEmpty())
         extra.value().acceptedMouseButtons = extra.value().acceptedMouseButtonsWithoutHandlers;
+}
+
+/*! \internal
+    Replaces any existing context menu with the given \a menu,
+    and returns the one that was already set before, or \c nullptr.
+*/
+QObject *QQuickItemPrivate::setContextMenu(QObject *menu)
+{
+    QObject *ret = (extra.isAllocated() ? extra->contextMenu : nullptr);
+    extra.value().contextMenu = menu;
+    return ret;
 }
 
 #if QT_CONFIG(quick_shadereffect)
@@ -10022,7 +10082,7 @@ QQuickItemPrivate::ExtraData::ExtraData()
 : z(0), scale(1), rotation(0), opacity(1),
   contents(nullptr), screenAttached(nullptr), layoutDirectionAttached(nullptr),
   enterKeyAttached(nullptr),
-  keyHandler(nullptr),
+  keyHandler(nullptr), contextMenu(nullptr),
 #if QT_CONFIG(quick_shadereffect)
   layer(nullptr),
 #endif

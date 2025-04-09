@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Templates as T
 import QtQuick.Controls.impl
 import QtQuick.Controls.Universal
+import QtQuick.Controls.Universal.impl
 
 T.TextField {
     id: control
@@ -30,6 +31,10 @@ T.TextField {
                                      activeFocus ? Universal.chromeBlackMediumLowColor :
                                                    Universal.baseMediumColor
     verticalAlignment: TextInput.AlignVCenter
+
+    ContextMenu.menu: TextEditingContextMenu {
+        control: control
+    }
 
     PlaceholderText {
         id: placeholder

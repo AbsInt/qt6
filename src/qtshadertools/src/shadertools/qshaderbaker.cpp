@@ -138,6 +138,7 @@ struct QShaderBakerPrivate
     QSpirvShader::TessellationInfo tessInfo;
     QSpirvShader::MultiViewInfo multiViewInfo;
     QShaderBaker::SpirvOptions spirvOptions;
+    QShaderBaker::GlslOptions glslOptions;
     QSpirvCompiler compiler;
     QString errorMessage;
 };
@@ -185,6 +186,11 @@ QShaderBaker::~QShaderBaker()
     \li \c{.geom} - geometry shader
     \li \c{.comp} - compute shader
     \endlist
+
+    \warning \a fileName is expected to contain trusted content. Application
+    developers are advised to carefully consider the potential implications
+    before passing in user-provided source files that are not part of the
+    application.
  */
 void QShaderBaker::setSourceFileName(const QString &fileName)
 {
@@ -214,6 +220,11 @@ void QShaderBaker::setSourceFileName(const QString &fileName)
     Sets the name of the shader source file to \a fileName. This is the file
     that will be read when calling bake(). The shader stage is specified by \a
     stage.
+
+    \warning \a fileName is expected to contain trusted content. Application
+    developers are advised to carefully consider the potential implications
+    before passing in user-provided source files that are not part of the
+    application.
  */
 void QShaderBaker::setSourceFileName(const QString &fileName, QShader::Stage stage)
 {
@@ -225,6 +236,11 @@ void QShaderBaker::setSourceFileName(const QString &fileName, QShader::Stage sta
     Sets the source \a device. This allows using any QIODevice instead of just
     files. \a stage specifies the shader stage, while the optional \a fileName
     contains a filename that is used in the error messages.
+
+    \warning \a device is expected to contain trusted content. Application
+    developers are advised to carefully consider the potential implications
+    before passing in user-provided data from sources that are not under the
+    application's control.
  */
 void QShaderBaker::setSourceDevice(QIODevice *device, QShader::Stage stage, const QString &fileName)
 {
@@ -235,6 +251,11 @@ void QShaderBaker::setSourceDevice(QIODevice *device, QShader::Stage stage, cons
     Sets the input shader \a sourceString. \a stage specified the shader stage,
     while the optional \a fileName contains a filename that is used in the
     error messages.
+
+    \warning \a sourceString is expected to contain trusted content. Application
+    developers are advised to carefully consider the potential implications
+    before passing in user-provided data from sources that are not under the
+    application's control.
  */
 void QShaderBaker::setSourceString(const QByteArray &sourceString, QShader::Stage stage, const QString &fileName)
 {
@@ -472,9 +493,34 @@ void QShaderBaker::setMultiViewCount(int count)
     d->multiViewInfo.viewCount = count >= 2 ? count : 0;
 }
 
+/*!
+    \enum QShaderBaker::SpirvOption
+    \value GenerateFullDebugInfo Generate and store additional debug information in the SPIR-V binary.
+    \value StripDebugAndVarInfo Strip all debug and variable name information from the SPIR-V binary.
+ */
+
+/*!
+    Sets additional \a options for the generated SPIR-V binary.
+    By default no flags are set.
+ */
 void QShaderBaker::setSpirvOptions(SpirvOptions options)
 {
     d->spirvOptions = options;
+}
+
+/*!
+    \enum QShaderBaker::GlslOption
+    \value GlslEsFragDefaultFloatPrecisionMedium Emit \c{precision mediump float;} in fragment shaders for GLSL ES.
+ */
+
+/*!
+    Sets additional \a options for the generated GLSL and GLSL ES sources.
+    By default no flags are set.
+    \since 6.9
+ */
+void QShaderBaker::setGlslOptions(GlslOptions options)
+{
+    d->glslOptions = options;
 }
 
 inline size_t qHash(const QShaderBaker::GeneratedShader &k, size_t seed = 0)
@@ -680,8 +726,11 @@ QShader QShaderBaker::bake()
             case QShader::GlslShader:
             {
                 QSpirvShader::GlslFlags flags;
-                if (req.second.flags().testFlag(QShaderVersion::GlslEs))
+                if (req.second.flags().testFlag(QShaderVersion::GlslEs)) {
                     flags |= QSpirvShader::GlslFlag::GlslEs;
+                    if (d->glslOptions.testFlag(GlslOption::GlslEsFragDefaultFloatPrecisionMedium))
+                        flags |= QSpirvShader::GlslFlag::EsFragDefaultFloatPrecisionMedium;
+                }
                 QVector<QSpirvShader::SeparateToCombinedImageSamplerMapping> separateToCombinedImageSamplerMappings;
                 shader.setShader(currentSpirvShader->translateToGLSL(req.second.version(),
                                                                      flags,

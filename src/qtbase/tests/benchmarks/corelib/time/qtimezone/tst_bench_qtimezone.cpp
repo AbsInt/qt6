@@ -18,6 +18,7 @@ private Q_SLOTS:
 #if QT_CONFIG(timezone)
     void isTimeZoneIdAvailable();
     void systemTimeZone();
+    void utc();
     void zoneByName_data();
     void zoneByName();
     void displayName_data();
@@ -69,9 +70,17 @@ void tst_QTimeZone::isTimeZoneIdAvailable()
 void tst_QTimeZone::systemTimeZone()
 {
     QBENCHMARK {
-        QTimeZone::systemTimeZone();
+        [[maybe_unused]] const auto r = QTimeZone::systemTimeZone();
     }
 }
+
+void tst_QTimeZone::utc()
+{
+    QBENCHMARK {
+        [[maybe_unused]] const auto r = QTimeZone::utc();
+    }
+}
+
 void tst_QTimeZone::zoneByName_data()
 {
     QTest::addColumn<QByteArray>("name");
@@ -123,7 +132,7 @@ void tst_QTimeZone::displayName_data()
     const auto names = enoughZones();
     for (const auto &name : names) {
         for (const auto &when : times) {
-            qsizetype locIndex = 0;
+            std::size_t locIndex = 0;
             for (const auto &where : locs) {
                 const QByteArray dt = when.toString(Qt::ISODate).toUtf8();
                 const QByteArray loc =

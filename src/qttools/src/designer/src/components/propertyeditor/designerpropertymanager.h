@@ -30,37 +30,12 @@ class QKeySequenceEdit;
 namespace qdesigner_internal
 {
 
-class ResetWidget;
-
 class TextEditor;
 class PaletteEditorButton;
 class PixmapEditor;
+class ResetDecorator;
 class StringListEditorButton;
 class FormWindowBase;
-
-class ResetDecorator : public QObject
-{
-    Q_OBJECT
-public:
-    explicit ResetDecorator(const QDesignerFormEditorInterface *core, QObject *parent = nullptr);
-    ~ResetDecorator();
-
-    void connectPropertyManager(QtAbstractPropertyManager *manager);
-    QWidget *editor(QWidget *subEditor, bool resettable, QtAbstractPropertyManager *manager, QtProperty *property,
-                QWidget *parent);
-    void disconnectPropertyManager(QtAbstractPropertyManager *manager);
-    void setSpacing(int spacing);
-signals:
-    void resetProperty(QtProperty *property);
-private slots:
-    void slotPropertyChanged(QtProperty *property);
-    void slotEditorDestroyed(QObject *object);
-private:
-    QHash<const QtProperty *, QList<ResetWidget *>> m_createdResetWidgets;
-    QHash<ResetWidget *, QtProperty *> m_resetWidgetToProperty;
-    int m_spacing;
-    const QDesignerFormEditorInterface *m_core;
-};
 
 // Helper for handling sub-properties of properties inheriting PropertySheetTranslatableData
 // (translatable, disambiguation, comment).
@@ -164,7 +139,6 @@ private:
 
     QHash<const QtProperty *, FlagData> m_flagValues;
     QHash<const QtProperty *, QList<QtProperty *>> m_propertyToFlags;
-    QHash<const QtProperty *, QtProperty *> m_flagToProperty;
 
     int alignToIndexH(uint align) const;
     int alignToIndexV(uint align) const;
@@ -182,7 +156,6 @@ private:
 
     QHash<const QtProperty *, QMap<std::pair<QIcon::Mode, QIcon::State>, QtProperty *>> m_propertyToIconSubProperties;
     QHash<const QtProperty *, std::pair<QIcon::Mode, QIcon::State>> m_iconSubPropertyToState;
-    PropertyToPropertyMap m_iconSubPropertyToProperty;
     PropertyToPropertyMap m_propertyToTheme;
     PropertyToPropertyMap m_propertyToThemeEnum;
 

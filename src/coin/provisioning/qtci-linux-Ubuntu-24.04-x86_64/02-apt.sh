@@ -107,11 +107,15 @@ installPackages+=(gstreamer1.0-plugins-rtp)
 installPackages+=(gstreamer1.0-plugins-ugly)
 installPackages+=(gir1.2-gst-plugins-base-1.0)
 installPackages+=(gir1.2-gst-plugins-bad-1.0)
+installPackages+=(libpipewire-0.3-dev)
+installPackages+=(libspa-0.2-dev)
 installPackages+=(yasm)
 installPackages+=(libva-dev)
 # for QtMultimedia streaming tests
 installPackages+=(vlc-bin)
 installPackages+=(vlc-plugin-base)
+# for tst_qfloat16format, see also QTQAINFRA-6390
+installPackages+=(locales-all)
 
 # Support for cross-building to x86 (needed by WebEngine boot2qt builds)
 installPackages+=(g++-multilib)
@@ -210,6 +214,7 @@ installPackages+=(ssh)
 installPackages+=(diffstat)
 installPackages+=(binfmt-support)
 installPackages+=(zstd)
+installPackages+=(libzstd-dev)
 installPackages+=(lz4)
 # Vulkan is needed for examples
 installPackages+=(libvulkan-dev)
@@ -254,6 +259,9 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get -q -y -o DPkg::Lock::Timeout=300 ins
 # Configure pip
 pip config --user set global.index https://ci-files01-hki.ci.qt.io/input/python_module_cache
 pip config --user set global.extra-index-url https://pypi.org/simple/
+# Ubuntu 24.04 comes with a newer pip that disallows installing into the system site-packages,
+# so we explicitly ask it to allow it.
+pip install --user -r "${BASH_SOURCE%/*}/../common/shared/sbom_requirements.txt" --break-system-packages
 
 source "${BASH_SOURCE%/*}/../common/unix/SetEnvVar.sh"
 # SetEnvVar "PATH" "/usr/lib/nodejs-mozilla/bin:\$PATH"
@@ -262,6 +270,9 @@ source "${BASH_SOURCE%/*}/../common/unix/SetEnvVar.sh"
 # 'The script sbom2doc is installed in '/home/qt/.local/bin' which is not on PATH.'
 # hence the explicit assignment to SBOM_PYTHON_APPS_PATH.
 SetEnvVar "SBOM_PYTHON_APPS_PATH" "/home/qt/.local/bin"
+
+gccVersion="$(gcc --version |grep -Eo '[0-9]+\.[0-9]+(\.[0-9]+)?' |head -n 1)"
+echo "GCC = $gccVersion" >> versions.txt
 
 OpenSSLVersion="$(openssl version |cut -b 9-14)"
 echo "System's OpenSSL = $OpenSSLVersion" >> ~/versions.txt

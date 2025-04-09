@@ -57,7 +57,7 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
-    \qmlproperty bool QtQuick.Controls::MenuItem::textPadding
+    \qmlproperty real QtQuick.Controls::MenuItem::textPadding
     \readonly
     \since 6.8
 
@@ -85,7 +85,7 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
-    \qmlproperty bool QtQuick.Controls::MenuItem::implicitTextPadding
+    \qmlproperty real QtQuick.Controls::MenuItem::implicitTextPadding
     \since 6.8
 
     This property holds the minimum space needed from the left edge of the

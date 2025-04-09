@@ -16,8 +16,6 @@
 #include <QtCore/private/qlocking_p.h>
 #include "qloggingcategory.h"
 #ifndef QT_BOOTSTRAPPED
-#include "qelapsedtimer.h"
-#include "qdeadlinetimer.h"
 #include "qdatetime.h"
 #include "qcoreapplication.h"
 #include "qthread.h"
@@ -121,6 +119,7 @@ static QT_PREPEND_NAMESPACE(qint64) qt_gettid()
 
 #include <cstdlib>
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <vector>
 
@@ -187,7 +186,7 @@ static int checked_var_value(const char *varname)
 
     bool ok;
     int value = str.toInt(&ok, 0);
-    return ok ? value : 1;
+    return (ok && value >= 0) ? value : 1;
 }
 
 static bool is_fatal_count_down(QAtomicInt &n)
@@ -196,7 +195,7 @@ static bool is_fatal_count_down(QAtomicInt &n)
     // otherwise decrement if it's non-zero
 
     int v = n.loadRelaxed();
-    while (v != 0 && !n.testAndSetRelaxed(v, v - 1, v))
+    while (v > 1 && !n.testAndSetRelaxed(v, v - 1, v))
         qYieldCpu();
     return v == 1; // we exited the loop, so either v == 0 or CAS succeeded to set n from v to v-1
 }
@@ -1130,25 +1129,42 @@ static const char ifFatalTokenC[] = "%{if-fatal}";
 static const char endifTokenC[] = "%{endif}";
 static const char emptyTokenC[] = "";
 
-#ifdef Q_OS_ANDROID
-static const char defaultPattern[] = "%{message}";
-#else
-static const char defaultPattern[] = "%{if-category}%{category}: %{endif}%{message}";
-#endif
-
 struct QMessagePattern
 {
     QMessagePattern();
     ~QMessagePattern();
 
     void setPattern(const QString &pattern);
+    void setDefaultPattern()
+    {
+        const char *const defaultTokens[] = {
+#ifndef Q_OS_ANDROID
+            // "%{if-category}%{category}: %{endif}%{message}"
+            ifCategoryTokenC,
+            categoryTokenC,
+            ": ",   // won't point to literals[] but that's ok
+            endifTokenC,
+#endif
+            messageTokenC,
+        };
+
+        // we don't attempt to free the pointers, so only call from the ctor
+        Q_ASSERT(!tokens);
+        Q_ASSERT(!literals);
+
+        auto ptr = new const char *[std::size(defaultTokens) + 1];
+        auto end = std::copy(std::begin(defaultTokens), std::end(defaultTokens), ptr);
+        *end = nullptr;
+        tokens.release();
+        tokens.reset(ptr);
+    }
 
     // 0 terminated arrays of literal tokens / literal or placeholder tokens
     std::unique_ptr<std::unique_ptr<const char[]>[]> literals;
     std::unique_ptr<const char *[]> tokens;
     QList<QString> timeArgs; // timeFormats in sequence of %{time
 #ifndef QT_BOOTSTRAPPED
-    QElapsedTimer timer;
+    std::chrono::steady_clock::time_point appStartTime = std::chrono::steady_clock::now();
 #endif
 #ifdef QLOGGING_HAVE_BACKTRACE
     struct BacktraceParams
@@ -1183,12 +1199,9 @@ Q_CONSTINIT QBasicMutex QMessagePattern::mutex;
 
 QMessagePattern::QMessagePattern()
 {
-#ifndef QT_BOOTSTRAPPED
-    timer.start();
-#endif
-    const QString envPattern = QString::fromLocal8Bit(qgetenv("QT_MESSAGE_PATTERN"));
+    const QString envPattern = qEnvironmentVariable("QT_MESSAGE_PATTERN");
     if (envPattern.isEmpty()) {
-        setPattern(QLatin1StringView(defaultPattern));
+        setDefaultPattern();
         fromEnvironment = false;
     } else {
         setPattern(envPattern);
@@ -1673,19 +1686,25 @@ static QString formatLogMessage(QtMsgType type, const QMessageLogContext &contex
             message.append(formatBacktraceForLogMessage(backtraceParams, context));
 #endif
         } else if (token == timeTokenC) {
+            using namespace std::chrono;
+            auto formatElapsedTime = [](steady_clock::duration time) {
+                // we assume time > 0
+                auto ms = duration_cast<milliseconds>(time);
+                auto sec = duration_cast<seconds>(ms);
+                ms -= sec;
+                return QString::asprintf("%6lld.%03u", qint64(sec.count()), uint(ms.count()));
+            };
             QString timeFormat = pattern->timeArgs.at(timeArgsIdx);
             timeArgsIdx++;
             if (timeFormat == "process"_L1) {
-                quint64 ms = pattern->timer.elapsed();
-                message.append(QString::asprintf("%6d.%03d", uint(ms / 1000), uint(ms % 1000)));
+                message += formatElapsedTime(steady_clock::now() - pattern->appStartTime);
             } else if (timeFormat == "boot"_L1) {
                 // just print the milliseconds since the elapsed timer reference
                 // like the Linux kernel does
-                qint64 ms = QDeadlineTimer::current().deadline();
-                message.append(QString::asprintf("%6d.%03d", uint(ms / 1000), uint(ms % 1000)));
+                message += formatElapsedTime(steady_clock::now().time_since_epoch());
 #if QT_CONFIG(datestring)
             } else if (timeFormat.isEmpty()) {
-                    message.append(QDateTime::currentDateTime().toString(Qt::ISODate));
+                message.append(QDateTime::currentDateTime().toString(Qt::ISODate));
             } else {
                 message.append(QDateTime::currentDateTime().toString(timeFormat));
 #endif // QT_CONFIG(datestring)

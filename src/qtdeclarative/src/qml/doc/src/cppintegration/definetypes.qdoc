@@ -52,9 +52,19 @@ see \l {Choosing the Correct Integration Method Between C++ and QML}.
 
 \section2 Preconditions
 
-All the macros mentioned below are available from the \c qqmlregistration.h
-header. You need to add the following code to the files using them in order to
+All the macros mentioned below are available from the \l qqmlintegration.h
+header file from the QtQmlIntegration module.
+
+You need to add the following code to the files using them in order to
 make the macros available:
+
+\code
+#include <QtQmlIntegration/qqmlintegration.h>
+\endcode
+
+If you are already linking to the QtQml module, you can instead use the \l
+qqmlregistration.h header file, which will include \l qqmlintegration.h, as
+follows:
 
 \code
 #include <QtQml/qqmlregistration.h>

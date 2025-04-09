@@ -557,16 +557,24 @@ bool QQuickOverlay::eventFilter(QObject *object, QEvent *event)
         return true;
 #endif
 
-    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonPress: {
+        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        // Don't filter right mouse button clicks, as it prevents ContextMenu from
+        // receiving QContextMenuEvents as long as e.g. a Drawer exists, even if it's not visible.
+        // This does not prevent popups from being closed with the right mouse button,
+        // as mousePressEvent takes care of that.
+        if (mouseEvent->button() == Qt::RightButton)
+            break;
+
 #if QT_CONFIG(quicktemplates2_multitouch)
         // do not emit pressed() twice when mouse events have been synthesized from touch events
-        if (static_cast<QMouseEvent *>(event)->source() == Qt::MouseEventNotSynthesized)
+        if (mouseEvent->source() == Qt::MouseEventNotSynthesized)
 #endif
             emit pressed();
 
         // setup currentEventDeliveryAgent like in QQuickDeliveryAgent::event
         QQuickDeliveryAgentPrivate::currentEventDeliveryAgent = d->deliveryAgent();
-        d->deliveryAgentPrivate()->handleMouseEvent(static_cast<QMouseEvent *>(event));
+        d->deliveryAgentPrivate()->handleMouseEvent(mouseEvent);
         QQuickDeliveryAgentPrivate::currentEventDeliveryAgent = nullptr;
 
         // If a mouse event hasn't been accepted after being delivered, there
@@ -575,11 +583,15 @@ bool QQuickOverlay::eventFilter(QObject *object, QEvent *event)
         // events, to be able to close non-modal popups on release outside.
         event->accept();
         return true;
+    }
+    case QEvent::MouseButtonRelease: {
+        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        if (mouseEvent->button() == Qt::RightButton)
+            break;
 
-    case QEvent::MouseButtonRelease:
 #if QT_CONFIG(quicktemplates2_multitouch)
         // do not emit released() twice when mouse events have been synthesized from touch events
-        if (static_cast<QMouseEvent *>(event)->source() == Qt::MouseEventNotSynthesized)
+        if (mouseEvent->source() == Qt::MouseEventNotSynthesized)
 #endif
             emit released();
 
@@ -587,7 +599,7 @@ bool QQuickOverlay::eventFilter(QObject *object, QEvent *event)
         if (!d->mouseGrabberPopup)
             d->handleRelease(d->window->contentItem(), event, nullptr);
         break;
-
+    }
 #if QT_CONFIG(wheelevent)
     case QEvent::Wheel: {
         // If the top item in the drawing-order is blocked by a modal popup, then
@@ -676,6 +688,8 @@ void QQuickOverlayAttachedPrivate::setWindow(QQuickWindow *newWindow)
 
     The signal can be attached to any item, popup, or window. When attached to an
     item or a popup, the signal is only emitted if the item or popup is in a window.
+
+    \include qquickoverlay-pressed-released.qdocinc
 */
 
 /*!
@@ -686,6 +700,8 @@ void QQuickOverlayAttachedPrivate::setWindow(QQuickWindow *newWindow)
 
     The signal can be attached to any item, popup, or window. When attached to an
     item or a popup, the signal is only emitted if the item or popup is in a window.
+
+    \include qquickoverlay-pressed-released.qdocinc
 */
 
 QQuickOverlayAttached::QQuickOverlayAttached(QObject *parent)

@@ -63,6 +63,7 @@ private slots:
     void fromLocalFileNormalize();
     void fromLocalFileNormalizeNonRoundtrip_data();
     void fromLocalFileNormalizeNonRoundtrip();
+    void macTypes_data();
     void macTypes();
     void relative();
     void compat_legacy();
@@ -1368,6 +1369,8 @@ void tst_QUrl::toLocalFile_data()
     QTest::newRow("FILE:/") << QString::fromLatin1("FILE:/a.txt") << QString::fromLatin1("/a.txt");
 
     QTest::newRow("path-delimiter") << QString::fromLatin1("file:///Mambo <%235>.mp3") << QString::fromLatin1("/Mambo <#5>.mp3");
+    QTest::newRow("path-brackets-encoded") << u"file:///tmp/%5Btest%5D.txt"_s << u"/tmp/[test].txt"_s;
+    QTest::newRow("path-brackets-decoded") << u"file:///tmp/[test].txt"_s << u"/tmp/[test].txt"_s;
     QTest::newRow("path-percent") << QString::fromLatin1("file:///a%25.txt") << QString::fromLatin1("/a%.txt");
     QTest::newRow("path-percent-percent") << QString::fromLatin1("file:///a%25%25.txt") << QString::fromLatin1("/a%%.txt");
     QTest::newRow("path-percent-a-percent") << QString::fromLatin1("file:///a%25a%25.txt") << QString::fromLatin1("/a%a%.txt");
@@ -1409,6 +1412,21 @@ void tst_QUrl::toLocalFile()
     QUrl url(theUrl);
     QCOMPARE(url.toLocalFile(), theFile);
     QCOMPARE(url.isLocalFile(), !theFile.isEmpty());
+
+    // set the path to the same (encoded) thing - nothing should change
+    url.setPath(url.path(QUrl::FullyEncoded), QUrl::TolerantMode);
+    QCOMPARE(url.toLocalFile(), theFile);
+    QCOMPARE(url.isLocalFile(), !theFile.isEmpty());
+
+    // QUrl::PrettyDecoded is still URL-encoded and lossless
+    url.setPath(url.path(QUrl::PrettyDecoded), QUrl::TolerantMode);
+    QCOMPARE(url.toLocalFile(), theFile);
+    QCOMPARE(url.isLocalFile(), !theFile.isEmpty());
+
+    // local file paths can be fully decoded without loss
+    url.setPath(url.path());
+    QCOMPARE(url.toLocalFile(), theFile);
+    QCOMPARE(url.isLocalFile(), !theFile.isEmpty());
 }
 
 void tst_QUrl::fromLocalFile_data()
@@ -1422,6 +1440,7 @@ void tst_QUrl::fromLocalFile_data()
     QTest::newRow("absolute-two-path") << QString::fromLatin1("/a/b.txt") << QString::fromLatin1("file:///a/b.txt") << QString::fromLatin1("/a/b.txt");
     QTest::newRow("path-delimiters") << QString::fromLatin1("/Mambo <#5>.mp3") << QString::fromLatin1("file:///Mambo <%235>.mp3")
                                      << QString::fromLatin1("/Mambo <#5>.mp3");
+    QTest::newRow("path-brackets") << u"/tmp/[test].txt"_s << u"file:///tmp/%5Btest%5D.txt"_s << u"/tmp/[test].txt"_s;
 
     // Windows absolute details
     QTest::newRow("windows-drive") << QString::fromLatin1("c:/a.txt") << QString::fromLatin1("file:///c:/a.txt") << QString::fromLatin1("/c:/a.txt");
@@ -1482,6 +1501,21 @@ void tst_QUrl::fromLocalFile()
 
     QUrl url = QUrl::fromLocalFile(theFile);
 
+    QCOMPARE(url.toString(QUrl::DecodeReserved), theUrl);
+    QCOMPARE(url.path(), thePath);
+
+    // set the path to the same (encoded) thing - nothing should change
+    url.setPath(url.path(QUrl::FullyEncoded), QUrl::TolerantMode);
+    QCOMPARE(url.toString(QUrl::DecodeReserved), theUrl);
+    QCOMPARE(url.path(), thePath);
+
+    // QUrl::PrettyDecoded is still URL-encoded and lossless
+    url.setPath(url.path(QUrl::PrettyDecoded), QUrl::TolerantMode);
+    QCOMPARE(url.toString(QUrl::DecodeReserved), theUrl);
+    QCOMPARE(url.path(), thePath);
+
+    // local file paths can be fully decoded without loss
+    url.setPath(url.path());
     QCOMPARE(url.toString(QUrl::DecodeReserved), theUrl);
     QCOMPARE(url.path(), thePath);
 }
@@ -1594,13 +1628,21 @@ void tst_QUrl::fromLocalFileNormalizeNonRoundtrip()
     QCOMPARE(url.toString(QUrl::NormalizePathSegments), urlWithNormalizedPath);
 }
 
-void tst_QUrl::macTypes()
+void tst_QUrl::macTypes_data()
 {
 #ifndef Q_OS_DARWIN
     QSKIP("This is a Mac-only test");
 #else
-    extern void tst_QUrl_mactypes(); // in tst_qurl_mac.mm
-    void tst_QUrl_mactypes();
+    extern void tst_QUrl_mactypes_data();
+    tst_QUrl_mactypes_data();
+#endif
+}
+
+void tst_QUrl::macTypes()
+{
+#ifdef Q_OS_DARWIN
+    extern void tst_QUrl_mactypes();
+    tst_QUrl_mactypes();
 #endif
 }
 
@@ -4118,24 +4160,25 @@ void tst_QUrl::setComponents_data()
                                            << int(Scheme) << "http%61" << Decoded << false
                                            << PrettyDecoded << "" << "";
     QTest::newRow("username-encode") << QUrl("http://example.com")
-                                     << int(UserName) << "h%61llo:world" << Decoded << true
-                                     << PrettyDecoded << "h%2561llo:world" << "http://h%2561llo%3Aworld@example.com";
+                                     << int(UserName) << "h%61llo[:]world" << Decoded << true
+                                     << PrettyDecoded << "h%2561llo[:]world" << "http://h%2561llo%5B%3A%5Dworld@example.com";
     QTest::newRow("password-encode") << QUrl("http://example.com")
-                                     << int(Password) << "h%61llo:world@" << Decoded << true
-                                     << PrettyDecoded << "h%2561llo:world@" << "http://:h%2561llo:world%40@example.com";
+                                     << int(Password) << "h%61llo[:]world@" << Decoded << true
+                                     << PrettyDecoded << "h%2561llo[:]world@" << "http://:h%2561llo%5B:%5Dworld%40@example.com";
     // '%' characters are not permitted in the hostname, these test that it fails to set anything
     QTest::newRow("invalid-host-encode") << QUrl("http://example.com")
                                          << int(Host) << "ex%61mple.com" << Decoded << false
                                          << PrettyDecoded << QString() << QString();
+    // square brackets are force-encoded from decoded forms in the path, query, and fragment
     QTest::newRow("path-encode") << QUrl("http://example.com/foo")
-                                 << int(Path) << "/bar%23" << Decoded << true
-                                 << PrettyDecoded << "/bar%2523" << "http://example.com/bar%2523";
+                                 << int(Path) << "/ba[r]%23" << Decoded << true
+                                 << PrettyDecoded << "/ba%5Br%5D%2523" << "http://example.com/ba%5Br%5D%2523";
     QTest::newRow("query-encode") << QUrl("http://example.com/foo?q")
-                                  << int(Query) << "bar%23" << Decoded << true
-                                  << PrettyDecoded << "bar%2523" << "http://example.com/foo?bar%2523";
+                                  << int(Query) << "ba[r]%23" << Decoded << true
+                                  << PrettyDecoded << "ba%5Br%5D%2523" << "http://example.com/foo?ba%5Br%5D%2523";
     QTest::newRow("fragment-encode") << QUrl("http://example.com/foo#z")
-                                     << int(Fragment) << "bar%23" << Decoded << true
-                                     << PrettyDecoded << "bar%2523" << "http://example.com/foo#bar%2523";
+                                     << int(Fragment) << "ba[r]%23" << Decoded << true
+                                     << PrettyDecoded << "ba%5Br%5D%2523" << "http://example.com/foo#ba%5Br%5D%2523";
     // force decoding
     QTest::newRow("username-decode") << QUrl("http://example.com")
                                      << int(UserName) << "hello%3Aworld%25" << Tolerant << true
@@ -4144,8 +4187,8 @@ void tst_QUrl::setComponents_data()
                                      << int(Password) << "}}>b9o%25kR(" << Tolerant << true
                                      << FullyDecoded << "}}>b9o%kR(" << "http://:%7D%7D%3Eb9o%25kR(@example.com";
     QTest::newRow("path-decode") << QUrl("http://example.com/")
-                                 << int(Path) << "/bar%25foo" << Tolerant << true
-                                 << FullyDecoded << "/bar%foo" << "http://example.com/bar%25foo";
+                                 << int(Path) << "/bar%25[foo]" << Tolerant << true
+                                 << FullyDecoded << "/bar%[foo]" << "http://example.com/bar%25[foo]";
     QTest::newRow("query-decode") << QUrl("http://example.com/foo?qq")
                                   << int(Query) << "bar%25foo" << Tolerant << true
                                   << FullyDecoded << "bar%foo" << "http://example.com/foo?bar%25foo";

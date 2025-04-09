@@ -85,6 +85,7 @@ private slots:
     void objectListArgumentMethod();
     void variantListQJsonConversion();
     void attachedObjectOfUnregistered();
+    void dropCUOnEngineShutdown();
     void multiLoadedJavaScriptModule();
 
 public slots:
@@ -1814,6 +1815,35 @@ void tst_qqmlengine::attachedObjectOfUnregistered()
     QVERIFY(c);
     QVERIFY(qobject_cast<UnregisteredAttached *>(c));
     QVERIFY(c != a);
+}
+
+void tst_qqmlengine::dropCUOnEngineShutdown()
+{
+    QScopedPointer<QObject> o;
+    const QUrl url("qrc:/some/Type.qml");
+    {
+        QQmlEngine e;
+        QQmlComponent c(&e);
+        c.setData("import QtQml\nQtObject {}", url);
+        QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+        o.reset(c.create());
+        QVERIFY(!o.isNull());
+        QVERIFY(QByteArray(o->metaObject()->className()).startsWith("Type_QMLTYPE_"));
+        QVERIFY(QQmlMetaType::qmlType(url).isValid());
+        QVERIFY(!QQmlMetaType::obtainCompilationUnit(url).isNull());
+    }
+
+    // The object is still there (don't do this at home).
+    QVERIFY(!o.isNull());
+
+    // QMetaObject is still ok.
+    QVERIFY(QByteArray(o->metaObject()->className()).startsWith("Type_QMLTYPE_"));
+
+    // But the QQmlType is gone.
+    QVERIFY(!QQmlMetaType::qmlType(url).isValid());
+
+    // And also the CU.
+    QVERIFY(QQmlMetaType::obtainCompilationUnit(url).isNull());
 }
 
 void tst_qqmlengine::multiLoadedJavaScriptModule()

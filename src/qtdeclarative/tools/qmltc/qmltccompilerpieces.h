@@ -411,7 +411,7 @@ inline void QmltcCodeGenerator::generate_qmltcInstructionCallCode(
     function->body << u"// call children's methods"_s;
     for (qsizetype i = 1; i < types.size(); ++i) {
         const auto &type = types[i];
-        Q_ASSERT(!type->isComponentRootElement());
+        Q_ASSERT(type->componentRootStatus() == QQmlJSScope::IsComponentRoot::No);
         function->body << u"creator->get<%1>(%2)->%3(%4);"_s.arg(
                 type->internalName(), QString::number(i), function->name, childInstructionArgs);
     }
@@ -532,7 +532,7 @@ inline void QmltcCodeGenerator::generate_interfaceCallCode(QmltcMethod *function
     function->body << u"// call children's methods"_s;
     for (qsizetype i = 1; i < types.size(); ++i) {
         const auto &type = types[i];
-        Q_ASSERT(!type->isComponentRootElement());
+        Q_ASSERT(type->componentRootStatus() == QQmlJSScope::IsComponentRoot::No);
         function->body << u"{"_s;
         function->body << u"auto child = creator->get<%1>(%2);"_s.arg(type->internalName(),
                                                                       QString::number(i));

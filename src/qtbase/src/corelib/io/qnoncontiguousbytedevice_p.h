@@ -69,6 +69,7 @@ class QNonContiguousByteDeviceByteArrayImpl : public QNonContiguousByteDevice
     Q_OBJECT
 public:
     explicit QNonContiguousByteDeviceByteArrayImpl(QByteArray ba);
+    explicit QNonContiguousByteDeviceByteArrayImpl(QBuffer *buffer);
     ~QNonContiguousByteDeviceByteArrayImpl();
     const char *readPointer(qint64 maximumLength, qint64 &len) override;
     bool advanceReadPointer(qint64 amount) override;
@@ -79,7 +80,8 @@ public:
 
 protected:
     QByteArray byteArray;
-    qint64 currentPosition;
+    QByteArrayView view;
+    qint64 currentPosition = 0;
 };
 
 class QNonContiguousByteDeviceRingBufferImpl : public QNonContiguousByteDevice
@@ -122,23 +124,6 @@ protected:
     qint64 totalAdvancements;
     bool eof;
     qint64 initialPosition;
-};
-
-class QNonContiguousByteDeviceBufferImpl : public QNonContiguousByteDevice
-{
-    Q_OBJECT
-public:
-    explicit QNonContiguousByteDeviceBufferImpl(QBuffer *b);
-    ~QNonContiguousByteDeviceBufferImpl();
-    const char *readPointer(qint64 maximumLength, qint64 &len) override;
-    bool advanceReadPointer(qint64 amount) override;
-    bool atEnd() const override;
-    bool reset() override;
-    qint64 size() const override;
-
-protected:
-    QByteArray byteArray;
-    QNonContiguousByteDeviceByteArrayImpl *arrayImpl;
 };
 
 // ... and the reverse thing

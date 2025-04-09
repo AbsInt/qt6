@@ -2,4 +2,5 @@ TEMPLATE = subdirs
 SUBDIRS = \
     abstractitemmodel \
     objectlistmodel \
-    stringlistmodel
+    stringlistmodel \
+    threadedfetchmore

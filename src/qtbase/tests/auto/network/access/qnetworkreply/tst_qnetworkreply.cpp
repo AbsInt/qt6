@@ -600,6 +600,9 @@ private Q_SLOTS:
 
     void abortAndError();
 
+    void resendRequest_data();
+    void resendRequest();
+
     // NOTE: This test must be last!
     void parentingRepliesToTheApp();
 private:
@@ -678,6 +681,7 @@ public:
     QByteArray receivedData;
     QSemaphore ready;
     bool doClose;
+    bool earlyClose = false; // close connection after request has been received
     bool doSsl;
     bool ipv6;
     bool multiple;
@@ -805,6 +809,9 @@ private slots:
         qDebug() << "slotError" << err << currentClient->errorString();
     }
 
+signals:
+    void requestReceived() const;
+
 public slots:
 
     void readyReadSlot()
@@ -830,10 +837,16 @@ public slots:
             if (contentRead < contentLength)
                 return;
 
+            emit requestReceived();
+
             // multiple requests incoming. remove the bytes of the current one
             if (multiple)
                 receivedData.remove(0, endOfHeader);
 
+            if (earlyClose) {
+                client->disconnectFromHost();
+                return;
+            }
             reply();
         }
     }
@@ -2310,7 +2323,7 @@ void tst_QNetworkReply::getWithBodyRedirected()
     QVERIFY(validateRedirectedResponseHeaders(reply));
 
     // Verify that the message body has arrived to the server
-    if (status > 302) {
+    if (status > 307) {
         QVERIFY(server2.contentLength != 0);
         QCOMPARE(server2.contentLength, dataFromClientToServer.size());
         QCOMPARE(server2.receivedData.right(dataFromClientToServer.size()), dataFromClientToServer);
@@ -5131,7 +5144,7 @@ void tst_QNetworkReply::ioPutToFileFromProcess_data()
 void tst_QNetworkReply::ioPutToFileFromProcess()
 {
 #if !QT_CONFIG(process)
-    QSKIP("No qprocess support", SkipAll);
+    QSKIP("No qprocess support");
 #else
 
 #ifdef Q_OS_WIN
@@ -6731,7 +6744,6 @@ void tst_QNetworkReply::httpConnectionCount()
 
     int pendingConnectionCount = 0;
 
-    using namespace std::chrono_literals;
     const auto newPendingConnection = [&server]() { return server->hasPendingConnections(); };
     // If we have http2 enabled then the second connection will take a little
     // longer to be established because we will wait for the first one to finish
@@ -10739,6 +10751,56 @@ Hello World!)"_ba;
     QCOMPARE(finishedSignal.count(), 1);
     QCOMPARE(errorSignal.count(), 1);
     QCOMPARE(reply->error(), QNetworkReply::OperationCanceledError);
+}
+
+void tst_QNetworkReply::resendRequest_data(){
+    QTest::addColumn<QString>("method");
+    QTest::addColumn<bool>("shouldResend");
+
+    for (auto &method : { "get", "head", "put" })
+        QTest::addRow("%s", method) << method << true;
+    QTest::addRow("post") << "post" << false;
+    QTest::addRow("mycustom") << "mycustom" << false;
+
+}
+
+void tst_QNetworkReply::resendRequest()
+{
+    QFETCH(const QString, method);
+    QFETCH(const bool, shouldResend);
+
+    MiniHttpServer server("");
+    server.earlyClose = true;
+
+    QSignalSpy requestReceived(&server, &MiniHttpServer::requestReceived);
+
+    QUrl url("http://127.0.0.1");
+    url.setPort(server.serverPort());
+    const QByteArray data(4096, 'a');
+    QNetworkReplyPtr reply([&]() {
+        QNetworkRequest req(url);
+        if (method == "get")
+            return manager.get(req, data);
+        else if (method == "head")
+            return manager.head(req);
+        else if (method == "put")
+            return manager.put(req, data);
+        else
+            return manager.sendCustomRequest(req, method.toUtf8(), data);
+    }());
+
+    // We send one request and will get no response from the server:
+    QVERIFY(requestReceived.wait());
+    requestReceived.clear();
+    // Then, for idempotent requests, we send the request again. For
+    // non-idempotent requests we error out and don't try to resend.
+    QCOMPARE(requestReceived.wait(2s), shouldResend);
+    if (!shouldResend) {
+        QCOMPARE(reply->error(), QNetworkReply::RemoteHostClosedError);
+    } else {
+        // No error yet, still can resend another
+        QCOMPARE(reply->error(), QNetworkReply::NoError);
+    }
 }
 
 // NOTE: This test must be last testcase in tst_qnetworkreply!

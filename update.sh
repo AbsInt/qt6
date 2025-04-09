@@ -18,9 +18,6 @@ cd .. || exit 1
 rm -rf src || exit 1
 mv qt5 src || exit 1
 
-# fix win compile with clang-cl
-sed 's/#if !defined(Q_OS_VXWORKS)/#if !defined(Q_OS_WIN)/' -i src/qtbase/src/corelib/global/qsystemdetection.h
-
 # Download some tag files. Not 100% accurate because of the version mismatch, but much simpler.
 # Generating these tag files ourselves would require building qdoc, which depends on clang, etc.
 rm -rf docs || exit 1

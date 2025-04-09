@@ -310,6 +310,7 @@ public:
 #endif
     bool delegateValidated : 1;
     bool isClearing : 1;
+    bool explicitDelegate: 1;
 
 protected:
     virtual Qt::Orientation layoutOrientation() const = 0;

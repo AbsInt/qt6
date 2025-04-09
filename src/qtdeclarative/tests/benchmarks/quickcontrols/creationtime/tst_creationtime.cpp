@@ -83,8 +83,9 @@ void tst_CreationTime::basic_data()
     QTest::addColumn<QUrl>("url");
     // Calendar is excluded because it's a singleton and can't be created.
     // TreeViewDelegate is excluded since it's a delegate that can only be created by TreeView.
+    // TableViewDelegate is excluded since it's a delegate that can only be created by TableView.
     addTestRowForEachControl(styleHelper.engine.data(), QQC2_IMPORT_PATH, "basic", "QtQuick/Controls/Basic",
-        QStringList() << "ApplicationWindow" << "Calendar" << "TreeViewDelegate");
+        QStringList() << "ApplicationWindow" << "Calendar" << "TreeViewDelegate" << "TableViewDelegate");
 }
 
 void tst_CreationTime::fusion()

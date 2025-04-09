@@ -765,7 +765,7 @@ void QQuickMultiPointTouchArea::setTouchEventsEnabled(bool enable)
     // Resolve function for enabling touch events from the (cocoa) platform plugin.
     typedef void (*RegisterTouchWindowFunction)(QWindow *, bool);
     RegisterTouchWindowFunction registerTouchWindow = reinterpret_cast<RegisterTouchWindowFunction>(
-        QGuiApplication::platformNativeInterface()->nativeResourceFunctionForIntegration("registertouchwindow"));
+        QFunctionPointer(QGuiApplication::platformNativeInterface()->nativeResourceFunctionForIntegration("registertouchwindow")));
     if (!registerTouchWindow)
         return; // Not necessarily an error, Qt might be using a different platform plugin.
 

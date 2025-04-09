@@ -586,22 +586,13 @@ void QQuickControlPrivate::updateFontRecur(QQuickItem *item, const QFont &font)
 
 QLocale QQuickControlPrivate::calcLocale(const QQuickItem *item)
 {
-    const QQuickItem *p = item;
-    while (p) {
+    for (const QQuickItem *p = item; p; p = p->parentItem())
         if (const QQuickControl *control = qobject_cast<const QQuickControl *>(p))
             return control->locale();
 
-        QVariant v = p->property("locale");
-        if (v.isValid() && v.userType() == QMetaType::QLocale)
-            return v.toLocale();
-
-        p = p->parentItem();
-    }
-
-    if (item) {
+    if (item)
         if (QQuickApplicationWindow *window = qobject_cast<QQuickApplicationWindow *>(item->window()))
             return window->locale();
-    }
 
     return QLocale();
 }
@@ -1754,6 +1745,23 @@ void QQuickControl::resetVerticalPadding()
 qreal QQuickControl::implicitContentWidth() const
 {
     Q_D(const QQuickControl);
+
+    if (auto *safeArea = static_cast<QQuickSafeArea*>(
+        qmlAttachedPropertiesObject<QQuickSafeArea>(this, false))) {
+        // If the control's padding is tied to the safe area we may in
+        // some cases end up with a binding loop if the implicit size
+        // moves the control further into the non-safe area. Detect this
+        // and break the binding loop by returning a constrained content
+        // size based on an earlier known good implicit size.
+        static constexpr auto kLastKnownGoodImplicitWidth = "_q_lastKnownGoodImplicitWidth";
+        if (safeArea->detectedPossibleBindingLoop) {
+            const auto lastImplicitWidth = safeArea->property(kLastKnownGoodImplicitWidth).value<int>();
+            return lastImplicitWidth - leftPadding() - rightPadding();
+        } else {
+            safeArea->setProperty(kLastKnownGoodImplicitWidth, implicitWidth());
+        }
+    }
+
     return d->implicitContentWidth;
 }
 
@@ -1782,6 +1790,23 @@ qreal QQuickControl::implicitContentWidth() const
 qreal QQuickControl::implicitContentHeight() const
 {
     Q_D(const QQuickControl);
+
+    if (auto *safeArea = static_cast<QQuickSafeArea*>(
+        qmlAttachedPropertiesObject<QQuickSafeArea>(this, false))) {
+        // If the control's padding is tied to the safe area we may in
+        // some cases end up with a binding loop if the implicit size
+        // moves the control further into the non-safe area. Detect this
+        // and break the binding loop by returning a constrained content
+        // size based on an earlier known good implicit size.
+        static constexpr auto kLastKnownGoodImplicitHeight = "_q_lastKnownGoodImplicitHeight";
+        if (safeArea->detectedPossibleBindingLoop) {
+            const auto lastImplicitHeight = safeArea->property(kLastKnownGoodImplicitHeight).value<int>();
+            return lastImplicitHeight - topPadding() - bottomPadding();
+        } else {
+            safeArea->setProperty(kLastKnownGoodImplicitHeight, implicitHeight());
+        }
+    }
+
     return d->implicitContentHeight;
 }
 

@@ -32,7 +32,6 @@ qt_internal_add_qml_module(QmlMeta
     URI "QtQml"
     VERSION "${PROJECT_VERSION}"
     DESIGNER_SUPPORTED
-    __QT_INTERNAL_SYSTEM_MODULE
     PLUGIN_TARGET qmlplugin
     CLASS_NAME QtQmlPlugin
     PAST_MAJOR_VERSIONS 2

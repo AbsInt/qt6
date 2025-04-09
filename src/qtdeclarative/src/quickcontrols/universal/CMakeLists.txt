@@ -130,8 +130,8 @@ target_sources(qtquickcontrols2universalstyleplugin
         qtquickcontrols2universalstyleplugin.cpp
 )
 
-target_link_libraries(qtquickcontrols2universalstyleplugin
-    PRIVATE
+qt_internal_extend_target(qtquickcontrols2universalstyleplugin
+    LIBRARIES
         Qt::QuickControls2Private
 )
 

@@ -258,4 +258,39 @@ TestCase {
         let control2 = createTemporaryObject(backgroundDeletionOrder2, testCase)
         verify(control2)
     }
+
+    Component {
+        id: contentSizeContainer
+        Container {
+            contentWidth: 150
+            contentHeight: 50
+
+            contentItem: Item {
+                implicitWidth: 100
+                implicitHeight: 30
+            }
+        }
+    }
+
+    function test_contentSize() {
+        let control = createTemporaryObject(contentSizeContainer, testCase)
+        verify(control)
+
+        compare(control.contentWidth, 150)
+        compare(control.contentHeight, 50)
+        compare(control.implicitContentWidth, 150)
+        compare(control.implicitContentHeight, 50)
+        compare(control.implicitWidth, 150)
+        compare(control.implicitHeight, 50)
+
+        control.contentWidth = undefined;
+        control.contentHeight = undefined;
+
+        compare(control.contentWidth, 100)
+        compare(control.contentHeight, 30)
+        compare(control.implicitContentWidth, 100)
+        compare(control.implicitContentHeight, 30)
+        compare(control.implicitWidth, 100)
+        compare(control.implicitHeight, 30)
+    }
 }

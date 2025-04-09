@@ -849,15 +849,21 @@ public:
     void endVisit(AST::FunctionDeclaration *) override { stop(u"FunctionDeclaration"); }
 
     bool visit(AST::FunctionExpression *el) override {
+
+        QString parentheses = options & AstDumperOption::NoLocations
+                ? QLatin1String()
+                : QLatin1String(" lparenToken=%1 rparenToken=%2")
+                          .arg(loc(el->lparenToken), loc(el->rparenToken));
+
         start(QLatin1String("FunctionExpression name=%1 isArrowFunction=%2 isGenerator=%3 "
                             "functionToken=%4 "
-                            "identifierToken=%5 lparenToken=%6 rparenToken=%7 lbraceToken=%8 "
-                            "rbraceToken=%9")
+                            "identifierToken=%5%6 lbraceToken=%7 "
+                            "rbraceToken=%8")
                       .arg(quotedString(el->name), boolStr(el->isArrowFunction),
                            boolStr(el->isGenerator),
                            loc(el->functionToken, options & AstDumperOption::SloppyCompare),
-                           loc(el->identifierToken), loc(el->lparenToken), loc(el->rparenToken),
-                           loc(el->lbraceToken), loc(el->rbraceToken)));
+                           loc(el->identifierToken), parentheses, loc(el->lbraceToken),
+                           loc(el->rbraceToken)));
         return true;
     }
     void endVisit(AST::FunctionExpression *) override { stop(u"FunctionExpression"); }

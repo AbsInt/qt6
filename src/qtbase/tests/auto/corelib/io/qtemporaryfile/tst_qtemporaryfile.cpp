@@ -592,6 +592,10 @@ void tst_QTemporaryFile::rename()
 
 void tst_QTemporaryFile::renameFdLeak()
 {
+#if defined(Q_OS_VXWORKS)
+    QSKIP("QTBUG-130066");
+#endif
+
 #if defined(Q_OS_UNIX) && !defined(Q_OS_ANDROID)
     QTemporaryFile file;
     QVERIFY(file.open());
@@ -728,6 +732,9 @@ void tst_QTemporaryFile::keepOpenMode()
 
 void tst_QTemporaryFile::resetTemplateAfterError()
 {
+#if defined(Q_OS_VXWORKS)
+    QSKIP("QTBUG-130066");
+#endif
     // calling setFileTemplate on a failed open
 
     QString tempPath = QDir::tempPath();
@@ -782,6 +789,9 @@ void tst_QTemporaryFile::resetTemplateAfterError()
 
 void tst_QTemporaryFile::setTemplateAfterOpen()
 {
+#if defined(Q_OS_VXWORKS)
+    QSKIP("QTBUG-130066");
+#endif
     QTemporaryFile temp;
 
     QVERIFY( temp.fileName().isEmpty() );
@@ -808,6 +818,9 @@ void tst_QTemporaryFile::setTemplateAfterOpen()
 
 void tst_QTemporaryFile::autoRemoveAfterFailedRename()
 {
+#if defined(Q_OS_VXWORKS)
+    QSKIP("QTBUG-130066");
+#endif
     struct CleanOnReturn
     {
         ~CleanOnReturn()
@@ -1012,6 +1025,9 @@ void tst_QTemporaryFile::QTBUG_4796()
 
 void tst_QTemporaryFile::guaranteeUnique()
 {
+#if defined(Q_OS_VXWORKS)
+    QSKIP("QTBUG-130066");
+#endif
     QDir dir(QDir::tempPath());
     QString takenFileName;
 

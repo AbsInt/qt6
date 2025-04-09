@@ -22,7 +22,9 @@ using namespace Qt::StringLiterals;
 // Create default time zone using appropriate backend
 static QTimeZonePrivate *newBackendTimeZone()
 {
-#if defined(Q_OS_DARWIN)
+#if QT_CONFIG(timezone_tzdb)
+    return new QChronoTimeZonePrivate();
+#elif defined(Q_OS_DARWIN)
     return new QMacTimeZonePrivate();
 #elif defined(Q_OS_ANDROID)
     return new QAndroidTimeZonePrivate();
@@ -41,7 +43,9 @@ static QTimeZonePrivate *newBackendTimeZone()
 static QTimeZonePrivate *newBackendTimeZone(const QByteArray &ianaId)
 {
     Q_ASSERT(!ianaId.isEmpty());
-#if defined(Q_OS_DARWIN)
+#if QT_CONFIG(timezone_tzdb)
+    return new QChronoTimeZonePrivate(ianaId);
+#elif defined(Q_OS_DARWIN)
     return new QMacTimeZonePrivate(ianaId);
 #elif defined(Q_OS_ANDROID)
     return new QAndroidTimeZonePrivate(ianaId);
@@ -399,7 +403,7 @@ QTimeZone::Data::~Data()
 #endif
 }
 
-QTimeZone::Data &QTimeZone::Data::operator=(const QTimeZone::Data &other) noexcept
+QTimeZone::Data &QTimeZone::Data::operator=(const Data &other) noexcept
 {
 #if QT_CONFIG(timezone)
     if (!other.isShort())
@@ -1451,7 +1455,7 @@ QTimeZone QTimeZone::systemTimeZone()
 */
 QTimeZone QTimeZone::utc()
 {
-    return QTimeZone(QTimeZonePrivate::utcQByteArray());
+    return QTimeZone(0);
 }
 
 /*!
@@ -1482,8 +1486,18 @@ bool QTimeZone::isTimeZoneIdAvailable(const QByteArray &ianaId)
         || global_tz->backend->isTimeZoneIdAvailable(ianaId);
 }
 
+[[maybe_unused]] static bool isUniqueSorted(const QList<QByteArray> &seq)
+{
+    // Since [..., b, a, ...] isn't unique-sorted if a <= b, at least the
+    // suggested implementations of is_sorted() and is_sorted_until() imply a
+    // non-unique sorted list will fail is_sorted() with <= comparison.
+    return std::is_sorted(seq.begin(), seq.end(), std::less_equal<QByteArray>());
+}
+
 static QList<QByteArray> set_union(const QList<QByteArray> &l1, const QList<QByteArray> &l2)
 {
+    Q_ASSERT(isUniqueSorted(l1));
+    Q_ASSERT(isUniqueSorted(l2));
     QList<QByteArray> result;
     result.reserve(l1.size() + l2.size());
     std::set_union(l1.begin(), l1.end(),
@@ -1506,6 +1520,8 @@ static QList<QByteArray> set_union(const QList<QByteArray> &l1, const QList<QByt
 
 QList<QByteArray> QTimeZone::availableTimeZoneIds()
 {
+    // Backends MUST implement availableTimeZoneIds().
+    // The return from each backend MUST be sorted and unique.
     return set_union(QUtcTimeZonePrivate().availableTimeZoneIds(),
                      global_tz->backend->availableTimeZoneIds());
 }

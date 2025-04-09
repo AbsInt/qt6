@@ -208,12 +208,12 @@
     \value RemovePassword  Any password in the URL is removed.
     \value RemoveUserInfo  Any user information in the URL is removed.
     \value RemovePort      Any specified port is removed from the URL.
-    \value RemoveAuthority
+    \value RemoveAuthority  Remove user name, password, host and port.
     \value RemovePath   The URL's path is removed, leaving only the scheme,
                         host address, and port (if present).
     \value RemoveQuery  The query part of the URL (following a '?' character)
                         is removed.
-    \value RemoveFragment
+    \value RemoveFragment The fragment part of the URL (including the '#' character) is removed.
     \value RemoveFilename The filename (i.e. everything after the last '/' in the path) is removed.
             The trailing '/' is kept, unless StripTrailingSlash is set.
             Only valid if RemovePath is not set.
@@ -807,9 +807,11 @@ static const ushort * const pathInUrl = userNameInUrl + 5;
 static const ushort * const queryInUrl = userNameInUrl + 6;
 static const ushort * const fragmentInUrl = userNameInUrl + 6;
 
-static inline void parseDecodedComponent(QString &data)
+static inline void parseDecodedComponent(QString &data, QUrlPrivate::Section section)
 {
     data.replace(u'%', "%25"_L1);
+    if (section != QUrlPrivate::Host)
+        data.replace(u'[', "%5B"_L1).replace(u']', "%5D"_L1);
 }
 
 static inline QString
@@ -2109,7 +2111,7 @@ void QUrl::setUserName(const QString &userName, ParsingMode mode)
 
     QString data = userName;
     if (mode == DecodedMode) {
-        parseDecodedComponent(data);
+        parseDecodedComponent(data, QUrlPrivate::UserName);
         mode = TolerantMode;
     }
 
@@ -2172,7 +2174,7 @@ void QUrl::setPassword(const QString &password, ParsingMode mode)
 
     QString data = password;
     if (mode == DecodedMode) {
-        parseDecodedComponent(data);
+        parseDecodedComponent(data, QUrlPrivate::Password);
         mode = TolerantMode;
     }
 
@@ -2234,7 +2236,7 @@ void QUrl::setHost(const QString &host, ParsingMode mode)
 
     QString data = host;
     if (mode == DecodedMode) {
-        parseDecodedComponent(data);
+        parseDecodedComponent(data, QUrlPrivate::Host);
         mode = TolerantMode;
     }
 
@@ -2359,7 +2361,7 @@ void QUrl::setPath(const QString &path, ParsingMode mode)
 
     QString data = path;
     if (mode == DecodedMode) {
-        parseDecodedComponent(data);
+        parseDecodedComponent(data, QUrlPrivate::Path);
         mode = TolerantMode;
     }
 
@@ -2495,7 +2497,7 @@ void QUrl::setQuery(const QString &query, ParsingMode mode)
 
     QString data = query;
     if (mode == DecodedMode) {
-        parseDecodedComponent(data);
+        parseDecodedComponent(data, QUrlPrivate::Query);
         mode = TolerantMode;
     }
 
@@ -2593,7 +2595,7 @@ void QUrl::setFragment(const QString &fragment, ParsingMode mode)
 
     QString data = fragment;
     if (mode == DecodedMode) {
-        parseDecodedComponent(data);
+        parseDecodedComponent(data, QUrlPrivate::Fragment);
         mode = TolerantMode;
     }
 
@@ -2893,11 +2895,10 @@ QUrl QUrl::adjusted(QUrl::FormattingOptions options) const
         that.setFragment(QString());
     if (options & RemovePath) {
         that.setPath(QString());
-    } else if (options & (StripTrailingSlash | RemoveFilename | NormalizePathSegments)) {
+    } else if (auto pathOpts = options & (StripTrailingSlash | RemoveFilename | NormalizePathSegments)) {
         that.detach();
-        QString path;
-        d->appendPath(path, options | FullyEncoded, QUrlPrivate::Path);
-        that.d->setPath(path, 0, path.size());
+        that.d->path.resize(0);
+        d->appendPath(that.d->path, pathOpts, QUrlPrivate::Path);
     }
     if (that.d->isLocalFile() && that.d->path.startsWith(u'/')) {
         // ensure absolute file URLs have an empty authority to comply with the
@@ -3125,7 +3126,7 @@ bool comparesEqual(const QUrl &lhs, const QUrl &rhs)
     Returns \c true if this URL and the given \a url are equal after
     applying \a options to both; otherwise returns \c false.
 
-    This is equivalent to calling adjusted(options) on both URLs
+    This is equivalent to calling \l{adjusted()}{adjusted}(options) on both URLs
     and comparing the resulting urls, but faster.
 
 */

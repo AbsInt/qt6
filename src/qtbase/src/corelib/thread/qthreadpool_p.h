@@ -133,8 +133,6 @@ public:
     void stealAndRunRunnable(QRunnable *runnable);
     void deletePageIfFinished(QueuePage *page);
 
-    static QThreadPool *qtGuiInstance();
-
     mutable QMutex mutex;
     QSet<QThreadPoolThread *> allThreads;
     QQueue<QThreadPoolThread *> waitingThreads;
@@ -149,6 +147,7 @@ public:
     int activeThreads = 0;
     uint stackSize = 0;
     QThread::Priority threadPriority = QThread::InheritPriority;
+    QThread::QualityOfService serviceLevel = QThread::QualityOfService::Auto;
 };
 
 QT_END_NAMESPACE

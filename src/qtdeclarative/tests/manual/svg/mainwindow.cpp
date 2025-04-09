@@ -34,13 +34,13 @@ MainWindow::MainWindow(QWidget *parent)
     ui->saSvgPainter->setBackgroundRole(QPalette::Base);
 
     m_svgImageWidget = new QQuickWidget;
-    m_svgImageWidget->setSource(QUrl(QStringLiteral("qrc:/SvgImageTest/SvgImage.qml")));
+    m_svgImageWidget->setSource(QUrl(QStringLiteral("qrc:/qt/qml/SvgImageTest/SvgImage.qml")));
     m_svgImageWidget->setResizeMode(QQuickWidget::SizeViewToRootObject);
     m_svgImageWidget->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
     ui->saSvgImage->setWidget(m_svgImageWidget);
 
     m_qmlGeneratorWidget = new QQuickWidget;
-    m_qmlGeneratorWidget->setSource(QUrl(QStringLiteral("qrc:/SvgImageTest/QmlGenerator.qml")));
+    m_qmlGeneratorWidget->setSource(QUrl(QStringLiteral("qrc:/qt/qml/SvgImageTest/QmlGenerator.qml")));
     m_qmlGeneratorWidget->setResizeMode(QQuickWidget::SizeViewToRootObject);
     m_qmlGeneratorWidget->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
     ui->saQmlGenerator->setWidget(m_qmlGeneratorWidget);

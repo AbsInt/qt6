@@ -20,10 +20,13 @@
 
 QT_BEGIN_NAMESPACE
 
+Q_DECLARE_LOGGING_CATEGORY(lcCycle)
+
 class Q_AUTOTEST_EXPORT QQmlTypeData : public QQmlTypeLoader::Blob
 {
     Q_DECLARE_TR_FUNCTIONS(QQmlTypeData)
 public:
+
     struct TypeReference
     {
         TypeReference() : version(QTypeRevision::zero()), needsCreation(true) {}
@@ -48,11 +51,11 @@ public:
 private:
     friend class QQmlTypeLoader;
 
-    QQmlTypeData(const QUrl &, QQmlTypeLoader *);
     template<typename Container>
     void setCompileUnit(const Container &container);
 
 public:
+    QQmlTypeData(const QUrl &, QQmlTypeLoader *);
     ~QQmlTypeData() override;
 
     QV4::CompiledData::CompilationUnit *compilationUnit() const;

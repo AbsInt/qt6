@@ -24,13 +24,13 @@ basePath="http://ci-files01-hki.ci.qt.io/input/android"
 
 toolsVersion="2.1"
 toolsFile="commandlinetools-linux-6609375_latest.zip"
-ndkVersionLatest="r26b"
+ndkVersionLatest="r27c"
 ndkVersionDefault=$ndkVersionLatest
-sdkBuildToolsVersion="34.0.0"
-sdkApiLevel="android-34"
+sdkBuildToolsVersion="35.0.1"
+sdkApiLevel="android-35"
 
 toolsSha1="9172381ff070ee2a416723c1989770cf4b0d1076"
-ndkSha1Latest="fdf33d9f6c1b3f16e5459d53a82c7d2201edbcc4"
+ndkSha1Latest="090e8083a715fdb1a3e402d0763c388abb03fb4e"
 ndkSha1Default=$ndkSha1Latest
 
 # Android Automotive max SDK level image
@@ -210,7 +210,7 @@ cp -r "${scripts_dir_name}/android/gradle_project" /tmp/gradle_project
 cd /tmp/gradle_project
 # Get Gradle files from qtbase
 qtbaseGradleUrl="https://code.qt.io/cgit/qt/qtbase.git/plain/src/3rdparty/gradle"
-commit_sha="8436455e2740000a817e0b8154e13f47e6abb68c"
+commit_sha="e5f79573fe2f21cf7bea8f63386f39bb18b351f0"
 curl "$qtbaseGradleUrl/gradle.properties?h=$commit_sha" > gradle.properties
 curl "$qtbaseGradleUrl/gradlew?h=$commit_sha" > gradlew
 curl "$qtbaseGradleUrl/gradlew.bat?h=$commit_sha" > gradlew.bat

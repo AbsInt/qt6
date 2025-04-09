@@ -6,8 +6,14 @@
 #####################################################################
 
 set(qml_files
+    "CopyAction.qml"
     "CursorDelegate.qml"
+    "CutAction.qml"
+    "DeleteAction.qml"
     "DialogButtonBoxDelegate.qml"
+    "PasteAction.qml"
+    "SelectAllAction.qml"
+    "TextEditingContextMenu.qml"
 )
 
 qt_internal_add_qml_module(QuickControls2IOSStyleImpl

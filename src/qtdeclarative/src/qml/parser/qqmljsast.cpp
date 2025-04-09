@@ -134,6 +134,7 @@ FormalParameterList *ExpressionNode::reparseAsFormalParameterList(MemoryPool *po
         if (!f)
             return nullptr;
 
+        f->commaToken = commaExpr->commaToken;
         expr = commaExpr->right;
     }
 
@@ -158,6 +159,7 @@ FormalParameterList *ExpressionNode::reparseAsFormalParameterList(MemoryPool *po
     }
     if (!binding)
         return nullptr;
+
     return new (pool) AST::FormalParameterList(f, binding);
 }
 

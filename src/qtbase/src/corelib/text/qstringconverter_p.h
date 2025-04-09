@@ -1,6 +1,7 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // Copyright (C) 2020 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #ifndef QSTRINGCONVERTER_P_H
 #define QSTRINGCONVERTER_P_H
@@ -42,7 +43,7 @@ struct QLatin1
     }
 
     static QChar *convertToUnicode(QChar *dst, QByteArrayView in,
-                                   [[maybe_unused]] QStringConverterBase::State *state) noexcept
+                                   [[maybe_unused]] QStringConverter::State *state) noexcept
     {
         Q_ASSERT(state);
 
@@ -320,7 +321,7 @@ struct QUtf8
     static char16_t *convertToUnicode(char16_t *dst, QByteArrayView in, QStringConverter::State *state);
 
     Q_CORE_EXPORT static QByteArray convertFromUnicode(QStringView in);
-    Q_CORE_EXPORT static QByteArray convertFromUnicode(QStringView in, QStringConverterBase::State *state);
+    Q_CORE_EXPORT static QByteArray convertFromUnicode(QStringView in, QStringConverter::State *state);
     static char *convertFromUnicode(char *out, QStringView in, QStringConverter::State *state);
     Q_CORE_EXPORT static char *convertFromLatin1(char *out, QLatin1StringView in);
     struct ValidUtf8Result {
@@ -334,6 +335,12 @@ struct QUtf8
                            Qt::CaseSensitivity cs = Qt::CaseSensitive);
     static int compareUtf8(QByteArrayView lhs, QByteArrayView rhs,
                            Qt::CaseSensitivity cs = Qt::CaseSensitive) noexcept;
+
+private:
+    template <typename OnErrorLambda> static char *
+    convertFromUnicode(char *out, QStringView in, OnErrorLambda &&onError) noexcept;
+    template <typename OnErrorLambda> static char16_t *
+    convertToUnicode(char16_t *dst, QByteArrayView in, OnErrorLambda &&onError) noexcept;
 };
 
 struct QUtf16

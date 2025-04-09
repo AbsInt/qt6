@@ -142,6 +142,7 @@ void DocBookGenerator::initializeGenerator()
     m_config = &Config::instance();
 
     m_project = m_config->get(CONFIG_PROJECT).asString();
+    m_productName = m_config->get(CONFIG_PRODUCTNAME).asString();
 
     m_projectDescription = m_config->get(CONFIG_DESCRIPTION).asString();
     if (m_projectDescription.isEmpty() && !m_project.isEmpty())
@@ -1771,8 +1772,9 @@ void DocBookGenerator::generateHeader(const QString &title, const QString &subTi
         newLine();
     }
 
-    if (!m_project.isEmpty()) {
-        m_writer->writeTextElement(dbNamespace, "productname", m_project);
+    if (!m_productName.isEmpty() || !m_project.isEmpty()) {
+        m_writer->writeTextElement(dbNamespace, "productname", m_productName.isEmpty() ?
+                m_project : m_productName);
         newLine();
     }
 
@@ -1961,7 +1963,7 @@ void DocBookGenerator::generateObsoleteMembers(const Sections &sections)
         return;
 
     Aggregate *aggregate = sections.aggregate();
-    startSection("obsolete", "Obsolete Members for " + aggregate->name());
+    startSection("obsolete", "Obsolete Members for " + aggregate->plainFullName());
 
     m_writer->writeStartElement(dbNamespace, "para");
     m_writer->writeStartElement(dbNamespace, "emphasis");
@@ -2105,16 +2107,16 @@ void DocBookGenerator::generateRequisite(const QString &description, const QStri
  * \internal
  * Generates the CMake (\a description) requisites
  */
-void DocBookGenerator::generateCMakeRequisite(const QStringList &values)
+void DocBookGenerator::generateCMakeRequisite(const QString &findPackage, const QString &linkLibraries)
 {
     const QString description("CMake");
     generateStartRequisite(description);
-    m_writer->writeCharacters(values.first());
+    m_writer->writeCharacters(findPackage);
     m_writer->writeEndElement(); // para
     newLine();
 
     m_writer->writeStartElement(dbNamespace, "para");
-    m_writer->writeCharacters(values.last());
+    m_writer->writeCharacters(linkLibraries);
     generateEndRequisite();
 }
 
@@ -2197,17 +2199,11 @@ void DocBookGenerator::generateRequisites(const Aggregate *aggregate)
         // CMake and QT variable.
         const CollectionNode *cn =
                 m_qdb->getCollectionNode(aggregate->physicalModuleName(), Node::Module);
-        if (cn && !cn->qtCMakeComponent().isEmpty()) {
-            const QString qtComponent = "Qt" + QString::number(QT_VERSION_MAJOR);
-            const QString findpackageText = "find_package(" + qtComponent
-                    + " REQUIRED COMPONENTS " + cn->qtCMakeComponent() + ")";
-            const QString targetItem =
-                    cn->qtCMakeTargetItem().isEmpty() ? cn->qtCMakeComponent() : cn->qtCMakeTargetItem();
-            const QString targetLinkLibrariesText = "target_link_libraries(mytarget PRIVATE "
-                    + qtComponent + "::" + targetItem + ")";
-            const QStringList cmakeInfo { findpackageText, targetLinkLibrariesText };
-            generateCMakeRequisite(cmakeInfo);
+
+        if (const auto result = cmakeRequisite(cn)) {
+            generateCMakeRequisite(result->first, result->second);
         }
+
         if (cn && !cn->qtVariable().isEmpty())
             generateRequisite("qmake", "QT += " + cn->qtVariable());
     }
@@ -2308,9 +2304,17 @@ void DocBookGenerator::generateRequisites(const Aggregate *aggregate)
 void DocBookGenerator::generateQmlRequisites(const QmlTypeNode *qcn)
 {
     // From HtmlGenerator::generateQmlRequisites, but simplified: no need to store all the elements,
-    // they can be produced one by one.
+    // they can be produced one by one and still keep the right order.
     if (!qcn)
         return;
+
+    const QString importText = "Import Statement";
+    const QString sinceText = "Since";
+    const QString inheritedByText = "Inherited By";
+    const QString inheritsText = "Inherits";
+    const QString nativeTypeText = "In C++";
+    const QString groupText = "Group";
+    const QString statusText = "Status";
 
     const CollectionNode *collection = qcn->logicalModule();
 
@@ -2342,23 +2346,24 @@ void DocBookGenerator::generateQmlRequisites(const QmlTypeNode *qcn)
 
     if (generate_import_statement) {
         QStringList parts = QStringList() << "import" << qcn->logicalModuleName() << qcn->logicalModuleVersion();
-        generateRequisite("Import Statement", parts.join(' ').trimmed());
+        generateRequisite(importText, parts.join(' ').trimmed());
     }
 
     // Since and project.
     if (!qcn->since().isEmpty())
-        generateRequisite("Since:", formatSince(qcn));
+        generateRequisite(sinceText, formatSince(qcn));
 
-    // Inherited by.
-    if (!subs.isEmpty()) {
-        generateStartRequisite("Inherited By:");
-        generateSortedQmlNames(qcn, knownTypeNames, subs);
+    // Native type information.
+    ClassNode *cn = (const_cast<QmlTypeNode *>(qcn))->classNode();
+    if (cn && cn->isQmlNativeType() && cn->status() != Node::Internal) {
+        generateStartRequisite(nativeTypeText);
+        generateSimpleLink(fullDocumentLocation(cn), cn->name());
         generateEndRequisite();
     }
 
     // Inherits.
     if (base) {
-        generateStartRequisite("Inherits:");
+        generateStartRequisite(inheritsText);
         generateSimpleLink(fullDocumentLocation(base), base->name());
         // Disambiguate with '(<QML module name>)' if there are clashing type names
         for (const auto sub : std::as_const(subs)) {
@@ -2370,24 +2375,23 @@ void DocBookGenerator::generateQmlRequisites(const QmlTypeNode *qcn)
         generateEndRequisite();
     }
 
-    // Native type information.
-    ClassNode *cn = (const_cast<QmlTypeNode *>(qcn))->classNode();
-    if (cn && cn->isQmlNativeType() && cn->status() != Node::Internal) {
-        generateStartRequisite("In C++:");
-        generateSimpleLink(fullDocumentLocation(cn), cn->name());
+    // Inherited by.
+    if (!subs.isEmpty()) {
+        generateStartRequisite(inheritedByText);
+        generateSortedQmlNames(qcn, knownTypeNames, subs);
         generateEndRequisite();
     }
 
     // Group.
     if (!qcn->groupNames().empty()) {
-        generateStartRequisite("Group");
+        generateStartRequisite(groupText);
         generateGroupReferenceText(qcn);
         generateEndRequisite();
     }
 
     // Status.
     if (auto status = formatStatus(qcn, m_qdb); status)
-        generateRequisite("Status:", status.value());
+        generateRequisite(statusText, status.value());
 
     m_writer->writeEndElement(); // variablelist
     newLine();
@@ -3025,28 +3029,20 @@ void DocBookGenerator::generateCppReferencePage(Node *node)
     const auto aggregate = static_cast<const Aggregate *>(node);
 
     QString title;
-    QString rawTitle;
-    QString fullTitle;
+    QString subtitleText;
+    const QString typeWord{aggregate->typeWord(true)};
     if (aggregate->isNamespace()) {
-        rawTitle = aggregate->plainName();
-        fullTitle = aggregate->plainFullName();
-        title = rawTitle + " Namespace";
+        title = "%1 %2"_L1.arg(aggregate->plainFullName(), typeWord);
     } else if (aggregate->isClass()) {
-        rawTitle = aggregate->plainName();
-
         auto templateDecl = node->templateDecl();
         if (templateDecl)
-            fullTitle = QString("%1 %2 ").arg((*templateDecl).to_qstring(), aggregate->typeWord(false));
-
-        fullTitle += aggregate->plainFullName();
-        title = rawTitle + QLatin1Char(' ') + aggregate->typeWord(true);
+            subtitleText = "%1 %2 %3"_L1.arg((*templateDecl).to_qstring(),
+                                             aggregate->typeWord(false),
+                                             aggregate->plainFullName());
+        title = "%1 %2"_L1.arg(aggregate->plainFullName(), typeWord);
     } else if (aggregate->isHeader()) {
-        title = fullTitle = rawTitle = aggregate->fullTitle();
+        title =  aggregate->fullTitle();
     }
-
-    QString subtitleText;
-    if (rawTitle != fullTitle)
-        subtitleText = fullTitle;
 
     // Start producing the DocBook file.
     m_writer = startDocument(node);
@@ -3415,16 +3411,12 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
             if (!aggregate->physicalModuleName().isEmpty()) {
                 const CollectionNode *cn =
                         m_qdb->getCollectionNode(aggregate->physicalModuleName(), Node::Module);
-                if (cn && !cn->qtCMakeComponent().isEmpty()) {
-                    const QString qtComponent = "Qt" + QString::number(QT_VERSION_MAJOR);
-                    const QString findpackageText = "find_package(" + qtComponent
-                            + " REQUIRED COMPONENTS " + cn->qtCMakeComponent() + ")";
-                    const QString targetLinkLibrariesText =
-                            "target_link_libraries(mytarget PRIVATE " + qtComponent + "::" + cn->qtCMakeComponent()
-                            + ")";
-                    generateSynopsisInfo("cmake-find-package", findpackageText);
-                    generateSynopsisInfo("cmake-target-link-libraries", targetLinkLibrariesText);
+
+                if (const auto result = cmakeRequisite(cn)) {
+                    generateSynopsisInfo("cmake-find-package", result->first);
+                    generateSynopsisInfo("cmake-target-link-libraries", result->second);
                 }
+
                 if (cn && !cn->qtVariable().isEmpty())
                     generateSynopsisInfo("qmake", "QT += " + cn->qtVariable());
             }

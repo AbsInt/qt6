@@ -17,7 +17,6 @@
 
 #include <QtCore/qbasictimer.h>
 #include <QtCore/qdatetime.h>
-#include <QtCore/qtimer.h>
 #include <QtCore/qelapsedtimer.h>
 #include <private/qobject_p.h>
 #include <private/qproperty_p.h>
@@ -116,7 +115,8 @@ public:
 
     virtual void updateAnimationsTime(qint64 delta) = 0;
     virtual void restartAnimationTimer() = 0;
-    virtual int runningAnimationCount() = 0;
+#define QT_QAbstractAnimationTimer_runningAnimationCount_IS_CONST
+    virtual qsizetype runningAnimationCount() const = 0;
 
     bool isRegistered = false;
     bool isPaused = false;
@@ -163,7 +163,7 @@ public:
     void updateAnimationTimers();
 
     //useful for profiling/debugging
-    int runningAnimationCount();
+    qsizetype runningAnimationCount() const;
     void registerProfilerCallback(void (*cb)(qint64));
 
     void startAnimationDriver();
@@ -247,7 +247,7 @@ public:
     void updateAnimationsTime(qint64 delta) override;
 
     //useful for profiling/debugging
-    int runningAnimationCount() override { return animations.size(); }
+    qsizetype runningAnimationCount() const override { return animations.size(); }
 
 private Q_SLOTS:
     void startAnimations();

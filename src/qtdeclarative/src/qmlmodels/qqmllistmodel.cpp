@@ -1576,11 +1576,15 @@ ModelNodeMetaObject::~ModelNodeMetaObject()
 {
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
+const QMetaObject *ModelNodeMetaObject::toDynamicMetaObject(QObject *object) const
+#else
 QMetaObject *ModelNodeMetaObject::toDynamicMetaObject(QObject *object)
+#endif
 {
     if (!m_initialized) {
         m_initialized = true;
-        initialize();
+        const_cast<ModelNodeMetaObject *>(this)->initialize();
     }
     return QQmlOpenMetaObject::toDynamicMetaObject(object);
 }
@@ -1715,8 +1719,8 @@ ReturnedValue ModelObject::virtualGet(const Managed *m, PropertyKey id, const Va
 
 ReturnedValue ModelObject::virtualResolveLookupGetter(const Object *object, ExecutionEngine *engine, Lookup *lookup)
 {
-    lookup->getter = Lookup::getterFallback;
-    return lookup->getter(lookup, engine, *object);
+    lookup->call = Lookup::Call::GetterQObjectPropertyFallback;
+    return lookup->getter(engine, *object);
 }
 
 struct ModelObjectOwnPropertyKeyIterator : ObjectOwnPropertyKeyIterator
@@ -1930,7 +1934,7 @@ void DynamicRoleModelNodeMetaObject::propertyWritten(int index)
 /*!
     \qmltype ListModel
     \nativetype QQmlListModel
-    \inherits AbstractListModel
+    //! \inherits AbstractListModel
     \inqmlmodule QtQml.Models
     \ingroup qtquick-models
     \brief Defines a free-form list data source.

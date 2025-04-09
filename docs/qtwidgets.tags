@@ -1450,6 +1450,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setUpdateThreshold</name>
+            <anchorfile>qabstractitemview.html</anchorfile>
+            <anchor>updateThreshold-prop</anchor>
+            <arglist>(int threshold)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setVerticalScrollMode</name>
             <anchorfile>qabstractitemview.html</anchorfile>
             <anchor>verticalScrollMode-prop</anchor>
@@ -1791,6 +1798,13 @@
             <anchor>sizeHintForRow</anchor>
             <arglist>(int row) const const</arglist>
         </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>int</type>
+            <name>updateThreshold</name>
+            <anchorfile>qabstractitemview.html</anchorfile>
+            <anchor>updateThreshold-prop</anchor>
+            <arglist>() const const</arglist>
+        </member>
         <member kind="function" protection="protected" virtualness="pure" static="no">
             <type>virtual int</type>
             <name>verticalOffset</name>
@@ -1899,6 +1913,12 @@
             <name>textElideMode</name>
             <anchorfile>qabstractitemview.html</anchorfile>
             <anchor>textElideMode-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="int">
+            <name>updateThreshold</name>
+            <anchorfile>qabstractitemview.html</anchorfile>
+            <anchor>updateThreshold-prop</anchor>
             <arglist></arglist>
         </member>
         <member kind="property" type="ScrollMode">
@@ -4900,7 +4920,7 @@
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
             <name>stateChanged</name>
-            <anchorfile>qcheckbox.html</anchorfile>
+            <anchorfile>qcheckbox-obsolete.html</anchorfile>
             <anchor>stateChanged</anchor>
             <arglist>(int state)</arglist>
         </member>
@@ -5529,6 +5549,23 @@
             <arglist></arglist>
         </member>
         <member kind="enumeration">
+            <name>LabelDrawingMode</name>
+            <anchorfile>qcombobox.html</anchorfile>
+            <anchor>LabelDrawingMode-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>UseStyle</name>
+            <anchorfile>qcombobox.html</anchorfile>
+            <anchor>LabelDrawingMode-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>UseDelegate</name>
+            <anchorfile>qcombobox.html</anchorfile>
+            <anchor>LabelDrawingMode-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
             <name>SizeAdjustPolicy</name>
             <anchorfile>qcombobox.html</anchorfile>
             <anchor>SizeAdjustPolicy-enum</anchor>
@@ -5854,6 +5891,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setLabelDrawingMode</name>
+            <anchorfile>qcombobox.html</anchorfile>
+            <anchor>labelDrawingMode-prop</anchor>
+            <arglist>(QComboBox::LabelDrawingMode labelDrawing)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setLineEdit</name>
             <anchorfile>qcombobox.html</anchorfile>
             <anchor>setLineEdit</anchor>
@@ -5997,6 +6041,13 @@
             <name>insertPolicy</name>
             <anchorfile>qcombobox.html</anchorfile>
             <anchor>insertPolicy-prop</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QComboBox::LabelDrawingMode</type>
+            <name>labelDrawingMode</name>
+            <anchorfile>qcombobox.html</anchorfile>
+            <anchor>labelDrawingMode-prop</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -6240,6 +6291,12 @@
             <name>insertPolicy</name>
             <anchorfile>qcombobox.html</anchorfile>
             <anchor>insertPolicy-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="LabelDrawingMode">
+            <name>labelDrawingMode</name>
+            <anchorfile>qcombobox.html</anchorfile>
+            <anchor>labelDrawingMode-prop</anchor>
             <arglist></arglist>
         </member>
         <member kind="property" type="int">
@@ -8809,6 +8866,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setDockLocation</name>
+            <anchorfile>qdockwidget.html</anchorfile>
+            <anchor>setDockLocation</anchor>
+            <arglist>(Qt::DockWidgetArea area)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setFeatures</name>
             <anchorfile>qdockwidget.html</anchorfile>
             <anchor>features-prop</anchor>
@@ -8885,6 +8949,13 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type>Qt::DockWidgetArea</type>
+            <name>dockLocation</name>
+            <anchorfile>qdockwidget.html</anchorfile>
+            <anchor>dockLocation-prop</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type>Qt::DockWidgetAreas</type>
             <name>allowedAreas</name>
             <anchorfile>qdockwidget.html</anchorfile>
@@ -8922,6 +8993,12 @@
             <name>allowedAreas</name>
             <anchorfile>qdockwidget.html</anchorfile>
             <anchor>allowedAreas-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="Qt::DockWidgetArea">
+            <name>dockLocation</name>
+            <anchorfile>qdockwidget.html</anchorfile>
+            <anchor>dockLocation-prop</anchor>
             <arglist></arglist>
         </member>
         <member kind="property" type="DockWidgetFeatures">
@@ -34489,6 +34566,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>widgetAdded</name>
+            <anchorfile>qstackedlayout.html</anchorfile>
+            <anchor>widgetAdded</anchor>
+            <arglist>(int index)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>widgetRemoved</name>
             <anchorfile>qstackedlayout.html</anchorfile>
             <anchor>widgetRemoved</anchor>
@@ -34649,6 +34733,13 @@
             <anchorfile>qstackedwidget.html</anchorfile>
             <anchor>setCurrentWidget</anchor>
             <arglist>(QWidget *widget)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>widgetAdded</name>
+            <anchorfile>qstackedwidget.html</anchorfile>
+            <anchor>widgetAdded</anchor>
+            <arglist>(int index)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
@@ -39944,6 +40035,12 @@
             <anchor>TabFeature-enum</anchor>
             <arglist></arglist>
         </member>
+        <member kind="enumvalue">
+            <name>MinimumSizeHint</name>
+            <anchorfile>qstyleoptiontab.html</anchorfile>
+            <anchor>TabFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
         <member kind="enumeration">
             <name>TabPosition</name>
             <anchorfile>qstyleoptiontab.html</anchorfile>
@@ -40495,6 +40592,18 @@
         </member>
         <member kind="enumvalue">
             <name>HasDecoration</name>
+            <anchorfile>qstyleoptionviewitem.html</anchorfile>
+            <anchor>ViewItemFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>IsDecoratedRootColumn</name>
+            <anchorfile>qstyleoptionviewitem.html</anchorfile>
+            <anchor>ViewItemFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>IsDecorationForRootColumn</name>
             <anchorfile>qstyleoptionviewitem.html</anchorfile>
             <anchor>ViewItemFeature-enum</anchor>
             <arglist></arglist>
@@ -49060,6 +49169,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setAccessibleIdentifier</name>
+            <anchorfile>qwidget.html</anchorfile>
+            <anchor>accessibleIdentifier-prop</anchor>
+            <arglist>(const QString &amp;identifier)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setAccessibleName</name>
             <anchorfile>qwidget.html</anchorfile>
             <anchor>accessibleName-prop</anchor>
@@ -50075,6 +50191,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QString</type>
+            <name>accessibleIdentifier</name>
+            <anchorfile>qwidget.html</anchorfile>
+            <anchor>accessibleIdentifier-prop</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QString</type>
             <name>accessibleName</name>
             <anchorfile>qwidget.html</anchorfile>
             <anchor>accessibleName-prop</anchor>
@@ -50607,6 +50730,12 @@
             <name>accessibleDescription</name>
             <anchorfile>qwidget.html</anchorfile>
             <anchor>accessibleDescription-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="QString">
+            <name>accessibleIdentifier</name>
+            <anchorfile>qwidget.html</anchorfile>
+            <anchor>accessibleIdentifier-prop</anchor>
             <arglist></arglist>
         </member>
         <member kind="property" type="QString">

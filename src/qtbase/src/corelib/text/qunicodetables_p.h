@@ -37,8 +37,9 @@ enum Case {
 };
 
 struct Properties {
-    ushort category            : 8; /* 5 used */
-    ushort direction           : 8; /* 5 used */
+    ushort category            : 5;
+    ushort direction           : 5;
+    ushort emojiFlags          : 6; /* 5 used */
     ushort combiningClass      : 8;
     ushort joining             : 3;
     signed short digitValue    : 5;
@@ -174,6 +175,15 @@ enum class IdnaStatus : unsigned int {
     Ignored,
     Mapped,
     Deviation
+};
+
+enum class EmojiFlags : uchar {
+    NoEmoji = 0,
+    Emoji = 1,
+    Emoji_Presentation = 2,
+    Emoji_Modifier = 4,
+    Emoji_Modifier_Base = 8,
+    Emoji_Component = 16
 };
 
 Q_CORE_EXPORT GraphemeBreakClass QT_FASTCALL graphemeBreakClass(char32_t ucs4) noexcept;

@@ -14,6 +14,7 @@
 #include <qdir.h>
 #include <qfileinfo.h>
 #include <qstringlist.h>
+#include <QDirIterator>
 
 #if defined(Q_OS_WIN)
 #include <QtCore/private/qfsfileengine_p.h>
@@ -260,7 +261,11 @@ void tst_QDir::init()
 void tst_QDir::initTestCase()
 {
 #ifdef BUILTIN_TESTDATA
+#ifdef Q_OS_WASM
+    m_dataDir = QEXTRACTTESTDATA("/tst_qdir");
+#else
     m_dataDir = QEXTRACTTESTDATA("/");
+#endif
     QVERIFY2(!m_dataDir.isNull(), qPrintable("Did not find testdata. Is this builtin?"));
     m_dataPath = m_dataDir->path();
 #elif QT_CONFIG(cxx17_filesystem) // This code doesn't work in QNX on the CI
@@ -359,10 +364,11 @@ void tst_QDir::mkdirRmdir_data()
     const struct {
         const char *name; // shall have a prefix added
         const char *path; // relative
-        bool recurse;
+        bool recurse; // QDir::rmpath() vs. QDir::rmdir()
     } cases[] = {
         { "plain", "testdir/one", false },
         { "recursive", "testdir/two/three/four", true },
+        { "recursive-name-length-1", "a/b/c", true },
         { "with-..", "testdir/../testdir/three", false },
     };
 
@@ -378,6 +384,8 @@ void tst_QDir::mkdirRmdir()
     QFETCH(QString, path);
     QFETCH(bool, recurse);
 
+    QTest::ThrowOnFailEnabler thrower;
+
     QDir dir;
     dir.rmdir(path);
     if (recurse)
@@ -389,10 +397,24 @@ void tst_QDir::mkdirRmdir()
     QFileInfo fi(path);
     QVERIFY2(fi.exists() && fi.isDir(), msgDoesNotExist(path).constData());
 
-    if (recurse)
-        QVERIFY(dir.rmpath(path));
-    else
+    if (recurse) {
+        // Check that rmpath() removed all empty parent dirs
+        auto verifyRmPath = [&dir, &path](QLatin1StringView subdir) {
+            QFileInfo fi(QDir::currentPath() + subdir);
+            QVERIFY(fi.exists());
+            QVERIFY(dir.rmpath(path));
+            fi.refresh();
+            QVERIFY(!fi.exists());
+        };
+        if (path.contains("testdir/two/three/four"_L1))
+            verifyRmPath("/testdir/two"_L1);
+        else if (path.contains("a/b/c"_L1))
+            verifyRmPath("/a"_L1);
+        else
+            QVERIFY(dir.rmpath(path));
+    } else {
         QVERIFY(dir.rmdir(path));
+    }
 
     //make sure it really doesn't exist (ie that rmdir returns the right value)
     fi.refresh();
@@ -447,6 +469,9 @@ void tst_QDir::mkdirOnSymlink()
     fi.setFile(path);
 #if defined(Q_OS_QNX)
     QSKIP("Fails on QNX QTBUG-98561");
+#endif
+#if defined (Q_OS_WASM)
+    QEXPECT_FAIL("", "fails on wasm, see bug: QTBUG-127766", Continue);
 #endif
     QVERIFY2(fi.exists() && fi.isDir(), msgDoesNotExist(path).constData());
 #endif
@@ -1944,11 +1969,13 @@ void tst_QDir::longFileName_data()
     QTest::addColumn<int>("length");
 
     QTest::newRow("128") << 128;
+#ifndef Q_OS_WASM
     QTest::newRow("256") << 256;
     QTest::newRow("512") << 512;
     QTest::newRow("1024") << 1024;
     QTest::newRow("2048") << 2048;
     QTest::newRow("4096") << 4096;
+#endif
 }
 
 void tst_QDir::longFileName()
@@ -2297,6 +2324,8 @@ void tst_QDir::equalityOperator_data()
 #elif defined(Q_OS_HAIKU)
     QString pathinroot("/boot/..");
 #elif defined(Q_OS_VXWORKS)
+    QString pathinroot("/tmp/..");
+#elif defined(Q_OS_WASM)
     QString pathinroot("/tmp/..");
 #else
     QString pathinroot("/usr/..");

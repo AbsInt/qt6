@@ -373,6 +373,18 @@ qt_config_compile_test_x86simd(avx512vbmi2 "AVX512VBMI2")
 # x86: vaes
 qt_config_compile_test_x86simd(vaes "VAES")
 
+# arm: crypto
+qt_config_compile_test_armintrin(crypto "CRYPTO")
+
+# arm: sve
+qt_config_compile_test_armintrin(sve "SVE")
+
+# loongarch: lsx
+qt_config_compile_test_loongarchsimd(lsx "LSX")
+
+# loongarch: lasx
+qt_config_compile_test_loongarchsimd(lasx "LASX")
+
 # localtime_r
 qt_config_compile_test(localtime_r
     LABEL "localtime_r()"
@@ -414,55 +426,6 @@ int main(void)
 {
     /* BEGIN TEST: */
 (void) posix_fallocate(0, 0, 0);
-    /* END TEST: */
-    return 0;
-}
-")
-
-# alloca_stdlib_h
-qt_config_compile_test(alloca_stdlib_h
-    LABEL "alloca() in stdlib.h"
-    CODE
-"#include <stdlib.h>
-
-int main(void)
-{
-    /* BEGIN TEST: */
-alloca(1);
-    /* END TEST: */
-    return 0;
-}
-")
-
-# alloca_h
-qt_config_compile_test(alloca_h
-    LABEL "alloca() in alloca.h"
-    CODE
-"#include <alloca.h>
-#ifdef __QNXNTO__
-// extra include needed in QNX7 to define NULL for the alloca() macro
-#  include <stddef.h>
-#endif
-
-int main(void)
-{
-    /* BEGIN TEST: */
-alloca(1);
-    /* END TEST: */
-    return 0;
-}
-")
-
-# alloca_malloc_h
-qt_config_compile_test(alloca_malloc_h
-    LABEL "alloca() in malloc.h"
-    CODE
-"#include <malloc.h>
-
-int main(void)
-{
-    /* BEGIN TEST: */
-alloca(1);
     /* END TEST: */
     return 0;
 }
@@ -617,9 +580,18 @@ qt_feature("no-prefix"
     AUTODETECT NOT QT_WILL_INSTALL
     CONDITION NOT QT_WILL_INSTALL
 )
+qt_feature("lint_generated_code"
+    LABEL "Lint qt-generated code"
+    AUTODETECT QT_FEATURE_developer_build
+)
 qt_feature("private_tests" PRIVATE
     LABEL "Developer build: private_tests"
     CONDITION QT_FEATURE_developer_build
+)
+qt_feature("doc_snippets" PRIVATE
+    LABEL "Developer build: doc_snippets"
+    AUTODETECT QT_FEATURE_developer_build
+    CONDITION QT_FEATURE_shared
 )
 qt_feature_definition("developer-build" "QT_BUILD_INTERNAL")
 qt_feature_config("developer-build" QMAKE_PUBLIC_QT_CONFIG
@@ -676,6 +648,12 @@ qt_feature("force_asserts" PUBLIC
     LABEL "Force assertions"
     AUTODETECT OFF
 )
+
+qt_feature("exceptions"
+    LABEL "Enable exceptions"
+    AUTODETECT OFF
+)
+
 qt_feature("framework" PUBLIC
     LABEL "Build Apple Frameworks"
     AUTODETECT ON
@@ -941,6 +919,18 @@ qt_feature("shani" PRIVATE
 )
 qt_feature_definition("shani" "QT_COMPILER_SUPPORTS_SHA" VALUE "1")
 qt_feature_config("shani" QMAKE_PRIVATE_CONFIG)
+qt_feature("lsx" PRIVATE
+    LABEL "LSX"
+    CONDITION ( TEST_architecture_arch STREQUAL loongarch64 ) AND TEST_subarch_lsx
+)
+qt_feature_definition("lsx" "QT_COMPILER_SUPPORTS_LSX" VALUE "1")
+qt_feature_config("lsx" QMAKE_PRIVATE_CONFIG)
+qt_feature("lasx" PRIVATE
+    LABEL "LASX"
+    CONDITION ( TEST_architecture_arch STREQUAL loongarch64 ) AND TEST_subarch_lasx
+)
+qt_feature_definition("lasx" "QT_COMPILER_SUPPORTS_LASX" VALUE "1")
+qt_feature_config("lasx" QMAKE_PRIVATE_CONFIG)
 qt_feature("mips_dsp" PRIVATE
     LABEL "DSP"
     CONDITION ( TEST_architecture_arch STREQUAL mips ) AND TEST_arch_${TEST_architecture_arch}_subarch_dsp
@@ -969,11 +959,18 @@ qt_feature_definition("arm_crc32" "QT_COMPILER_SUPPORTS_CRC32" VALUE "1")
 qt_feature_config("arm_crc32" QMAKE_PRIVATE_CONFIG)
 qt_feature("arm_crypto" PRIVATE
     LABEL "AES"
-    CONDITION ( ( TEST_architecture_arch STREQUAL arm ) OR ( TEST_architecture_arch STREQUAL arm64 ) ) AND TEST_arch_${TEST_architecture_arch}_subarch_crypto
+    CONDITION ( ( TEST_architecture_arch STREQUAL arm ) OR ( TEST_architecture_arch STREQUAL arm64 ) ) AND ( TEST_arch_${TEST_architecture_arch}_subarch_crypto OR TEST_subarch_crypto )
 )
 qt_feature_definition("arm_crypto" "QT_COMPILER_SUPPORTS_CRYPTO" VALUE "1")
 qt_feature_definition("arm_crypto" "QT_COMPILER_SUPPORTS_AES" VALUE "1")
 qt_feature_config("arm_crypto" QMAKE_PRIVATE_CONFIG)
+
+qt_feature("arm_sve" PRIVATE
+    LABEL "SVE"
+    CONDITION ( TEST_architecture_arch STREQUAL arm64 ) AND ( TEST_arch_${TEST_architecture_arch}_subarch_sve OR TEST_subarch_sve )
+)
+qt_feature_definition("arm_sve" "QT_COMPILER_SUPPORTS_SVE" VALUE "1")
+qt_feature_config("arm_sve" QMAKE_PRIVATE_CONFIG)
 
 qt_feature("wasm-simd128" PUBLIC
     LABEL "WebAssembly SIMD128"
@@ -991,6 +988,14 @@ qt_feature("wasm-exceptions" PUBLIC
 qt_feature_definition("wasm-exceptions" "QT_WASM_EXCEPTIONS" VALUE "1")
 qt_feature_config("wasm-exceptions" QMAKE_PRIVATE_CONFIG)
 
+qt_feature("wasm-jspi" PUBLIC
+    LABEL "WebAssembly JSPI"
+    PURPOSE "Enables WebAssembly JavaScript Promise Integration (JSPI)"
+    AUTODETECT OFF
+)
+qt_feature_definition("wasm-jspi" "QT_WASM_JSPI" VALUE "1")
+qt_feature_config("wasm-jspi" QMAKE_PRIVATE_CONFIG)
+
 qt_feature("localtime_r" PRIVATE
     LABEL "localtime_r()"
     CONDITION TEST_localtime_r
@@ -1003,19 +1008,15 @@ qt_feature("posix_fallocate" PRIVATE
     LABEL "POSIX fallocate()"
     CONDITION TEST_posix_fallocate
 )
-qt_feature("alloca_h" PRIVATE
-    LABEL "alloca.h"
-    CONDITION TEST_alloca_h
+qt_feature("force-system-libs" PRIVATE
+    LABEL "Force the usage of system libraries"
+    AUTODETECT OFF
 )
-qt_feature("alloca_malloc_h" PRIVATE
-    LABEL "alloca() in malloc.h"
-    CONDITION NOT QT_FEATURE_alloca_h AND TEST_alloca_malloc_h
+qt_feature("force-bundled-libs" PRIVATE
+    LABEL "Force the usage of bundled libraries"
+    AUTODETECT OFF
 )
-qt_feature("alloca" PRIVATE
-    LABEL "alloca()"
-    CONDITION QT_FEATURE_alloca_h OR QT_FEATURE_alloca_malloc_h OR TEST_alloca_stdlib_h
-)
-qt_feature("system-zlib" PRIVATE
+qt_feature("system-zlib" PRIVATE SYSTEM_LIBRARY
     LABEL "Using system zlib"
     CONDITION WrapSystemZLIB_FOUND
 )
@@ -1325,6 +1326,10 @@ qt_configure_add_summary_entry(
     ARGS "wasm-exceptions"
     CONDITION ( TEST_architecture_arch STREQUAL wasm )
 )
+qt_configure_add_summary_entry(
+    ARGS "wasm-jspi"
+    CONDITION ( TEST_architecture_arch STREQUAL wasm )
+)
 qt_configure_add_summary_section(NAME "Target compiler supports")
 qt_configure_add_summary_entry(
     TYPE "featureList"
@@ -1334,9 +1339,15 @@ qt_configure_add_summary_entry(
 )
 qt_configure_add_summary_entry(
     TYPE "featureList"
-    ARGS "neon arm_crc32 arm_crypto"
+    ARGS "neon arm_crc32 arm_crypto arm_sve"
     MESSAGE "ARM Extensions"
     CONDITION ( TEST_architecture_arch STREQUAL arm ) OR ( TEST_architecture_arch STREQUAL arm64 )
+)
+qt_configure_add_summary_entry(
+    TYPE "featureList"
+    ARGS "lsx lasx"
+    MESSAGE "LOONGARCH Extensions"
+    CONDITION ( TEST_architecture_arch STREQUAL loongarch64 )
 )
 qt_configure_add_summary_entry(
     ARGS "mips_dsp"
@@ -1465,9 +1476,15 @@ qt_configure_add_report_entry(
     CONDITION QT_FEATURE_thread AND WASM
 )
 qt_configure_add_report_entry(
-    TYPE WARNING
+    TYPE ERROR
     MESSAGE "You should use the recommended Emscripten version ${QT_EMCC_RECOMMENDED_VERSION} with this Qt. You have ${EMCC_VERSION}."
-    CONDITION WASM AND NOT ${EMCC_VERSION} MATCHES ${QT_EMCC_RECOMMENDED_VERSION}
+    CONDITION WASM AND ${EMCC_VERSION} VERSION_LESS ${QT_EMCC_RECOMMENDED_VERSION}
+)
+qt_configure_add_report_entry(
+    TYPE WARNING
+    MESSAGE "Using Emscripten version ${QT_EMCC_RECOMMENDED_VERSION} with this Qt
+    may have issues. You have ${EMCC_VERSION}."
+    CONDITION WASM AND ${EMCC_VERSION} VERSION_GREATER ${QT_EMCC_RECOMMENDED_VERSION}
 )
 qt_configure_add_report_entry(
     TYPE WARNING
@@ -1478,6 +1495,11 @@ qt_configure_add_report_entry(
     TYPE ERROR
     MESSAGE "Building Qt with C++20 is not supported with MSVC 2019."
     CONDITION QT_FEATURE_cxx20 AND MSVC AND MSVC_VERSION LESS "1930"
+)
+qt_configure_add_report_entry(
+    TYPE ERROR
+    MESSAGE "You cannot force both system and bundled libraries."
+    CONDITION QT_FEATURE_force_bundled_libs AND QT_FEATURE_force_system_libs
 )
 if(WASM)
     qt_extra_definition("QT_EMCC_VERSION" "\"${EMCC_VERSION}\"" PUBLIC)
@@ -1495,4 +1517,10 @@ qt_configure_add_report_entry(
 E.g., When building QtWebEngine, enabling this option may result in build issues in certain platforms.
 See https://bugreports.qt.io/browse/QTBUG-59769."
     CONDITION QT_ALLOW_SYMLINK_IN_PATHS
+)
+
+# QtGuiTest interface
+qt_feature_definition("test_gui" "QT_GUI_TEST" VALUE "1")
+qt_feature("test_gui" PUBLIC
+    LABEL "Build QtGuiTest namespace"
 )

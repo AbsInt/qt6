@@ -55,7 +55,7 @@ private:
 
 class Q_QUICKTEMPLATES2_EXPORT QQuickPopupPrivate
     : public QObjectPrivate
-    , public QQuickItemChangeListener
+    , public QSafeQuickItemChangeListener<QQuickPopupPrivate>
     , public QQuickPaletteProviderPrivateBase<QQuickPopup, QQuickPopupPrivate>
 {
 public:
@@ -200,8 +200,8 @@ public:
     qreal explicitDimmerOpacity = 0;
     qreal prevOpacity = 0;
     qreal prevScale = 0;
-    QString m_title;
-    QQuickPopup::PopupType m_popupType = QQuickPopup::Item;
+    QString title;
+    QQuickPopup::PopupType popupType = QQuickPopup::Item;
 
     friend class QQuickPopupTransitionManager;
 };

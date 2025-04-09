@@ -13,7 +13,7 @@ cmake_minimum_required(VERSION 3.16)
 project(qtdeclarative_cmake_tests)
 enable_testing()
 
-set(required_packages Core)
+set(required_packages Core TestInternalsPrivate)
 set(optional_packages Qml Quick)
 
 # Setup the test when called as a completely standalone project.
@@ -150,6 +150,7 @@ if(TARGET Qt::Quick)
         if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
             _qt_internal_test_expect_pass(test_generate_qmlls_ini BINARY tst_generate_qmlls_ini)
             _qt_internal_test_expect_pass(test_aotstats_integration BINARY tst_aotstats_integration)
+            _qt_internal_test_expect_pass(test_target_qml_sources_in_different_scope)
         endif()
         _qt_internal_test_expect_pass(
                    test_link_qml_module_without_target
@@ -168,3 +169,5 @@ if(TARGET Qt::Quick)
         endif()
     endif()
 endif()
+
+add_subdirectory(RunCMake)

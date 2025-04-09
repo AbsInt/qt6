@@ -391,7 +391,7 @@ finishIncubate:
 void QQmlIncubatorPrivate::incubateCppBasedComponent(QQmlComponent *component, QQmlContext *context)
 {
     auto compPriv = QQmlComponentPrivate::get(component);
-    Q_ASSERT(compPriv->loadedType.isCreatable());
+    Q_ASSERT(compPriv->loadedType().isCreatable());
     std::unique_ptr<QObject> object(component->beginCreate(context));
     component->setInitialProperties(object.get(), initialProperties);
     if (auto props = compPriv->state.requiredProperties()) {

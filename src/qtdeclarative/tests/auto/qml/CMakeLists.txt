@@ -22,6 +22,10 @@ if(NOT INTEGRITY)
     add_subdirectory(common)
 endif()
 
+if(NOT ANDROID) # QTBUG-100003
+    add_subdirectory(qqmlmoduleplugin)
+endif()
+
 # Limit set of tests to run for static Qt builds.
 if(QT_BUILD_MINIMAL_STATIC_TESTS)
     return()
@@ -38,9 +42,6 @@ if(QT_FEATURE_qml_locale)
     add_subdirectory(qqmllocale)
 endif()
 add_subdirectory(qqmlmetaobject)
-if(NOT ANDROID) # QTBUG-100003
-    add_subdirectory(qqmlmoduleplugin)
-endif()
 add_subdirectory(qqmlnotifier)
 add_subdirectory(qqmlqt)
 add_subdirectory(qqmlxmlhttprequest)
@@ -166,4 +167,5 @@ if(QT_FEATURE_private_tests)
 endif()
 if(NOT CMAKE_CROSSCOMPILING)
     add_subdirectory(qqmljsutils)
+    add_subdirectory(compiler)
 endif()

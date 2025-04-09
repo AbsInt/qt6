@@ -6,6 +6,8 @@
 #include "paletteeditorbutton.h"
 #include "pixmapeditor.h"
 #include "qlonglongvalidator.h"
+#include "texteditor.h"
+#include "resetdecorator.h"
 #include "stringlisteditorbutton.h"
 #include "qtresourceview_p.h"
 #include "qtpropertybrowserutils_p.h"
@@ -16,7 +18,6 @@
 #include <propertysheet.h>
 #include <qextensionmanager.h>
 #include <formwindowcursor.h>
-#include <textpropertyeditor_p.h>
 #include <stylesheeteditor_p.h>
 #include <richtexteditor_p.h>
 #include <plaintexteditor_p.h>
@@ -255,311 +256,6 @@ bool TranslatablePropertyManager<PropertySheetValue>::value(const QtProperty *pr
     return true;
 }
 
-// ------------ TextEditor
-class TextEditor : public QWidget
-{
-    Q_OBJECT
-public:
-    TextEditor(QDesignerFormEditorInterface *core, QWidget *parent);
-
-    TextPropertyValidationMode textPropertyValidationMode() const;
-    void setTextPropertyValidationMode(TextPropertyValidationMode vm);
-
-    void setRichTextDefaultFont(const QFont &font) { m_richTextDefaultFont = font; }
-    QFont richTextDefaultFont() const { return m_richTextDefaultFont; }
-
-    void setSpacing(int spacing);
-
-    TextPropertyEditor::UpdateMode updateMode() const     { return m_editor->updateMode(); }
-    void setUpdateMode(TextPropertyEditor::UpdateMode um) { m_editor->setUpdateMode(um); }
-
-    void setIconThemeModeEnabled(bool enable);
-
-public slots:
-    void setText(const QString &text);
-
-signals:
-    void textChanged(const QString &text);
-
-private slots:
-    void buttonClicked();
-    void resourceActionActivated();
-    void fileActionActivated();
-private:
-    TextPropertyEditor *m_editor;
-    IconThemeEditor *m_themeEditor;
-    bool m_iconThemeModeEnabled;
-    QFont m_richTextDefaultFont;
-    QToolButton *m_button;
-    QMenu *m_menu;
-    QAction *m_resourceAction;
-    QAction *m_fileAction;
-    QHBoxLayout *m_layout;
-    QDesignerFormEditorInterface *m_core;
-};
-
-TextEditor::TextEditor(QDesignerFormEditorInterface *core, QWidget *parent) :
-    QWidget(parent),
-    m_editor(new TextPropertyEditor(this)),
-    m_themeEditor(new IconThemeEditor(this, false)),
-    m_iconThemeModeEnabled(false),
-    m_richTextDefaultFont(QApplication::font()),
-    m_button(new QToolButton(this)),
-    m_menu(new QMenu(this)),
-    m_resourceAction(new QAction(tr("Choose Resource..."), this)),
-    m_fileAction(new QAction(tr("Choose File..."), this)),
-    m_layout(new QHBoxLayout(this)),
-    m_core(core)
-{
-    m_themeEditor->setVisible(false);
-    m_button->setVisible(false);
-
-    m_layout->addWidget(m_editor);
-    m_layout->addWidget(m_themeEditor);
-    m_button->setText(tr("..."));
-    m_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Ignored);
-    m_button->setFixedWidth(20);
-    m_layout->addWidget(m_button);
-    m_layout->setContentsMargins(QMargins());
-    m_layout->setSpacing(0);
-
-    connect(m_resourceAction, &QAction::triggered, this, &TextEditor::resourceActionActivated);
-    connect(m_fileAction, &QAction::triggered, this, &TextEditor::fileActionActivated);
-    connect(m_editor, &TextPropertyEditor::textChanged, this, &TextEditor::textChanged);
-    connect(m_themeEditor, &IconThemeEditor::edited, this, &TextEditor::textChanged);
-    connect(m_button, &QAbstractButton::clicked, this, &TextEditor::buttonClicked);
-
-    setSizePolicy(QSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed));
-    setFocusProxy(m_editor);
-
-    m_menu->addAction(m_resourceAction);
-    m_menu->addAction(m_fileAction);
-}
-
-void TextEditor::setSpacing(int spacing)
-{
-    m_layout->setSpacing(spacing);
-}
-
-void TextEditor::setIconThemeModeEnabled(bool enable)
-{
-    if (m_iconThemeModeEnabled == enable)
-        return; // nothing changes
-    m_iconThemeModeEnabled = enable;
-    m_editor->setVisible(!enable);
-    m_themeEditor->setVisible(enable);
-    if (enable) {
-        m_themeEditor->setTheme(m_editor->text());
-        setFocusProxy(m_themeEditor);
-    } else {
-        m_editor->setText(m_themeEditor->theme());
-        setFocusProxy(m_editor);
-    }
-}
-
-TextPropertyValidationMode TextEditor::textPropertyValidationMode() const
-{
-    return m_editor->textPropertyValidationMode();
-}
-
-void TextEditor::setTextPropertyValidationMode(TextPropertyValidationMode vm)
-{
-    m_editor->setTextPropertyValidationMode(vm);
-    if (vm == ValidationURL) {
-        m_button->setMenu(m_menu);
-        m_button->setFixedWidth(30);
-        m_button->setPopupMode(QToolButton::MenuButtonPopup);
-    } else {
-        m_button->setMenu(nullptr);
-        m_button->setFixedWidth(20);
-        m_button->setPopupMode(QToolButton::DelayedPopup);
-    }
-    m_button->setVisible(vm == ValidationStyleSheet || vm == ValidationRichText || vm == ValidationMultiLine || vm == ValidationURL);
-}
-
-void TextEditor::setText(const QString &text)
-{
-    if (m_iconThemeModeEnabled)
-        m_themeEditor->setTheme(text);
-    else
-        m_editor->setText(text);
-}
-
-void TextEditor::buttonClicked()
-{
-    const QString oldText = m_editor->text();
-    QString newText;
-    switch (textPropertyValidationMode()) {
-    case ValidationStyleSheet: {
-        StyleSheetEditorDialog dlg(m_core, this);
-        dlg.setText(oldText);
-        if (dlg.exec() != QDialog::Accepted)
-            return;
-        newText = dlg.text();
-    }
-        break;
-    case ValidationRichText: {
-        RichTextEditorDialog dlg(m_core, this);
-        dlg.setDefaultFont(m_richTextDefaultFont);
-        dlg.setText(oldText);
-        if (dlg.showDialog() != QDialog::Accepted)
-            return;
-        newText = dlg.text(Qt::AutoText);
-    }
-        break;
-    case ValidationMultiLine: {
-        PlainTextEditorDialog dlg(m_core, this);
-        dlg.setDefaultFont(m_richTextDefaultFont);
-        dlg.setText(oldText);
-        if (dlg.showDialog() != QDialog::Accepted)
-            return;
-        newText = dlg.text();
-    }
-        break;
-    case ValidationURL:
-        if (oldText.isEmpty() || oldText.startsWith("qrc:"_L1))
-            resourceActionActivated();
-        else
-            fileActionActivated();
-        return;
-    default:
-        return;
-    }
-    if (newText != oldText) {
-        m_editor->setText(newText);
-        emit textChanged(newText);
-    }
-}
-
-void TextEditor::resourceActionActivated()
-{
-    QString oldPath = m_editor->text();
-    if (oldPath.startsWith("qrc:"_L1))
-        oldPath.remove(0, 4);
-    // returns ':/file'
-    QString newPath = IconSelector::choosePixmapResource(m_core, m_core->resourceModel(), oldPath, this);
-    if (newPath.startsWith(u':'))
-         newPath.remove(0, 1);
-    if (newPath.isEmpty() || newPath == oldPath)
-        return;
-    const QString newText = "qrc:"_L1 + newPath;
-    m_editor->setText(newText);
-    emit textChanged(newText);
-}
-
-void TextEditor::fileActionActivated()
-{
-    QString oldPath = m_editor->text();
-    if (oldPath.startsWith("file:"_L1))
-        oldPath = oldPath.mid(5);
-    const QString newPath = m_core->dialogGui()->getOpenFileName(this, tr("Choose a File"), oldPath);
-    if (newPath.isEmpty() || newPath == oldPath)
-        return;
-    const QString newText = QUrl::fromLocalFile(newPath).toString();
-    m_editor->setText(newText);
-    emit textChanged(newText);
-}
-
-// --------------- ResetWidget
-class ResetWidget : public QWidget
-{
-    Q_OBJECT
-public:
-    ResetWidget(QtProperty *property, QWidget *parent = nullptr);
-
-    void setWidget(QWidget *widget);
-    void setResetEnabled(bool enabled);
-    void setValueText(const QString &text);
-    void setValueIcon(const QIcon &icon);
-    void setSpacing(int spacing);
-signals:
-    void resetProperty(QtProperty *property);
-private slots:
-    void slotClicked();
-private:
-    QtProperty *m_property;
-    QLabel *m_textLabel;
-    QLabel *m_iconLabel;
-    QToolButton *m_button;
-    int m_spacing;
-};
-
-ResetWidget::ResetWidget(QtProperty *property, QWidget *parent) :
-    QWidget(parent),
-    m_property(property),
-    m_textLabel(new QLabel(this)),
-    m_iconLabel(new QLabel(this)),
-    m_button(new QToolButton(this)),
-    m_spacing(-1)
-{
-    m_textLabel->setSizePolicy(QSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed));
-    m_iconLabel->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
-    m_button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    m_button->setIcon(createIconSet("resetproperty.png"_L1));
-    m_button->setIconSize(QSize(8,8));
-    m_button->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::MinimumExpanding));
-    connect(m_button, &QAbstractButton::clicked, this, &ResetWidget::slotClicked);
-    QLayout *layout = new QHBoxLayout(this);
-    layout->setContentsMargins(QMargins());
-    layout->setSpacing(m_spacing);
-    layout->addWidget(m_iconLabel);
-    layout->addWidget(m_textLabel);
-    layout->addWidget(m_button);
-    setFocusProxy(m_textLabel);
-    setSizePolicy(QSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed));
-}
-
-void ResetWidget::setSpacing(int spacing)
-{
-    m_spacing = spacing;
-    layout()->setSpacing(m_spacing);
-}
-
-void ResetWidget::setWidget(QWidget *widget)
-{
-    if (m_textLabel) {
-        delete m_textLabel;
-        m_textLabel = nullptr;
-    }
-    if (m_iconLabel) {
-        delete m_iconLabel;
-        m_iconLabel = nullptr;
-    }
-    delete layout();
-    QLayout *layout = new QHBoxLayout(this);
-    layout->setContentsMargins(QMargins());
-    layout->setSpacing(m_spacing);
-    layout->addWidget(widget);
-    layout->addWidget(m_button);
-    setFocusProxy(widget);
-}
-
-void ResetWidget::setResetEnabled(bool enabled)
-{
-    m_button->setEnabled(enabled);
-}
-
-void ResetWidget::setValueText(const QString &text)
-{
-    if (m_textLabel)
-        m_textLabel->setText(text);
-}
-
-void ResetWidget::setValueIcon(const QIcon &icon)
-{
-    QPixmap pix = icon.pixmap(QSize(16, 16));
-    if (m_iconLabel) {
-        m_iconLabel->setVisible(!pix.isNull());
-        m_iconLabel->setPixmap(pix);
-    }
-}
-
-void ResetWidget::slotClicked()
-{
-    emit resetProperty(m_property);
-}
-
-
 // ------------ DesignerPropertyManager:
 
 DesignerPropertyManager::DesignerPropertyManager(QDesignerFormEditorInterface *core, QObject *parent) :
@@ -683,7 +379,9 @@ void DesignerPropertyManager::slotValueChanged(QtProperty *property, const QVari
         return;
     }
 
-    if (QtProperty *flagProperty = m_flagToProperty.value(property, 0)) {
+    auto *parentItem = property->parentProperty();
+    if (m_flagValues.contains(parentItem)) {
+        auto *flagProperty = parentItem;
         const auto subFlags = m_propertyToFlags.value(flagProperty);
         const qsizetype subFlagCount = subFlags.size();
         // flag changed
@@ -769,7 +467,8 @@ void DesignerPropertyManager::slotValueChanged(QtProperty *property, const QVari
             return;
 
         variantProperty(alignProperty)->setValue(newValue);
-    } else if (QtProperty *iProperty = m_iconSubPropertyToProperty.value(property, 0)) {
+    } else if (m_iconValues.contains(parentItem)) {
+        QtProperty *iProperty = parentItem;
         QtVariantProperty *iconProperty = variantProperty(iProperty);
         PropertySheetIconValue icon = qvariant_cast<PropertySheetIconValue>(iconProperty->value());
         const auto itState = m_iconSubPropertyToState.constFind(property);
@@ -795,11 +494,12 @@ void DesignerPropertyManager::slotValueChanged(QtProperty *property, const QVari
 
 void DesignerPropertyManager::slotPropertyDestroyed(QtProperty *property)
 {
-    if (QtProperty *flagProperty = m_flagToProperty.value(property, 0)) {
+    auto *parentItem = property->parentProperty();
+    if (m_flagValues.contains(parentItem)) {
+        auto *flagProperty = parentItem;
         const auto it = m_propertyToFlags.find(flagProperty);
         auto &propertyList = it.value();
         propertyList.replace(propertyList.indexOf(property), 0);
-        m_flagToProperty.remove(property);
     } else if (QtProperty *alignProperty = m_alignHToProperty.value(property, 0)) {
         m_propertyToAlignH.remove(alignProperty);
         m_alignHToProperty.remove(property);
@@ -809,7 +509,8 @@ void DesignerPropertyManager::slotPropertyDestroyed(QtProperty *property)
     } else if (m_stringManager.destroy(property)
                || m_stringListManager.destroy(property)
                || m_keySequenceManager.destroy(property)) {
-    } else if (QtProperty *iconProperty = m_iconSubPropertyToProperty.value(property, 0)) {
+    } else if (m_iconValues.contains(parentItem)) {
+        auto *iconProperty = parentItem;
         if (m_propertyToTheme.value(iconProperty) == property) {
             m_propertyToTheme.remove(iconProperty);
         } else if (m_propertyToThemeEnum.value(iconProperty) == property) {
@@ -821,7 +522,6 @@ void DesignerPropertyManager::slotPropertyDestroyed(QtProperty *property)
             propertyList.remove(state);
             m_iconSubPropertyToState.remove(property);
         }
-        m_iconSubPropertyToProperty.remove(property);
     } else {
         m_fontManager.slotPropertyDestroyed(property);
         m_brushManager.slotPropertyDestroyed(property);
@@ -971,12 +671,7 @@ void DesignerPropertyManager::setAttribute(QtProperty *property,
             return;
 
         const auto pfit = m_propertyToFlags.find(property);
-        for (QtProperty *prop : std::as_const(pfit.value())) {
-            if (prop) {
-                delete prop;
-                m_flagToProperty.remove(prop);
-            }
-        }
+        qDeleteAll(std::as_const(pfit.value()));
         pfit.value().clear();
 
         QList<uint> values;
@@ -987,7 +682,6 @@ void DesignerPropertyManager::setAttribute(QtProperty *property,
             prop->setPropertyName(flagName);
             property->addSubProperty(prop);
             m_propertyToFlags[property].append(prop);
-            m_flagToProperty[prop] = property;
             values.append(pair.second);
         }
 
@@ -1814,14 +1508,12 @@ void DesignerPropertyManager::initializeProperty(QtProperty *property)
             QtVariantProperty *themeEnumProp = addProperty(QMetaType::Int, tr("Theme"));
             m_intValues[themeEnumProp] = -1;
             themeEnumProp->setAttribute(themeEnumAttributeC, true);
-            m_iconSubPropertyToProperty[themeEnumProp] = property;
             m_propertyToThemeEnum[property] = themeEnumProp;
             m_resetMap[themeEnumProp] = true;
             property->addSubProperty(themeEnumProp);
 
             QtVariantProperty *themeProp = addProperty(QMetaType::QString, tr("XDG Theme"));
             themeProp->setAttribute(themeAttributeC, true);
-            m_iconSubPropertyToProperty[themeProp] = property;
             m_propertyToTheme[property] = themeProp;
             m_resetMap[themeProp] = true;
             property->addSubProperty(themeProp);
@@ -1859,7 +1551,6 @@ void DesignerPropertyManager::createIconSubProperty(QtProperty *iconProperty, QI
     QtVariantProperty *subProp = addProperty(DesignerPropertyManager::designerPixmapTypeId(), subName);
     m_propertyToIconSubProperties[iconProperty][pair] = subProp;
     m_iconSubPropertyToState[subProp] = pair;
-    m_iconSubPropertyToProperty[subProp] = iconProperty;
     m_resetMap[subProp] = true;
     iconProperty->addSubProperty(subProp);
 }
@@ -1868,14 +1559,11 @@ void DesignerPropertyManager::uninitializeProperty(QtProperty *property)
 {
     m_resetMap.remove(property);
 
-    const auto propList = m_propertyToFlags.value(property);
-    for (QtProperty *prop : propList) {
-        if (prop) {
-            delete prop;
-            m_flagToProperty.remove(prop);
-        }
+    const auto pfit = m_propertyToFlags.find(property);
+    if (pfit != m_propertyToFlags.end()) {
+        qDeleteAll(std::as_const(pfit.value()));
+        m_propertyToFlags.erase(pfit);
     }
-    m_propertyToFlags.remove(property);
     m_flagValues.remove(property);
 
     QtProperty *alignH = m_propertyToAlignH.value(property);
@@ -1893,15 +1581,11 @@ void DesignerPropertyManager::uninitializeProperty(QtProperty *property)
     m_stringListManager.uninitialize(property);
     m_keySequenceManager.uninitialize(property);
 
-    if (QtProperty *iconTheme = m_propertyToTheme.value(property)) {
-        delete iconTheme; // Delete first (QTBUG-126182)
-        m_iconSubPropertyToProperty.remove(iconTheme);
-    }
+    if (QtProperty *iconTheme = m_propertyToTheme.value(property))
+        delete iconTheme;
 
-    if (QtProperty *iconThemeEnum = m_propertyToThemeEnum.value(property)) {
-        delete iconThemeEnum; // Delete first (QTBUG-126182)
-        m_iconSubPropertyToProperty.remove(iconThemeEnum);
-    }
+    if (QtProperty *iconThemeEnum = m_propertyToThemeEnum.value(property))
+        delete iconThemeEnum;
 
     m_propertyToAlignH.remove(property);
     m_propertyToAlignV.remove(property);
@@ -1922,11 +1606,9 @@ void DesignerPropertyManager::uninitializeProperty(QtProperty *property)
         QtProperty *subIcon = itIcon.value();
         delete subIcon;
         m_iconSubPropertyToState.remove(subIcon);
-        m_iconSubPropertyToProperty.remove(subIcon);
     }
     m_propertyToIconSubProperties.remove(property);
     m_iconSubPropertyToState.remove(property);
-    m_iconSubPropertyToProperty.remove(property);
 
     m_intValues.remove(property);
     m_uintValues.remove(property);
@@ -1959,8 +1641,8 @@ bool DesignerPropertyManager::resetFontSubProperty(QtProperty *property)
 
 bool DesignerPropertyManager::resetIconSubProperty(QtProperty *property)
 {
-    QtProperty *iconProperty = m_iconSubPropertyToProperty.value(property);
-    if (!iconProperty)
+    auto *parentItem = property->parentProperty();
+    if (!m_iconValues.contains(parentItem))
         return false;
 
     if (m_pixmapValues.contains(property)) {
@@ -2549,116 +2231,6 @@ void DesignerEditorFactory::slotStringListChanged(const QStringList &value)
     }
 }
 
-ResetDecorator::ResetDecorator(const QDesignerFormEditorInterface *core, QObject *parent)
-    : QObject(parent)
-    , m_spacing(-1)
-    , m_core(core)
-{
-}
-
-ResetDecorator::~ResetDecorator()
-{
-    const auto editors = m_resetWidgetToProperty.keys();
-    qDeleteAll(editors);
-}
-
-void ResetDecorator::connectPropertyManager(QtAbstractPropertyManager *manager)
-{
-    connect(manager, &QtAbstractPropertyManager::propertyChanged,
-            this, &ResetDecorator::slotPropertyChanged);
-}
-
-void ResetDecorator::disconnectPropertyManager(QtAbstractPropertyManager *manager)
-{
-    disconnect(manager, &QtAbstractPropertyManager::propertyChanged,
-            this, &ResetDecorator::slotPropertyChanged);
-}
-
-void ResetDecorator::setSpacing(int spacing)
-{
-    m_spacing = spacing;
-}
-
-static inline bool isModifiedInMultiSelection(const QDesignerFormEditorInterface *core,
-                                              const QString &propertyName)
-{
-    const QDesignerFormWindowInterface *form = core->formWindowManager()->activeFormWindow();
-    if (!form)
-        return false;
-    const QDesignerFormWindowCursorInterface *cursor = form->cursor();
-    const int selectionSize = cursor->selectedWidgetCount();
-    if (selectionSize < 2)
-        return false;
-    for (int i = 0; i < selectionSize; ++i) {
-        const QDesignerPropertySheetExtension *sheet =
-            qt_extension<QDesignerPropertySheetExtension*>(core->extensionManager(),
-                                                           cursor->selectedWidget(i));
-        const int index = sheet->indexOf(propertyName);
-        if (index >= 0 && sheet->isChanged(index))
-            return true;
-    }
-    return false;
-}
-
-QWidget *ResetDecorator::editor(QWidget *subEditor, bool resettable, QtAbstractPropertyManager *manager, QtProperty *property,
-            QWidget *parent)
-{
-    Q_UNUSED(manager);
-
-    ResetWidget *resetWidget = nullptr;
-    if (resettable) {
-        resetWidget = new ResetWidget(property, parent);
-        resetWidget->setSpacing(m_spacing);
-        resetWidget->setResetEnabled(property->isModified() || isModifiedInMultiSelection(m_core, property->propertyName()));
-        resetWidget->setValueText(property->valueText());
-        resetWidget->setValueIcon(property->valueIcon());
-        resetWidget->setAutoFillBackground(true);
-        connect(resetWidget, &QObject::destroyed, this, &ResetDecorator::slotEditorDestroyed);
-        connect(resetWidget, &ResetWidget::resetProperty, this, &ResetDecorator::resetProperty);
-        m_createdResetWidgets[property].append(resetWidget);
-        m_resetWidgetToProperty[resetWidget] = property;
-    }
-    if (subEditor) {
-        if (resetWidget) {
-            subEditor->setParent(resetWidget);
-            resetWidget->setWidget(subEditor);
-        }
-    }
-    if (resetWidget)
-        return resetWidget;
-    return subEditor;
-}
-
-void ResetDecorator::slotPropertyChanged(QtProperty *property)
-{
-    const auto prIt = m_createdResetWidgets.constFind(property);
-    if (prIt == m_createdResetWidgets.constEnd())
-        return;
-
-    for (ResetWidget *widget : prIt.value()) {
-        widget->setResetEnabled(property->isModified() || isModifiedInMultiSelection(m_core, property->propertyName()));
-        widget->setValueText(property->valueText());
-        widget->setValueIcon(property->valueIcon());
-    }
-}
-
-void ResetDecorator::slotEditorDestroyed(QObject *object)
-{
-    for (auto itEditor = m_resetWidgetToProperty.cbegin(), cend = m_resetWidgetToProperty.cend(); itEditor != cend; ++itEditor) {
-        if (itEditor.key() == object) {
-            ResetWidget *editor = itEditor.key();
-            QtProperty *property = itEditor.value();
-            m_resetWidgetToProperty.remove(editor);
-            m_createdResetWidgets[property].removeAll(editor);
-            if (m_createdResetWidgets[property].isEmpty())
-                m_createdResetWidgets.remove(property);
-            return;
-        }
-    }
-}
-
 }
 
 QT_END_NAMESPACE
-
-#include "designerpropertymanager.moc"

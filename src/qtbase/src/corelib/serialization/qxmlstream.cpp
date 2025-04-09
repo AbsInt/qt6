@@ -572,6 +572,7 @@ void QXmlStreamReader::addData(QAnyStringView data)
         } else if constexpr (std::is_same_v<decltype(data), QLatin1StringView>) {
             // Conversion to a QString is required, to avoid breaking
             // pre-existing (before porting to QAnyStringView) behavior.
+            d->lockEncoding = true;
             if (!d->decoder.isValid())
                 d->decoder = QStringDecoder(QStringDecoder::Utf8);
             addDataImpl(QString::fromLatin1(data).toUtf8());
@@ -1291,7 +1292,7 @@ inline qsizetype QXmlStreamReaderPrivate::fastScanContentCharList()
                 textBuffer += QChar(ushort(c));
                 ++n;
             }
-            if (c == 0) {
+            if (c == StreamEOF) {
                 putString(textBuffer, pos);
                 textBuffer.resize(pos);
             } else if (c == '>' && textBuffer.at(textBuffer.size() - 2) == u']') {
@@ -2913,6 +2914,8 @@ public:
     uint hasIoError :1;
     uint hasEncodingError :1;
     uint autoFormatting :1;
+    uint didWriteStartDocument :1;
+    uint didWriteAnyToken :1;
     std::string autoFormattingIndent;
     NamespaceDeclaration emptyNamespace;
     qsizetype lastNamespaceDeclaration;
@@ -2946,6 +2949,8 @@ QXmlStreamWriterPrivate::QXmlStreamWriterPrivate(QXmlStreamWriter *q)
     lastNamespaceDeclaration = 1;
     autoFormatting = false;
     namespacePrefixCount = 0;
+    didWriteStartDocument = false;
+    didWriteAnyToken = false;
 }
 
 void QXmlStreamWriterPrivate::write(QAnyStringView s)
@@ -3065,6 +3070,7 @@ void QXmlStreamWriterPrivate::writeNamespaceDeclaration(const NamespaceDeclarati
         write(namespaceDeclaration.namespaceUri);
         write("\"");
     }
+    didWriteAnyToken = true;
 }
 
 bool QXmlStreamWriterPrivate::finishStartElement(bool contents)
@@ -3084,6 +3090,7 @@ bool QXmlStreamWriterPrivate::finishStartElement(bool contents)
     }
     inStartElement = inEmptyElement = false;
     lastNamespaceDeclaration = namespaceDeclarations.size();
+    didWriteAnyToken = true;
     return hadSomethingWritten;
 }
 
@@ -3149,7 +3156,8 @@ QXmlStreamPrivateTagStack::NamespaceDeclaration &QXmlStreamWriterPrivate::findNa
 
 void QXmlStreamWriterPrivate::indent(int level)
 {
-    write("\n");
+    if (didWriteStartDocument || didWriteAnyToken)
+        write("\n");
     for (int i = 0; i < level; ++i)
         write(autoFormattingIndent);
 }
@@ -3375,6 +3383,7 @@ void QXmlStreamWriter::writeAttribute(QAnyStringView qualifiedName, QAnyStringVi
     d->write("=\"");
     d->writeEscaped(value, true);
     d->write("\"");
+    d->didWriteAnyToken = true;
 }
 
 /*!  Writes an attribute with \a name and \a value, prefixed for
@@ -3403,6 +3412,7 @@ void QXmlStreamWriter::writeAttribute(QAnyStringView namespaceUri, QAnyStringVie
     d->write("=\"");
     d->writeEscaped(value, true);
     d->write("\"");
+    d->didWriteAnyToken = true;
 }
 
 /*!
@@ -3610,7 +3620,8 @@ void QXmlStreamWriter::writeEndDocument()
     Q_D(QXmlStreamWriter);
     while (d->tagStack.size())
         writeEndElement();
-    d->write("\n");
+    if (d->didWriteStartDocument || d->didWriteAnyToken)
+        d->write("\n");
 }
 
 /*!
@@ -3621,6 +3632,7 @@ void QXmlStreamWriter::writeEndDocument()
 void QXmlStreamWriter::writeEndElement()
 {
     Q_D(QXmlStreamWriter);
+    Q_ASSERT(d->didWriteAnyToken);
     if (d->tagStack.isEmpty())
         return;
 
@@ -3744,6 +3756,7 @@ void QXmlStreamWriter::writeProcessingInstruction(QAnyStringView target, QAnyStr
         d->write(data);
     }
     d->write("?>");
+    d->didWriteAnyToken = true;
 }
 
 
@@ -3778,6 +3791,7 @@ void QXmlStreamWriter::writeStartDocument(QAnyStringView version)
     if (d->device) // stringDevice does not get any encoding
         d->write("\" encoding=\"UTF-8");
     d->write("\"?>");
+    d->didWriteStartDocument = true;
 }
 
 /*!  Writes a document start with the XML version number \a version
@@ -3801,6 +3815,7 @@ void QXmlStreamWriter::writeStartDocument(QAnyStringView version, bool standalon
         d->write("\" standalone=\"yes\"?>");
     else
         d->write("\" standalone=\"no\"?>");
+    d->didWriteStartDocument = true;
 }
 
 
@@ -3862,6 +3877,7 @@ void QXmlStreamWriterPrivate::writeStartElement(QAnyStringView namespaceUri, QAn
             writeNamespaceDeclaration(namespaceDeclarations[i]);
     }
     tag.namespaceDeclarationsSize = lastNamespaceDeclaration;
+    didWriteAnyToken = true;
 }
 
 #if QT_CONFIG(xmlstreamreader)
@@ -3928,7 +3944,10 @@ void QXmlStreamWriter::writeCurrentToken(const QXmlStreamReader &reader)
         break;
     }
 }
+#endif // feature xmlstreamreader
+#endif // feature xmlstreamwriter
 
+#if QT_CONFIG(xmlstreamreader)
 static constexpr bool isTokenAllowedInContext(QXmlStreamReader::TokenType type,
                                                QXmlStreamReaderPrivate::XmlContext ctxt)
 {
@@ -4045,7 +4064,6 @@ void QXmlStreamReaderPrivate::checkToken()
 */
 
 #endif // feature xmlstreamreader
-#endif // feature xmlstreamwriter
 
 QT_END_NAMESPACE
 

@@ -39,8 +39,6 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_DECLARE_LOGGING_CATEGORY(lcPopup)
-
 /*!
     \class QWindow
     \inmodule QtGui
@@ -306,6 +304,8 @@ void QWindowPrivate::init(QWindow *parent, QScreen *targetScreen)
     the platform.
     When reading the visibility property you will always get the actual state,
     never AutomaticVisibility.
+
+    The default value is Hidden.
 */
 QWindow::Visibility QWindow::visibility() const
 {
@@ -1391,12 +1391,15 @@ Qt::ScreenOrientation QWindow::contentOrientation() const
     for the window. This value is dependent on the screen the window is on,
     and may change when the window is moved.
 
+    The QWindow instance receives an event of type
+    QEvent::DevicePixelRatioChange when the device pixel ratio changes.
+
     Common values are 1.0 on normal displays and 2.0 on Apple "retina" displays.
 
     \note For windows not backed by a platform window, meaning that create() was not
     called, the function will fall back to the associated QScreen's device pixel ratio.
 
-    \sa QScreen::devicePixelRatio()
+    \sa QScreen::devicePixelRatio(), QEvent::DevicePixelRatioChange
 */
 qreal QWindow::devicePixelRatio() const
 {
@@ -1966,6 +1969,46 @@ void QWindow::setFramePosition(const QPoint &point)
         d->geometry.moveTopLeft(point);
     }
 }
+
+/*!
+    Returns the safe area margins of the window.
+
+    The safe area represents the part of the window where content
+    can be safely placed without risk of being obscured by, or
+    conflicting with, other UI elements, such as system UIs.
+
+    The margins are relative to the internal geometry of the
+    window, i.e QRect(0, 0, width(), height()).
+
+    \code
+    void PaintDeviceWindow::paintEvent(QPaintEvent *)
+    {
+        QPainter painter(this);
+        QRect rect(0, 0, width(), height());
+        painter.fillRect(rect, QGradient::SunnyMorning);
+        painter.fillRect(rect - safeAreaMargins(), QGradient::DustyGrass);
+    }
+    \endcode
+
+    \since 6.9
+    \sa geometry(), safeAreaMarginsChanged()
+*/
+QMargins QWindow::safeAreaMargins() const
+{
+    Q_D(const QWindow);
+    if (d->platformWindow)
+        return QHighDpi::fromNativePixels(d->platformWindow->safeAreaMargins(), this);
+    return {};
+}
+
+/*!
+    \fn void QWindow::safeAreaMarginsChanged(QMargins margins)
+    \since 6.9
+
+    This signal is emitted when the safe area margins changed to \a margins.
+
+    \sa safeAreaMargins()
+*/
 
 /*!
     \brief set the position of the window on the desktop to \a pt
@@ -2578,18 +2621,27 @@ void QWindow::closeEvent(QCloseEvent *ev)
 */
 bool QWindow::event(QEvent *ev)
 {
+    Q_D(QWindow);
     switch (ev->type()) {
     case QEvent::MouseMove:
         mouseMoveEvent(static_cast<QMouseEvent*>(ev));
         break;
 
-    case QEvent::MouseButtonPress:
-        mousePressEvent(static_cast<QMouseEvent*>(ev));
+    case QEvent::MouseButtonPress: {
+        auto *me = static_cast<QMouseEvent*>(ev);
+        mousePressEvent(me);
+        if (!ev->isAccepted())
+            d->maybeSynthesizeContextMenuEvent(me);
         break;
+    }
 
-    case QEvent::MouseButtonRelease:
-        mouseReleaseEvent(static_cast<QMouseEvent*>(ev));
+    case QEvent::MouseButtonRelease: {
+        auto *me = static_cast<QMouseEvent*>(ev);
+        mouseReleaseEvent(me);
+        if (!ev->isAccepted())
+            d->maybeSynthesizeContextMenuEvent(me);
         break;
+    }
 
     case QEvent::MouseButtonDblClick:
         mouseDoubleClickEvent(static_cast<QMouseEvent*>(ev));
@@ -2646,7 +2698,6 @@ bool QWindow::event(QEvent *ev)
 
     case QEvent::Close: {
 
-        Q_D(QWindow);
         const bool wasVisible = d->treatAsVisible();
         const bool participatesInLastWindowClosed = d->participatesInLastWindowClosed();
 
@@ -2707,35 +2758,60 @@ bool QWindow::event(QEvent *ev)
         return QObject::event(ev);
     }
 
+    return true;
+}
+
+/*! \internal
+    Synthesize and send a QContextMenuEvent if the given \a event is a suitable
+    mouse event (a right-button press or release, depending on
+    QStyleHints::contextMenuTrigger()). On most platforms, it's done on mouse
+    press; on Windows, it's done on release, because of the potential to
+    support right-button clicks and drags to select or lasso items, and then
+    still getting a context menu at the end of that gesture. (That is in
+    conflict with supporting the press-drag-release gesture to select menu
+    items on the context menus themselves. Context menus can be implemented
+    that way by handling the separate press, move and release events.)
+
+    Any time the \a event was already handled in some way, it *should* be
+    accepted, but mere acceptance of the mouse event cannot be taken to
+    indicate that it's not necessary to synthesize a QContextMenuEvent here,
+    because the Windows use case requires doing one thing (selecting items)
+    with the mouse events, and then doing something completely different with
+    the QContextMenuEvent. In other words, QContextMenuEvent is very different
+    from other kinds of optional followup events synthesized from unhandled
+    events (like the way we synthesize a QMouseEvent only if a QTabletEvent was
+    not handled). Furthermore, there's enough legacy widget code that doesn't
+    call ignore() on unhandled mouse events. So it's uncertain whether this can
+    change in Qt 7.
+
+    The QContextMenuEvent occurs at the scenePosition(). The position()
+    was likely already "localized" during the previous delivery.
+
+    The synthesis from a mouse button event could be done in the platform
+    plugin, but so far on Windows it's not done: WM_CONTEXTMENU is not
+    generated by the OS, because we never call the default window procedure
+    that would do that in response to unhandled WM_RBUTTONUP. If we
+    eventually want to do that, we would have to avoid doing it here,
+    on platforms where the platform plugin is responsible for it.
+
+    QGuiApplicationPrivate::processContextMenuEvent also allows
+    keyboard-triggered context menu events that the QPA plugin might generate.
+    On Windows, the keyboard may have a menu key. On macOS, control-return
+    is the usual shortcut; on Gnome, it's shift-F10; and so on.
+*/
+void QWindowPrivate::maybeSynthesizeContextMenuEvent(QMouseEvent *event)
+{
 #ifndef QT_NO_CONTEXTMENU
-    /*
-        QGuiApplicationPrivate::processContextMenuEvent blocks mouse-triggered
-        context menu events that the QPA plugin might generate. In practice that
-        never happens, as even on Windows WM_CONTEXTMENU is never generated by
-        the OS (we never call the default window procedure that would do that in
-        response to unhandled WM_RBUTTONUP).
-
-        So, we always have to syntheize QContextMenuEvent for mouse events anyway.
-        QWidgetWindow synthesizes QContextMenuEvent similar to this code, and
-        never calls QWindow::event, so we have to do it here as well.
-
-        This logic could be simplified by always synthesizing events in
-        QGuiApplicationPrivate, or perhaps even in each QPA plugin. See QTBUG-93486.
-    */
-    auto asMouseEvent = [](QEvent *ev) {
-        const auto t = ev->type();
-        return t == QEvent::MouseButtonPress || t == QEvent::MouseButtonRelease
-                ? static_cast<QMouseEvent *>(ev) : nullptr ;
-    };
-    if (QMouseEvent *me = asMouseEvent(ev);
-        me && ev->type() == QGuiApplicationPrivate::contextMenuEventType()
-        && me->button() == Qt::RightButton) {
-        QContextMenuEvent e(QContextMenuEvent::Mouse, me->position().toPoint(),
-                            me->globalPosition().toPoint(), me->modifiers());
-        QGuiApplication::sendEvent(this, &e);
+    if (event->button() == Qt::RightButton
+        && event->type() == QGuiApplicationPrivate::contextMenuEventType()) {
+        QContextMenuEvent e(QContextMenuEvent::Mouse, event->scenePosition().toPoint(),
+                            event->globalPosition().toPoint(), event->modifiers());
+        qCDebug(lcPopup) << "synthesized after"
+                         << (event->isAccepted() ? "ACCEPTED (legacy behavior)" : "ignored")
+                         << event->type() << ":" << &e;
+        QCoreApplication::forwardEvent(q_func(), &e, event);
     }
 #endif
-    return true;
 }
 
 /*!
@@ -2767,7 +2843,7 @@ bool QWindow::event(QEvent *ev)
 */
 void QWindow::requestUpdate()
 {
-    Q_ASSERT_X(QThread::currentThread() == QCoreApplication::instance()->thread(),
+    Q_ASSERT_X(QThread::isMainThread(),
         "QWindow", "Updates can only be scheduled from the GUI (main) thread");
 
     Q_D(QWindow);
@@ -3255,6 +3331,9 @@ QDebug operator<<(QDebug debug, const QWindow *window)
             const QMargins margins = window->frameMargins();
             if (!margins.isNull())
                 debug << ", margins=" << margins;
+            const QMargins safeAreaMargins = window->safeAreaMargins();
+            if (!safeAreaMargins.isNull())
+                debug << ", safeAreaMargins=" << safeAreaMargins;
             debug << ", devicePixelRatio=" << window->devicePixelRatio();
             if (const QPlatformWindow *platformWindow = window->handle())
                 debug << ", winId=0x" << Qt::hex << platformWindow->winId() << Qt::dec;

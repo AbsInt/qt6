@@ -129,9 +129,8 @@ static Q_NEVER_INLINE QString makeString(const QCborContainerPrivate *d, qsizety
 
     case QCborValue::Array:
     case QCborValue::Map:
-#if defined(QT_JSON_READONLY) || defined(QT_BOOTSTRAPPED)
-        qFatal("Writing JSON is disabled.");
-        return QString();
+#if defined(QT_BOOTSTRAPPED)
+        Q_UNREACHABLE_RETURN(QString());
 #else
         return d->valueAt(idx).toDiagnosticNotation(QCborValue::Compact);
 #endif
@@ -553,8 +552,10 @@ QVariant QCborValue::toVariant() const
         // ignore tags
         return taggedValue().toVariant();
 
+#if QT_CONFIG(datestring)
     case DateTime:
         return toDateTime();
+#endif
 
 #ifndef QT_BOOTSTRAPPED
     case Url:
@@ -717,12 +718,15 @@ QCborValue QCborValue::fromVariant(const QVariant &variant)
     case QMetaType::UShort:
     case QMetaType::Int:
     case QMetaType::LongLong:
+    case QMetaType::Long:
     case QMetaType::UInt:
         return variant.toLongLong();
+    case QMetaType::ULong:
     case QMetaType::ULongLong:
         if (variant.toULongLong() <= static_cast<uint64_t>(std::numeric_limits<qint64>::max()))
             return variant.toLongLong();
         Q_FALLTHROUGH();
+    case QMetaType::Float16:
     case QMetaType::Float:
     case QMetaType::Double:
         return variant.toDouble();
@@ -732,8 +736,10 @@ QCborValue QCborValue::fromVariant(const QVariant &variant)
         return QCborArray::fromStringList(variant.toStringList());
     case QMetaType::QByteArray:
         return variant.toByteArray();
+#if QT_CONFIG(datestring)
     case QMetaType::QDateTime:
         return QCborValue(variant.toDateTime());
+#endif
 #ifndef QT_BOOTSTRAPPED
     case QMetaType::QUrl:
         return QCborValue(variant.toUrl());

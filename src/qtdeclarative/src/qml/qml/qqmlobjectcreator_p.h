@@ -26,6 +26,7 @@
 #include <private/qqmlvmemetaobject_p.h>
 
 #include <qpointer.h>
+#include <deque>
 
 QT_BEGIN_NAMESPACE
 
@@ -115,6 +116,11 @@ struct QQmlObjectCreatorSharedState final : QQmlRefCounted<QQmlObjectCreatorShar
     QQmlRefPointer<QQmlContextData> creationContext;
     QFiniteStack<QQmlAbstractBinding::Ptr> allCreatedBindings;
     QFiniteStack<QQmlParserStatus*> allParserStatusCallbacks;
+    /* This needs to be a deque, not a vector, as we need reference stability:
+       The parser status holds a back-pointer to its place in the container, so that it can null itself
+       in its dtor.
+    */
+    std::unique_ptr<std::deque<QQmlParserStatus *>> attachedObjectParserStatusCallbacks;
     QFiniteStack<QQmlGuard<QObject> > allCreatedObjects;
     ObjectInCreationGCAnchorList allJavaScriptObjects; // pointer to vector on JS stack to reference JS wrappers during creation phase.
     QQmlComponentAttached *componentAttached;

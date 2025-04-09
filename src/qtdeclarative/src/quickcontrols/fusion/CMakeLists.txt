@@ -129,8 +129,8 @@ target_sources(qtquickcontrols2fusionstyleplugin
         qtquickcontrols2fusionstyleplugin.cpp
 )
 
-target_link_libraries(qtquickcontrols2fusionstyleplugin
-    PRIVATE
+qt_internal_extend_target(qtquickcontrols2fusionstyleplugin
+    LIBRARIES
         Qt::QuickControls2Private
 )
 

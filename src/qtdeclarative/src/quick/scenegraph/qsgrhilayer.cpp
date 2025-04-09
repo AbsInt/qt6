@@ -115,7 +115,16 @@ void QSGRhiLayer::setSize(const QSize &pixelSize)
     if (pixelSize == m_pixelSize)
         return;
 
-    m_pixelSize = pixelSize;
+    const int textureSizeMax = m_rhi->resourceLimit(QRhi::TextureSizeMax);
+    m_pixelSize = pixelSize.boundedTo(QSize(textureSizeMax, textureSizeMax));
+
+    if (Q_UNLIKELY(m_pixelSize != pixelSize)) {
+        qWarning("QSGRhiLayer: Unsupported size requested: [%d, %d]. "
+                 "Maximum texture size: %d",
+                 pixelSize.width(),
+                 pixelSize.height(),
+                 textureSizeMax);
+    }
 
     if (m_live && m_pixelSize.isNull())
         releaseResources();
@@ -452,7 +461,7 @@ QImage QSGRhiLayer::toImage() const
         imageFormat = QImage::Format_RGBA32FPx4_Premultiplied;
 
     const uchar *p = reinterpret_cast<const uchar *>(result.data.constData());
-    return QImage(p, result.pixelSize.width(), result.pixelSize.height(), imageFormat).mirrored();
+    return QImage(p, result.pixelSize.width(), result.pixelSize.height(), imageFormat).flipped();
 }
 
 QRectF QSGRhiLayer::normalizedTextureSubRect() const

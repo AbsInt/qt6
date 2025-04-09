@@ -15,74 +15,65 @@ Rectangle {
     Text {
         id: helloText
 
-        text: "Main QML component"
+        text: "First QML View"
         color: "white"
-        font.pixelSize: 72
-        fontSizeMode: Text.VerticalFit
-        // Height is calculated based on display orientation
-        // from Screen height, dividing numbers are based on what seem
-        // to look good on most displays
-        height: Screen.width > Screen.height ? Screen.height / 8 : (Screen.height / 2) / 8
+        font.pointSize: 72
+        width: parent.width
         font.bold: true
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: 5
-        horizontalAlignment: Text.AlignHCenter
-    }
-
-
-    Text {
-        id: changeColorText
-
-        text: "Tap button to change Java view background color"
         wrapMode: Text.Wrap
-        color: "white"
-        font.pixelSize: 58
-        fontSizeMode: Text.Fit
-        // Height and width are calculated based on display orientation
-        // from Screen height and width, dividing numbers are based on what seem to
-        // look good on most displays
-        height: Screen.width > Screen.height ? Screen.height / 8 : (Screen.height / 2) / 8
-        width: Screen.width > Screen.height ? (Screen.width / 2) / 2 : Screen.width / 2
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: helloText.bottom
-        anchors.topMargin: Screen.height / 10
         horizontalAlignment: Text.AlignHCenter
+        anchors {
+            top: parent.top
+            topMargin: 50
+            horizontalCenter: parent.horizontalCenter
+        }
     }
 
-    Button {
-        id: button
+    Column {
+        anchors.centerIn: parent
+        width: parent.width
+        spacing: 30
 
-        // Width is calculated from changeColorText which is calculated from Screen size
-        // dividing numbers are base on what seems to look good on most displays
-        width: changeColorText.width / 1.6
-        height: changeColorText.height * 1.2
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: changeColorText.bottom
-        anchors.topMargin: height / 5
+        Text {
+            id: changeColorText
 
-        onClicked: mainRectangle.onClicked()
-
-        background: Rectangle {
-            id: buttonBackground
-
-            radius: 14
-            color: "#6200EE"
-            opacity: button.down ? 0.6 : 1
-            scale: button.down ? 0.9 : 1
-        }
-        contentItem: Text {
-            id: buttonText
-
-            text: "CHANGE COLOR"
-            color: "white"
-            font.pixelSize: 58
-            minimumPixelSize: 10
-            fontSizeMode: Text.Fit
-            font.bold: true
+            text: "Tap button to change Java view background color"
             wrapMode: Text.Wrap
+            color: "white"
+            width: parent.width
             horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            anchors.horizontalCenter: parent.horizontalCenter
+        }
+
+        Button {
+            id: button
+
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            onClicked: mainRectangle.onClicked()
+
+            background: Rectangle {
+                id: buttonBackground
+
+                radius: 14
+                color: "#6200EE"
+                opacity: button.down ? 0.6 : 1
+                scale: button.down ? 0.9 : 1
+            }
+
+            contentItem: Text {
+                id: buttonText
+
+                text: "CHANGE COLOR"
+                color: "white"
+                font.pixelSize: 58
+                minimumPixelSize: 10
+                fontSizeMode: Text.Fit
+                font.bold: true
+                wrapMode: Text.Wrap
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
         }
     }
 }

@@ -12,10 +12,9 @@
 
 #include <QtCore/qloggingcategory.h>
 
-Q_DECLARE_LOGGING_CATEGORY(DBG_DISK_CACHE)
-Q_LOGGING_CATEGORY(DBG_DISK_CACHE, "qt.qml.diskcache")
-
 QT_BEGIN_NAMESPACE
+
+Q_LOGGING_CATEGORY(DBG_DISK_CACHE, "qt.qml.diskcache")
 
 QQmlScriptBlob::QQmlScriptBlob(const QUrl &url, QQmlTypeLoader *loader)
     : QQmlTypeLoader::Blob(url, JavaScriptFile, loader)
@@ -34,14 +33,24 @@ QQmlRefPointer<QQmlScriptData> QQmlScriptBlob::scriptData() const
 
 void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
 {
-    if (readCacheFile()) {
-        auto unit = QQml::makeRefPointer<QV4::CompiledData::CompilationUnit>();
-        QString error;
-        if (unit->loadFromDisk(url(), data.sourceTimeStamp(), &error)) {
+    Q_ASSERT(isTypeLoaderThread());
+
+    if (data.isCacheable()) {
+        if (auto unit = QQmlMetaType::obtainCompilationUnit(url())) {
             initializeFromCompilationUnit(std::move(unit));
             return;
-        } else {
-            qCDebug(DBG_DISK_CACHE()) << "Error loading" << urlString() << "from disk cache:" << error;
+        }
+
+        if (readCacheFile()) {
+            auto unit = QQml::makeRefPointer<QV4::CompiledData::CompilationUnit>();
+            QString error;
+            if (unit->loadFromDisk(url(), data.sourceTimeStamp(), &error)) {
+                initializeFromCompilationUnit(std::move(unit));
+                return;
+            } else {
+                qCDebug(DBG_DISK_CACHE()) << "Error loading" << urlString()
+                                          << "from disk cache:" << error;
+            }
         }
     }
 
@@ -113,12 +122,15 @@ void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
 
 void QQmlScriptBlob::initializeFromCachedUnit(const QQmlPrivate::CachedQmlUnit *cachedUnit)
 {
+    Q_ASSERT(isTypeLoaderThread());
     initializeFromCompilationUnit(QQml::makeRefPointer<QV4::CompiledData::CompilationUnit>(
             cachedUnit->qmlData, cachedUnit->aotCompiledFunctions, urlString(), finalUrlString()));
 }
 
 void QQmlScriptBlob::done()
 {
+    Q_ASSERT(isTypeLoaderThread());
+
     if (isError())
         return;
 
@@ -163,7 +175,7 @@ void QQmlScriptBlob::done()
     m_scripts.clear();
 
     if (auto cu = m_scriptData->compilationUnit()) {
-        cu->qmlType = QQmlMetaType::findCompositeType(finalUrl(), cu, QQmlMetaType::JavaScript);
+        cu->qmlType = QQmlMetaType::findCompositeType(url(), cu, QQmlMetaType::JavaScript);
         QQmlMetaType::registerInternalCompositeType(cu);
     }
 }
@@ -175,6 +187,8 @@ QString QQmlScriptBlob::stringAt(int index) const
 
 void QQmlScriptBlob::scriptImported(const QQmlRefPointer<QQmlScriptBlob> &blob, const QV4::CompiledData::Location &location, const QString &qualifier, const QString &nameSpace)
 {
+    Q_ASSERT(isTypeLoaderThread());
+
     ScriptReference ref;
     ref.script = blob;
     ref.location = location;
@@ -187,6 +201,7 @@ void QQmlScriptBlob::scriptImported(const QQmlRefPointer<QQmlScriptBlob> &blob, 
 void QQmlScriptBlob::initializeFromCompilationUnit(
         QQmlRefPointer<QV4::CompiledData::CompilationUnit> &&unit)
 {
+    Q_ASSERT(isTypeLoaderThread());
     Q_ASSERT(!m_scriptData);
     Q_ASSERT(unit);
 

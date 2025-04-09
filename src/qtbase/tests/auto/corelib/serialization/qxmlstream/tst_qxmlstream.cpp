@@ -479,14 +479,16 @@ public:
         ParseSinglePass
     };
 
-    static bool isWellformed(QIODevice *const inputFile, const ParseMode mode)
+    static bool isWellformed(QFile *const inputFile, const ParseMode mode)
     {
         if (!inputFile)
-            qFatal("%s: inputFile must be a valid QIODevice pointer", Q_FUNC_INFO);
+            qFatal("%s: inputFile must be a valid QFile pointer", Q_FUNC_INFO);
         if (!inputFile->isOpen())
             qFatal("%s: inputFile must be opened by the caller", Q_FUNC_INFO);
         if (mode != ParseIncrementally && mode != ParseSinglePass)
             qFatal("%s: mode must be either ParseIncrementally or ParseSinglePass", Q_FUNC_INFO);
+        if (!inputFile->seek(0))
+            qFatal("%s: could not seek to the beginning of the file", Q_FUNC_INFO);
 
         if(mode == ParseIncrementally)
         {
@@ -503,8 +505,8 @@ public:
 
                 if(bufferPos < buffer.size())
                 {
-                    ++bufferPos;
                     reader.addData(QByteArray(buffer.data() + bufferPos, 1));
+                    ++bufferPos;
                 }
                 else
                     break;
@@ -559,11 +561,18 @@ private slots:
     void writerAutoFormattingWithProcessingInstructions() const;
     void writerAutoEmptyTags() const;
     void writeAttributesWithSpace() const;
+    void writerAutoFormattingProcessingInstructionFirst() const;
+    void writerAutoFormattingStartElementFirst() const;
+    void writerAutoFormattingCommentFirst() const;
+    void writerAutoFormattingNamespaceFirst() const;
     void addExtraNamespaceDeclarations();
     void setEntityResolver();
     void readFromQBuffer() const;
     void readFromQBufferInvalid() const;
     void readFromLatin1String() const;
+    void readLatin1Document() const;
+    void appendToRawDocumentWithNonUtf8Encoding_data();
+    void appendToRawDocumentWithNonUtf8Encoding();
     void readNextStartElement() const;
     void readElementText() const;
     void readElementText_data() const;
@@ -1075,6 +1084,74 @@ void tst_QXmlStream::writeAttributesWithSpace() const
     QCOMPARE(buffer.buffer().data(), s.toUtf8().data());
 }
 
+void tst_QXmlStream::writerAutoFormattingProcessingInstructionFirst() const
+{
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter writer(&buffer);
+    writer.setAutoFormatting(true);
+    writer.writeProcessingInstruction("B");
+    writer.writeComment("This is a comment");
+    writer.writeStartElement("A");
+    writer.writeNamespace("http://website.com", "website");
+    writer.writeDefaultNamespace("http://websiteNo2.com");
+    writer.writeEndElement();
+    writer.writeEndDocument();
+    const char *str =
+            "<?B?>\n<!--This is a comment-->\n<A xmlns:website=\"http://website.com\" xmlns=\"http://websiteNo2.com\"/>\n";
+    QCOMPARE(buffer.buffer().data(), str);
+}
+void tst_QXmlStream::writerAutoFormattingStartElementFirst() const
+{
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter writer(&buffer);
+    writer.setAutoFormatting(true);
+    writer.writeStartElement("A");
+    writer.writeNamespace("http://website.com", "website");
+    writer.writeComment("This is a comment");
+    writer.writeProcessingInstruction("B");
+    writer.writeDefaultNamespace("http://websiteNo2.com");
+    writer.writeEndElement();
+    writer.writeEndDocument();
+    const char *str = "<A xmlns:website=\"http://website.com\">\n    <!--This is a comment-->\n    <?B?>\n</A>\n";
+    QCOMPARE(buffer.buffer().data(), str);
+}
+
+void tst_QXmlStream::writerAutoFormattingCommentFirst() const
+{
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter writer(&buffer);
+    writer.setAutoFormatting(true);
+    writer.writeComment("This is a comment");
+    writer.writeStartElement("A");
+    writer.writeNamespace("http://website.com", "website");
+    writer.writeEndElement();
+    writer.writeDefaultNamespace("http://websiteNo2.com");
+    writer.writeProcessingInstruction("B");
+    writer.writeEndDocument();
+    const char *str = "<!--This is a comment--><A xmlns:website=\"http://website.com\"/>\n<?B?>\n";
+    QCOMPARE(buffer.buffer().data(), str);
+}
+
+void tst_QXmlStream::writerAutoFormattingNamespaceFirst() const
+{
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter writer(&buffer);
+    writer.setAutoFormatting(true);
+    writer.writeNamespace("http://website.com", "website");
+    writer.writeStartElement("A");
+    writer.writeDefaultNamespace("http://websiteNo2.com");
+    writer.writeProcessingInstruction("B");
+    writer.writeEndElement();
+    writer.writeComment("This is a comment");
+    writer.writeEndDocument();
+    const char *str = "<A xmlns:website=\"http://website.com\" xmlns=\"http://websiteNo2.com\">\n    <?B?></A>\n<!--This is a comment-->\n";
+    QCOMPARE(buffer.buffer().data(), str);
+}
+
 void tst_QXmlStream::writerAutoEmptyTags() const
 {
     QBuffer buffer;
@@ -1155,6 +1232,98 @@ void tst_QXmlStream::readFromLatin1String() const
         QString text = reader.readElementText();
         QCOMPARE(text, "M\xE5rten"_L1);
     }
+}
+
+void tst_QXmlStream::readLatin1Document() const
+{
+    const auto in = "<?xml version=\"1.0\" encoding=\"iso-8859-1\"?><a>M\xE5rten</a>"_L1;
+    {
+        QXmlStreamReader reader(in);
+        QVERIFY(reader.readNextStartElement());
+        QString text = reader.readElementText();
+        QCOMPARE(text, "M\xE5rten"_L1);
+    }
+    // Same as above, but with addData(), QTBUG-135033
+    {
+        QXmlStreamReader reader;
+        reader.addData(in);
+        QVERIFY(reader.readNextStartElement());
+        QString text = reader.readElementText();
+        QCOMPARE(text, "M\xE5rten"_L1);
+    }
+}
+
+void tst_QXmlStream::appendToRawDocumentWithNonUtf8Encoding_data()
+{
+    QTest::addColumn<QByteArray>("rawDocumentStart");
+    QTest::addColumn<QString>("expectedFirstElementText");
+    QTest::addColumn<QString>("nextData");
+    QTest::addColumn<QStringConverter::Encoding>("nextEncoding");
+    QTest::addColumn<QString>("expectedNextElementText");
+
+    auto row = [](const char *name, const QByteArray &encoding,
+                  const QByteArray &firstData, const QString &expectedFirstString,
+                  QStringConverter::Encoding nextEncoding, const QString &nextString) {
+        const QByteArray docStart = "<?xml version=\"1.0\" encoding=\"" + encoding
+                + "\"?><foo><a>" + firstData + "</a>";
+        const QString nextElement = u"<a>"_s + nextString + u"</a>"_s;
+        QTest::newRow(name) << docStart << expectedFirstString << nextElement
+                            << nextEncoding << nextString;
+    };
+
+    row("l1+utf16", "iso-8859-1"_ba, "M\xE5rten"_ba, QString::fromLatin1("M\xE5rten"),
+        QStringConverter::Utf16, u"M\u00E5rten"_s);
+    row("l1+utf8", "iso-8859-1"_ba, "M\xE5rten"_ba, QString::fromLatin1("M\xE5rten"),
+        QStringConverter::Utf8, QString::fromUtf8("M\xC3\xA5rten"));
+    // Even this fails, because we internally convert the second L1 to UTF-8!
+    row("l1+l1", "iso-8859-1"_ba, "M\xE5rten"_ba, QString::fromLatin1("M\xE5rten"),
+        QStringConverter::Latin1, QString::fromLatin1("M\xE5rten"));
+
+    const QString utf16Str = u"<?xml version=\"1.0\" encoding=\"utf-16\"?>"
+                             "<foo><a>M\u00E5rten</a>"_s;
+    const QByteArray utf16Data{reinterpret_cast<const char *>(utf16Str.utf16()),
+                               utf16Str.size() * 2};
+
+    QTest::newRow("utf16+utf16") << utf16Data << u"M\u00E5rten"_s
+                                 << u"<a>M\u00E5rten</a>"_s
+                                 << QStringConverter::Utf16
+                                 << u"M\u00E5rten"_s;
+}
+
+void tst_QXmlStream::appendToRawDocumentWithNonUtf8Encoding()
+{
+    QFETCH(const QByteArray, rawDocumentStart);
+    QFETCH(const QString, expectedFirstElementText);
+    QFETCH(const QString, nextData);
+    QFETCH(const QStringConverter::Encoding, nextEncoding);
+    QFETCH(const QString, expectedNextElementText);
+
+    QXmlStreamReader reader(rawDocumentStart);
+    QVERIFY(reader.readNextStartElement()); // foo
+    QVERIFY(reader.readNextStartElement()); // a
+    QString text = reader.readElementText();
+    QCOMPARE(text, expectedFirstElementText);
+
+    switch (nextEncoding) {
+    case QStringConverter::Utf16:
+        reader.addData(nextData);
+        break;
+    case QStringConverter::Utf8:
+        reader.addData(QUtf8StringView{nextData.toUtf8()});
+        break;
+    case QStringConverter::Latin1:
+        reader.addData(QLatin1StringView{nextData.toLatin1()});
+        break;
+    default:
+        Q_UNREACHABLE();
+    }
+    QEXPECT_FAIL("utf16+utf16", "QTBUG-135129: Parser expected UTF-16, but got UTF-8", Abort);
+    QVERIFY(reader.readNextStartElement()); // a
+    text = reader.readElementText();
+
+    QEXPECT_FAIL("", "Parser expects the data in the initial encoding, but we convert to UTF-8",
+                 Continue);
+    QCOMPARE(text, expectedNextElementText);
 }
 
 void tst_QXmlStream::readNextStartElement() const

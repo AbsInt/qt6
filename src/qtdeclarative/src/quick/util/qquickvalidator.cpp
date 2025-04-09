@@ -22,6 +22,12 @@ QT_BEGIN_NAMESPACE
     and negative signs.  In addition, IntValidator is always guaranteed to accept a number
     formatted according to the "C" locale.
 
+    The following example shows a TextInput object with an IntValidator to check
+    that the user has input an integer within the specified range, updating the
+    text color to highlight invalid input:
+
+    \snippet qml/intvalidator.qml 0
+
     \sa DoubleValidator, RegularExpressionValidator, {Validating Input Text}
 */
 
@@ -100,6 +106,12 @@ void QQuickIntValidator::resetLocaleName()
     \c DoubleValidator.ScientificNotation and the input is not in the valid
     range, it is accepted but invalid. The value may become valid by changing
     the exponent.
+
+    The following example shows a TextInput object with a DoubleValidator to
+    check that the user has input a double within the specified range,
+    updating the text color to highlight invalid input:
+
+    \snippet qml/doublevalidator.qml 0
 
     \sa IntValidator, RegularExpressionValidator, {Validating Input Text}
 */

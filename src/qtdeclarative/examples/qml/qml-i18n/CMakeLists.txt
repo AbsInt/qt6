@@ -23,11 +23,13 @@ qt_add_qml_module(qmli18n
         Main.qml
 )
 
+#![0]
 qt_add_translations(qmli18n
     RESOURCE_PREFIX /qt/qml/Translated/i18n
     TS_FILE_BASE qml
     TS_FILE_DIR i18n
 )
+#![0]
 
 install(TARGETS qmli18n
     BUNDLE  DESTINATION .

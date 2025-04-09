@@ -772,6 +772,7 @@ Method::Method(const QCborMap &cbor, bool isConstructor)
     , isCloned(cbor[S_IS_CLONED].toBool())
     , isJavaScriptFunction(cbor[S_IS_JAVASCRIPT_FUNCTION].toBool())
     , isConstructor(isConstructor || cbor[S_IS_CONSTRUCTOR].toBool())
+    , isConst(cbor[S_IS_CONST].toBool())
 {
     const QCborArray args = cbor[S_ARGUMENTS].toArray();
     for (const QCborValue &argument : args)

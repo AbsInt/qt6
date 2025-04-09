@@ -29,7 +29,7 @@ if(TARGET Qt::QuickTest)
     add_subdirectory(qmlnetwork)
 endif()
 add_subdirectory(toolsupport)
-if(NOT UIKIT AND NOT ANDROID AND NOT QNX) # FIXME: QTBUG-92591 QTBUG-100202
+if(NOT UIKIT AND NOT ANDROID AND NOT QNX AND NOT VXWORKS) # FIXME: QTBUG-92591 QTBUG-100202
     add_subdirectory(qmltest)
 endif()
 if(TARGET Qt::Quick)

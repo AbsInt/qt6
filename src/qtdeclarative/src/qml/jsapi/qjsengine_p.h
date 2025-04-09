@@ -45,7 +45,12 @@ public:
     static void addToDebugServer(QJSEngine *q);
     static void removeFromDebugServer(QJSEngine *q);
 
-    void uiLanguageChanged() { Q_Q(QJSEngine); if (q) q->uiLanguageChanged(); }
+    void uiLanguageChanged()
+    {
+        Q_Q(QJSEngine);
+        if (q)
+            Q_EMIT q->uiLanguageChanged();
+    }
     Q_OBJECT_BINDABLE_PROPERTY(QJSEnginePrivate, QString, uiLanguage, &QJSEnginePrivate::uiLanguageChanged);
 };
 

@@ -181,7 +181,7 @@ void QmlTypesCreator::writeType(QAnyStringView type)
     if (resolved.isPointer)
         m_qml.writeBooleanBinding(S_IS_POINTER, true);
     if (resolved.isConstant)
-        m_qml.writeBooleanBinding(S_IS_CONSTANT, true);
+        m_qml.writeBooleanBinding(S_IS_TYPE_CONSTANT, true);
 }
 
 void QmlTypesCreator::writeProperties(const Property::Container &properties)
@@ -227,7 +227,7 @@ void QmlTypesCreator::writeProperties(const Property::Container &properties)
             m_qml.writeBooleanBinding(S_IS_FINAL, true);
 
         if (obj.isConstant)
-            m_qml.writeBooleanBinding(S_IS_CONSTANT, true);
+            m_qml.writeBooleanBinding(S_IS_PROPERTY_CONSTANT, true);
 
         if (obj.isRequired)
             m_qml.writeBooleanBinding(S_IS_REQUIRED, true);
@@ -256,6 +256,8 @@ void QmlTypesCreator::writeMethods(const Method::Container &methods, QLatin1Stri
             m_qml.writeBooleanBinding(S_IS_CONSTRUCTOR, true);
         if (obj.isJavaScriptFunction)
             m_qml.writeBooleanBinding(S_IS_JAVASCRIPT_FUNCTION, true);
+        if (obj.isConst)
+            m_qml.writeBooleanBinding(S_IS_METHOD_CONSTANT, true);
 
         const Argument::Container &arguments = obj.arguments;
         for (qsizetype i = 0, end = arguments.size(); i != end; ++i) {
@@ -352,6 +354,7 @@ void QmlTypesCreator::writeRootMethods(const MetaType &classDef)
     toStringMethod.name = "toString"_L1;
     toStringMethod.access = Access::Public;
     toStringMethod.returnType = "QString"_L1;
+    toStringMethod.isConst = true;
     componentMethods.push_back(std::move(toStringMethod));
 
     // Add destroy(int)

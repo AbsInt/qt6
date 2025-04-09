@@ -12,6 +12,7 @@
 #include <QtQml/qjsvalue.h>
 #include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlinfo.h>
+#include <QtQml/qqmlcomponent.h>
 
 #include <private/qv4qobjectwrapper_p.h>
 #include <private/qqmlengine_p.h>
@@ -1696,7 +1697,7 @@ QQuickStackViewAttached::QQuickStackViewAttached(QObject *parent)
         QQuickItemPrivate::get(item)->addItemChangeListener(d, QQuickItemPrivate::Parent);
         d->itemParentChanged(item, item->parentItem());
     } else if (parent) {
-        qmlWarning(parent) << "StackView must be attached to an Item";
+        qmlWarning(parent) << "StackView attached property must be attached to an object deriving from Item";
     }
 }
 

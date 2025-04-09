@@ -10,6 +10,7 @@
 #include <qjsondocument.h>
 #include <qjsonarray.h>
 #include <qjsonobject.h>
+#include <qtmocconstants.h>
 #include <qtyperevision.h>
 #include <stdio.h>
 
@@ -18,6 +19,15 @@
 QT_BEGIN_NAMESPACE
 
 struct QMetaObject;
+
+enum class TypeTag : uchar {
+    None,
+    HasStruct = 0x01,
+    HasClass = 0x02,
+    HasEnum = 0x04,
+};
+Q_DECLARE_FLAGS(TypeTags, TypeTag)
+Q_DECLARE_OPERATORS_FOR_FLAGS(TypeTags)
 
 struct Type
 {
@@ -32,6 +42,7 @@ struct Type
     QByteArray rawName;
     uint isVolatile : 1;
     uint isScoped : 1;
+    TypeTags typeTag;
     Token firstToken;
     ReferenceType referenceType;
 };
@@ -44,8 +55,7 @@ struct EnumDef
     QByteArray enumName;
     QByteArray type;
     QList<QByteArray> values;
-    bool isEnumClass; // c++11 enum class
-    EnumDef() : isEnumClass(false) {}
+    QFlags<QtMocConstants::EnumFlags> flags = {};
     QJsonObject toJson(const ClassDef &cdef) const;
     QByteArray qualifiedType(const ClassDef *cdef) const;
 };
@@ -116,6 +126,7 @@ struct PropertyDef
     enum Specification  { ValueSpec, ReferenceSpec, PointerSpec };
     Specification gspec = ValueSpec;
     int revision = 0;
+    TypeTags typeTag;
     bool constant = false;
     bool final = false;
     bool required = false;
@@ -148,7 +159,7 @@ struct BaseDef {
     QByteArray classname;
     QByteArray qualified;
     QList<ClassInfoDef> classInfoList;
-    QMap<QByteArray, bool> enumDeclarations;
+    QMap<QByteArray, QFlags<QtMocConstants::EnumFlags>> enumDeclarations;
     QList<EnumDef> enumList;
     QMap<QByteArray, QByteArray> flagAliases;
     qsizetype begin = 0;
@@ -261,7 +272,7 @@ public:
     void createPropertyDef(PropertyDef &def, int propertyIndex, PropertyMode mode);
 
     void parsePropertyAttributes(PropertyDef &propDef);
-    void parseEnumOrFlag(BaseDef *def, bool isFlag);
+    void parseEnumOrFlag(BaseDef *def, QtMocConstants::EnumFlags flags);
     void parseFlag(BaseDef *def);
     enum class EncounteredQmlMacro {Yes, No};
     EncounteredQmlMacro parseClassInfo(BaseDef *def);

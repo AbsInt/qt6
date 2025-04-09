@@ -33,6 +33,7 @@ public:
         InvalidRegister = -1,
         Accumulator = QV4::CallData::Accumulator,
         This = QV4::CallData::This,
+        NewTarget = QV4::CallData::NewTarget,
         FirstArgument = QV4::CallData::OffsetCount
     };
 
@@ -43,6 +44,7 @@ public:
         QQmlJSRegisterContent content;
         bool canMove = false;
         bool affectedBySideEffects = false;
+        bool isShadowable = false;
 
     private:
         friend bool operator==(const VirtualRegister &a, const VirtualRegister &b)
@@ -59,7 +61,6 @@ public:
     {
         QList<int> jumpOrigins;
         QList<int> readRegisters;
-        QList<QQmlJSScope::ConstPtr> readTypes;
         int jumpTarget = -1;
         bool jumpIsUnconditional = false;
         bool isReturnBlock = false;
@@ -80,6 +81,7 @@ public:
         int changedRegisterIndex = InvalidRegister;
         bool hasSideEffects = false;
         bool isRename = false;
+        bool isShadowable = false;
     };
 
     using InstructionAnnotations = QFlatMap<int, InstructionAnnotation>;
@@ -95,7 +97,7 @@ public:
         QList<QQmlJSRegisterContent> argumentTypes;
         QList<QQmlJSRegisterContent> registerTypes;
         QQmlJSRegisterContent returnType;
-        QQmlJSScope::ConstPtr qmlScope;
+        QQmlJSRegisterContent qmlScope;
         QByteArray code;
         const SourceLocationTable *sourceLocations = nullptr;
         bool isSignalHandler = false;
@@ -133,7 +135,7 @@ public:
             the type may differ from what was seen or requested ealier. See \l {readAccumulator()}.
             The input type may then need to be converted to the expected type.
         */
-        const QQmlJSRegisterContent &accumulatorIn() const
+        QQmlJSRegisterContent accumulatorIn() const
         {
             auto it = registers.find(Accumulator);
             Q_ASSERT(it != registers.end());
@@ -144,7 +146,7 @@ public:
             \internal
             \brief The accumulatorOut is the output register of the current instruction.
         */
-        const QQmlJSRegisterContent &accumulatorOut() const
+        QQmlJSRegisterContent accumulatorOut() const
         {
             Q_ASSERT(m_changedRegisterIndex == Accumulator);
             return m_changedRegister;
@@ -167,11 +169,10 @@ public:
         }
 
         int changedRegisterIndex() const { return m_changedRegisterIndex; }
-        const QQmlJSRegisterContent &changedRegister() const { return m_changedRegister; }
+        QQmlJSRegisterContent changedRegister() const { return m_changedRegister; }
 
-        void addReadRegister(int registerIndex, const QQmlJSRegisterContent &reg)
+        void addReadRegister(int registerIndex, QQmlJSRegisterContent reg)
         {
-            Q_ASSERT(isRename() || reg.isConversion());
             const VirtualRegister &source = registers[registerIndex];
             VirtualRegister &target = m_readRegisters[registerIndex];
             target.content = reg;
@@ -179,7 +180,7 @@ public:
             target.affectedBySideEffects = source.affectedBySideEffects;
         }
 
-        void addReadAccumulator(const QQmlJSRegisterContent &reg)
+        void addReadAccumulator(QQmlJSRegisterContent reg)
         {
             addReadRegister(Accumulator, reg);
         }
@@ -248,6 +249,9 @@ public:
         bool isRename() const { return m_isRename; }
         void setIsRename(bool isRename) { m_isRename = isRename; }
 
+        bool isShadowable() const { return m_isShadowable; }
+        void setIsShadowable(bool isShadowable) { m_isShadowable = isShadowable; }
+
         int renameSourceRegisterIndex() const
         {
             Q_ASSERT(m_isRename);
@@ -261,14 +265,18 @@ public:
         int m_changedRegisterIndex = InvalidRegister;
         bool m_hasSideEffects = false;
         bool m_isRename = false;
+        bool m_isShadowable = false;
     };
 
     QQmlJSCompilePass(const QV4::Compiler::JSUnitGenerator *jsUnitGenerator,
                       const QQmlJSTypeResolver *typeResolver, QQmlJSLogger *logger,
-                      BasicBlocks basicBlocks = {}, InstructionAnnotations annotations = {})
+                      QList<QQmlJS::DiagnosticMessage> *errors, const BasicBlocks &basicBlocks = {},
+                      const InstructionAnnotations &annotations = {})
         : m_jsUnitGenerator(jsUnitGenerator)
         , m_typeResolver(typeResolver)
+        , m_pool(typeResolver->registerContentPool())
         , m_logger(logger)
+        , m_errors(errors)
         , m_basicBlocks(basicBlocks)
         , m_annotations(annotations)
     {}
@@ -276,12 +284,13 @@ public:
 protected:
     const QV4::Compiler::JSUnitGenerator *m_jsUnitGenerator = nullptr;
     const QQmlJSTypeResolver *m_typeResolver = nullptr;
+    QQmlJSRegisterContentPool *m_pool = nullptr;
     QQmlJSLogger *m_logger = nullptr;
 
     const Function *m_function = nullptr;
+    QList<QQmlJS::DiagnosticMessage> *m_errors;
     BasicBlocks m_basicBlocks;
     InstructionAnnotations m_annotations;
-    QQmlJS::DiagnosticMessage *m_error = nullptr;
 
     int firstRegisterIndex() const
     {
@@ -299,6 +308,28 @@ protected:
         return m_function->argumentTypes[registerIndex - FirstArgument];
     }
 
+    /*!
+     * \internal
+     * Determines whether this is the _QML_ scope object
+     * (in contrast to the JavaScript global or some other scope).
+     *
+     * We omit any module prefixes seen on top of the object.
+     * The module prefixes don't actually add anything unless they
+     * are the prefix to an attachment.
+     */
+    bool isQmlScopeObject(QQmlJSRegisterContent content)
+    {
+        switch (content.variant()) {
+        case QQmlJSRegisterContent::ScopeObject:
+            return content.contains(m_function->qmlScope.containedType());
+        case QQmlJSRegisterContent::ModulePrefix:
+            return content.scope().contains(m_function->qmlScope.containedType());
+        default:
+            break;
+        }
+
+        return false;
+    }
 
     State initialState(const Function *function)
     {
@@ -326,6 +357,8 @@ protected:
             newState.registers[oldState.changedRegisterIndex()].affectedBySideEffects = false;
             newState.registers[oldState.changedRegisterIndex()].content
                     = oldState.changedRegister();
+            newState.registers[oldState.changedRegisterIndex()].isShadowable
+                    = oldState.isShadowable();
         }
 
         // Side effects are applied at the end of an instruction: An instruction with side
@@ -338,6 +371,7 @@ protected:
         newState.markSideEffects(instruction->second.hasSideEffects);
         newState.setReadRegisters(instruction->second.readRegisters);
         newState.setIsRename(instruction->second.isRename);
+        newState.setIsShadowable(instruction->second.isShadowable);
 
         for (auto it = instruction->second.typeConversions.begin(),
              end = instruction->second.typeConversions.end(); it != end; ++it) {
@@ -370,18 +404,17 @@ protected:
         return sourceLocation(currentInstructionOffset());
     }
 
-    void setError(const QString &message, int instructionOffset)
+    void addError(const QString &message, int instructionOffset)
     {
-        Q_ASSERT(m_error);
-        if (m_error->isValid())
-            return;
-        m_error->message = message;
-        m_error->loc = sourceLocation(instructionOffset);
+        QQmlJS::DiagnosticMessage diagnostic;
+        diagnostic.message = message;
+        diagnostic.loc = sourceLocation(instructionOffset);
+        m_errors->append(diagnostic);
     }
 
-    void setError(const QString &message)
+    void addError(const QString &message)
     {
-        setError(message, currentInstructionOffset());
+        addError(message, currentInstructionOffset());
     }
 
     static bool instructionManipulatesContext(QV4::Moth::Instr::Type type)

@@ -31,7 +31,7 @@ Examples/Qt-\QtVersion/qml/tutorials/extending-qml/.
 
 Alternatively, you can follow the tutorial by creating the sources from scratch:
 For each chapter, create a new project using the \e {Qt Quick Application} template
-in Qt Creator, as instructed in \l {Qt Creator: Creating Qt Quick Projects}.
+in \QC, as instructed in \l {\QC: Create Qt Quick Applications}.
 Then follow along by adapting and extending the generated skeleton code.
 
 \section1 Chapter 1: Creating a New Type
@@ -156,7 +156,7 @@ Now we can build and run the application:
 
 \image extending-tutorial-chapter1.png
 
-\note You may see a warning \e {Expression ... depends on non-NOTIFYable properties:
+\note You may see a warning \e {Expression ... depends on non-bindable properties:
       PieChart::name}. This happens because we add a binding to the writable \c name
       property, but haven't yet defined a notify signal for it. The QML engine therefore
       cannot update the binding if the \c name value changes. This is addressed in
@@ -356,11 +356,10 @@ have a \c slices property that accepts a list of \c PieSlice items:
 \image extending-tutorial-chapter5.png
 
 To do this, we replace the \c pieSlice property in \c PieChart with a \c slices property,
-declared as a QQmlListProperty type. The QQmlListProperty class enables the
-creation of list properties in QML extensions. We replace the \c pieSlice()
-function with a \c slices() function that returns a list of slices, and add
-an internal \c append_slice() function (discussed below). We also use a QList to
-store the internal list of slices as \c m_slices:
+declared as a \l QQmlListProperty type. The \l QQmlListProperty class enables the
+creation of list properties in types exposed to QML. We replace the \c pieSlice()
+function with a \c slices() function that returns a list of slices. We also use
+a QList to store the internal list of slices as \c m_slices:
 
 \snippet tutorials/extending-qml/chapter5-listproperties/piechart.h 0
 \dots
@@ -369,18 +368,18 @@ store the internal list of slices as \c m_slices:
 \snippet tutorials/extending-qml/chapter5-listproperties/piechart.h 2
 
 Although the \c slices property does not have an associated \c WRITE function,
-it is still modifiable because of the way QQmlListProperty works.
+it is still modifiable because of the way \l QQmlListProperty works.
 In the \c PieChart implementation, we implement \c PieChart::slices() to
-return a QQmlListProperty value and indicate that the internal
-\c PieChart::append_slice() function is to be called whenever a request is made from QML
-to add items to the list:
+return a \l QQmlListProperty value:
 
 \snippet tutorials/extending-qml/chapter5-listproperties/piechart.cpp 0
 
-The \c append_slice() function simply sets the parent item as before,
-and adds the new item to the \c m_slices list. As you can see, the append function for a
-QQmlListProperty is called with two arguments: the list property, and
-the item that is to be appended.
+This synthesizes the necessary functions to interact with the list from QML.
+The resulting \l QQmlListProperty is a \e view into the list. Alternately, you can
+manually provide the individual access functions for the list. This is necessary
+if your list is not a \l QList or if you want to restrict or otherwise customize
+QML access to your list. In most cases, however, the constructor taking a
+\l QList pointer is the safest and easiest option.
 
 The \c PieSlice class has also been modified to include \c fromAngle and \c angleSpan
 properties and to draw the slice according to these values. This is a straightforward

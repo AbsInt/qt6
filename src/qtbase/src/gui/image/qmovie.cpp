@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 /*!
     \class QMovie
@@ -148,14 +149,13 @@
 #include "qbuffer.h"
 #include "qdir.h"
 #include "qloggingcategory.h"
+#include "private/qimage_p.h"
 #include "private/qobject_p.h"
 #include "private/qproperty_p.h"
 
 #define QMOVIE_INVALID_DELAY -1
 
 QT_BEGIN_NAMESPACE
-
-Q_DECLARE_LOGGING_CATEGORY(lcImageIo)
 
 class QFrameInfo
 {

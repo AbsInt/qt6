@@ -9,6 +9,7 @@
 #include <QtTest/private/qbenchmark_p.h>
 #include <QtTest/private/qtestlog_p.h>
 
+#include <QtCore/qelapsedtimer.h>
 #include <QtCore/qlibraryinfo.h>
 
 #include <cstdio>
@@ -142,7 +143,7 @@ void QJUnitTestLogger::enterTestCase(const char *name)
 
     ++testCounter;
 
-    elapsedTestcaseTime.restart();
+    elapsedTestcaseTime.start();
 }
 
 void QJUnitTestLogger::enterTestData(QTestData *)
@@ -158,7 +159,7 @@ void QJUnitTestLogger::enterTestData(QTestData *)
             currentTestCase->attribute(QTest::AI_Name));
         name->setPair(QTest::AI_Name, testIdentifier.data());
         lastTestFunction = QTestResult::currentTestFunction();
-        elapsedTestcaseTime.restart();
+        elapsedTestcaseTime.start();
     } else {
         // Create new test cases for remaining test data
         leaveTestCase();

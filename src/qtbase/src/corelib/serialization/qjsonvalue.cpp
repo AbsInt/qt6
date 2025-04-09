@@ -14,6 +14,8 @@
 #include <qhash.h>
 #include <qdebug.h>
 #include "qdatastream.h"
+#include "qjsonparser_p.h"
+#include "qjsonwriter_p.h"
 
 #include <private/qnumeric_p.h>
 #include <private/qcborvalue_p.h>
@@ -482,12 +484,15 @@ QJsonValue QJsonValue::fromVariant(const QVariant &variant)
     case QMetaType::UShort:
     case QMetaType::Int:
     case QMetaType::UInt:
+    case QMetaType::Long:
     case QMetaType::LongLong:
         return QJsonValue(variant.toLongLong());
+    case QMetaType::ULong:
     case QMetaType::ULongLong:
         if (variant.toULongLong() <= static_cast<uint64_t>(std::numeric_limits<qint64>::max()))
             return QJsonValue(variant.toLongLong());
         Q_FALLTHROUGH();
+    case QMetaType::Float16:
     case QMetaType::Float:
     case QMetaType::Double: {
         double v = variant.toDouble();
@@ -592,6 +597,62 @@ QVariant QJsonValue::toVariant() const
                     in an array or a non existent key in an object.
 */
 #endif // !QT_NO_VARIANT
+
+/*!
+    \since 6.9
+    Parses \a json as a UTF-8 encoded JSON value, and creates a QJsonValue
+    from it.
+
+    Returns a valid QJsonValue if the parsing succeeds. If it fails, the
+    returned value will be \l {QJsonValue::isUndefined} {undefined}, and
+    the optional \a error variable will contain further details about the
+    error.
+
+    \sa QJsonParseError, isUndefined(), toJson()
+ */
+QJsonValue QJsonValue::fromJson(QByteArrayView json, QJsonParseError *error)
+{
+    QJsonPrivate::Parser parser(json.constData(), json.size());
+    QJsonValue result;
+    result.value = parser.parse(error);
+    return result;
+}
+
+/*!
+\if defined(qt7)
+    \enum QJsonValue::JsonFormat
+    \since 6.9
+
+    This value defines the format of the JSON byte array produced
+    when converting to a QJsonValue using toJson().
+
+    \value Indented Defines human readable output as follows:
+        \snippet code/src_corelib_serialization_qjsondocument.cpp 0
+
+    \value Compact Defines a compact output as follows:
+        \snippet code/src_corelib_serialization_qjsondocument.cpp 1
+\else
+    \typealias QJsonValue::JsonFormat
+    \since 6.9
+
+    Same as \l QJsonDocument::JsonFormat.
+\endif
+*/
+
+/*!
+    \since 6.9
+    Converts the QJsonValue to a UTF-8 encoded JSON value in the provided \a format.
+
+    \sa fromJson(), JsonFormat
+ */
+QByteArray QJsonValue::toJson(JsonFormat format) const
+{
+    QByteArray json;
+
+    QJsonPrivate::Writer::valueToJson(value, json, 0, (format == JsonFormat::Compact));
+
+    return json;
+}
 
 /*!
     Returns the type of the value.
@@ -1107,7 +1168,7 @@ size_t qHash(const QJsonValue &value, size_t seed)
     Q_UNREACHABLE_RETURN(0);
 }
 
-#if !defined(QT_NO_DEBUG_STREAM) && !defined(QT_JSON_READONLY)
+#if !defined(QT_NO_DEBUG_STREAM)
 QDebug operator<<(QDebug dbg, const QJsonValue &o)
 {
     QDebugStateSaver saver(dbg);

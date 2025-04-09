@@ -71,6 +71,12 @@ The following options are available:
     \li 4
     \li How many spaces are used when indenting.
 \row
+    \li -W, --column-width <width>
+    \li -1
+    \li Breaks the line into multiple lines if it exceeds
+        the specified width. Use -1 to disable line
+        wrapping. (default).
+\row
     \li -n, --normalize
     \li
     \li Reorders the attributes of the objects according to the QML Coding Guidelines.

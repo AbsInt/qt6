@@ -1,8 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
-#include <qglobal.h>
-
 #include <QtNetwork/private/qtnetworkglobal_p.h>
 
 #if QT_CONFIG(topleveldomain)
@@ -28,7 +26,9 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
-Q_LOGGING_CATEGORY(lcTld, "qt.network.tld")
+#if QT_CONFIG(publicsuffix_system)
+Q_STATIC_LOGGING_CATEGORY(lcTld, "qt.network.tld")
+#endif
 
 static constexpr int PSL_NOT_FOUND = -1;
 static constexpr int PSL_FLAG_EXCEPTION = 1 << 0;

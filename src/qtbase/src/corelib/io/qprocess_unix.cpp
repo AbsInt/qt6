@@ -43,10 +43,6 @@
 #if __has_include(<paths.h>)
 #  include <paths.h>
 #endif
-#if __has_include(<linux/close_range.h>)
-// FreeBSD's is in <unistd.h>
-#  include <linux/close_range.h>
-#endif
 
 #if QT_CONFIG(process)
 #include <forkfd.h>
@@ -789,18 +785,18 @@ static QString startFailureErrorMessage(ChildError &err, [[maybe_unused]] ssize_
     Q_ASSERT(bytesRead == sizeof(err));
 
     qsizetype len = qstrnlen(err.function, sizeof(err.function));
-    QString complement = QString::fromUtf8(err.function, len);
+    const QUtf8StringView complement(err.function, len);
     if (err.code == FakeErrnoForThrow)
         return QProcess::tr("Child process modifier threw an exception: %1")
-                .arg(std::move(complement));
+                .arg(complement);
     if (err.code == 0)
         return QProcess::tr("Child process modifier reported error: %1")
-                .arg(std::move(complement));
+                .arg(complement);
     if (err.code < 0)
         return QProcess::tr("Child process modifier reported error: %1: %2")
-                .arg(std::move(complement), qt_error_string(-err.code));
+                .arg(complement, qt_error_string(-err.code));
     return QProcess::tr("Child process set up failed: %1: %2")
-            .arg(std::move(complement), qt_error_string(err.code));
+            .arg(complement, qt_error_string(err.code));
 }
 
 Q_NORETURN void
@@ -846,10 +842,13 @@ static const char *applyProcessParameters(const QProcess::UnixProcessParameters 
     if (params.flags.testFlag(QProcess::UnixProcessFlag::CloseFileDescriptors)) {
         int r = -1;
         int fd = qMax(STDERR_FILENO + 1, params.lowestFileDescriptorToClose);
-#if QT_CONFIG(close_range)
+#ifdef CLOSE_RANGE_CLOEXEC
+        // Mark the file descriptors for closing upon execve() - we delay
+        // closing so we don't close the ones QProcess needs for itself.
         // On FreeBSD, this probably won't fail.
-        // On Linux, this will fail with ENOSYS before kernel 5.9.
-        r = close_range(fd, INT_MAX, 0);
+        // On Linux, this will fail with ENOSYS before kernel 5.9 and EINVAL
+        // before 5.11.
+        r = close_range(fd, INT_MAX, CLOSE_RANGE_CLOEXEC);
 #endif
         if (r == -1) {
             // We *could* read /dev/fd to find out what file descriptors are
@@ -860,7 +859,7 @@ static const char *applyProcessParameters(const QProcess::UnixProcessParameters 
             if (struct rlimit limit; getrlimit(RLIMIT_NOFILE, &limit) == 0)
                 max_fd = limit.rlim_cur;
             for ( ; fd < max_fd; ++fd)
-                close(fd);
+                fcntl(fd, F_SETFD, FD_CLOEXEC);
         }
     }
 
@@ -882,6 +881,17 @@ static const char *applyProcessParameters(const QProcess::UnixProcessParameters 
                 errno = savedErrno;
                 return "ioctl";
             }
+        }
+    }
+
+    // Disable core dumps near the end. This isn't expected to fail.
+    if (params.flags.testFlag(QProcess::UnixProcessFlag::DisableCoreDumps)) {
+        if (struct rlimit lim; getrlimit(RLIMIT_CORE, &lim) == 0 && lim.rlim_cur) {
+            // We'll leave rlim_max untouched, so the child can set it back if it
+            // wants to. We don't expect setrlimit() to fail, so we ignore its
+            // return value.
+            lim.rlim_cur = 0;
+            (void) setrlimit(RLIMIT_CORE, &lim);
         }
     }
 

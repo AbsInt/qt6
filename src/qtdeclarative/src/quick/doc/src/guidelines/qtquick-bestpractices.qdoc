@@ -258,6 +258,41 @@ property int size
 property MyMenu optionsMenu
 \endcode
 
+\section1 Property change signals
+
+Prefer using the explicit interaction signals over the value changed signals to
+avoid subtle bugs.
+
+Using \c {valueChanged} can lead to event cascades where the value is constantly
+changed because it is somehow rounded or normalized.
+
+Using explicit interaction signals alone avoids this whole class of issues.
+
+For example, \l Slider has these similar signals: \l {Slider::}{moved} and
+\c {valueChanged}.
+
+\qml
+Slider {
+    value: someValueFromBackend
+
+    onValueChanged: pushToBackend(value)
+    // or
+    onMoved: pushToBackend(value)
+}
+\endqml
+
+Both cases look similar, and you may want to use \c {valueChanged}.
+
+Developers often overlook the fact that the \l Slider can automatically change
+its value, for example, because of clamping to minimum/maximum values or
+rounding. In this case, the \c {valueChanged} signal is emitted. If you use the
+\c {valueChanged} signal, you may notice it is emitted at unexpected moments.
+
+To avoid possible issues, use an interaction signal: the signal that is emitted
+when user interacts with the control. In this example, if you use the
+\l {Slider::}{moved} signal, the slot will only be triggered if the user
+changes the control.
+
 \section1 Performance
 
 For information on performance in QML and Qt Quick,

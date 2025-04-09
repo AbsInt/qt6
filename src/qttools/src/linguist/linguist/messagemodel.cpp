@@ -16,6 +16,69 @@
 
 #include <limits.h>
 
+static QString resolveNcr(QStringView str)
+{
+    constexpr QStringView notation = u"&#";
+    constexpr QChar cx = QLatin1Char('x');
+    constexpr QChar ce = QLatin1Char(';');
+
+    QString result;
+    result.reserve(str.size());
+    qsizetype offset = str.indexOf(notation);
+    while (offset >= 0) {
+
+        qsizetype metaLen = 2;
+        if (str.size() <= offset + metaLen)
+            break;
+
+        int base = 10;
+        if (const QChar ch = str[offset + metaLen]; ch == cx) {
+            metaLen++;
+            base = 16;
+        }
+        offset += metaLen;
+
+        const qsizetype end = str.sliced(offset).indexOf(ce);
+        if (end > 0) {
+            bool valid;
+            if (const uint c = str.sliced(offset, end).toUInt(&valid, base);
+                valid && c <= QChar::LastValidCodePoint) {
+                if (QChar::requiresSurrogates(c))
+                    result += str.sliced(0, offset - metaLen) + QChar(QChar::highSurrogate(c))
+                            + QChar(QChar::lowSurrogate(c));
+                else
+                    result += str.sliced(0, offset - metaLen) + QChar(c);
+                str.slice(offset + end + 1);
+                offset = str.indexOf(notation);
+                continue;
+            }
+        }
+        result += str.sliced(0, offset);
+        str.slice(offset);
+        offset = str.indexOf(notation);
+    }
+    result += str;
+    return result;
+}
+
+static QString showNcr(const QString &str)
+{
+    QString result;
+    result.reserve(str.size());
+    for (const QChar ch : str) {
+        if (uint c = ch.unicode(); Q_UNLIKELY(!ch.isPrint() && c > 0x20))
+            result += QString(QLatin1String("&#x%1;")).arg(c, 0, 16);
+        else
+            result += ch;
+    }
+    return result;
+}
+
+static QString adjustNcrVisibility(const QString &str, bool ncrMode)
+{
+    return ncrMode ? showNcr(str) : resolveNcr(str);
+}
+
 QT_BEGIN_NAMESPACE
 
 /******************************************************************************
@@ -25,8 +88,7 @@ QT_BEGIN_NAMESPACE
  *****************************************************************************/
 
 MessageItem::MessageItem(const TranslatorMessage &message)
-  : m_message(message),
-    m_danger(false)
+    : m_message(message), m_danger(false), m_ncrMode(false)
 {
     if (m_message.translation().isEmpty())
         m_message.setTranslation(QString());
@@ -39,6 +101,45 @@ bool MessageItem::compare(const QString &findText, bool matchSubstring,
     return matchSubstring
         ? text().indexOf(findText, 0, cs) >= 0
         : text().compare(findText, cs) == 0;
+}
+
+void MessageItem::setTranslation(const QString &translation)
+{
+    m_message.setTranslation(resolveNcr(translation));
+}
+
+QString MessageItem::text() const
+{
+    return adjustNcrVisibility(m_message.sourceText(), m_ncrMode);
+}
+
+QString MessageItem::pluralText() const
+{
+    return adjustNcrVisibility(m_message.extra(QLatin1String("po-msgid_plural")), m_ncrMode);
+}
+
+QString MessageItem::translation() const
+{
+    return adjustNcrVisibility(m_message.translation(), m_ncrMode);
+}
+
+QStringList MessageItem::translations() const
+{
+    QStringList translations;
+    translations.reserve(m_message.translations().size());
+    for (QString &trans : m_message.translations())
+        translations.append(adjustNcrVisibility(trans, m_ncrMode));
+    return translations;
+}
+
+void MessageItem::setTranslations(const QStringList &translations)
+{
+    QStringList trans;
+    trans.reserve(translations.size());
+    for (const QString &t : translations)
+        trans.append(resolveNcr(t));
+
+    m_message.setTranslations(trans);
 }
 
 /******************************************************************************
@@ -101,7 +202,13 @@ DataModel::DataModel(QObject *parent)
 
 QStringList DataModel::normalizedTranslations(const MessageItem &m) const
 {
-    return Translator::normalizedTranslations(m.message(), m_numerusForms.size());
+    QStringList translations =
+            Translator::normalizedTranslations(m.message(), m_numerusForms.size());
+    QStringList ncrTranslations;
+    ncrTranslations.reserve(translations.size());
+    for (const QString &translate : translations)
+        ncrTranslations.append(adjustNcrVisibility(translate, m.ncrMode()));
+    return ncrTranslations;
 }
 
 ContextItem *DataModel::contextItem(int context) const

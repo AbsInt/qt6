@@ -786,6 +786,10 @@ QString QQuickGraphicsConfiguration::pipelineCacheSaveFile() const
     runtime HLSL->DXBC compilation and is therefore device and vendor
     independent.
 
+    \warning The serialized pipeline cache data is assumed to be trusted
+    content. Application developers are advised to never pass in data from
+    untrusted sources.
+
     \since 6.5
 
     \sa pipelineCacheLoadFile(), setPipelineCacheSaveFile()

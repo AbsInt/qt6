@@ -12,6 +12,8 @@ sudo yum -y remove PackageKit gnome-software
 sudo yum -y update
 
 installPackages=()
+# Make sure needed ca-certificates are available
+installPackages+=(ca-certificates)
 installPackages+=(git)
 installPackages+=(zlib-devel)
 installPackages+=(glib2-devel)
@@ -176,6 +178,9 @@ sudo python3.11 -m pip install -r "${BASH_SOURCE%/*}/../common/shared/sbom_requi
 sudo /usr/bin/pip3 install wheel
 sudo /usr/bin/pip3 install dataclasses
 # No sbom_requirements.txt, because it requires Python 3.9 for poetry_core -> spdx_tools and we have 3.8
+
+gccVersion="$(gcc --version |grep -Eo '[0-9]+\.[0-9]+(\.[0-9]+)?' |head -n 1)"
+echo "GCC = $gccVersion" >> versions.txt
 
 OpenSSLVersion="$(openssl3 version |cut -b 9-14)"
 echo "System's OpenSSL = $OpenSSLVersion" >> ~/versions.txt

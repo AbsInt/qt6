@@ -269,10 +269,10 @@ QFile::~QFile()
 }
 
 /*!
-    Returns the name set by setFileName() or to the QFile
-    constructors.
+    Returns the name of the file as set by setFileName(), rename(), or
+    by the QFile constructors.
 
-    \sa setFileName(), QFileInfo::fileName()
+    \sa setFileName(), rename(), QFileInfo::fileName()
 */
 QString QFile::fileName() const
 {
@@ -453,6 +453,22 @@ QFile::remove(const QString &fileName)
 }
 
 /*!
+    \since 6.9
+
+    Returns \c true if Qt supports moving files to a trash (recycle bin) in the
+    current operating system using the moveToTrash() function, \c false
+    otherwise. Note that this function returning \c true does not imply
+    moveToTrash() will succeed. In particular, this function does not check if
+    the user has disabled the functionality in their settings.
+
+    \sa moveToTrash()
+*/
+bool QFile::supportsMoveToTrash()
+{
+    return QFileSystemEngine::supportsMoveFileToTrash();
+}
+
+/*!
     \since 5.15
 
     Moves the file specified by fileName() to the trash. Returns \c true if successful,
@@ -479,9 +495,12 @@ QFile::remove(const QString &fileName)
     themselves mount points).
 //! [move-to-trash-common]
 
-    \note On systems where the system API doesn't report the location of the file in the
-    trash, fileName() will be set to the null string once the file has been moved. On
-    systems that don't have a trash can, this function always returns false.
+    \note On systems where the system API doesn't report the location of the
+    file in the trash, fileName() will be set to the null string once the file
+    has been moved. On systems that don't have a trash can, this function
+    always returns \c false (see supportsMoveToTrash()).
+
+    \sa supportsMoveToTrash(), remove(), QDir::remove()
 */
 bool
 QFile::moveToTrash()
@@ -648,8 +667,8 @@ QFile::rename(const QString &newName)
         }
 
         QFile out(newName);
-        if (open(QIODevice::ReadOnly)) {
-            if (out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (open(QIODevice::ReadOnly | QIODevice::Unbuffered)) {
+            if (out.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Unbuffered)) {
                 bool error = false;
                 char block[4096];
                 qint64 bytes;
@@ -793,7 +812,7 @@ QFile::copy(const QString &newName)
             return true;
         } else {
             bool error = false;
-            if (!open(QFile::ReadOnly)) {
+            if (!open(QFile::ReadOnly | QFile::Unbuffered)) {
                 error = true;
                 d->setError(QFile::CopyError, tr("Cannot open %1 for input").arg(d->fileName));
             } else {
@@ -818,6 +837,7 @@ QFile::copy(const QString &newName)
                     if (!d->engine()->cloneTo(out.d_func()->engine())) {
                         char block[4096];
                         qint64 totalRead = 0;
+                        out.setOpenMode(ReadWrite | Unbuffered);
                         while (!atEnd()) {
                             qint64 in = read(block, sizeof(block));
                             if (in <= 0)

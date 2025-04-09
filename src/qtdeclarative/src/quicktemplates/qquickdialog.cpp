@@ -222,15 +222,15 @@ QQuickDialog::~QQuickDialog()
 QString QQuickDialog::title() const
 {
     Q_D(const QQuickDialog);
-    return d->m_title;
+    return d->title;
 }
 
 void QQuickDialog::setTitle(const QString &title)
 {
     Q_D(QQuickDialog);
-    if (d->m_title == title)
+    if (d->title == title)
         return;
-    d->m_title = title;
+    d->title = title;
 
     if (d->popupWindow)
         d->popupWindow->setTitle(title);

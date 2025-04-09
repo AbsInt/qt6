@@ -18,6 +18,7 @@
 #include <private/qqmltypeloader_p.h>
 
 QT_BEGIN_NAMESPACE
+Q_DECLARE_LOGGING_CATEGORY(DBG_DISK_CACHE)
 
 class QQmlScriptData;
 class Q_AUTOTEST_EXPORT QQmlScriptBlob : public QQmlTypeLoader::Blob
@@ -25,9 +26,8 @@ class Q_AUTOTEST_EXPORT QQmlScriptBlob : public QQmlTypeLoader::Blob
 private:
     friend class QQmlTypeLoader;
 
-    QQmlScriptBlob(const QUrl &, QQmlTypeLoader *);
-
 public:
+    QQmlScriptBlob(const QUrl &, QQmlTypeLoader *);
     ~QQmlScriptBlob() override;
 
     struct ScriptReference

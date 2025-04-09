@@ -732,7 +732,7 @@ static size_t aeshash(const uchar *p, size_t len, size_t seed, size_t seed2) noe
 
     // Compared to x86 AES, ARM splits each round into two instructions
     // and includes the pre-xor instead of the post-xor.
-    const auto hash16bytes = [](uint8x16_t &state0, uint8x16_t data) {
+    const auto hash16bytes = [](uint8x16_t &state0, uint8x16_t data) QT_FUNCTION_TARGET(AES) {
         auto state1 = state0;
         state0 = vaeseq_u8(state0, data);
         state0 = vaesmcq_u8(state0);
@@ -1239,6 +1239,19 @@ uint qt_hash(QStringView key, uint chained) noexcept
     \sa qHashRange(), qHashRangeCommutative()
 */
 
+/*!
+    \fn template <typename T, std::enable_if_t<std::is_same_v<T, bool>, bool> = true> size_t qHash(T key, size_t seed)
+    \since 6.9
+
+    \qhashbuiltin
+
+    \note This is qHash(bool), constrained to accept only arguments of type bool,
+    not arguments of types that merely convert to bool.
+
+    \note In Qt versions prior to 6.9, this overload was unintendedly provided by
+    an undocumented 1-to-2-arg qHash adapter template function, with identical behavior.
+*/
+
 /*! \fn size_t qHash(char key, size_t seed = 0)
     \since 5.0
     \qhashbuiltin
@@ -1439,6 +1452,7 @@ size_t qHash(long double key, size_t seed) noexcept
     \class QHash
     \inmodule QtCore
     \brief The QHash class is a template class that provides a hash-table-based dictionary.
+    \compares equality
 
     \ingroup tools
     \ingroup shared
@@ -1731,10 +1745,10 @@ size_t qHash(long double key, size_t seed) noexcept
     \memberswap{multi-hash}
 */
 
-/*! \fn template <class Key, class T> bool QHash<Key, T>::operator==(const QHash &other) const
+/*! \fn template <class Key, class T> bool QHash<Key, T>::operator==(const QHash &lhs, const QHash &rhs)
 
-    Returns \c true if \a other is equal to this hash; otherwise returns
-    false.
+    Returns \c true if \a lhs hash is equal to \a rhs hash; otherwise returns
+    \c false.
 
     Two hashes are considered equal if they contain the same (key,
     value) pairs.
@@ -1744,9 +1758,9 @@ size_t qHash(long double key, size_t seed) noexcept
     \sa operator!=()
 */
 
-/*! \fn template <class Key, class T> bool QHash<Key, T>::operator!=(const QHash &other) const
+/*! \fn template <class Key, class T> bool QHash<Key, T>::operator!=(const QHash &lhs, const QHash &rhs)
 
-    Returns \c true if \a other is not equal to this hash; otherwise
+    Returns \c true if \a lhs hash is not equal to \a rhs hash; otherwise
     returns \c false.
 
     Two hashes are considered equal if they contain the same (key,
@@ -2294,6 +2308,185 @@ size_t qHash(long double key, size_t seed) noexcept
     \include qhash.cpp qhash-iterator-invalidation-func-desc
 */
 
+/*!
+    \class QHash::TryEmplaceResult
+    \inmodule QtCore
+    \since 6.9
+    \ingroup tools
+    \brief The TryEmplaceResult class is used to represent the result of a tryEmplace() operation.
+
+    The \c{TryEmplaceResult} class is used in QHash to represent the result
+    of a tryEmplace() operation. It holds an \l{iterator} to the newly
+    created item, or to the pre-existing item that prevented the insertion, and
+    a boolean, \l{inserted}, denoting whether the insertion took place.
+
+    \sa QHash, QHash::tryEmplace()
+*/
+
+/*!
+    \variable QHash::TryEmplaceResult::iterator
+
+    Holds the iterator to the newly inserted element, or the element that
+    prevented the insertion.
+*/
+
+/*!
+    \variable QHash::TryEmplaceResult::inserted
+
+    This value is \c{false} if there was already an entry with the same key.
+*/
+
+/*!
+    \fn template <class Key, class T> template <typename... Args> QHash<Key, T>::TryEmplaceResult QHash<Key, T>::tryEmplace(const Key &key, Args &&...args)
+    \fn template <class Key, class T> template <typename... Args> QHash<Key, T>::TryEmplaceResult QHash<Key, T>::tryEmplace(Key &&key, Args &&...args)
+    \fn template <class Key, class T> template <typename K, typename... Args, QHash<Key, T>::if_heterogeneously_searchable<K> = true, QHash<Key, T>::if_key_constructible_from<K> = true> QHash<Key, T>::TryEmplaceResult QHash<Key, T>::tryEmplace(K &&key, Args &&...args)
+    \since 6.9
+
+    Inserts a new item with the \a key and a value constructed from \a args.
+    If an item with \a key already exists, no insertion takes place.
+
+    Returns an instance of \l{TryEmplaceResult}, a structure that holds an
+    \l{QHash::TryEmplaceResult::}{iterator} to the newly created item, or
+    to the pre-existing item that prevented the insertion, and a boolean,
+    \l{QHash::TryEmplaceResult::}{inserted}, denoting whether the insertion
+    took place.
+
+    For example, this can be used to avoid the pattern of comparing old and
+    new size or double-lookups. Where you might previously have written code like:
+
+    \code
+    QHash<int, MyType> hash;
+    // [...]
+    int myKey = getKey();
+    qsizetype oldSize = hash.size();
+    MyType &elem = hash[myKey];
+    if (oldSize != hash.size()) // Size changed: new element!
+        initialize(elem);
+    // [use elem...]
+    \endcode
+
+    You can instead write:
+
+    \code
+    QHash<int, MyType> hash;
+    // [...]
+    int myKey = getKey();
+    auto result = hash.tryEmplace(myKey);
+    if (result.inserted) // New element!
+        initialize(*result.iterator);
+    // [use result.iterator...]
+    \endcode
+
+    \sa emplace(), tryInsert(), insertOrAssign()
+*/
+
+/*!
+    \fn template <class Key, class T> QHash<Key, T>::TryEmplaceResult QHash<Key, T>::tryInsert(const Key &key, const T &value)
+    \fn template <class Key, class T> template <typename K, QHash<Key, T>::if_heterogeneously_searchable<K> = true, QHash<Key, T>::if_key_constructible_from<K> = true> QHash<Key, T>::TryEmplaceResult QHash<Key, T>::tryInsert(K &&key, const T &value)
+    \since 6.9
+
+    Inserts a new item with the \a key and a value of \a value.
+    If an item with \a key already exists, no insertion takes place.
+
+    Returns an instance of \l{TryEmplaceResult}, a structure that holds an
+    \l{QHash::TryEmplaceResult::}{iterator} to the newly created item, or to the pre-existing item
+    that prevented the insertion, and a boolean, \l{QHash::TryEmplaceResult::}{inserted}, denoting
+    whether the insertion took place.
+
+    \sa insert(), tryEmplace(), insertOrAssign()
+*/
+
+/*!
+    \fn template <class Key, class T> template <typename K, typename... Args, QHash<Key, T>::if_heterogeneously_searchable<K> = true, QHash<Key, T>::if_key_constructible_from<K> = true> iterator QHash<Key, T>::try_emplace(const_iterator hint, K &&key, Args &&...args)
+    \fn template <class Key, class T> template <typename... Args> iterator QHash<Key, T>::try_emplace(const_iterator hint, const Key &key, Args &&...args)
+    \fn template <class Key, class T> template <typename... Args> iterator QHash<Key, T>::try_emplace(const_iterator hint, Key &&key, Args &&...args)
+    \since 6.9
+
+    Inserts a new item with the \a key and a value constructed from \a args.
+    If an item with \a key already exists, no insertion takes place.
+
+    Returns the iterator of the inserted item, or to the item that prevented the
+    insertion.
+
+    \a hint is ignored.
+
+    These functions are provided for compatibility with the standard library.
+
+    \sa emplace(), tryEmplace(), tryInsert(), insertOrAssign()
+*/
+
+/*!
+    \fn template <class Key, class T> template <typename... Args> std::pair<iterator, bool> QHash<Key, T>::try_emplace(const Key &key, Args &&...args)
+    \fn template <class Key, class T> template <typename... Args> std::pair<iterator, bool> QHash<Key, T>::try_emplace(Key &&key, Args &&...args)
+    \fn template <class Key, class T> template <typename K, typename... Args, QHash<Key, T>::if_heterogeneously_searchable<K> = true, QHash<Key, T>::if_key_constructible_from<K> = true> std::pair<iterator, bool> QHash<Key, T>::try_emplace(K &&key, Args &&...args)
+    \since 6.9
+
+    Inserts a new item with the \a key and a value constructed from \a args.
+    If an item with \a key already exists, no insertion takes place.
+
+    Returns a pair consisting of an iterator to the inserted item (or to the
+    item that prevented the insertion), and a bool denoting whether the
+    insertion took place.
+
+    These functions are provided for compatibility with the standard library.
+
+    \sa emplace(), tryEmplace(), tryInsert(), insertOrAssign()
+*/
+
+/*!
+    \fn template <class Key, class T> template <typename Value> QHash<Key, T>::TryEmplaceResult QHash<Key, T>::insertOrAssign(const Key &key, Value &&value)
+    \fn template <class Key, class T> template <typename Value> QHash<Key, T>::TryEmplaceResult QHash<Key, T>::insertOrAssign(Key &&key, Value &&value)
+    \fn template <class Key, class T> template <typename K, typename Value, QHash<Key, T>::if_heterogeneously_searchable<K> = true, QHash<Key, T>::if_key_constructible_from<K> = true> QHash<Key, T>::TryEmplaceResult QHash<Key, T>::insertOrAssign(K &&key, Value &&value)
+    \since 6.9
+
+    Attempts to insert an item with the \a key and \a value.
+    If an item with \a key already exists its value is overwritten with \a value.
+
+    Returns an instance of \l{TryEmplaceResult}, a structure that holds an
+    \l{QHash::TryEmplaceResult::}{iterator} to the item, and a boolean,
+    \l{QHash::TryEmplaceResult::}{inserted}, denoting whether the item was newly created (\c{true})
+    or if it previously existed (\c{false}).
+
+    \sa insert(), tryEmplace(), tryInsert()
+*/
+
+/*!
+    \fn template <class Key, class T> template <typename Value> std::pair<QHash<Key, T>::key_value_iterator, bool> QHash<Key, T>::insert_or_assign(const Key &key, Value &&value)
+    \fn template <class Key, class T> template <typename Value> std::pair<QHash<Key, T>::key_value_iterator, bool>  QHash<Key, T>::insert_or_assign(Key &&key, Value &&value)
+    \fn template <class Key, class T> template <typename K, typename Value, QHash<Key, T>::if_heterogeneously_searchable<K> = true, QHash<Key, T>::if_key_constructible_from<K> = true> std::pair<QHash<Key, T>::key_value_iterator, bool> QHash<Key, T>::insert_or_assign(K &&key, Value &&value)
+    \since 6.9
+
+    Attempts to insert an item with the \a key and \a value.
+    If an item with \a key already exists its value is overwritten with \a value.
+
+    Returns a pair consisting of an iterator pointing to the item, and a
+    boolean, denoting whether the item was newly created (\c{true}) or if it
+    previously existed (\c{false}).
+
+    These functions are provided for compatibility with the standard library.
+
+    \sa insert(), tryEmplace(), tryInsert(), insertOrAssign()
+*/
+
+/*!
+    \fn template <class Key, class T> template <typename Value> std::pair<QHash<Key, T>::key_value_iterator, bool> QHash<Key, T>::insert_or_assign(const_iterator hint, const Key &key, Value &&value)
+    \fn template <class Key, class T> template <typename Value> std::pair<QHash<Key, T>::key_value_iterator, bool>  QHash<Key, T>::insert_or_assign(const_iterator hint, Key &&key, Value &&value)
+    \fn template <class Key, class T> template <typename K, typename Value, QHash<Key, T>::if_heterogeneously_searchable<K> = true, QHash<Key, T>::if_key_constructible_from<K> = true> std::pair<QHash<Key, T>::key_value_iterator, bool> QHash<Key, T>::insert_or_assign(const_iterator hint, K &&key, Value &&value)
+    \since 6.9
+
+    Attempts to insert an item with the \a key and \a value.
+    If an item with \a key already exists its value is overwritten with \a value.
+
+    Returns a pair consisting of an iterator pointing to the item, and a
+    boolean, denoting whether the item was newly created (\c{true}) or if it
+    previously existed (\c{false}).
+
+    \a hint is ignored.
+
+    These functions are provided for compatibility with the standard library.
+
+    \sa insert(), tryEmplace(), insertOrAssign()
+*/
 
 /*! \fn template <class Key, class T> void QHash<Key, T>::insert(const QHash &other)
     \since 5.15
@@ -2825,7 +3018,8 @@ size_t qHash(long double key, size_t seed) noexcept
 
 /*! \class QMultiHash
     \inmodule QtCore
-    \brief The QMultiHash class is a convenience QHash subclass that provides multi-valued hashes.
+    \brief The QMultiHash class provides a multi-valued hash table.
+    \compares equality
 
     \ingroup tools
     \ingroup shared
@@ -2833,10 +3027,7 @@ size_t qHash(long double key, size_t seed) noexcept
     \reentrant
 
     QMultiHash\<Key, T\> is one of Qt's generic \l{container classes}.
-    It inherits QHash and extends it with a few convenience functions
-    that make it more suitable than QHash for storing multi-valued
-    hashes. A multi-valued hash is a hash that allows multiple values
-    with the same key.
+    It provides a hash table that allows multiple values for the same key.
 
     QMultiHash mostly mirrors QHash's API. For example, you can use isEmpty() to test
     whether the hash is empty, and you can traverse a QMultiHash using
@@ -2846,7 +3037,7 @@ size_t qHash(long double key, size_t seed) noexcept
     QHash::insert(). It also provides convenient operator+() and
     operator+=().
 
-    Unlike QMultiMap, QMultiHash does not provide and ordering of the
+    Unlike QMultiMap, QMultiHash does not provide ordering of the
     inserted items. The only guarantee is that items that
     share the same key will appear consecutively, from the most
     recently to the least recently inserted value.
@@ -3048,6 +3239,34 @@ size_t qHash(long double key, size_t seed) noexcept
     \include qhash.cpp qhash-iterator-invalidation-func-desc
 
     \sa insert(), value()
+*/
+
+/*!
+    \fn template <class Key, class T> bool QMultiHash<Key, T>::operator==(const QMultiHash &lhs, const QMultiHash &rhs)
+
+    Returns \c true if \a lhs multihash equals to the \a rhs multihash;
+    otherwise returns \c false.
+
+    Two multihashes are considered equal if they contain the same (key, value)
+    pairs.
+
+    This function requires the value type to implement \c {operator==()}.
+
+    \sa operator!=()
+*/
+
+/*!
+    \fn template <class Key, class T> bool QMultiHash<Key, T>::operator!=(const QMultiHash &lhs, const QMultiHash &rhs)
+
+    Returns \c true if \a lhs multihash is not equal to the \a rhs multihash;
+    otherwise returns \c false.
+
+    Two multihashes are considered equal if they contain the same (key, value)
+    pairs.
+
+    This function requires the value type to implement \c {operator==()}.
+
+    \sa operator==()
 */
 
 /*! \fn template <class Key, class T> QMultiHash &QMultiHash<Key, T>::operator+=(const QMultiHash &other)

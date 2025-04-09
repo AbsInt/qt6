@@ -1100,7 +1100,7 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
                 }
             return false;
         case QtWindows::CalculateSize:
-            return QWindowsGeometryHint::handleCalculateSize(d->m_creationContext->customMargins, msg, result);
+            return QWindowsGeometryHint::handleCalculateSize(d->m_creationContext->window, d->m_creationContext->customMargins, msg, result);
         case QtWindows::GeometryChangingEvent:
             return QWindowsWindow::handleGeometryChangingMessage(&msg, d->m_creationContext->window,
                                                                  d->m_creationContext->margins + d->m_creationContext->customMargins);
@@ -1165,9 +1165,13 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
         platformWindow->getSizeHints(reinterpret_cast<MINMAXINFO *>(lParam));
         return true;// maybe available on some SDKs revisit WM_NCCALCSIZE
     case QtWindows::CalculateSize:
-        return QWindowsGeometryHint::handleCalculateSize(platformWindow->customMargins(), msg, result);
-    case QtWindows::NonClientHitTest:
+        return QWindowsGeometryHint::handleCalculateSize(platformWindow->window(), platformWindow->customMargins(), msg, result);
+    case QtWindows::NonClientHitTest: {
+        QWindow *window = platformWindow->window();
+        if (window->flags().testFlags(Qt::ExpandedClientAreaHint))
+            platformWindow->updateCustomTitlebar();
         return platformWindow->handleNonClientHitTest(QPoint(msg.pt.x, msg.pt.y), result);
+    }
     case QtWindows::GeometryChangingEvent:
         return platformWindow->handleGeometryChanging(&msg);
     case QtWindows::ExposeEvent:
@@ -1236,7 +1240,6 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
         return true;
     }
     case QtWindows::CompositionSettingsChanged:
-        platformWindow->handleCompositionSettingsChanged();
         return true;
     case QtWindows::ActivateWindowEvent:
         if (platformWindow->window()->flags() & Qt::WindowDoesNotAcceptFocus) {

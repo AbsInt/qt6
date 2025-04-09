@@ -98,7 +98,7 @@ static void initResources()
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcWidgetPopup, "qt.widgets.popup");
+Q_STATIC_LOGGING_CATEGORY(lcWidgetPopup, "qt.widgets.popup");
 
 using namespace Qt::StringLiterals;
 
@@ -363,8 +363,8 @@ QWidget *qt_desktopWidget = nullptr;                // root window widgets
 */
 void QApplicationPrivate::process_cmdline()
 {
-    if (styleOverride.isEmpty() && qEnvironmentVariableIsSet("QT_STYLE_OVERRIDE"))
-        styleOverride = QString::fromLocal8Bit(qgetenv("QT_STYLE_OVERRIDE"));
+    if (styleOverride.isEmpty())
+        styleOverride = qEnvironmentVariable("QT_STYLE_OVERRIDE");
 
     // process platform-indep command line
     if (qt_is_tty_app || !argc)
@@ -1404,8 +1404,8 @@ QString QApplicationPrivate::desktopStyleKey()
 {
 #if defined(QT_BUILD_INTERNAL)
     // Allow auto-tests to override the desktop style
-    if (qEnvironmentVariableIsSet("QT_DESKTOP_STYLE_KEY"))
-        return QString::fromLocal8Bit(qgetenv("QT_DESKTOP_STYLE_KEY"));
+    if (QString env = qEnvironmentVariable("QT_DESKTOP_STYLE_KEY"); !env.isNull())
+        return env;
 #endif
 
     // The platform theme might return a style that is not available, find
@@ -1566,14 +1566,18 @@ QWidget *QApplication::activeWindow()
     return QApplicationPrivate::active_window;
 }
 
-#if QT_DEPRECATED_SINCE(6,0)
 /*!
-    \deprecated Use the QFontMetricsF constructor instead.
-    Returns display (screen) font metrics for the application font.
+    \fn QFontMetrics QApplication::fontMetrics()
+    \deprecated [6.0] Use QFontMetricsF(qApp->font()) instead.
+
+    Returns display (screen) font metrics for the application font. For more
+    information about the difference between \l QFontMetrics and \l QFontMetricsF,
+    see the detailed description of \l QFontMetrics.
 
     \sa font(), setFont(), QWidget::fontMetrics(), QPainter::fontMetrics()
 */
 
+#if QT_DEPRECATED_SINCE(6,0)
 QFontMetrics QApplication::fontMetrics()
 {
     return QApplicationPrivate::desktop()->fontMetrics();
@@ -3222,8 +3226,8 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
         typedef void (*RegisterTouchWindowFn)(QWindow *,  bool);
         case QEvent::Enter:
             if (w->testAttribute(Qt::WA_AcceptTouchEvents)) {
-                RegisterTouchWindowFn registerTouchWindow = reinterpret_cast<RegisterTouchWindowFn>
-                        (platformNativeInterface()->nativeResourceFunctionForIntegration("registertouchwindow"));
+                RegisterTouchWindowFn registerTouchWindow = reinterpret_cast<RegisterTouchWindowFn>(
+                    QFunctionPointer(platformNativeInterface()->nativeResourceFunctionForIntegration("registertouchwindow")));
                 if (registerTouchWindow)
                     registerTouchWindow(w->window()->windowHandle(), true);
             }
@@ -3231,8 +3235,8 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
             break;
         case QEvent::Leave:
             if (w->testAttribute(Qt::WA_AcceptTouchEvents)) {
-                RegisterTouchWindowFn registerTouchWindow = reinterpret_cast<RegisterTouchWindowFn>
-                        (platformNativeInterface()->nativeResourceFunctionForIntegration("registertouchwindow"));
+                RegisterTouchWindowFn registerTouchWindow = reinterpret_cast<RegisterTouchWindowFn>(
+                        QFunctionPointer(platformNativeInterface()->nativeResourceFunctionForIntegration("registertouchwindow")));
                 if (registerTouchWindow)
                     registerTouchWindow(w->window()->windowHandle(), false);
             }
@@ -3262,8 +3266,9 @@ bool QApplicationPrivate::notify_helper(QObject *receiver, QEvent * e)
     Q_TRACE_EXIT(QApplication_notify_exit, consumed, filtered);
 
     // send to all application event filters
-    if (threadRequiresCoreApplication()
-        && receiver->d_func()->threadData.loadRelaxed()->thread.loadAcquire() == mainThread()
+    QThreadData *threadData = receiver->d_func()->threadData.loadRelaxed();
+    if (threadData->requiresCoreApplication
+        && threadData->thread.loadAcquire() == mainThread()
         && sendThroughApplicationEventFilters(receiver, e)) {
         filtered = true;
         return filtered;

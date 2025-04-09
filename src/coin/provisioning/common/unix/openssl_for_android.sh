@@ -12,12 +12,12 @@ source "${BASH_SOURCE%/*}/../unix/DownloadURL.sh"
 source "${BASH_SOURCE%/*}/../unix/SetEnvVar.sh"
 
 version="3.0.7"
-ndkVersionLatest="r26b"
+ndkVersionLatest="r27c"
 ndkVersionDefault=$ndkVersionLatest
-prebuiltOpensslNdkShaLatest="ea925d5a5b696916fb3650403a2eb3189c52b5ce"
+prebuiltOpensslNdkShaLatest="733cff853b6ee7738e78b90f46b5f028c8490e1e"
 prebuiltOpensslNdkShaDefault=$prebuiltOpensslNdkShaLatest
 
-: <<'EOB' SOURCE BUILD INSTRUCTIONS - Openssl prebuilt was made using Android NDK r26b
+: <<'EOB' SOURCE BUILD INSTRUCTIONS - Openssl prebuilt was made using Android NDK r27c
 # Source built requires GCC and Perl to be in PATH. Rhel "requires yum install perl-IPC-Cmd"
 exports_file="/tmp/export.sh"
 # source previously made environmental variables.

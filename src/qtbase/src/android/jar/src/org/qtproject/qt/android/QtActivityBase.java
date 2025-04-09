@@ -128,18 +128,6 @@ public class QtActivityBase extends Activity
     }
 
     @Override
-    protected void onStart()
-    {
-        super.onStart();
-    }
-
-    @Override
-    protected void onRestart()
-    {
-        super.onRestart();
-    }
-
-    @Override
     protected void onPause()
     {
         super.onPause();
@@ -155,7 +143,7 @@ public class QtActivityBase extends Activity
         QtNative.setApplicationState(QtNative.ApplicationState.ApplicationActive);
         if (QtNative.getStateDetails().isStarted) {
             m_delegate.displayManager().registerDisplayListener();
-            QtNative.updateWindow();
+            QtWindow.updateWindows();
             // Suspending the app clears the immersive mode, so we need to set it again.
             m_delegate.displayManager().reinstateFullScreen();
         }
@@ -338,19 +326,13 @@ public class QtActivityBase extends Activity
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults)
     {
-        QtNative.sendRequestPermissionsResult(requestCode, permissions, grantResults);
+        QtNative.sendRequestPermissionsResult(requestCode, grantResults);
     }
 
     @UsedFromNativeCode
     public void hideSplashScreen(final int duration)
     {
         m_delegate.hideSplashScreen(duration);
-    }
-
-    @UsedFromNativeCode
-    QtActivityDelegateBase getActivityDelegate()
-    {
-        return m_delegate;
     }
 
     private void showErrorDialog() {

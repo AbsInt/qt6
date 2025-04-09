@@ -185,7 +185,7 @@ void QQuickContainerPrivate::cleanup()
     if (contentItem) {
         QQuickItem *focusItem = QQuickItemPrivate::get(contentItem)->subFocusItem;
         if (focusItem && window)
-            QQuickWindowPrivate::get(window)->clearFocusInScope(contentItem, focusItem, Qt::OtherFocusReason);
+            deliveryAgentPrivate()->clearFocusInScope(contentItem, focusItem, Qt::OtherFocusReason);
 
         q->contentItemChange(nullptr, contentItem);
         QQuickControlPrivate::hideOldItem(contentItem);
@@ -785,6 +785,7 @@ void QQuickContainer::setContentWidth(qreal width)
 
     d->contentWidth = width;
     d->resizeContent();
+    d->updateImplicitContentWidth();
     emit contentWidthChanged();
 }
 
@@ -795,7 +796,7 @@ void QQuickContainer::resetContentWidth()
         return;
 
     d->hasContentWidth = false;
-    d->updateContentWidth();
+    d->updateImplicitContentWidth();
 }
 
 /*!
@@ -825,6 +826,7 @@ void QQuickContainer::setContentHeight(qreal height)
 
     d->contentHeight = height;
     d->resizeContent();
+    d->updateImplicitContentHeight();
     emit contentHeightChanged();
 }
 
@@ -835,7 +837,23 @@ void QQuickContainer::resetContentHeight()
         return;
 
     d->hasContentHeight = false;
-    d->updateContentHeight();
+    d->updateImplicitContentHeight();
+}
+
+qreal QQuickContainerPrivate::getContentWidth() const
+{
+    if (hasContentWidth)
+        return contentWidth;
+
+    return QQuickControlPrivate::getContentWidth();
+}
+
+qreal QQuickContainerPrivate::getContentHeight() const
+{
+    if (hasContentHeight)
+        return contentHeight;
+
+    return QQuickControlPrivate::getContentHeight();
 }
 
 void QQuickContainer::componentComplete()

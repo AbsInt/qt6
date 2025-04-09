@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qquicktextedit_p.h"
 #include "qquicktextedit_p_p.h"
@@ -34,8 +35,7 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_DECLARE_LOGGING_CATEGORY(lcVP)
-Q_LOGGING_CATEGORY(lcTextEdit, "qt.quick.textedit")
+Q_STATIC_LOGGING_CATEGORY(lcTextEdit, "qt.quick.textedit")
 
 using namespace Qt::StringLiterals;
 
@@ -2913,6 +2913,8 @@ void QQuickTextEdit::q_textChanged()
     }
 
     emit textChanged();
+    if (d->control->isBeingEdited())
+        emit textEdited();
 }
 
 void QQuickTextEdit::markDirtyNodesForRange(int start, int end, int charDelta)
@@ -3543,6 +3545,15 @@ void QQuickTextEditPrivate::updateMouseCursorShape()
     and the link string provides access to the particular link.
 
     \sa linkHovered, linkAt()
+*/
+
+/*!
+    \qmlsignal QtQuick::TextEdit::textEdited()
+    \since 6.9
+
+    This signal is emitted whenever the text is edited. Unlike \l{TextEdit::text}{textChanged()},
+    this signal is not emitted when the text is changed programmatically, for example,
+    by changing the value of the \l text property or by calling \l clear().
 */
 
 QString QQuickTextEdit::hoveredLink() const

@@ -16,4 +16,5 @@
     <dimen name="switch_thumb_size">45dp</dimen>
     <dimen name="switch_thumb_border">2sp</dimen>
     <dimen name="switch_text_size">24sp</dimen>
+    <dimen name="layout_margins">5dp</dimen>
 </resources>

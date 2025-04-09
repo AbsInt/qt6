@@ -20,6 +20,9 @@
 #include <array>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
+
 namespace {
 struct ContentEncodingMapping
 {
@@ -591,7 +594,7 @@ qsizetype QDecompressHelper::readZLib(char *data, const qsizetype maxSize)
         // also an error.
         // in the case where we get Z_DATA_ERROR this could be because we received raw deflate
         // compressed data.
-        if (ret == Z_DATA_ERROR && !triedRawDeflate) {
+        if (ret == Z_DATA_ERROR && !triedRawDeflate) { Q_UNLIKELY_BRANCH
             inflateEnd(inflateStream);
             triedRawDeflate = true;
             inflateStream->zalloc = Z_NULL;
@@ -715,10 +718,12 @@ qsizetype QDecompressHelper::readBrotli(char *data, const qsizetype maxSize)
         bytesDecoded += previousUnusedDecodedSize - unusedDecodedSize;
 
         switch (result) {
+        Q_UNLIKELY_BRANCH
         case BROTLI_DECODER_RESULT_ERROR:
-            errorStr = QLatin1String("Brotli error: %1")
-                               .arg(QString::fromUtf8(BrotliDecoderErrorString(
-                                       BrotliDecoderGetErrorCode(brotliDecoderState))));
+            //: Brotli (compression algorithm) decoding error, e.g. corrupted input or memory allocation problem.
+            errorStr = QCoreApplication::translate("QHttp", "Brotli error: %1")
+                           .arg(QUtf8StringView{BrotliDecoderErrorString(
+                               BrotliDecoderGetErrorCode(brotliDecoderState))});
             return -1;
         case BROTLI_DECODER_RESULT_SUCCESS:
             BrotliDecoderDestroyInstance(brotliDecoderState);
@@ -763,21 +768,20 @@ qsizetype QDecompressHelper::readZstandard(char *data, const qsizetype maxSize)
     qsizetype bytesDecoded = 0;
     while (outBuf.pos < outBuf.size && (inBuf.pos < inBuf.size || decoderHasData)) {
         size_t retValue = ZSTD_decompressStream(zstdStream, &outBuf, &inBuf);
-        if (ZSTD_isError(retValue)) {
-            errorStr = QLatin1String("ZStandard error: %1")
-                               .arg(QString::fromUtf8(ZSTD_getErrorName(retValue)));
-            return -1;
-        } else {
-            decoderHasData = false;
-            bytesDecoded = outBuf.pos;
-            // if pos == size then there may be data left over in internal buffers
-            if (outBuf.pos == outBuf.size) {
-                decoderHasData = true;
-            } else if (inBuf.pos == inBuf.size) {
-                compressedDataBuffer.advanceReadPointer(input.size());
-                input = compressedDataBuffer.readPointer();
-                inBuf = { input.constData(), size_t(input.size()), 0 };
-            }
+        if (ZSTD_isError(retValue)) { Q_UNLIKELY_BRANCH
+            errorStr = QCoreApplication::translate("QHttp", "ZStandard error: %1")
+                            .arg(QUtf8StringView{ZSTD_getErrorName(retValue)});
+                return -1;
+        }
+        decoderHasData = false;
+        bytesDecoded = outBuf.pos;
+        // if pos == size then there may be data left over in internal buffers
+        if (outBuf.pos == outBuf.size) {
+            decoderHasData = true;
+        } else if (inBuf.pos == inBuf.size) {
+            compressedDataBuffer.advanceReadPointer(input.size());
+            input = compressedDataBuffer.readPointer();
+            inBuf = { input.constData(), size_t(input.size()), 0 };
         }
     }
     compressedDataBuffer.advanceReadPointer(inBuf.pos);

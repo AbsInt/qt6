@@ -132,19 +132,9 @@ macro(_qt_internal_find_qt_dependencies target target_dep_list find_dependency_p
         list(GET __qt_${target}_target_dep 1 __qt_${target}_version)
 
         if (NOT ${__qt_${target}_pkg}_FOUND)
-            # TODO: Remove Private handling once sufficient time has passed, aka all developers
-            # updated their builds not to contain stale FooDependencies.cmake files without the
-            # _qt_package_name property.
-            set(__qt_${target}_pkg_names ${__qt_${target}_pkg})
-            if(__qt_${target}_pkg MATCHES "(.*)Private$")
-                set(__qt_${target}_pkg_names "${CMAKE_MATCH_1};${__qt_${target}_pkg}")
-            endif()
-
             _qt_internal_save_find_package_context_for_debugging(${target})
 
             find_dependency(${__qt_${target}_pkg} ${__qt_${target}_version}
-                NAMES
-                    ${__qt_${target}_pkg_names}
                 PATHS
                     ${QT_BUILD_CMAKE_PREFIX_PATH}
                     ${${find_dependency_path_list}}
@@ -239,9 +229,9 @@ function(_qt_internal_determine_if_host_info_package_needed out_var)
     set(${out_var} "${needed}" PARENT_SCOPE)
 endfunction()
 
-macro(_qt_internal_find_host_info_package platform_requires_host_info)
+macro(_qt_internal_find_host_info_package platform_requires_host_info install_namespace)
     if(${platform_requires_host_info})
-        find_package(Qt6HostInfo
+        find_package(${install_namespace}HostInfo
                      CONFIG
                      REQUIRED
                      PATHS "${QT_HOST_PATH}"

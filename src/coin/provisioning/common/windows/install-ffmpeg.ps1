@@ -144,7 +144,7 @@ function InstallAndroidArmv7 {
     $target_cpu="armv7-a"
     $api_version="24"
 
-    $ndkVersionLatest = "r26b"
+    $ndkVersionLatest = "r27c"
     $ndkFolderLatest = "/c/Utils/Android/android-ndk-$ndkVersionLatest"
 
     $toolchain="${ndkFolderLatest}/toolchains/llvm/prebuilt/windows-x86_64"

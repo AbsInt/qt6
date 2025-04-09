@@ -1311,7 +1311,7 @@ void tst_QFileInfo::isSymLink_data()
 void tst_QFileInfo::isSymLink()
 {
 #ifdef Q_NO_SYMLINKS
-    QSKIP("No symlink support", SkipAll);
+    QSKIP("No symlink support");
 #else
     QFETCH(QString, path);
     QFETCH(bool, isSymLink);

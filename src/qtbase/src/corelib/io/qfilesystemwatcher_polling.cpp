@@ -5,7 +5,6 @@
 
 #include <QtCore/qlatin1stringview.h>
 #include <QtCore/qscopeguard.h>
-#include <QtCore/qtimer.h>
 
 #include <chrono>
 
@@ -89,7 +88,7 @@ QStringList QPollingFileSystemWatcherEngine::removePaths(const QStringList &path
 
 void QPollingFileSystemWatcherEngine::timerEvent(QTimerEvent *e)
 {
-    if (e->timerId() != timer.timerId())
+    if (e->id() != timer.id())
         return QFileSystemWatcherEngine::timerEvent(e);
 
     for (auto it = files.begin(), end = files.end(); it != end; /*erasing*/) {

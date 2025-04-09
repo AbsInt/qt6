@@ -55,6 +55,7 @@ private slots:
     void opacity();
     void backgroundSize();
     void explicitBackgroundSizeBinding();
+    void safeArea();
 };
 
 tst_QQuickApplicationWindow::tst_QQuickApplicationWindow()
@@ -836,17 +837,17 @@ void tst_QQuickApplicationWindow::layout()
     QVERIFY(footer);
 
     QCOMPARE(menuBar->x(), 0.0);
-    QCOMPARE(menuBar->y(), -menuBar->height() - header->height());
-    QCOMPARE(header->width(), qreal(window->width()));
+    QCOMPARE(menuBar->y(), 0.0);
+    QCOMPARE(menuBar->width(), qreal(window->width()));
     QVERIFY(menuBar->height() > 0);
 
     QCOMPARE(header->x(), 0.0);
-    QCOMPARE(header->y(), -header->height());
+    QCOMPARE(header->y(), menuBar->height());
     QCOMPARE(header->width(), qreal(window->width()));
     QVERIFY(header->height() > 0);
 
     QCOMPARE(footer->x(), 0.0);
-    QCOMPARE(footer->y(), content->height());
+    QCOMPARE(footer->y(), window->height() - footer->height());
     QCOMPARE(footer->width(), qreal(window->width()));
     QVERIFY(footer->height() > 0.0);
 
@@ -896,7 +897,7 @@ void tst_QQuickApplicationWindow::layoutLayout()
     QQuickItem *headerChild = header->findChild<QQuickItem*>();
     QVERIFY(headerChild);
     QCOMPARE(header->x(), 0.0);
-    QCOMPARE(header->y(), -header->height());
+    QCOMPARE(header->y(), 0.0);
     QCOMPARE(header->width(), qreal(window->width()));
     QCOMPARE(headerChild->width(), qreal(window->width()));
     QVERIFY(header->height() > 0);
@@ -904,7 +905,7 @@ void tst_QQuickApplicationWindow::layoutLayout()
     QQuickItem *footerChild = header->findChild<QQuickItem*>();
     QVERIFY(footerChild);
     QCOMPARE(footer->x(), 0.0);
-    QCOMPARE(footer->y(), content->height());
+    QCOMPARE(footer->y(), window->height() - footer->height());
     QCOMPARE(footer->width(), qreal(window->width()));
     QCOMPARE(footerChild->width(), qreal(window->width()));
     QVERIFY(footer->height() > 0.0);
@@ -1006,6 +1007,84 @@ void tst_QQuickApplicationWindow::explicitBackgroundSizeBinding()
     window->setProperty("scaleFactor", 0.5);
     QCOMPARE(background->width(), window->width() / 2);
     QCOMPARE(background->height(), window->height() / 2);
+}
+
+void tst_QQuickApplicationWindow::safeArea()
+{
+    QQuickControlsApplicationHelper helper(this, QLatin1String("safeArea.qml"));
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickApplicationWindow *window = helper.appWindow;
+    window->show();
+    window->requestActivate();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    auto menuBarRect = window->menuBar()->mapRectToScene(window->menuBar()->boundingRect());
+    auto headerRect = window->header()->mapRectToScene(window->header()->boundingRect());
+    auto contentRect = window->contentItem()->mapRectToScene(window->contentItem()->boundingRect());
+    auto footerRect = window->footer()->mapRectToScene(window->footer()->boundingRect());
+
+    // No item should overlap by default when there are no margins
+    QCOMPARE(menuBarRect.intersected(headerRect), QRectF());
+    QCOMPARE(menuBarRect.intersected(contentRect), QRectF());
+    QCOMPARE(menuBarRect.intersected(footerRect), QRectF());
+    QCOMPARE(headerRect.intersected(contentRect), QRectF());
+    QCOMPARE(headerRect.intersected(footerRect), QRectF());
+    QCOMPARE(footerRect.intersected(contentRect), QRectF());
+
+    // And content item should not report any safe area margins
+    auto *contentSafeArea = qobject_cast<QQuickSafeArea*>(
+        qmlAttachedPropertiesObject<QQuickSafeArea>(window->contentItem()));
+    QCOMPARE(contentSafeArea->margins(), QMarginsF());
+
+    auto *windowSafeArea = qobject_cast<QQuickSafeArea*>(
+        qmlAttachedPropertiesObject<QQuickSafeArea>(window));
+    windowSafeArea->setAdditionalMargins(QMarginsF(100, 100, 100, 100));
+
+    QTRY_COMPARE(window->property("margins").value<QMarginsF>(),
+        windowSafeArea->additionalMargins());
+
+    menuBarRect = window->menuBar()->mapRectToScene(window->menuBar()->boundingRect());
+    headerRect = window->header()->mapRectToScene(window->header()->boundingRect());
+    contentRect = window->contentItem()->mapRectToScene(window->contentItem()->boundingRect());
+    footerRect = window->footer()->mapRectToScene(window->footer()->boundingRect());
+
+    // No item should overlap by default when there are margins
+    QCOMPARE(menuBarRect.intersected(headerRect), QRectF());
+    QCOMPARE(menuBarRect.intersected(contentRect), QRectF());
+    QCOMPARE(menuBarRect.intersected(footerRect), QRectF());
+    QCOMPARE(headerRect.intersected(contentRect), QRectF());
+    QCOMPARE(headerRect.intersected(footerRect), QRectF());
+    QCOMPARE(footerRect.intersected(contentRect), QRectF());
+
+    // And content item should not report any safe area margins
+    QCOMPARE(contentSafeArea->margins(), QMarginsF());
+
+    QQmlProperty::write(window, "leftPadding", 0);
+    QQmlProperty::write(window, "topPadding", 0);
+    QQmlProperty::write(window, "rightPadding", 0);
+    QQmlProperty::write(window, "bottomPadding", 0);
+
+    // Removing the automatic padding should reflect the window's safe area margins
+    QCOMPARE(contentSafeArea->margins(), windowSafeArea->additionalMargins());
+
+    // And the content item should fill the entire window
+    QCOMPARE(window->contentItem()->position(), QPoint());
+    QCOMPARE(window->contentItem()->size(), window->size());
+
+    // Having no window safe area marings should still reflect the
+    // menuBar, header, and footer as safe areas
+    windowSafeArea->setAdditionalMargins(QMarginsF());
+    QTRY_COMPARE(window->property("margins").value<QMarginsF>(),
+        windowSafeArea->additionalMargins());
+
+    QCOMPARE(contentSafeArea->margins(),
+        QMarginsF(0, window->menuBar()->height() + window->header()->height(),
+                  0, window->footer()->height()));
+
+    // And the content item still should fill the entire window
+    QCOMPARE(window->contentItem()->position(), QPoint());
+    QCOMPARE(window->contentItem()->size(), window->size());
+
 }
 
 QTEST_MAIN(tst_QQuickApplicationWindow)

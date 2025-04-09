@@ -60,18 +60,13 @@ private:
     QQmlJSLogger *m_logger;
 };
 
-QString QQmlJSLinter::defaultPluginPath()
-{
-    return QLibraryInfo::path(QLibraryInfo::PluginsPath) + QDir::separator() + u"qmllint";
-}
-
-QQmlJSLinter::QQmlJSLinter(const QStringList &importPaths, const QStringList &pluginPaths,
+QQmlJSLinter::QQmlJSLinter(const QStringList &importPaths, const QStringList &extraPluginPaths,
                            bool useAbsolutePath)
     : m_useAbsolutePath(useAbsolutePath),
       m_enablePlugins(true),
       m_importer(importPaths, nullptr, UseOptionalImports)
 {
-    m_plugins = loadPlugins(pluginPaths);
+    m_plugins = loadPlugins(extraPluginPaths);
 }
 
 QQmlJSLinter::Plugin::Plugin(QQmlJSLinter::Plugin &&plugin) noexcept
@@ -183,21 +178,32 @@ bool QQmlJSLinter::Plugin::parseMetaData(const QJsonObject &metaData, QString pl
         const auto it = object.find("enabled"_L1);
         const bool ignored = (it != object.end() && !it->toBool());
 
+        const QString prefix = (m_isInternal ? u""_s : u"Plugin."_s).append(m_name).append(u'.');
         const QString categoryId =
-                (m_isInternal ? u""_s : u"Plugin."_s) + m_name + u'.' + object[u"name"].toString();
+                prefix + object[u"name"].toString();
         const auto settingsNameIt = object.constFind(u"settingsName");
         const QString settingsName = (settingsNameIt == object.constEnd())
                 ? categoryId
-                : settingsNameIt->toString(categoryId);
+                : prefix + settingsNameIt->toString(categoryId);
         m_categories << QQmlJS::LoggerCategory{ categoryId, settingsName,
                                                 object["description"_L1].toString(), QtWarningMsg,
                                                 ignored };
+        const auto itLevel = object.find("defaultLevel"_L1);
+        if (itLevel == object.end())
+            continue;
+
+        const QString level = itLevel->toString();
+        if (!QQmlJS::LoggingUtils::applyLevelToCategory(level, m_categories.last())) {
+            qWarning() << "Invalid logging level" << level << "provided for"
+                       << m_categories.last().id().name().toString()
+                       << "(allowed are: disable, info, warning) found in plugin metadata";
+        }
     }
 
     return true;
 }
 
-std::vector<QQmlJSLinter::Plugin> QQmlJSLinter::loadPlugins(QStringList paths)
+std::vector<QQmlJSLinter::Plugin> QQmlJSLinter::loadPlugins(QStringList extraPluginPaths)
 {
     std::vector<Plugin> plugins;
 
@@ -219,8 +225,16 @@ std::vector<QQmlJSLinter::Plugin> QQmlJSLinter::loadPlugins(QStringList paths)
     }
 
 #if QT_CONFIG(library)
+    const QStringList paths = [&extraPluginPaths]() {
+        QStringList result{ extraPluginPaths };
+        const QStringList libraryPaths = QCoreApplication::libraryPaths();
+        for (const auto &path : libraryPaths) {
+            result.append(path + u"/qmllint"_s);
+        }
+        return result;
+    }();
     for (const QString &pluginDir : paths) {
-        QDirIterator it { pluginDir };
+        QDirIterator it{ pluginDir, QDir::Files };
 
         while (it.hasNext()) {
             auto potentialPlugin = it.next();
@@ -244,7 +258,7 @@ std::vector<QQmlJSLinter::Plugin> QQmlJSLinter::loadPlugins(QStringList paths)
         }
     }
 #endif
-    Q_UNUSED(paths)
+    Q_UNUSED(extraPluginPaths)
     return plugins;
 }
 
@@ -409,12 +423,8 @@ static void addJsonWarning(QJsonArray &warnings, const QQmlJS::DiagnosticMessage
 
 void QQmlJSLinter::processMessages(QJsonArray &warnings)
 {
-    for (const auto &error : m_logger->errors())
-        addJsonWarning(warnings, error, error.id, error.fixSuggestion);
-    for (const auto &warning : m_logger->warnings())
-        addJsonWarning(warnings, warning, warning.id, warning.fixSuggestion);
-    for (const auto &info : m_logger->infos())
-        addJsonWarning(warnings, info, info.id, info.fixSuggestion);
+    for (const Message &message : m_logger->messages())
+        addJsonWarning(warnings, message, message.id, message.fixSuggestion);
 }
 
 QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
@@ -817,20 +827,19 @@ QQmlJSLinter::FixResult QQmlJSLinter::applyFixes(QString *fixedCode, bool silent
     if (isESModule || isJavaScript)
         return NothingToFix;
 
-    for (const auto &messages : { m_logger->infos(), m_logger->warnings(), m_logger->errors() })
-        for (const Message &msg : messages) {
-            if (!msg.fixSuggestion.has_value() || !msg.fixSuggestion->isAutoApplicable())
-                continue;
+    for (const Message &msg : m_logger->messages()) {
+        if (!msg.fixSuggestion.has_value() || !msg.fixSuggestion->isAutoApplicable())
+            continue;
 
-            // Ignore fix suggestions for other files
-            const QString filename = msg.fixSuggestion->filename();
-            if (!filename.isEmpty()
-                    && QFileInfo(filename).absoluteFilePath() != currentFileAbsolutePath) {
-                continue;
-            }
-
-            fixesToApply << msg.fixSuggestion.value();
+        // Ignore fix suggestions for other files
+        const QString filename = msg.fixSuggestion->filename();
+        if (!filename.isEmpty()
+                && QFileInfo(filename).absoluteFilePath() != currentFileAbsolutePath) {
+            continue;
         }
+
+        fixesToApply << msg.fixSuggestion.value();
+    }
 
     if (fixesToApply.isEmpty())
         return NothingToFix;

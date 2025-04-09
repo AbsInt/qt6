@@ -24,8 +24,6 @@
 #include "qendian.h"
 #include "qresource.h"
 
-#include <QtCore/private/qduplicatetracker_p.h>
-
 #if defined(Q_OS_UNIX) && !defined(Q_OS_INTEGRITY)
 #  define QT_USE_MMAP
 #  include "private/qcore_unix_p.h"
@@ -43,7 +41,7 @@
 
 QT_BEGIN_NAMESPACE
 
-static Q_LOGGING_CATEGORY(lcTranslator, "qt.core.qtranslator")
+Q_STATIC_LOGGING_CATEGORY(lcTranslator, "qt.core.qtranslator")
 
 namespace {
 enum Tag { Tag_End = 1, Tag_SourceText16, Tag_Translation, Tag_Context16, Tag_Obsolete1,
@@ -480,12 +478,9 @@ bool QTranslator::load(const QString & filename, const QString & directory,
         if (fi.isReadable() && fi.isFile())
             break;
 
-        int rightmost = 0;
-        for (int i = 0; i < (int)delims.size(); i++) {
-            int k = fname.lastIndexOf(delims[i]);
-            if (k > rightmost)
-                rightmost = k;
-        }
+        qsizetype rightmost = 0;
+        for (auto ch : delims)
+            rightmost = std::max(rightmost, fname.lastIndexOf(ch));
 
         // no truncations? fail
         if (rightmost == 0)
@@ -635,80 +630,41 @@ static QString find_translation(const QLocale & locale,
 
     // see http://www.unicode.org/reports/tr35/#LanguageMatching for inspiration
 
-    // For each language_country returned by locale.uiLanguages(), add
-    // also a lowercase version to the list. Since these languages are
-    // used to create file names, this is important on case-sensitive
-    // file systems, where otherwise a file called something like
-    // "prefix_en_us.qm" won't be found under the "en_US" locale. Note
-    // that the Qt resource system is always case-sensitive, even on
-    // Windows (in other words: this codepath is *not* UNIX-only).
-    QStringList languages = locale.uiLanguages(QLocale::TagSeparator::Underscore);
+    // For each name returned by locale.uiLanguages(), also try a lowercase
+    // version. Since these languages are used to create file names, this is
+    // important on case-sensitive file systems, where otherwise a file called
+    // something like "prefix_en_us.qm" won't be found under the "en_US"
+    // locale. Note that the Qt resource system is always case-sensitive, even
+    // on Windows (in other words: this codepath is *not* UNIX-only).
+    const QStringList languages = locale.uiLanguages(QLocale::TagSeparator::Underscore);
     qCDebug(lcTranslator) << "Requested UI languages" << languages;
 
-    QDuplicateTracker<QString> duplicates(languages.size() * 2);
-    for (const auto &l : std::as_const(languages))
-        (void)duplicates.hasSeen(l);
-
-    for (qsizetype i = languages.size() - 1; i >= 0; --i) {
-        QString language = languages.at(i);
-
-        // Add candidates for each entry where we progressively truncate sections
-        // from the end, until a matching language tag is found. For compatibility
-        // reasons (see QTBUG-124898) we add a special case: if we find a
-        // language_Script_Territory entry (i.e. an entry with two sections), try
-        // language_Territory as well as language_Script. Use QDuplicateTracker
-        // so that we don't add any entries as fallbacks that are already in the
-        // list anyway.
-        // This is a kludge, and such entries are added at the end of the candidate
-        // list; from 6.9 on, this is fixed in QLocale::uiLanguages().
-        QStringList fallbacks;
-        const auto addIfNew = [&duplicates, &fallbacks](const QString &fallback) {
-            if (!duplicates.hasSeen(fallback))
-                fallbacks.append(fallback);
-        };
-
+    for (const QString &localeName : languages) {
+        QString loc = localeName;
+        // First try this given name, then in lower-case form (if different):
         while (true) {
-            const qsizetype last = language.lastIndexOf(u'_');
-            if (last < 0) // no more sections
+            // First, try with suffix:
+            realname += loc + suffixOrDotQM;
+            if (is_readable_file(realname))
+                return realname;
+
+            // Next, try without:
+            realname.truncate(realNameBaseSize + loc.size());
+            if (is_readable_file(realname))
+                return realname;
+            // Reset realname:
+            realname.truncate(realNameBaseSize);
+
+            // Non-trivial while-loop condition:
+            if (loc != localeName) // loc was the lower-case form, we're done.
                 break;
-
-            const qsizetype first = language.indexOf(u'_');
-             // two sections, add fallback without script
-            if (first != last && language.count(u'_') == 2) {
-                QString fallback = language.left(first) + language.mid(last);
-                addIfNew(fallback);
-            }
-            QString fallback = language.left(last);
-            addIfNew(fallback);
-
-            language.truncate(last);
+            loc = std::move(loc).toLower(); // Try lower-case next,
+            if (loc == localeName) // but only if different.
+                break;
         }
-        for (qsizetype j = fallbacks.size() - 1; j >= 0; --j)
-            languages.insert(i + 1, fallbacks.at(j));
     }
 
-    qCDebug(lcTranslator) << "Augmented UI languages" << languages;
-    for (qsizetype i = languages.size() - 1; i >= 0; --i) {
-        const QString &lang = languages.at(i);
-        QString lowerLang = lang.toLower();
-        if (lang != lowerLang)
-            languages.insert(i + 1, lowerLang);
-    }
-
-    for (QString localeName : std::as_const(languages)) {
-        // try each locale with and without suffix
-        realname += localeName + suffixOrDotQM;
-        if (is_readable_file(realname))
-            return realname;
-
-        realname.truncate(realNameBaseSize + localeName.size());
-        if (is_readable_file(realname))
-            return realname;
-
-        realname.truncate(realNameBaseSize);
-    }
-
-    const int realNameBaseSizeFallbacks = path.size() + filename.size();
+    const qsizetype realNameBaseSizeFallbacks = path.size() + filename.size();
 
     // realname == path + filename + prefix;
     if (!suffix.isNull()) {
