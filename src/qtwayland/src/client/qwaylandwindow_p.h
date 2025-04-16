@@ -296,7 +296,7 @@ protected:
     GestureState mGestureState = GestureNotActive;
 #endif
 
-    bool mFrameCallbackTimedOut = false; // Whether the frame callback has timed out
+    std::atomic_bool mFrameCallbackTimedOut = false; // Whether the frame callback has timed out
     int mFrameCallbackCheckIntervalTimerId = -1;
     QAtomicInt mWaitingForUpdateDelivery = false;
 

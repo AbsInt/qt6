@@ -267,7 +267,7 @@ QT_WARNING_POP
 
 
     QString signature
-            = u"    struct { QV4::ExecutableCompilationUnit *compilationUnit; } c { unit };\n"
+            = u"    struct { QV4::ExecutableCompilationUnit *compilationUnit; } c { contextUnit };\n"
                "    const auto *aotContext = &c;\n"
                "    Q_UNUSED(aotContext);\n"_s;
 
@@ -1563,6 +1563,8 @@ void QQmlJSCodeGenerator::generate_GetOptionalLookup(int index, int offset)
     } else if (accumulatorIn.isStoredIn(m_typeResolver->jsValueType())) {
         m_body += u"if (%1.isNull() || %1.isUndefined())\n"_s.arg(accumulatorVarIn);
         generateJumpCodeWithTypeConversions(offset);
+    } else if (!m_typeResolver->canHoldUndefined(accumulatorIn.storage())) {
+        // The base cannot hold undefined and isn't a reference type, generate a regular get lookup
     } else {
         Q_UNREACHABLE(); // No other accumulatorIn stored types should be possible
     }

@@ -1766,7 +1766,9 @@ void Renderer::prepareOpaqueBatches()
             const QSGMaterial *gnjMaterial = gnj->activeMaterial();
             if (gni->clipList() == gnj->clipList()
                     && gniGeometry->drawingMode() == gnjGeometry->drawingMode()
-                    && (gniGeometry->drawingMode() != QSGGeometry::DrawLines || gniGeometry->lineWidth() == gnjGeometry->lineWidth())
+                    && (gniGeometry->lineWidth() == gnjGeometry->lineWidth()
+                        || (gniGeometry->drawingMode() != QSGGeometry::DrawLines
+                            && gniGeometry->drawingMode() != QSGGeometry::DrawLineStrip))
                     && gniGeometry->attributes() == gnjGeometry->attributes()
                     && gniGeometry->indexType() == gnjGeometry->indexType()
                     && gni->inheritedOpacity() == gnj->inheritedOpacity()

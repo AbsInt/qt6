@@ -2095,79 +2095,186 @@ void tst_qquicktextedit::moveCursorSelectionSequence()
 
 void tst_qquicktextedit::mouseSelection_data()
 {
+    // initialization
     QTest::addColumn<QUrl>("qmlfile");
-    QTest::addColumn<int>("from");
-    QTest::addColumn<int>("to");
-    QTest::addColumn<QString>("selectedText");
     QTest::addColumn<bool>("focus");
     QTest::addColumn<bool>("focusOnPress");
-    QTest::addColumn<int>("clicks");
 
-    // import installed
-    QTest::newRow("on") << testFileUrl("mouseselection_true.qml") << 4 << 9 << "45678" << true << true << 1;
-    QTest::newRow("off") << testFileUrl("mouseselection_false.qml") << 4 << 9 << QString() << true << true << 1;
-    QTest::newRow("default") << testFileUrl("mouseselectionmode_default.qml") << 4 << 9 << "45678" << true << true << 1;
-    QTest::newRow("off word selection") << testFileUrl("mouseselection_false_words.qml") << 4 << 9 << QString() << true << true << 1;
-    QTest::newRow("on word selection (4,9)") << testFileUrl("mouseselection_true_words.qml") << 4 << 9 << "0123456789" << true << true << 1;
+    // first interaction
+    QTest::addColumn<int>("initialClicks");
+    QTest::addColumn<int>("from");
+    QTest::addColumn<int>("to");
+    QTest::addColumn<QString>("expectedTextSelectedByDragging");
 
-    QTest::newRow("on unfocused") << testFileUrl("mouseselection_true.qml") << 4 << 9 << "45678" << false << false << 1;
-    QTest::newRow("on word selection (4,9) unfocused") << testFileUrl("mouseselection_true_words.qml") << 4 << 9 << "0123456789" << false << false << 1;
+    // second interaction
+    QTest::addColumn<int>("clicksAfterDragging");
+    QTest::addColumn<bool>("shiftClickAfterDragging");
+    QTest::addColumn<QString>("expectedFinalTextSelected");
 
-    QTest::newRow("on focus on press") << testFileUrl("mouseselection_true.qml") << 4 << 9 << "45678" << false << true << 1;
-    QTest::newRow("on word selection (4,9) focus on press") << testFileUrl("mouseselection_true_words.qml") << 4 << 9 << "0123456789" << false << true << 1;
+    QTest::newRow("on") << testFileUrl("mouseselection_true.qml") << true << true
+            << 0 << 4 << 9 << "45678"
+            << 1 << true << "45678";
+    QTest::newRow("off") << testFileUrl("mouseselection_false.qml") << true << true
+            << 0 << 4 << 9 << QString()
+            << 1 << true <<  QString();
+    QTest::newRow("default") << testFileUrl("mouseselectionmode_default.qml") << true << true
+            << 0 << 4 << 9 << "45678"
+            << 1 << true << "45678";
+    QTest::newRow("off word selection") << testFileUrl("mouseselection_false_words.qml") << true << true
+            << 0 << 4 << 9 << QString()
+            << 1 << true <<  QString();
+    QTest::newRow("on word selection (4,9)") << testFileUrl("mouseselection_true_words.qml") << true << true
+            << 0 << 4 << 9 << "0123456789"
+            << 1 << true << "0123456789";
 
-    QTest::newRow("on word selection (2,13)") << testFileUrl("mouseselection_true_words.qml") << 2 << 13 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 1;
-    QTest::newRow("on word selection (2,30)") << testFileUrl("mouseselection_true_words.qml") << 2 << 30 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 1;
-    QTest::newRow("on word selection (9,13)") << testFileUrl("mouseselection_true_words.qml") << 9 << 13 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 1;
-    QTest::newRow("on word selection (9,30)") << testFileUrl("mouseselection_true_words.qml") << 9 << 30 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 1;
-    QTest::newRow("on word selection (13,2)") << testFileUrl("mouseselection_true_words.qml") << 13 << 2 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 1;
-    QTest::newRow("on word selection (20,2)") << testFileUrl("mouseselection_true_words.qml") << 20 << 2 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 1;
-    QTest::newRow("on word selection (12,9)") << testFileUrl("mouseselection_true_words.qml") << 12 << 9 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 1;
-    QTest::newRow("on word selection (30,9)") << testFileUrl("mouseselection_true_words.qml") << 30 << 9 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 1;
+    QTest::newRow("on unfocused") << testFileUrl("mouseselection_true.qml") << false << false
+            << 0 << 4 << 9 << "45678"
+            << 1 << true << "45678";
+    QTest::newRow("on word selection (4,9) unfocused") << testFileUrl("mouseselection_true_words.qml") << false << false
+            << 0 << 4 << 9 << "0123456789"
+            << 1 << true << "0123456789";
 
-    QTest::newRow("on double click (4,9)") << testFileUrl("mouseselection_true.qml") << 4 << 9 << "0123456789" << true << true << 2;
-    QTest::newRow("on double click (2,13)") << testFileUrl("mouseselection_true.qml") << 2 << 13 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 2;
-    QTest::newRow("on double click (2,30)") << testFileUrl("mouseselection_true.qml") << 2 << 30 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 2;
-    QTest::newRow("on double click (9,13)") << testFileUrl("mouseselection_true.qml") << 9 << 13 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 2;
-    QTest::newRow("on double click (9,30)") << testFileUrl("mouseselection_true.qml") << 9 << 30 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 2;
-    QTest::newRow("on double click (13,2)") << testFileUrl("mouseselection_true.qml") << 13 << 2 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 2;
-    QTest::newRow("on double click (20,2)") << testFileUrl("mouseselection_true.qml") << 20 << 2 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 2;
-    QTest::newRow("on double click (12,9)") << testFileUrl("mouseselection_true.qml") << 12 << 9 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 2;
-    QTest::newRow("on double click (30,9)") << testFileUrl("mouseselection_true.qml") << 30 << 9 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ" << true << true << 2;
+    QTest::newRow("on focus on press") << testFileUrl("mouseselection_true.qml") << false << true
+            << 0 << 4 << 9 << "45678"
+            << 1 << true << "45678";
+    QTest::newRow("on word selection (4,9) focus on press") << testFileUrl("mouseselection_true_words.qml") << false << true
+            << 0 << 4 << 9 << "0123456789"
+            << 1 << true << "0123456789";
 
-    QTest::newRow("on triple click (4,9)") << testFileUrl("mouseselection_true.qml") << 4 << 9 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n" << true << true << 3;
-    QTest::newRow("on triple click (2,13)") << testFileUrl("mouseselection_true.qml") << 2 << 13 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n" << true << true << 3;
-    QTest::newRow("on triple click (2,30)") << testFileUrl("mouseselection_true.qml") << 2 << 30 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n" << true << true << 3;
-    QTest::newRow("on triple click (9,13)") << testFileUrl("mouseselection_true.qml") << 9 << 13 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n" << true << true << 3;
-    QTest::newRow("on triple click (9,30)") << testFileUrl("mouseselection_true.qml") << 9 << 30 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n" << true << true << 3;
-    QTest::newRow("on triple click (13,2)") << testFileUrl("mouseselection_true.qml") << 13 << 2 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n" << true << true << 3;
-    QTest::newRow("on triple click (20,2)") << testFileUrl("mouseselection_true.qml") << 20 << 2 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n" << true << true << 3;
-    QTest::newRow("on triple click (12,9)") << testFileUrl("mouseselection_true.qml") << 12 << 9 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n" << true << true << 3;
-    QTest::newRow("on triple click (30,9)") << testFileUrl("mouseselection_true.qml") << 30 << 9 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n" << true << true << 3;
+    QTest::newRow("on word selection (2,13)") << testFileUrl("mouseselection_true_words.qml") << true << true
+            << 0 << 2 << 13 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            << 1 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on word selection (2,30)") << testFileUrl("mouseselection_true_words.qml") << true << true
+            << 0 << 2 << 30 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            << 1 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on word selection (9,13)") << testFileUrl("mouseselection_true_words.qml") << true << true
+            << 0 << 9 << 13 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            << 1 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on word selection (9,30)") << testFileUrl("mouseselection_true_words.qml") << true << true
+            << 0 << 9 << 30 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            << 1 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on word selection (13,2)") << testFileUrl("mouseselection_true_words.qml") << true << true
+            << 0 << 13 << 2 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            << 1 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on word selection (20,2)") << testFileUrl("mouseselection_true_words.qml") << true << true
+            << 0 << 20 << 2 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            << 1 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on word selection (12,9)") << testFileUrl("mouseselection_true_words.qml") << true << true
+            << 0 << 12 << 9 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            << 1 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on word selection (30,9)") << testFileUrl("mouseselection_true_words.qml") << true << true
+            << 0 << 30 << 9 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            << 1 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-    QTest::newRow("on triple click (2,40)") << testFileUrl("mouseselection_true.qml") << 2 << 40 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n" << true << true << 3;
-    QTest::newRow("on triple click (2,50)") << testFileUrl("mouseselection_true.qml") << 2 << 50 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n\nZXYWVUTSRQPON MLKJIHGFEDCBA" << true << true << 3;
-    QTest::newRow("on triple click (25,40)") << testFileUrl("mouseselection_true.qml") << 25 << 40 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n" << true << true << 3;
-    QTest::newRow("on triple click (25,50)") << testFileUrl("mouseselection_true.qml") << 25 << 50 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n\nZXYWVUTSRQPON MLKJIHGFEDCBA" << true << true << 3;
-    QTest::newRow("on triple click (40,25)") << testFileUrl("mouseselection_true.qml") << 40 << 25 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n" << true << true << 3;
-    QTest::newRow("on triple click (40,50)") << testFileUrl("mouseselection_true.qml") << 40 << 50 << "9876543210\n\nZXYWVUTSRQPON MLKJIHGFEDCBA" << true << true << 3;
-    QTest::newRow("on triple click (50,25)") << testFileUrl("mouseselection_true.qml") << 50 << 25 << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n\nZXYWVUTSRQPON MLKJIHGFEDCBA" << true << true << 3;
-    QTest::newRow("on triple click (50,40)") << testFileUrl("mouseselection_true.qml") << 50 << 40 << "9876543210\n\nZXYWVUTSRQPON MLKJIHGFEDCBA" << true << true << 3;
+    QTest::newRow("on double click (4,9)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 1 << 4 << 9 << "45678"
+            << 2 << true << "0123456789";
+    QTest::newRow("on double click (2,13)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 1 << 2 << 13 << "23456789 AB"
+            << 2 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // hae?!?
+    QTest::newRow("on double click (2,30)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 1 << 2 << 30 << "23456789 ABCDEFGHIJKLMNOPQRS"
+            << 2 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on double click (9,13)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 1 << 9 << 13 << "9 AB"
+            << 2 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on double click (9,30)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 1 << 9 << 30 << "9 ABCDEFGHIJKLMNOPQRS"
+            << 2 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on double click (13,2)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 1 << 13 << 2 << "23456789 AB"
+            << 2 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on double click (20,2)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 1 << 20 << 2 << "23456789 ABCDEFGHI"
+            << 2 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on double click (12,9)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 1 << 12 << 9 << "9 A"
+            << 2 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    QTest::newRow("on double click (30,9)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 1 << 30 << 9 << "9 ABCDEFGHIJKLMNOPQRS"
+            << 2 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-    QTest::newRow("on tr align") << testFileUrl("mouseselection_align_tr.qml") << 4 << 9 << "45678" << true << true << 1;
-    QTest::newRow("on center align") << testFileUrl("mouseselection_align_center.qml") << 4 << 9 << "45678" << true << true << 1;
-    QTest::newRow("on bl align") << testFileUrl("mouseselection_align_bl.qml") << 4 << 9 << "45678" << true << true << 1;
+    QTest::newRow("on triple click (4,9)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 4 << 9 << "45678"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
+    QTest::newRow("on triple click (2,13)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 2 << 13 << "23456789 AB"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
+    QTest::newRow("on triple click (2,30)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 2 << 30 << "23456789 ABCDEFGHIJKLMNOPQRS"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
+    QTest::newRow("on triple click (9,13)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 9 << 13 << "9 AB"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
+    QTest::newRow("on triple click (9,30)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 9 << 30 << "9 ABCDEFGHIJKLMNOPQRS"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
+    QTest::newRow("on triple click (13,2)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 13 << 2 << "23456789 AB"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
+    QTest::newRow("on triple click (20,2)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 20 << 2 << "23456789 ABCDEFGHI"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
+    QTest::newRow("on triple click (12,9)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 12 << 9 << "9 A"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
+    QTest::newRow("on triple click (30,9)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 30 << 9 << "9 ABCDEFGHIJKLMNOPQRS"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
+
+    QTest::newRow("on triple click (2,40)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 2 << 40 << "23456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n98"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n";
+    QTest::newRow("on triple click (2,50)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 2 << 50 << "23456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n\n"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n\nZXYWVUTSRQPON MLKJIHGFEDCBA";
+    QTest::newRow("on triple click (25,40)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 25 << 40 << "OPQRSTUVWXYZ\n98"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n";
+    QTest::newRow("on triple click (25,50)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 25 << 50 << "OPQRSTUVWXYZ\n9876543210\n\n"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n\nZXYWVUTSRQPON MLKJIHGFEDCBA";
+    QTest::newRow("on triple click (40,25)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 40 << 25 << "OPQRSTUVWXYZ\n98"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n";
+    QTest::newRow("on triple click (40,50)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2<< 40 << 50 << "76543210\n\n"
+            << 3 << true << "9876543210\n\nZXYWVUTSRQPON MLKJIHGFEDCBA";
+    QTest::newRow("on triple click (50,25)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 50 << 25 << "OPQRSTUVWXYZ\n9876543210\n\n"
+            << 3 << true << "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n9876543210\n\nZXYWVUTSRQPON MLKJIHGFEDCBA";
+    QTest::newRow("on triple click (50,40)") << testFileUrl("mouseselection_true.qml") << true << true
+            << 2 << 50 << 40 << "76543210\n\n"
+            << 3 << true << "9876543210\n\nZXYWVUTSRQPON MLKJIHGFEDCBA";
+
+    QTest::newRow("on tr align") << testFileUrl("mouseselection_align_tr.qml") << true << true
+            << 0 << 4 << 9 << "45678"
+            << 1 << true <<  "45678";
+    QTest::newRow("on center align") << testFileUrl("mouseselection_align_center.qml") << true << true
+            << 0 << 4 << 9 << "45678"
+            << 1 << true << "45678";
+    QTest::newRow("on bl align") << testFileUrl("mouseselection_align_bl.qml") << true << true
+            << 0 << 4 << 9 << "45678"
+            << 1 << true << "45678";
 }
 
 void tst_qquicktextedit::mouseSelection()
 {
+    // initialization
     QFETCH(QUrl, qmlfile);
-    QFETCH(int, from);
-    QFETCH(int, to);
-    QFETCH(QString, selectedText);
     QFETCH(bool, focus);
     QFETCH(bool, focusOnPress);
-    QFETCH(int, clicks);
+
+    // first interaction
+    QFETCH(int, initialClicks);
+    QFETCH(int, from);
+    QFETCH(int, to);
+    QFETCH(QString, expectedTextSelectedByDragging);
+
+    // second interaction
+    QFETCH(int, clicksAfterDragging);
+    QFETCH(bool, shiftClickAfterDragging);
+    QFETCH(QString, expectedFinalTextSelected);
 
     QQuickView window;
     QVERIFY(QQuickTest::showView(window, qmlfile));
@@ -2176,34 +2283,71 @@ void tst_qquicktextedit::mouseSelection()
 
     textEditObject->setFocus(focus);
     textEditObject->setFocusOnPress(focusOnPress);
+    QVERIFY(QTest::qWaitForWindowActive(&window)); // need for that is uncertain
 
     // Avoid that the last click from the previous test data and the first click in the
     // current test data happens so close in time that they are interpreted as a double click.
     static const int moreThanDoubleClickInterval = QGuiApplication::styleHints()->mouseDoubleClickInterval() + 1;
 
-    // press-and-drag-and-release from x1 to x2
+    // convert char positions to mouse x positions
     QPoint p1 = textEditObject->positionToRectangle(from).center().toPoint();
     QPoint p2 = textEditObject->positionToRectangle(to).center().toPoint();
     QCursor::setPos(p2);
     if (QCursor::pos() != p2)
         QSKIP("Can't move mouse");
-    if (clicks == 2)
-        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, p1, moreThanDoubleClickInterval);
-    else if (clicks == 3)
-        QTest::mouseDClick(&window, Qt::LeftButton, Qt::NoModifier, p1, moreThanDoubleClickInterval);
-    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, p1);
-    QTest::mouseMove(&window, p2);
-    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, p2);
-    QTRY_COMPARE(textEditObject->selectedText(), selectedText);
 
-    // Clicking and shift to clicking between the same points should select the same text.
+    // --------------------------------
+    // first interaction
+
+    // maybe click or double-click first
+    if (initialClicks == 1) {
+        // clicking just moves the cursor
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, p1);
+        qCDebug(lcTests, "after initial click, cursor at %d, expected %d", textEditObject->cursorPosition(), from);
+        QCOMPARE(textEditObject->cursorPosition(), from);
+    } else if (initialClicks == 2) {
+        // double-clicking should select a word
+        QTest::mouseDClick(&window, Qt::LeftButton, Qt::NoModifier, p1);
+        qCDebug(lcTests, "after initial double-click, selected %d -> %d: %s",
+                textEditObject->selectionStart(), textEditObject->selectionEnd(),
+                textEditObject->selectedText().toLatin1().constData());
+    }
+
+    // press-and-drag-and-release from x1 to x2
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, p1, moreThanDoubleClickInterval);
+    QTest::mouseMove(&window, p2);
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, p2, moreThanDoubleClickInterval);
+    qCDebug(lcTests, "after dragging from %d,%d to %d,%d, selected %d -> %d: %s",
+            p1.x(), p1.y(), p2.x(), p2.y(),
+            textEditObject->selectionStart(), textEditObject->selectionEnd(),
+            textEditObject->selectedText().toLatin1().constData());
+    QTRY_COMPARE(textEditObject->selectedText(), expectedTextSelectedByDragging);
+
+    // --------------------------------
+    // second interaction
+
+    // some combination of clicks
     textEditObject->setCursorPosition(0);
-    if (clicks > 1)
+    switch (clicksAfterDragging) {
+    case 3: // triple-click
         QTest::mouseDClick(&window, Qt::LeftButton, Qt::NoModifier, p1, 10);
-    if (clicks != 2)
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, p1, 10);
-    QTest::mouseClick(&window, Qt::LeftButton, Qt::ShiftModifier, p2);
-    QTRY_COMPARE(textEditObject->selectedText(), selectedText);
+        break;
+    case 2: // double-click
+        QTest::mouseDClick(&window, Qt::LeftButton, Qt::NoModifier, p1, 10);
+        break;
+    case 1: // single click
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, p1, 10);
+        break;
+    default:
+        qWarning("test case is not designed for %d clicks", clicksAfterDragging);
+    }
+    // Final shift-click should select the range of text up to that position;
+    // but in word-selection cases, whole words are selected.
+    if (shiftClickAfterDragging)
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::ShiftModifier, p2, moreThanDoubleClickInterval);
+
+    QTRY_COMPARE(textEditObject->selectedText(), expectedFinalTextSelected);
 }
 
 void tst_qquicktextedit::dragMouseSelection()

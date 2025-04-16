@@ -8,6 +8,8 @@
     to embed Qt Quick content in Android projects.
     \ingroup qtquickexamples
 
+    \include running-qtquick-for-android-examples.qdocinc
+
     \section1 Overview
 
     This example contains a QML project that you can import into Android Studio

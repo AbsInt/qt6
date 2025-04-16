@@ -130,6 +130,7 @@ private slots:
     void getLookupOfScript();
     void getOptionalLookup();
     void getOptionalLookup_data();
+    void getOptionalLookupNonVoidableBase();
     void getOptionalLookupOnQJSValueNonStrict();
     void getOptionalLookupShadowed();
     void globals();
@@ -268,6 +269,7 @@ private slots:
     void undefinedToDouble();
     void unknownAttached();
     void unknownParameter();
+    void unknownUnderlyingType();
     void unstoredUndefined();
     void unusedAttached();
     void urlString();
@@ -2377,6 +2379,16 @@ void tst_QmlCppCodegen::getOptionalLookup()
 
     QVariant actual = o->property(propertyName.toLocal8Bit());
     QCOMPARE(actual, expected);
+}
+
+void tst_QmlCppCodegen::getOptionalLookupNonVoidableBase()
+{
+    QQmlEngine engine;
+    const QUrl document(u"qrc:/qt/qml/TestTypes/GetOptionalLookupNonVoidableBase.qml"_s);
+    QQmlComponent c(&engine, document);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
 }
 
 void tst_QmlCppCodegen::getOptionalLookupOnQJSValueNonStrict()
@@ -5453,6 +5465,16 @@ void tst_QmlCppCodegen::unknownParameter()
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
     QCOMPARE(object->property("cppProp").toInt(), 18);
+}
+
+void tst_QmlCppCodegen::unknownUnderlyingType()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/unknownUnderlyingType.qml"_s));
+    QVERIFY2(!component.isError(), component.errorString().toUtf8());
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+    QCOMPARE(object->property("foo").toInt(), 11);
 }
 
 void tst_QmlCppCodegen::unstoredUndefined()

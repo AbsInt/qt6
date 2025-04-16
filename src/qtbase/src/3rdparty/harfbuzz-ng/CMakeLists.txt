@@ -15,6 +15,7 @@ qt_internal_add_3rdparty_library(BundledHarfbuzz
         src/hb-aat-map.cc
         src/hb-algs.hh
         src/hb-atomic.hh
+        src/hb-bit-vector.hh
         src/hb-blob.cc src/hb-blob.h
         src/hb-buffer.cc src/hb-buffer.h src/hb-buffer.hh
         src/hb-buffer-deserialize-json.hh
@@ -76,8 +77,8 @@ qt_internal_add_3rdparty_library(BundledHarfbuzz
         HB_NO_UNICODE_FUNCS
         QT_NO_VERSION_TAGGING
     INCLUDE_DIRECTORIES
-        $<TARGET_PROPERTY:Core,INCLUDE_DIRECTORIES>
         "${CMAKE_CURRENT_SOURCE_DIR}"
+        $<TARGET_PROPERTY:Core,INCLUDE_DIRECTORIES>
     PUBLIC_INCLUDE_DIRECTORIES
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/harfbuzz>
 )

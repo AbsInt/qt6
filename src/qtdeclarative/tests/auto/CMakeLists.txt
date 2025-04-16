@@ -14,6 +14,7 @@ endif()
 if(TARGET Qt::Quick)
     add_subdirectory(qml)
     add_subdirectory(quick)
+    add_subdirectory(quickshapes)
 endif()
 
 # Limit set of tests to run for static Qt builds.

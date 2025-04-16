@@ -6,11 +6,11 @@ import QtQuick.Controls
 Rectangle {
     id: mainRectangle
 
+    color: colorStringFormat
+
     property string colorStringFormat: "#1CB669"
 
     signal onClicked()
-
-    color: colorStringFormat
 
     Text {
         id: helloText
@@ -18,62 +18,67 @@ Rectangle {
         text: "First QML View"
         color: "white"
         font.pointSize: 72
-        width: parent.width
         font.bold: true
-        wrapMode: Text.Wrap
+        wrapMode: Text.WordWrap
+        width: mainRectangle.width
         horizontalAlignment: Text.AlignHCenter
+
         anchors {
-            top: parent.top
-            topMargin: 50
             horizontalCenter: parent.horizontalCenter
+            top: parent.top
+            topMargin: mainRectangle.height / 40
         }
     }
 
-    Column {
-        anchors.centerIn: parent
-        width: parent.width
-        spacing: 30
 
-        Text {
-            id: changeColorText
+    Text {
+        id: changeColorText
 
-            text: "Tap button to change Java view background color"
-            wrapMode: Text.Wrap
-            color: "white"
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            anchors.horizontalCenter: parent.horizontalCenter
+        text: "Tap button to change Java view background color"
+        color: "white"
+        font.pointSize: 48
+        wrapMode: Text.WordWrap
+        padding: 20
+        width: mainRectangle.width
+        horizontalAlignment: Text.AlignHCenter
+
+        anchors {
+            horizontalCenter: parent.horizontalCenter
+            top: helloText.bottom;
+            topMargin: mainRectangle.height / 10
+        }
+    }
+
+    Button {
+        id: button
+
+        anchors {
+            horizontalCenter: parent.horizontalCenter
+            top: changeColorText.bottom
+            topMargin: mainRectangle.height / 30
         }
 
-        Button {
-            id: button
+        onClicked: mainRectangle.onClicked()
 
-            anchors.horizontalCenter: parent.horizontalCenter
+        background: Rectangle {
+            id: buttonBackground
 
-            onClicked: mainRectangle.onClicked()
+            radius: 14
+            color: "#6200EE"
+            opacity: button.down ? 0.6 : 1
+            scale: button.down ? 0.9 : 1
+        }
 
-            background: Rectangle {
-                id: buttonBackground
+        contentItem: Text {
+            id: buttonText
 
-                radius: 14
-                color: "#6200EE"
-                opacity: button.down ? 0.6 : 1
-                scale: button.down ? 0.9 : 1
-            }
-
-            contentItem: Text {
-                id: buttonText
-
-                text: "CHANGE COLOR"
-                color: "white"
-                font.pixelSize: 58
-                minimumPixelSize: 10
-                fontSizeMode: Text.Fit
-                font.bold: true
-                wrapMode: Text.Wrap
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
+            text: "CHANGE COLOR"
+            color: "white"
+            font.pointSize: 56
+            font.bold: true
+            padding: 20
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
     }
 }

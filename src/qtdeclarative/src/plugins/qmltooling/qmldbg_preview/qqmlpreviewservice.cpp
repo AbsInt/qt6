@@ -46,16 +46,22 @@ void QQmlPreviewServiceImpl::messageReceived(const QByteArray &data)
         QString path;
         QByteArray contents;
         packet >> path >> contents;
+
+        const QUrl url = path.startsWith(QLatin1Char(':'))
+                ? QUrl(QLatin1String("qrc") + path)
+                : QUrl::fromLocalFile(path);
+
+        // Drop any existing compilation units for this URL from the type registry.
+        if (const auto cu = QQmlMetaType::obtainCompilationUnit(url))
+            QQmlMetaType::unregisterInternalCompositeType(cu);
+
         emit file(path, contents);
 
         // Replace the whole scene with the first file successfully loaded over the debug
         // connection. This is an OK approximation of the root component, and if the client wants
         // something specific, it will send an explicit Load anyway.
         if (m_currentUrl.isEmpty() && path.endsWith(".qml")) {
-            if (path.startsWith(':'))
-                m_currentUrl = QUrl("qrc" + path);
-            else
-                m_currentUrl = QUrl::fromLocalFile(path);
+            m_currentUrl = url;
             emit load(m_currentUrl);
         }
         break;

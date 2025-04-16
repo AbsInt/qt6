@@ -50,6 +50,7 @@ QQmlDirParser QQmlJSImporter::createQmldirParserForFile(const QString &filename,
     QQmlDirParser parser;
     if (f.open(QFile::ReadOnly)) {
         parser.parse(QString::fromUtf8(f.readAll()));
+        import->warnings.append(parser.errors(filename));
     } else {
         import->warnings.append({
             QStringLiteral("Could not open qmldir file: ") + filename,

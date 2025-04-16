@@ -32,7 +32,7 @@ std::unique_ptr<QPlatformDialogHelper> QQuickDialogImplFactory::createPlatformDi
         dialogHelper.reset(new QQuickPlatformColorDialog(parent));
         break;
     }
-#if QT_CONFIG(quick_listview)
+#if QT_CONFIG(quick_listview) && QT_CONFIG(quick_draganddrop)
     case QQuickDialogType::FileDialog: {
         dialogHelper.reset(new QQuickPlatformFileDialog(parent));
         break;

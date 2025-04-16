@@ -3,7 +3,10 @@
 
 #include <QTest>
 #include <QtTest/private/qcomparisontesthelper_p.h>
+
+#include <QtCore/private/qobject_p.h>
 #include <QRunnable>
+#include <QSemaphore>
 #include <QThreadPool>
 
 #include <QPointer>
@@ -32,6 +35,7 @@ private slots:
     void disconnect();
     void castDuringDestruction();
     void threadSafety();
+    void raceCondition();
 
     void qvariantCast();
     void constPointer();
@@ -365,6 +369,7 @@ class DerivedChild : public QObject
 {
     Q_OBJECT
 
+protected:
     DerivedParent *parentPointer;
     QPointer<DerivedParent> guardedParentPointer;
 
@@ -383,13 +388,90 @@ DerivedParent::DerivedParent()
 
 DerivedParent::~DerivedParent()
 {
-    delete derivedChild;
+    QObjectPrivate::get(this)->deleteChildren(); // like ~QWidget() does
 }
 
 DerivedChild::~DerivedChild()
 {
     QCOMPARE(static_cast<DerivedParent *>(guardedParentPointer), parentPointer);
     QCOMPARE(qobject_cast<DerivedParent *>(guardedParentPointer), parentPointer);
+}
+
+//
+// The FurtherDerived... hierarchiy mimicks QWidget subclasses:
+// Like ~QWidget(), ~DerivedParent() deletes its children before ~QObject() would do it,
+// which would have first set QPointers to nullptr. In this situation, therefore,
+// guardedParentPointers are _not_ nullptr, yet, and the object they point to is already
+// demoted from FurtherDerivedParent to DerivedParent, potentially making some operations
+// UB (invalid downcasts).
+//
+
+class FurtherDerivedParent;
+class FurtherDerivedChild : public DerivedChild
+{
+    Q_OBJECT
+
+    FurtherDerivedParent *parentPointer;
+    QPointer<FurtherDerivedParent> guardedParentPointer;
+public:
+    FurtherDerivedChild(FurtherDerivedParent *);
+    ~FurtherDerivedChild() override;
+};
+
+class FurtherDerivedParent : public DerivedParent
+{
+    Q_OBJECT
+public:
+    FurtherDerivedParent() : DerivedParent()
+    {
+        new FurtherDerivedChild(this);
+    }
+};
+
+FurtherDerivedChild::FurtherDerivedChild(FurtherDerivedParent *parent)
+    : DerivedChild(parent),
+      parentPointer(parent),
+      guardedParentPointer(parent)
+{
+}
+
+FurtherDerivedChild::~FurtherDerivedChild()
+{
+    // isNull()
+    QVERIFY(!guardedParentPointer.isNull());
+
+    // operator bool()
+    QVERIFY(guardedParentPointer);
+    QVERIFY(!!guardedParentPointer);
+
+    // Don't use QCOMPARE in these, it may call .data(), which could be UB at this point:
+    #define CHECK_NE(lhs, rhs) do { \
+        QVERIFY(!(lhs == rhs)); \
+        QVERIFY(!(rhs == lhs)); \
+        QVERIFY(lhs != rhs); \
+        QVERIFY(rhs != lhs); \
+    } while (false)
+
+    #define CHECK_EQ(lhs, rhs) do { \
+        QVERIFY(!(lhs != rhs)); \
+        QVERIFY(!(rhs != lhs)); \
+        QVERIFY(lhs == rhs); \
+        QVERIFY(rhs == lhs); \
+    } while (false)
+
+    // operator==/!= against nullptr
+    CHECK_NE(guardedParentPointer, nullptr);
+
+    // operator==/!= against QObject*/DerivedParent*/FutherDerivedParent*
+    CHECK_EQ(parentPointer, parentPointer); // verify it's not UB for raw pointers
+    // UB after this point!
+    return;
+    const QObject *parentPointerAsQObject = parentPointer;
+    CHECK_EQ(guardedParentPointer, parentPointerAsQObject);
+    const DerivedParent *parentPointerAsDerived = parentPointer;
+    CHECK_EQ(guardedParentPointer, parentPointerAsDerived);
+    CHECK_EQ(guardedParentPointer, DerivedChild::guardedParentPointer);
+    CHECK_EQ(guardedParentPointer, parentPointer);
 }
 
 void tst_QPointer::castDuringDestruction()
@@ -410,6 +492,11 @@ void tst_QPointer::castDuringDestruction()
 
     {
         delete new DerivedParent();
+    }
+
+    {
+        [[maybe_unused]]
+        FurtherDerivedParent obj;
     }
 }
 
@@ -442,6 +529,41 @@ void tst_QPointer::threadSafety()
 
     owner.quit();
     owner.wait();
+}
+
+void tst_QPointer::raceCondition()
+{
+    const int NUM_THREADS = 20;
+    const int ITERATIONS_PER_THREAD = 10;
+
+    QSemaphore startSemaphore;
+
+    QObject targetObject;
+
+    std::vector<std::unique_ptr<QThread>> threads;
+    threads.reserve(NUM_THREADS);
+
+    for (int i = 0; i < NUM_THREADS; ++i) {
+        QThread *thread =
+                QThread::create([&startSemaphore, &targetObject, ITERATIONS_PER_THREAD]() {
+                    startSemaphore.acquire();
+
+                    for (int j = 0; j < ITERATIONS_PER_THREAD; ++j) {
+                        QPointer<QObject> pointer(&targetObject);
+                        Q_UNUSED(pointer);
+                    }
+                });
+
+        threads.emplace_back(thread);
+        thread->start();
+    }
+
+    QTest::qWait(100);
+    startSemaphore.release(NUM_THREADS);
+
+    for (const auto &thread : threads) {
+        QVERIFY(thread->wait(30000));
+    }
 }
 
 void tst_QPointer::qvariantCast()

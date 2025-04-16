@@ -1008,7 +1008,7 @@ QString TestQmlformat::formatInMemory(const QString &fileToFormat, bool *didSucc
     env->loadPendingDependencies();
     MutableDomItem myFile = tFile.field(Fields::currentItem);
 
-    bool writtenOut;
+    bool writtenOut = false;
     QString resultStr;
     if (myFile.field(Fields::isValid).value().toBool()) {
         WriteOutChecks checks = extraChecks;

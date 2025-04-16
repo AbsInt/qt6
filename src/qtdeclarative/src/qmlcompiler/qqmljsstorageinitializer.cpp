@@ -35,17 +35,25 @@ QQmlJSCompilePass::BlocksAndAnnotations QQmlJSStorageInitializer::run(Function *
         if (!content.isValid() || !content.storage().isNull())
             return;
 
-        const QQmlJSRegisterContent original = m_typeResolver->original(content);
-        const QQmlJSScope::ConstPtr originalStored
-                = m_typeResolver->storedType(original.containedType());
-        m_pool->storeType(content, originalStored);
+        const QQmlJSScope::ConstPtr original = m_typeResolver->originalContainedType(content);
+        if (const QQmlJSScope::ConstPtr originalStored = m_typeResolver->storedType(original)) {
+            m_pool->storeType(content, originalStored);
+        } else {
+            addError(QStringLiteral("Cannot store type %1.").arg(original->internalName()));
+            return;
+        }
 
-        const QQmlJSScope::ConstPtr adjustedStored
-                = m_typeResolver->storedType(content.containedType());
+        const QQmlJSScope::ConstPtr contentContained = content.containedType();
+        const QQmlJSScope::ConstPtr adjustedStored = m_typeResolver->storedType(contentContained);
+        if (!adjustedStored) {
+            addError(QStringLiteral("Cannot store type %1.")
+                             .arg(contentContained->internalName()));
+            return;
+        }
 
         if (!m_typeResolver->adjustTrackedType(content.storage(), adjustedStored)) {
-            addError(QStringLiteral("Cannot adjust stored type for %1.")
-                             .arg(content.containedType()->internalName()));
+            addError(QStringLiteral("Cannot adjust stored type for %1 to %2.")
+                             .arg(contentContained->internalName(), adjustedStored->internalName()));
         }
     };
 

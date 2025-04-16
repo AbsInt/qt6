@@ -52,6 +52,7 @@ private slots:
     void fps();
     void unhandledFiles_data();
     void unhandledFiles();
+    void updateFile();
 };
 
 tst_QQmlPreview::tst_QQmlPreview()
@@ -397,6 +398,31 @@ void tst_QQmlPreview::unhandledFiles()
     m_client->triggerLoad(file);
     verifyProcessOutputContains("fooh");
     QVERIFY(!m_files.contains(file.toLocalFile()));
+}
+
+void tst_QQmlPreview::updateFile()
+{
+    const QString file("qtquick2.qml");
+    QCOMPARE(startQmlProcess(file), ConnectSuccess);
+    QVERIFY(m_client);
+    QTRY_COMPARE(m_client->state(), QQmlDebugClient::Enabled);
+    m_client->triggerLoad(testFileUrl(file));
+    QTRY_VERIFY(m_files.contains(testFile(file)));
+    verifyProcessOutputContains("ms/degrees");
+
+    QFile input(testFile(file));
+    QVERIFY(input.open(QIODevice::ReadOnly));
+    QByteArray contents = input.readAll();
+    contents.replace("ms/degrees", "foozle/barzle");
+    contents.replace("blue", "red");
+
+    serveFile(testFile(file), contents);
+    m_client->triggerLoad(testFileUrl(file));
+    verifyProcessOutputContains("foozle/barzle");
+
+    m_process->stop();
+    QTRY_COMPARE(m_client->state(), QQmlDebugClient::NotConnected);
+    QVERIFY(m_serviceErrors.isEmpty());
 }
 
 QTEST_MAIN(tst_QQmlPreview)

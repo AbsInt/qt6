@@ -429,6 +429,14 @@ void QQuickAccessibleAttached::setNameImplicitly(const QString &name)
     m_nameExplicitlySet = false;
 }
 
+void QQuickAccessibleAttached::setDescriptionImplicitly(const QString &desc)
+{
+    if (m_descriptionExplicitlySet)
+        return;
+    setDescription(desc);
+    m_descriptionExplicitlySet = false;
+}
+
 QQuickAccessibleAttached *QQuickAccessibleAttached::qmlAttachedProperties(QObject *obj)
 {
     return new QQuickAccessibleAttached(obj);

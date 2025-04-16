@@ -1890,7 +1890,11 @@ void QQuickPixmap::load(QQmlEngine *engine, const QUrl &url, const QRect &reques
         iter = store->m_cache.find(key);
 
     if (iter == store->m_cache.end()) {
+        if (!engine)
+            return;
+
         locker.unlock();
+
         if (url.scheme() == QLatin1String("image")) {
             QQmlEnginePrivate *enginePrivate = QQmlEnginePrivate::get(engine);
             if (auto provider = enginePrivate->imageProvider(imageProviderId(url)).staticCast<QQuickImageProvider>()) {
@@ -1922,10 +1926,6 @@ void QQuickPixmap::load(QQmlEngine *engine, const QUrl &url, const QRect &reques
                 return;
             }
         }
-
-        if (!engine)
-            return;
-
 
         d = new QQuickPixmapData(url, requestRegion, requestSize, providerOptions,
                                  QQuickImageProviderOptions::UsePluginDefaultTransform, frame, frameCount);

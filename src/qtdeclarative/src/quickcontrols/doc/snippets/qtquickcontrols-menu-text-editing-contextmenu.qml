@@ -15,11 +15,7 @@ Item {
         TapHandler {
             acceptedButtons: Qt.RightButton
             onPressedChanged: {
-                if (pressed && Application.styleHints.contextMenuTrigger === Qt.ContextMenuTrigger.Press)
-                    contextMenu.popup()
-            }
-            onTapped: {
-                if (Application.styleHints.contextMenuTrigger === Qt.ContextMenuTrigger.Release)
+                if (pressed === (Application.styleHints.contextMenuTrigger === Qt.ContextMenuTrigger.Press))
                     contextMenu.popup()
             }
         }

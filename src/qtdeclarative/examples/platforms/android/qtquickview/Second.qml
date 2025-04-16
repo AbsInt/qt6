@@ -16,53 +16,70 @@ Rectangle {
         text: "Second QML View"
         color: "white"
         font.pointSize: 72
-        width: parent.width
         font.bold: true
-        wrapMode: Text.Wrap
+        wrapMode: Text.WordWrap
+        width: secondaryRectangle.width
         horizontalAlignment: Text.AlignHCenter
+
         anchors {
+            horizontalCenter: parent.horizontalCenter
             top: parent.top
-            topMargin: 50
+            topMargin: secondaryRectangle.height / 40
+        }
+    }
+
+    Text {
+        id: gridText
+
+        text: "QML Grid type"
+        font.pointSize: 48
+        color: "white"
+        width: secondaryRectangle.width
+        wrapMode: Text.WordWrap
+        horizontalAlignment: Text.AlignHCenter
+
+        anchors {
+            top: title.bottom
+            topMargin: secondaryRectangle.height / 10
             horizontalCenter: parent.horizontalCenter
         }
     }
 
-    Column {
-        anchors.centerIn: parent
-        width: parent.width
-        spacing: 30
+    Grid {
+        id: grid
 
-        Grid {
-            id: grid
+        columns: 3
+        rows: 3
+        spacing: secondaryRectangle.height / 15
+        rotation: gridRotation
 
-            columns: 3
-            rows: 3
-            spacing: 50
-            rotation: gridRotation
-            anchors.horizontalCenter: parent.horizontalCenter
+        anchors {
+            horizontalCenter: parent.horizontalCenter
+            top: gridText.bottom
+            topMargin: secondaryRectangle.height / 10
+        }
 
-            Repeater {
-                id: repeater
+        Repeater {
+            id: repeater
 
-                model: [
-                    "green",
-                    "lightblue",
-                    "grey",
-                    "red",
-                    "black",
-                    "white",
-                    "pink",
-                    "yellow",
-                    "orange"
-                ]
+            model: [
+                "green",
+                "lightblue",
+                "grey",
+                "red",
+                "black",
+                "white",
+                "pink",
+                "yellow",
+                "orange"
+            ]
 
-                Rectangle {
-                    required property string modelData
+            Rectangle {
+                required property string modelData
 
-                    height: 50
-                    width: 50
-                    color: modelData
-                }
+                height: secondaryRectangle.height / 15
+                width: height
+                color: modelData
             }
         }
     }

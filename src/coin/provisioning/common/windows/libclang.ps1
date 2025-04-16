@@ -5,7 +5,7 @@ param(
 )
 . "$PSScriptRoot\helpers.ps1"
 
-$libclang_version="19.1.7"
+$libclang_version="20.1.0"
 Write-Output "libClang = $libclang_version" >> ~/versions.txt
 
 # PySide versions following 5.6 use a C++ parser based on Clang (http://clang.org/).
@@ -38,10 +38,10 @@ $toolchainSuffix = ""
 
 if ( $toolchain -eq "vs2022" ) {
     if ( $archVer -eq "64" ) {
-        $sha1 = "f56057b8679e21a44b341bb1041cb03fbe6f5c0d"
+        $sha1 = "60c840e627b5bb03663f00db17bf249b37936428"
     }
     elseif ( $archVer -eq "arm64" ) {
-        $sha1 = "89fddd8c4bde3e8b70382e21059743637c27d38d"
+        $sha1 = "68ead0e3135dfccae21b226f187fc305803ede3d"
     }
     else {
         $sha1 = ""
@@ -51,7 +51,7 @@ if ( $toolchain -eq "vs2022" ) {
 
 if ( $toolchain -eq "mingw" ) {
     if ( $archVer -eq "64" ) {
-        $sha1 = "fcc1f06bd395bc133b7828d0be48e8492b9ba807"
+        $sha1 = "2180859572dd6ad2029ecffffcc785cba334e037"
     }
     else {
         $sha1 = ""
@@ -62,7 +62,7 @@ if ( $toolchain -eq "mingw" ) {
 
 if ( $toolchain -eq "llvm-mingw" ) {
     if ( $archVer -eq "64" ) {
-        $sha1 = "ee01352eb68bee252cefb1b8ff4ad086baa8ab5f"
+        $sha1 = "3e917d002f363c225e5ee2b7d8999a3cabd8b467"
     }
     else {
         $sha1 = ""

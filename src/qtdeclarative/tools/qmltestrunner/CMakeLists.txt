@@ -26,7 +26,7 @@ if(MACOS AND NOT CMAKE_GENERATOR STREQUAL "Xcode")
     set(entitlements_file
         "${__qt_internal_cmake_apple_support_files_path}/test.entitlements.plist")
     add_custom_command(TARGET "${target_name}"
-        POST_BUILD COMMAND codesign --sign -
+        POST_BUILD COMMAND codesign --sign - -f
             --entitlements "${entitlements_file}"
             "$<TARGET_FILE:${target_name}>"
         )

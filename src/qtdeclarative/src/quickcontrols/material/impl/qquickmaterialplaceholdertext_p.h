@@ -37,8 +37,8 @@ class QQuickMaterialPlaceholderText : public QQuickPlaceholderText
     Q_PROPERTY(qreal controlImplicitBackgroundHeight READ controlImplicitBackgroundHeight
         WRITE setControlImplicitBackgroundHeight NOTIFY controlImplicitBackgroundHeightChanged FINAL)
     Q_PROPERTY(qreal controlHeight READ controlHeight WRITE setControlHeight FINAL)
-    Q_PROPERTY(int leftPadding WRITE setLeftPadding FINAL)
-    Q_PROPERTY(int floatingLeftPadding WRITE setFloatingLeftPadding FINAL)
+    Q_PROPERTY(int leftPadding MEMBER m_leftPadding WRITE setLeftPadding FINAL)
+    Q_PROPERTY(int floatingLeftPadding MEMBER m_floatingLeftPadding WRITE setFloatingLeftPadding FINAL)
     QML_NAMED_ELEMENT(FloatingPlaceholderText)
     QML_ADDED_IN_VERSION(6, 5)
 

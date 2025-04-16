@@ -5541,6 +5541,23 @@ bool QQuickTableViewPrivate::editFromKeyEvent(QKeyEvent *e)
     return true;
 }
 
+QObject *QQuickTableViewPrivate::installEventFilterOnFocusObjectInsideEditItem()
+{
+    // If the current focus object is inside the edit item, install an event filter
+    // on it to handle Enter, Tab, and FocusOut. Note that the focusObject doesn't
+    // need to be the editItem itself, in case the editItem is a FocusScope.
+    // Return the focus object that we filter, or nullptr otherwise.
+    Q_Q(QQuickTableView);
+    if (QObject *focusObject = editItem->window()->focusObject()) {
+        QQuickItem *focusItem = qobject_cast<QQuickItem *>(focusObject);
+        if (focusItem == editItem || editItem->isAncestorOf(focusItem)) {
+            focusItem->installEventFilter(q);
+            return focusItem;
+        }
+    }
+    return nullptr;
+}
+
 void QQuickTableViewPrivate::closeEditorAndCommit()
 {
     if (!editItem)
@@ -6800,15 +6817,7 @@ void QQuickTableView::edit(const QModelIndex &index)
 
     // Transfer focus to the edit item
     d->editItem->forceActiveFocus(Qt::MouseFocusReason);
-
-    // Install an event filter on the focus object to handle Enter, Tab, and FocusOut.
-    // Note that the focusObject doesn't need to be the editItem itself, in
-    // case the editItem is a FocusScope.
-    if (QObject *focusObject = d->editItem->window()->focusObject()) {
-        QQuickItem *focusItem = qobject_cast<QQuickItem *>(focusObject);
-        if (focusItem == d->editItem || d->editItem->isAncestorOf(focusItem))
-            focusItem->installEventFilter(this);
-    }
+    (void)d->installEventFilterOnFocusObjectInsideEditItem();
 }
 
 void QQuickTableView::closeEditor()
@@ -6958,7 +6967,10 @@ bool QQuickTableView::eventFilter(QObject *obj, QEvent *event)
         }
         break; }
     case QEvent::FocusOut:
-        d->closeEditorAndCommit();
+        // If focus was transferred within the edit delegate, we start to filter
+        // the new focus object. Otherwise we close the edit delegate.
+        if (!d->installEventFilterOnFocusObjectInsideEditItem())
+            d->closeEditorAndCommit();
         break;
     default:
         break;

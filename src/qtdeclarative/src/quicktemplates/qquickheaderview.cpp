@@ -443,8 +443,10 @@ QQuickHorizontalHeaderView::QQuickHorizontalHeaderView(QQuickItem *parent)
 
 QQuickHorizontalHeaderView::~QQuickHorizontalHeaderView()
 {
+#if QT_CONFIG(quick_draganddrop)
     Q_D(QQuickHorizontalHeaderView);
     d->destroySectionDragHandler();
+#endif
 }
 
 bool QQuickHorizontalHeaderView::movableColumns() const
@@ -480,8 +482,10 @@ QQuickVerticalHeaderView::QQuickVerticalHeaderView(QQuickItem *parent)
 
 QQuickVerticalHeaderView::~QQuickVerticalHeaderView()
 {
+#if QT_CONFIG(quick_draganddrop)
     Q_D(QQuickVerticalHeaderView);
     d->destroySectionDragHandler();
+#endif
 }
 
 bool QQuickVerticalHeaderView::movableRows() const

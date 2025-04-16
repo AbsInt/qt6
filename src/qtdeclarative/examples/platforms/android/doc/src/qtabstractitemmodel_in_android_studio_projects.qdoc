@@ -9,6 +9,8 @@
     QtModelIndex class.
     \ingroup qtquickexamples
 
+    \include running-qtquick-for-android-examples.qdocinc
+
     \section1 Overview
 
     \image qtabstractitemmodel_portrait.png

@@ -383,7 +383,7 @@ QVariant QQmlTableModel::getRow(int rowIndex)
 /*!
     \qmlmethod TableModel::insertRow(int rowIndex, object row)
 
-    Adds a new row to the list model at position \a rowIndex, with the
+    Adds a new row to the model at position \a rowIndex, with the
     values (cells) in \a row.
 
     \code
@@ -396,8 +396,8 @@ QVariant QQmlTableModel::getRow(int rowIndex)
         })
     \endcode
 
-    The \a rowIndex must be to an existing item in the list, or one past
-    the end of the list (equivalent to \l appendRow()).
+    The \a rowIndex must point to an existing item in the table, or one past
+    the end of the table (equivalent to \l appendRow()).
 
     \sa appendRow(), setRow(), removeRow(), rowCount
 */

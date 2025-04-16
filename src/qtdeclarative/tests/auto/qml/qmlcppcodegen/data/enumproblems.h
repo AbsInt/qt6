@@ -116,4 +116,19 @@ public:
     Q_ENUM(EType)
 };
 
+using uint_myown_t = decltype(75 - 12);
+
+class UnknownUnderlyingType : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+
+public:
+    enum Bla : uint_myown_t {
+        Yo = 11,
+    };
+    Q_ENUM(Bla)
+};
+
+
 #endif // ENUMPROBLEMS_H

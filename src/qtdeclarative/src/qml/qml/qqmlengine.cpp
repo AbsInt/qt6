@@ -50,6 +50,10 @@
 #  endif
 #endif // Q_OS_WIN
 
+#ifdef Q_OS_DARWIN
+#  include <unistd.h>
+#endif
+
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;

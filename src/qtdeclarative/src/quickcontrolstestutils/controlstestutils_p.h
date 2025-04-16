@@ -89,8 +89,7 @@ namespace QQuickControlsTestUtils
         void requestColorScheme(Qt::ColorScheme theme) override
         {
             m_colorScheme = theme;
-            QWindowSystemInterfacePrivate::ThemeChangeEvent tce{nullptr};
-            QGuiApplicationPrivate::processThemeChanged(&tce);
+            QWindowSystemInterface::handleThemeChange<QWindowSystemInterface::SynchronousDelivery>();
         }
 
     private:

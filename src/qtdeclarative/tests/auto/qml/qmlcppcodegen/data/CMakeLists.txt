@@ -60,6 +60,7 @@ set(qml_files
     EditConstraint.qml
     Enums.qml
     Foozle.qml
+    GetOptionalLookupNonVoidableBase.qml
     GetOptionalLookupOnQJSValueNonStrict.qml
     GetOptionalLookupShadowed.qml
     Loopy.qml
@@ -307,6 +308,7 @@ set(qml_files
     undefinedToDouble.qml
     unknownAttached.qml
     unknownParameter.qml
+    unknownUnderlyingType.qml
     unstoredUndefined.qml
     unusedAttached.qml
     urlString.qml

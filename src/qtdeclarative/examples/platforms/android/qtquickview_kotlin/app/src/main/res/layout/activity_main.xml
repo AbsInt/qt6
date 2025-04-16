@@ -28,7 +28,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:gravity="center_vertical"
+        android:gravity="center_horizontal"
         android:background="@color/lilac">
 
         <TextView
@@ -39,6 +39,7 @@
             android:text="@string/kotlin"
             android:textColor="@color/white"
             android:textStyle="bold"
+            android:layout_marginTop="@dimen/title_margin_top"
             android:textSize="@dimen/title_text_size"/>
 
         <TextView
@@ -47,7 +48,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_below="@+id/header_title"
-            android:layout_marginTop="@dimen/layout_margins"
+            android:layout_marginTop="@dimen/smaller_top_margin"
             android:layout_centerHorizontal="true"
             android:text="@string/qml_view_status"
             android:textColor="@color/white"/>
@@ -60,7 +61,7 @@
             android:orientation="horizontal"
             android:layout_centerHorizontal="true"
             android:layout_below="@id/qmlStatusText"
-            android:layout_marginTop="@dimen/layout_margins">
+            android:layout_marginTop="@dimen/bigger_top_margin">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -76,14 +77,14 @@
                 android:layout_height="@dimen/color_box_height"
                 android:background="@color/cardview_shadow_start_color"
                 android:layout_gravity="center_vertical"
-                android:layout_marginStart="@dimen/layout_margins">
+                android:layout_marginStart="@dimen/color_box_margin_start">
 
                 <TextView
                     android:id="@+id/qmlViewBackgroundText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="@dimen/other_text_size"
-                    android:text="placeholder"
+                    android:text=""
                     android:layout_centerInParent="true"
                     android:textColor="@color/white"/>
 
@@ -95,7 +96,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_below="@+id/qmlColorLayout"
-            android:layout_marginTop="@dimen/layout_margins"
+            android:layout_marginTop="@dimen/bigger_top_margin"
             android:layout_centerHorizontal="true">
 
             <TextView
@@ -109,7 +110,10 @@
                 android:id="@+id/disconnectQmlListenerSwitch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:checked="true"/>
+                android:layout_marginStart="@dimen/switch_left_margin"
+                android:checked="true"
+                app:track="@drawable/switch_track"
+                android:thumb="@drawable/switch_thumb"/>
 
         </LinearLayout>
 
@@ -119,20 +123,25 @@
             android:orientation="horizontal"
             android:gravity="center_horizontal"
             android:layout_below="@+id/switchAndTextLayout"
-            android:layout_marginTop="@dimen/layout_margins">
+            android:layout_marginTop="@dimen/bigger_top_margin">
             <Button
                 android:id="@+id/changeQmlColorButton"
-                android:layout_width="wrap_content"
+                android:layout_width="@dimen/other_buttons_width"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
+                android:textSize="@dimen/other_text_size"
+                app:cornerRadius="@dimen/button_corner_radius"
+                android:maxLines="2"
                 android:text="@string/change_qml_background" />
             <Button
                 android:id="@+id/rotateQmlGridButton"
-                android:layout_width="wrap_content"
+                android:layout_width="@dimen/other_buttons_width"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
                 android:text="@string/rotate_qml_grid"
-                android:layout_marginStart="@dimen/layout_margins"/>
+                app:cornerRadius="@dimen/button_corner_radius"
+                android:textSize="@dimen/other_text_size"
+                android:layout_marginStart="@dimen/rotate_qml_grid_margin_start"/>
         </LinearLayout>
     </RelativeLayout>
 </LinearLayout>

@@ -119,8 +119,8 @@ static const int SUBMENU_DELAY = 225;
     \snippet qtquickcontrols-menu-contextmenu.qml children
 
     Note that if you are implementing your own context menu for text editing
-    controls, you only need to provide a \c TapHandler for desktop platforms,
-    as iOS and Android have their own native context menus:
+    controls, you only need to show it on desktop platforms, as iOS and Android
+    have their own native context menus:
 
     \snippet qtquickcontrols-menu-text-editing-contextmenu.qml children
 

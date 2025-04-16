@@ -384,6 +384,41 @@ void QQmlBindPrivate::validate(QQmlBind *q) const
     The Binding type restores any previously set direct bindings on the
     property.
 
+    \section1 Multiple targets in one Binding
+
+    You can specify multiple bindings to the same object in one Binding element:
+
+    \qml
+    Text {
+        id: t1
+    }
+
+    Binding {
+        t1 {
+            color: "#00FF00"
+            text: "green text"
+        }
+    }
+    \endqml
+
+    You can also specify several bindings with different target objects in a
+    single Binding element:
+
+    \qml
+    Text {
+        id: t1
+    }
+
+    Text {
+        id: t2
+    }
+
+    Binding {
+        t1.text: "Foo"
+        t2.text: "Bar"
+    }
+    \endqml
+
     \sa {Qt Qml}
 */
 QQmlBind::QQmlBind(QObject *parent)
