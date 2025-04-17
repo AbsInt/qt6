@@ -58,6 +58,7 @@ private slots:
     void componentDefinitionInnerRequiredProperty();
     void componentDefinitionInnerRequiredPropertyFromOutside();
     void innerLevelRequiredProperty();
+    void customParsed();
 };
 
 #ifndef TST_QMLTC_QPROCESS_RESOURCES
@@ -362,6 +363,21 @@ void tst_qmltc_qprocess::innerLevelRequiredProperty()
                 u"innerLevelRequiredProperty.qml:7:5: Component is missing required property foo from here [required]"
         ));
     }
+}
+
+void tst_qmltc_qprocess::customParsed()
+{
+    const auto errors = runQmltc(u"customParsed.qml"_s, false);
+    QVERIFY(errors.contains(
+            u"customParsed.qml:5:9: Cannot assign to non-existent default property [missing-property]"
+    ));
+    QVERIFY(errors.contains(
+            u"customParsed.qml:5:23: Could not find property \"a\". [missing-property]"
+    ));
+    QVERIFY(errors.contains(
+            u"customParsed.qml:: qmltc does not support custom parsers such as ListModel or old forms "
+            "of Connections and PropertyChanges. [compiler]"
+    ));
 }
 
 QTEST_MAIN(tst_qmltc_qprocess)

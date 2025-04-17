@@ -4,7 +4,8 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QString>
-#include <QtTest>
+#include <QTest>
+#include <QSignalSpy>
 #include <QCoreApplication>
 
 #include <QtQuick/private/qquickfontmetrics_p.h>

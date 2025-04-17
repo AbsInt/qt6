@@ -407,7 +407,10 @@ void HighlightingVisitor::highlightComponent(const DomItem &item)
     if (!fLocs)
         return;
     const auto regions = fLocs->info().regions;
-    m_highlights.addHighlight(regions[ComponentKeywordRegion], QmlHighlightKind::QmlKeyword);
+    const auto componentKeywordIt = regions.constFind(ComponentKeywordRegion);
+    if (componentKeywordIt == regions.constEnd())
+        return; // not an inline component, no need for highlighting
+    m_highlights.addHighlight(*componentKeywordIt, QmlHighlightKind::QmlKeyword);
     m_highlights.addHighlight(regions[IdentifierRegion], QmlHighlightKind::QmlType);
 }
 

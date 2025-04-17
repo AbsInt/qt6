@@ -839,14 +839,30 @@ struct QmlTypeAndRevisionsRegistration<T, Resolved, Extended, false, false, fals
     {
 #if QT_DEPRECATED_SINCE(6, 4)
         // ### Qt7: Remove the warning, and leave only the static assert below.
+        if constexpr (!std::is_base_of_v<QObject, Resolved>) {
+            if constexpr (!QQmlPrivate::QmlMetaType<Resolved>::hasAcceptableCtors()) {
+                QQmlPrivate::qmlRegistrationWarning(
+                        QQmlPrivate::UnconstructibleType, QMetaType::fromType<Resolved>());
+            }
+            if constexpr (QQmlTypeInfo<Resolved>::hasAttachedProperties) {
+                QQmlPrivate::qmlRegistrationWarning(
+                        QQmlPrivate::NonQObjectWithAtached, QMetaType::fromType<Resolved>());
+            }
+        }
+#elif QT_DEPRECATED_SINCE(6, 10)
+        static_assert(std::is_base_of_v<QObject, Resolved>
+                || !QQmlTypeInfo<Resolved>::hasAttachedProperties);
+
+        // ### Qt7: Remove the warning, and leave only the static assert below.
         if constexpr (!std::is_base_of_v<QObject, Resolved>
-                && QQmlTypeInfo<Resolved>::hasAttachedProperties) {
-            QQmlPrivate::qmlRegistrationWarning(QQmlPrivate::NonQObjectWithAtached,
-                                                QMetaType::fromType<Resolved>());
+                && !QQmlPrivate::QmlMetaType<Resolved>::hasAcceptableCtors()) {
+            QQmlPrivate::qmlRegistrationWarning(
+                    QQmlPrivate::UnconstructibleType, QMetaType::fromType<Resolved>());
         }
 #else
         static_assert(std::is_base_of_v<QObject, Resolved>
-                || !QQmlTypeInfo<Resolved>::hasAttachedProperties);
+                || (QQmlPrivate::QmlMetaType<Resolved>::hasAcceptableCtors()
+                    && !QQmlTypeInfo<Resolved>::hasAttachedProperties));
 #endif
         QQmlPrivate::qmlRegisterTypeAndRevisions<Resolved, Extended>(
                     uri, versionMajor, QQmlPrivate::StaticMetaObject<T>::staticMetaObject(),

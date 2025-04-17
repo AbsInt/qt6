@@ -11,7 +11,7 @@
 // cast of the top level items (DomEnvironments,...)
 #include <QtQmlDom/private/qqmldomtop_p.h>
 
-#include <QtTest/QtTest>
+#include <QtTest/QTest>
 #include <QCborValue>
 #include <QDebug>
 #include <QLatin1String>

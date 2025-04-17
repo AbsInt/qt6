@@ -1,7 +1,9 @@
 // Copyright (C) 2016 Canonical Limited and/or its subsidiary(-ies).
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
-#include <QtTest/QtTest>
+#include <QtTest/QTest>
+#include <QtCore/QTimer>
+#include <QtCore/QRandomGenerator>
 #include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlfile.h>
 #include <QtQml/qqmlnetworkaccessmanagerfactory.h>

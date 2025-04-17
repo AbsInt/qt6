@@ -4,7 +4,8 @@
 #include <QtGui/qpa/qplatformintegration.h>
 #include <QtGui/qpa/qplatformtheme.h>
 #include <QtGui/private/qguiapplication_p.h>
-#include <QtTest>
+#include <QTest>
+#include <QSignalSpy>
 #include <QtQml>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <QtQuickTestUtils/private/visualtestutils_p.h>

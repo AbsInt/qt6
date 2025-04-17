@@ -4,7 +4,7 @@
 
 #include <QtQml/private/qabstractanimationjob_p.h>
 #include <QtQml/private/qanimationgroupjob_p.h>
-#include <QtTest>
+#include <QTest>
 
 class tst_QAbstractAnimationJob : public QObject
 {

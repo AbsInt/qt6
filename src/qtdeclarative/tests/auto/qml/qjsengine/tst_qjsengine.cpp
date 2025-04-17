@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
-#include <QtTest/QtTest>
+#include <QtTest/QTest>
+#include <QtTest/QSignalSpy>
 
 #include <private/qqmldata_p.h>
 #include <qjsengine.h>
@@ -20,6 +21,12 @@
 #include <QtQml/qqmllist.h>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <private/qv4functionobject_p.h>
+#include <QItemSelection>
+#include <QItemSelectionRange>
+#include <QJsonArray>
+#include <QQueue>
+#include <QStack>
+#include <QTranslator>
 
 #ifdef Q_CC_MSVC
 #define NO_INLINE __declspec(noinline)

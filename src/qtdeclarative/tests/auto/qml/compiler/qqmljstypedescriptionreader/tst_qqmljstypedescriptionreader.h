@@ -5,7 +5,7 @@
 #define TST_QQMLJSTYPEDESCRIPTIONREADER_H
 
 #include <QtQmlCompiler/private/qqmljstypedescriptionreader_p.h>
-#include <QtTest/QtTest>
+#include <QtTest/QTest>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 
 QT_BEGIN_NAMESPACE

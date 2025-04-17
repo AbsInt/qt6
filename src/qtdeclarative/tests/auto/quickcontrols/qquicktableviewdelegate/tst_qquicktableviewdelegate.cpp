@@ -14,7 +14,8 @@
 #include <QtQuickTestUtils/private/viewtestutils_p.h>
 #include <QtQuickTestUtils/private/visualtestutils_p.h>
 
-#include <QtTest/QtTest>
+#include <QtTest/QTest>
+#include <QtTest/QSignalSpy>
 
 using namespace QQuickViewTestUtils;
 using namespace QQuickVisualTestUtils;

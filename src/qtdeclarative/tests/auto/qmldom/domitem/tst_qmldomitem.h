@@ -11,7 +11,7 @@
 #include <QtQmlDom/private/qqmldomfieldfilter_p.h>
 #include <QtQmlDom/private/qqmldomscriptelements_p.h>
 
-#include <QtTest/QtTest>
+#include <QtTest/QTest>
 #include <QtCore/QCborValue>
 #include <QtCore/QDebug>
 #include <QtCore/QLibraryInfo>

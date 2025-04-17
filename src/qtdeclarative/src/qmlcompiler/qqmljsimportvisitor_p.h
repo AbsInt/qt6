@@ -155,6 +155,8 @@ protected:
 
     void throwRecursionDepthError() override;
 
+    virtual bool checkCustomParser(const QQmlJSScope::ConstPtr &scope);
+
     QString m_implicitImportDirectory;
     QStringList m_qmldirFiles;
     QQmlJSScope::Ptr m_currentScope;
@@ -262,7 +264,7 @@ protected:
     template<typename ErrorHandler>
     bool checkTypeResolved(const QQmlJSScope::ConstPtr &type, ErrorHandler handle)
     {
-        if (type->isFullyResolved() || type->isInCustomParserParent())
+        if (type->isFullyResolved() || checkCustomParser(type))
             return true;
 
         // Note: ignore duplicates, but only after we are certain that the type

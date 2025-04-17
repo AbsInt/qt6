@@ -337,6 +337,13 @@ void QmltcVisitor::endVisit(QQmlJS::AST::UiProgram *program)
             checkNamesAndTypes(type);
 }
 
+bool QmltcVisitor::checkCustomParser(const QQmlJSScope::ConstPtr &scope)
+{
+    if (QQmlJSImportVisitor::checkCustomParser(scope))
+        m_seenCustomParsers = true;
+    return false;
+}
+
 QQmlJSScope::ConstPtr fetchType(const QQmlJSMetaPropertyBinding &binding)
 {
     switch (binding.bindingType()) {
