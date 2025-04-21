@@ -654,9 +654,12 @@ void tst_qmlls_modules::findUsages_data()
 
     // line and character start at 1!
     const QList<QLspSpecification::Location> sumUsages = {
-        locationFrom(jsIdentifierUsagesUri, jsIdentifierUsagesContent, 8, 13, strlen("sum")),
-        locationFrom(jsIdentifierUsagesUri, jsIdentifierUsagesContent, 10, 13, strlen("sum")),
-        locationFrom(jsIdentifierUsagesUri, jsIdentifierUsagesContent, 10, 19, strlen("sum")),
+        locationFrom(jsIdentifierUsagesUri, jsIdentifierUsagesContent, 8, 13,
+                     static_cast<quint32>(strlen("sum"))),
+        locationFrom(jsIdentifierUsagesUri, jsIdentifierUsagesContent, 10, 13,
+                     static_cast<quint32>(strlen("sum"))),
+        locationFrom(jsIdentifierUsagesUri, jsIdentifierUsagesContent, 10, 19,
+                     static_cast<quint32>(strlen("sum"))),
     };
     QVERIFY(sumUsages.front().uri.startsWith("file://"_ba));
 
@@ -910,13 +913,16 @@ void tst_qmlls_modules::renameUsages_data()
                         OptionalVersionedTextDocumentIdentifier{ { jsIdentifierUsagesUri } },
                         {
                                 TextEdit{
-                                        rangeFrom(jsIdentifierUsagesContent, 8, 13, strlen("sum")),
+                                        rangeFrom(jsIdentifierUsagesContent, 8, 13,
+                                                  static_cast<quint32>(strlen("sum"))),
                                         "specialSum" },
                                 TextEdit{
-                                        rangeFrom(jsIdentifierUsagesContent, 10, 13, strlen("sum")),
+                                        rangeFrom(jsIdentifierUsagesContent, 10, 13,
+                                                  static_cast<quint32>(strlen("sum"))),
                                         "specialSum" },
                                 TextEdit{
-                                        rangeFrom(jsIdentifierUsagesContent, 10, 19, strlen("sum")),
+                                        rangeFrom(jsIdentifierUsagesContent, 10, 19,
+                                                  static_cast<quint32>(strlen("sum"))),
                                         "specialSum" },
                         } },
         }
@@ -954,7 +960,7 @@ void tst_qmlls_modules::renameUsages_data()
                             OptionalVersionedTextDocumentIdentifier{ { renameUsagesUri } },
                             {
                                     TextEdit{ rangeFrom(renamingContent, 4, 5,
-                                                        strlen("RenameMe")),
+                                                        static_cast<quint32>(strlen("RenameMe"))),
                                               "HelloWorld" },
                             } },
                     RenameFile{ "rename", renameMeUri, newFileUri } }
@@ -972,7 +978,7 @@ void tst_qmlls_modules::renameUsages_data()
                             OptionalVersionedTextDocumentIdentifier{ { renameUsagesUri } },
                             {
                                     TextEdit{ rangeFrom(renamingContent, 5, 5,
-                                                        strlen("RenameMe2")),
+                                                        static_cast<quint32>(strlen("RenameMe2"))),
                                               "HelloWorld" },
                             } },
                     RenameFile{ "rename", renameMe2Uri, newFileUri2 } }
@@ -1152,7 +1158,7 @@ struct EditingRecorder
 
 static constexpr int characterAfter(const char *line)
 {
-    return std::char_traits<char>::length(line) + 1;
+    return static_cast<int>(std::char_traits<char>::length(line) + 1);
 }
 
 static EditingRecorder propertyTypoScenario(const QByteArray &fileUri)

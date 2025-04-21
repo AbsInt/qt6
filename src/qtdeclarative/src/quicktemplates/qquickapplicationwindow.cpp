@@ -817,11 +817,24 @@ void QQuickApplicationWindow::classBegin()
     QQuickWindowQmlImpl::classBegin();
     d->resolveFont();
 
-    // Create the control up front, rather than lazily, as we have
-    // to set the default padding before any user-bindings override
-    // them.
+    /*
+        Create the control up front, rather than lazily, as we have
+        to set the default padding before any user-bindings override
+        them.
+
+        The hierarchy is:
+
+            contentItem (QQuickRootItem)
+            ├── menuBar
+            ├── header
+            ├── control (QQuickControl)
+            │   └── control->contentItem() (QQuickContentItem)
+            ├── footer
+            └── background
+     */
     d->control = new QQuickControl(QQuickWindow::contentItem());
     d->control->setObjectName("ApplicationWindowContentControl");
+#if QT_CONFIG(quicktemplates2_hover)
     // Now that QQuickContentItem's parent is the content control rather
     // than QQuickRootItem, we need to ensure that the control has the
     // correct hoverEnabled value. If we don't do this (get the value
@@ -829,6 +842,7 @@ void QQuickApplicationWindow::classBegin()
     // and some controls won't be hoverable when they should be.
     QQuickControlPrivate::get(d->control)->updateHoverEnabled(
         QQuickControlPrivate::calcHoverEnabled(nullptr), false);
+#endif
     auto *contentItem = new QQuickContentItem(this, d->control);
     // The content item can't be its own focus scope here, as that
     // will detach focus of items inside the content item from focus

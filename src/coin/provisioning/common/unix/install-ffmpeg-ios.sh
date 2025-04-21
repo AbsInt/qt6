@@ -5,28 +5,12 @@
 # This script will build and install FFmpeg static libs
 set -ex
 
-# shellcheck source=../unix/InstallFromCompressedFileFromURL.sh
-source "${BASH_SOURCE%/*}/../unix/InstallFromCompressedFileFromURL.sh"
-# shellcheck source=../unix/SetEnvVar.sh
-source "${BASH_SOURCE%/*}/../unix/SetEnvVar.sh"
+source "${BASH_SOURCE%/*}/../unix/ffmpeg-installation-utils.sh"
 
-version="n7.1"
-url_public="https://github.com/FFmpeg/FFmpeg/archive/refs/tags/$version.tar.gz"
-sha1="f008a93710a7577e3f85a90f4b632cc615164712"
-url_cached="http://ci-files01-hki.ci.qt.io/input/ffmpeg/$version.tar.gz"
-ffmpeg_name="FFmpeg-$version"
-
-target_dir="$HOME"
-ffmpeg_source_dir="$target_dir/$ffmpeg_name"
+ffmpeg_source_dir=$(download_ffmpeg)
+ffmpeg_config_options=$(get_ffmpeg_config_options "shared")
 prefix="/usr/local/ios/ffmpeg"
 dylib_regex="^@rpath/.*\.dylib$"
-
-if [ ! -d "$ffmpeg_source_dir" ];
-then
-   InstallFromCompressedFileFromURL "$url_cached" "$url_public" "$sha1" "$target_dir"
-fi
-
-ffmpeg_config_options=$(cat "${BASH_SOURCE%/*}/../shared/ffmpeg_config_options.txt")
 
 build_ffmpeg_ios() {
     local target_platform=$1
@@ -202,6 +186,6 @@ for name in $ffmpeg_libs; do
     create_xcframework $name "arm64-iphoneos" "x86_64-simulator"
 done
 
-install_ffmpeg "$ffmpeg_source_dir/build_ios/arm64-iphoneos/installed"
+install_ffmpeg "$ffmpeg_source_dir/build_ios/x86_64-simulator/installed" "$ffmpeg_source_dir/build_ios/arm64-iphoneos/installed"
 
-SetEnvVar "FFMPEG_DIR_IOS" $prefix
+set_ffmpeg_dir_env_var "FFMPEG_DIR_IOS" $prefix

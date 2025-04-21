@@ -13,6 +13,7 @@
 #include <private/qv4persistent_p.h>
 #include <private/qv4qmlcontext_p.h>
 #include <private/qv4resolvedtypereference_p.h>
+#include <private/qv4runtime_p.h>
 
 #include <QtQml/qqmlcontext.h>
 #include <QtQml/qqmlengine.h>
@@ -285,6 +286,7 @@ public:
     void onDelayedValueChanged(QString delayedName);
     void evalDelayed();
     void buildBindEntries(QQmlBind *q, QQmlComponentPrivate::DeferredState *deferredState);
+    bool isCurrent(QQmlBindEntry *entry) const;
 };
 
 void QQmlBindEntry::validate(QQmlBind *q) const
@@ -1058,6 +1060,29 @@ void QQmlBindEntry::clearPrev()
     previousKind = previous.destroy(previousKind);
 }
 
+bool QQmlBindPrivate::isCurrent(QQmlBindEntry *entry) const
+{
+    switch (entry->currentKind) {
+    case QQmlBindEntryKind::V4Value: {
+        auto propPriv = QQmlPropertyPrivate::get(entry->prop);
+        QQmlVMEMetaObject *vmemo = QQmlVMEMetaObject::get(propPriv->object);
+        Q_ASSERT(vmemo);
+        return QV4::RuntimeHelpers::strictEqual(
+                // fromReturnedValue is OK here because strictEqual will not allocate
+                QV4::Value::fromReturnedValue(vmemo->vmeProperty(propPriv->core.coreIndex())),
+                *entry->current.v4Value.valueRef());
+    }
+    case QQmlBindEntryKind::Variant:
+        return entry->current.variant == entry->prop.read();
+    case QQmlBindEntryKind::Binding:
+        return entry->current.binding == QQmlAnyBinding::ofProperty(entry->prop);
+    case QQmlBindEntryKind::None:
+        break;
+    }
+
+    return false;
+}
+
 void QQmlBind::eval()
 {
     Q_D(QQmlBind);
@@ -1072,6 +1097,11 @@ void QQmlBind::eval()
             continue; // if the target is already gone, we can't do anything
 
         if (!d->when) {
+            if (!d->isCurrent(&entry)) {
+                entry.clearPrev();
+                return;
+            }
+
             //restore any previous binding
             switch (entry.previousKind) {
             case QQmlBindEntryKind::Binding:
