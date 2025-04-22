@@ -22,6 +22,8 @@
 
 #include "wl-socket.h"
 
+#include <unistd.h>
+
 using namespace MockCompositor;
 
 class TestWindow : public QRasterWindow
