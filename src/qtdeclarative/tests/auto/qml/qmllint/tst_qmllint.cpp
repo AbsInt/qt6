@@ -1131,10 +1131,10 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
             << Result{ {
                          Message {
                                   QStringLiteral("Member \"Mode\" not found on type \"Item\""), 12,
-                                  29, QtWarningMsg },
+                                  29},
                           Message{
                                   QStringLiteral("\"Hour\" is not an entry of enum \"Mode\"."), 13,
-                                  62, QtInfoMsg }
+                                  62}
                        },
                        {},
                        { Message{ QStringLiteral("Hours") } }
@@ -1253,7 +1253,7 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
             << Result {{ Message { QStringLiteral("Unqualified access") }}};
     QTest::newRow("missingRequiredOnObjectDefinitionBinding")
             << QStringLiteral("missingRequiredPropertyOnObjectDefinitionBinding.qml")
-            << Result{ { { uR"(Component is missing required property i from here)"_s, 4, 26 } } };
+            << Result{ { { uR"(Component is missing required property i from QtObject)"_s, 4, 26 } } };
 }
 
 void TestQmllint::dirtyQmlCode()
@@ -1294,13 +1294,35 @@ void TestQmllint::dirtyQmlCode()
             });
 }
 
+static void addLocationOffsetTo(TestQmllint::Result *result, qsizetype lineOffset,
+                                qsizetype columnOffset = 0)
+{
+    for (auto *messages :
+         { &result->expectedMessages, &result->badMessages, &result->expectedReplacements }) {
+        for (auto &message : *messages) {
+            message.line += lineOffset;
+            message.column += columnOffset;
+        }
+    }
+}
+
 void TestQmllint::dirtyQmlSnippet_data()
 {
     QTest::addColumn<QString>("code");
     QTest::addColumn<Result>("result");
 
     QTest::newRow("testSnippet") << u"property int qwer: \"Hello\""_s
-                                 << Result{ { { "Cannot assign literal of type string to int"_L1 } } };
+                                 << Result{ { { "Cannot assign literal of type string to int"_L1, 1, 20 } } };
+    QTest::newRow("requiredInInlineComponent")
+            << u"Item { component Foo: Item { required property var bla; } } Foo {}"_s
+            << Result{ { { "Component is missing required property bla from Foo"_L1, 1, 61 } } };
+
+    QTest::newRow("requiredPropertyOwnerMixup")
+            << u"component Foo: Item { required property var bla }\n"_s
+               u"Foo { Item { property int bla: 43 } }\n"_s
+               u"Foo {}\n"_s
+            << Result{ { { "Component is missing required property bla from Foo"_L1, 2, 1 },
+                         { "Component is missing required property bla from Foo"_L1, 3, 1 } } };
 }
 
 void TestQmllint::dirtyQmlSnippet()
@@ -1308,7 +1330,9 @@ void TestQmllint::dirtyQmlSnippet()
     QFETCH(QString, code);
     QFETCH(Result, result);
 
-    QString qmlCode = "import QtQuick\nItem {%1}"_L1.arg(code);
+    QString qmlCode = "import QtQuick\nItem {\n%1}"_L1.arg(code);
+
+    addLocationOffsetTo(&result, 2);
 
     QJsonArray warnings;
     callQmllint(QString(), result.flags.testFlag(Result::ExitsNormally), &warnings, {}, {}, {},
@@ -1323,6 +1347,10 @@ void TestQmllint::cleanQmlSnippet_data()
     QTest::addColumn<QString>("code");
 
     QTest::newRow("testSnippet") << u"property int qwer: 123"_s;
+    QTest::newRow("requiredInComponent")
+            << u"Item { Component { id: comp; required property var bla; } }"_s;
+    QTest::newRow("requiredInInlineComponent")
+            << u"Item { component Foo: Item { required property var bla; } }"_s;
 }
 
 void TestQmllint::cleanQmlSnippet()
@@ -1357,18 +1385,6 @@ void TestQmllint::dirtyJsSnippet_data()
     QTest::newRow("assignmentWarningLocation")
             << u"console.log(a = 1)"_s
             << Result{ { { "Unqualified access"_L1, 1, 13 } } };
-}
-
-static void addLocationOffsetTo(TestQmllint::Result *result, qsizetype lineOffset,
-                                qsizetype columnOffset = 0)
-{
-    for (auto *messages :
-         { &result->expectedMessages, &result->badMessages, &result->expectedReplacements }) {
-        for (auto &message : *messages) {
-            message.line += lineOffset;
-            message.column += columnOffset;
-        }
-    }
 }
 
 void TestQmllint::dirtyJsSnippet()
@@ -2094,7 +2110,7 @@ void TestQmllint::requiredProperty()
             Result { { Message { QStringLiteral("Component is missing required property "
                                                 "required_now_string from Base") },
                        Message { QStringLiteral("Component is missing required property "
-                                                "required_defined_here_string from here") } } });
+                                                "required_defined_here_string from Derived") } } });
     runTest("requiredPropertyBindingsLater.qml",
             Result { { Message { QStringLiteral("Component is missing required property "
                                                 "required_later_string from "
@@ -2655,6 +2671,7 @@ void TestQmllint::quickPlugin()
             } });
     runTest("pluginQuick_propertyChangesInvalidTarget.qml", Result {}); // we don't care about the specific warnings
 }
+#endif // QT_CONFIG(library)
 
 void TestQmllint::environment_data()
 {
@@ -2715,8 +2732,6 @@ void TestQmllint::maxWarnings()
     // only 2 warning => should exit normally
     runQmllint(testFile("badScript.qml"), true, {"--max-warnings", "2"});
 }
-
-#endif
 
 void TestQmllint::ignoreSettingsNotCommandLineOptions()
 {

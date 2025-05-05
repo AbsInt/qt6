@@ -26,6 +26,7 @@ private slots:
     void tooltipAndSiblingPopup();
     void switchPopups();
     void hidePopupParent();
+    void popupsWithoutParent();
     void pongs();
     void minMaxSize_data();
     void minMaxSize();
@@ -605,6 +606,45 @@ void tst_xdgshell::hidePopupParent()
 
     window.hide();
     QCOMPOSITOR_TRY_VERIFY(!xdgToplevel());
+}
+
+void tst_xdgshell::popupsWithoutParent()
+{
+    QRasterWindow popup;
+    QSignalSpy popupDoneSpy(&popup, &QWindow::visibilityChanged);
+    popup.setFlags(Qt::Popup);
+    popup.resize(100, 100);
+    popup.show();
+    QVERIFY(popup.isVisible());
+
+    // popup cannot be created within the spec, so it gets auto-dismissed
+    QVERIFY(popupDoneSpy.wait());
+    QVERIFY(!popup.isVisible());
+
+    QCOMPOSITOR_VERIFY(!xdgToplevel());
+
+    // now make a normal window with an input event
+    QRasterWindow window;
+    window.setTitle("main window");
+    window.resize(200, 200);
+    window.show();
+
+    QCOMPOSITOR_TRY_VERIFY(xdgToplevel());
+    exec([&] { xdgToplevel()->sendCompleteConfigure(); });
+    QCOMPOSITOR_TRY_VERIFY(xdgToplevel()->m_xdgSurface->m_committedConfigureSerial);
+    exec([&] {
+        keyboard()->sendEnter(xdgToplevel()->surface());
+        keyboard()->sendKey(client(), 72, Keyboard::key_state_pressed); // related with native scan code
+        keyboard()->sendKey(client(), 72, Keyboard::key_state_released); // related with native scan code
+    });
+    QTRY_COMPARE(qGuiApp->focusWindow(), &window);
+
+    // now re-show our popup, it should be able to guess a transient this time
+    // and correctly show as a popup
+    popup.show();
+    QCOMPOSITOR_TRY_VERIFY(xdgPopup());
+    exec([&] { xdgPopup()->sendCompleteConfigure(QRect(100, 100, 100, 100)); });
+    QCOMPOSITOR_TRY_VERIFY(xdgPopup()->m_xdgSurface->m_committedConfigureSerial);
 }
 
 void tst_xdgshell::pongs()

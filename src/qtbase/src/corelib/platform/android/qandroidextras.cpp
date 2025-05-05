@@ -11,7 +11,7 @@
 #include <QtCore/qtimer.h>
 #include <QtCore/qset.h>
 
-#if QT_CONFIG(future)
+#if QT_CONFIG(permissions)
 #include <QtCore/qpromise.h>
 #endif
 
@@ -1029,6 +1029,7 @@ void QAndroidActivityCallbackResultReceiver::registerCallback(
     callbackMap.insert(receiverRequestCode, callbackFunc);
 }
 
+#if QT_CONFIG(permissions)
 // Permissions API
 
 QtAndroidPrivate::PermissionResult resultFromAndroid(jint value)
@@ -1127,6 +1128,8 @@ requestPermissionsInternal(const QStringList &permissions)
         env->DeleteLocalRef(array);
     });
 
+    QtAndroidPrivate::releaseAndroidDeadlockProtector();
+
     return future;
 }
 
@@ -1189,6 +1192,8 @@ bool QtAndroidPrivate::registerPermissionNatives(QJniEnvironment &env)
         Q_JNI_NATIVE_METHOD(sendRequestPermissionsResult)
     });
 }
+
+#endif // QT_CONFIG(permissions)
 
 QT_END_NAMESPACE
 

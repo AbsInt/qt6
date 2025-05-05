@@ -10,7 +10,6 @@
 #include "androidcontentfileengine.h"
 #include "qandroidapkfileengine.h"
 #include "androiddeadlockprotector.h"
-#include "androidjniaccessibility.h"
 #include "androidjniinput.h"
 #include "androidjnimain.h"
 #include "androidjnimenu.h"
@@ -19,7 +18,12 @@
 #include "qandroideventdispatcher.h"
 #include "qandroidplatformdialoghelpers.h"
 #include "qandroidplatformintegration.h"
+#if QT_CONFIG(clipboard)
 #include "qandroidplatformclipboard.h"
+#endif
+#if QT_CONFIG(accessibility)
+#include "androidjniaccessibility.h"
+#endif
 #include "qandroidplatformwindow.h"
 
 #include <android/api-level.h>
@@ -91,7 +95,9 @@ static const char m_methodErrorMsg[] = "Can't find method \"%s%s\"";
 
 Q_CONSTINIT static QBasicAtomicInt startQtAndroidPluginCalled = Q_BASIC_ATOMIC_INITIALIZER(0);
 
+#if QT_CONFIG(accessibility)
 Q_DECLARE_JNI_CLASS(QtAccessibilityInterface, "org/qtproject/qt/android/QtAccessibilityInterface");
+#endif
 
 namespace QtAndroid
 {
@@ -192,6 +198,7 @@ namespace QtAndroid
         return true;
     }
 
+#if QT_CONFIG(accessibility)
     void initializeAccessibility()
     {
         m_backendRegister->callInterface<QtJniTypes::QtAccessibilityInterface, void>(
@@ -233,6 +240,7 @@ namespace QtAndroid
         m_backendRegister->callInterface<QtJniTypes::QtAccessibilityInterface, void>(
                 "notifyScrolledEvent", accessibilityObjectId);
     }
+#endif //QT_CONFIG(accessibility)
 
     void notifyNativePluginIntegrationReady(bool ready)
     {
@@ -810,9 +818,13 @@ static bool registerNatives(QJniEnvironment &env)
     success = success
         && QtAndroidInput::registerNatives(env)
         && QtAndroidMenu::registerNatives(env)
+#if QT_CONFIG(accessibility)
         && QtAndroidAccessibility::registerNatives(env)
+#endif
         && QtAndroidDialogHelpers::registerNatives(env)
+#if QT_CONFIG(clipboard)
         && QAndroidPlatformClipboard::registerNatives(env)
+#endif
         && QAndroidPlatformWindow::registerNatives(env)
         && QtAndroidWindowEmbedding::registerNatives(env)
         && AndroidBackendRegister::registerNatives()

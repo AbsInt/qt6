@@ -85,6 +85,8 @@ private slots:
     void formatTimeZone();
     void toDateTime_data();
     void toDateTime();
+    void roundtripDateTimeFormat_data();
+    void roundtripDateTimeFormat();
     void toDate_data();
     void toDate();
     void toTime_data();
@@ -660,7 +662,13 @@ void tst_QLocale::systemLocale_data()
 
     QTest::addColumn<QString>("expected");
 
-#define ADD_CTOR_TEST(give, expect) QTest::newRow(give) << QStringLiteral(expect);
+#if QT_CONFIG(jalalicalendar)
+#define ADD_CTOR_TEST(input, localePart, monthName) \
+       QTest::newRow(input) << QStringLiteral(localePart) + " "_L1 + QStringLiteral(monthName);
+#else
+#define ADD_CTOR_TEST(input, localePart, monthName) \
+       QTest::newRow(input) << QStringLiteral(localePart);
+#endif
 
     // For format and meaning, see:
     // http://pubs.opengroup.org/onlinepubs/7908799/xbd/envvar.html
@@ -672,44 +680,44 @@ void tst_QLocale::systemLocale_data()
     // setDefault(Persian) has interfered with the system locale setup.
 
     // Vanilla:
-    ADD_CTOR_TEST("C", "C Ordibehesht");
+    ADD_CTOR_TEST("C", "C", "Ordibehesht");
 
     // Standard forms:
-    ADD_CTOR_TEST("en", "en_US Ordibehesht");
-    ADD_CTOR_TEST("en_GB", "en_GB Ordibehesht");
-    ADD_CTOR_TEST("de", "de_DE Ordibehescht");
+    ADD_CTOR_TEST("en", "en_US", "Ordibehesht");
+    ADD_CTOR_TEST("en_GB", "en_GB", "Ordibehesht");
+    ADD_CTOR_TEST("de", "de_DE", "Ordibehescht");
     // Norsk has some quirks:
-    ADD_CTOR_TEST("no", "nb_NO ordibehesht");
-    ADD_CTOR_TEST("nb", "nb_NO ordibehesht");
-    ADD_CTOR_TEST("nn", "nn_NO ordibehesht");
-    ADD_CTOR_TEST("no_NO", "nb_NO ordibehesht");
-    ADD_CTOR_TEST("nb_NO", "nb_NO ordibehesht");
-    ADD_CTOR_TEST("nn_NO", "nn_NO ordibehesht");
+    ADD_CTOR_TEST("no", "nb_NO", "ordibehesht");
+    ADD_CTOR_TEST("nb", "nb_NO", "ordibehesht");
+    ADD_CTOR_TEST("nn", "nn_NO", "ordibehesht");
+    ADD_CTOR_TEST("no_NO", "nb_NO",  "ordibehesht");
+    ADD_CTOR_TEST("nb_NO", "nb_NO", "ordibehesht");
+    ADD_CTOR_TEST("nn_NO", "nn_NO", "ordibehesht");
 
     // Not too fussy about case:
-    ADD_CTOR_TEST("DE", "de_DE Ordibehescht");
-    ADD_CTOR_TEST("EN", "en_US Ordibehesht");
+    ADD_CTOR_TEST("DE", "de_DE", "Ordibehescht");
+    ADD_CTOR_TEST("EN", "en_US", "Ordibehesht");
 
     // Invalid fields
-    ADD_CTOR_TEST("bla", "C Ordibehesht");
-    ADD_CTOR_TEST("zz", "C Ordibehesht");
-    ADD_CTOR_TEST("zz_zz", "C Ordibehesht");
-    ADD_CTOR_TEST("zz...", "C Ordibehesht");
-    ADD_CTOR_TEST("en.bla", "en_US Ordibehesht");
-    ADD_CTOR_TEST("en@bla", "en_US Ordibehesht");
-    ADD_CTOR_TEST("en_blaaa", "en_US Ordibehesht");
-    ADD_CTOR_TEST("en_zz", "en_US Ordibehesht");
-    ADD_CTOR_TEST("en_GB.bla", "en_GB Ordibehesht");
-    ADD_CTOR_TEST("en_GB@.bla", "en_GB Ordibehesht");
-    ADD_CTOR_TEST("en_GB@bla", "en_GB Ordibehesht");
+    ADD_CTOR_TEST("bla", "C", "Ordibehesht");
+    ADD_CTOR_TEST("zz", "C", "Ordibehesht");
+    ADD_CTOR_TEST("zz_zz", "C", "Ordibehesht");
+    ADD_CTOR_TEST("zz...", "C", "Ordibehesht");
+    ADD_CTOR_TEST("en.bla", "en_US", "Ordibehesht");
+    ADD_CTOR_TEST("en@bla", "en_US", "Ordibehesht");
+    ADD_CTOR_TEST("en_blaaa", "en_US", "Ordibehesht");
+    ADD_CTOR_TEST("en_zz", "en_US", "Ordibehesht");
+    ADD_CTOR_TEST("en_GB.bla", "en_GB", "Ordibehesht");
+    ADD_CTOR_TEST("en_GB@.bla", "en_GB", "Ordibehesht");
+    ADD_CTOR_TEST("en_GB@bla", "en_GB", "Ordibehesht");
 
     // Empty optional fields, but with punctuators supplied
-    ADD_CTOR_TEST("en.", "en_US Ordibehesht");
-    ADD_CTOR_TEST("en@", "en_US Ordibehesht");
-    ADD_CTOR_TEST("en.@", "en_US Ordibehesht");
-    ADD_CTOR_TEST("en_", "en_US Ordibehesht");
-    ADD_CTOR_TEST("en_.", "en_US Ordibehesht");
-    ADD_CTOR_TEST("en_.@", "en_US Ordibehesht");
+    ADD_CTOR_TEST("en.", "en_US", "Ordibehesht");
+    ADD_CTOR_TEST("en@", "en_US", "Ordibehesht");
+    ADD_CTOR_TEST("en.@", "en_US", "Ordibehesht");
+    ADD_CTOR_TEST("en_", "en_US", "Ordibehesht");
+    ADD_CTOR_TEST("en_.", "en_US", "Ordibehesht");
+    ADD_CTOR_TEST("en_.@", "en_US", "Ordibehesht");
 #undef ADD_CTOR_TEST
 
 #if QT_CONFIG(process) // for runSysApp
@@ -718,7 +726,11 @@ void tst_QLocale::systemLocale_data()
     QString errorMessage;
     if (runSysApp(m_sysapp, QStringList(), cleanEnv, &defaultLoc, &errorMessage)) {
 #if defined(Q_OS_MACOS)
+#if QT_CONFIG(jalalicalendar)
         QString localeForInvalidLocale = "C Ordibehesht";
+#else
+        QString localeForInvalidLocale = "C";
+#endif // QT_CONFIG(jalalicalendar)
 #else
         QString localeForInvalidLocale = defaultLoc;
 #endif
@@ -2375,6 +2387,79 @@ void tst_QLocale::toDateTime()
         QCOMPARE(l.toDateTime(string, QLocale::LongFormat), result);
     if (l.dateTimeFormat(QLocale::ShortFormat) == format)
         QCOMPARE(l.toDateTime(string, QLocale::ShortFormat), result);
+}
+
+void tst_QLocale::roundtripDateTimeFormat_data()
+{
+    QTest::addColumn<QLocale>("locale");
+    QTest::addColumn<QDateTime>("when");
+    QTest::addColumn<QCalendar>("cal");
+    QTest::addColumn<QLocale::FormatType>("format");
+    QTest::addColumn<int>("baseYear");
+    const QCalendar greg;
+
+#if QT_CONFIG(timezone)
+    qsizetype count = 0;
+    const QTimeZone westOz("Australia/Perth");
+    if (westOz.isValid()) {
+        QTest::newRow("de_DE/LongFormat/2024-05-06T12:34/AWT") // QTBUG-130278
+            << QLocale(QLocale::German, QLocale::Germany)
+            << QDateTime(QDate(2024, 5, 6, greg), QTime(12, 34), westOz)
+            << greg << QLocale::LongFormat << 2000;
+        ++count;
+    }
+
+    const QTimeZone nepal("Asia/Katmandu");
+    if (nepal.isValid()) {
+        // Triggers the region-format code-path:
+        QTest::newRow("en_US/LongFormat/2025-02-06T20:20/Katmandu")
+            << QLocale(QLocale::English, QLocale::UnitedStates)
+            << QDateTime(QDate(2025, 2, 6, greg), QTime(20, 20), nepal)
+            << greg << QLocale::LongFormat << 2000;
+        ++count;
+    }
+
+    if (!count)
+        QSKIP("Missing zones for both test-cases");
+#else
+    QSKIP("The only test-case depends on feature timezone");
+#endif
+}
+
+void tst_QLocale::roundtripDateTimeFormat()
+{
+    QFETCH(const QLocale, locale);
+    QFETCH(const QDateTime, when);
+    QFETCH(const QCalendar, cal);
+    QFETCH(const QLocale::FormatType, format);
+    QFETCH(const int, baseYear);
+
+    const QString text = locale.toString(when, format, cal);
+    auto report = qScopeGuard([=]() {
+        qDebug() << "Went via:" << text;
+        qDebug() << "Used format:" << locale.dateTimeFormat(format);
+        QDateTime parsed = locale.toDateTime(text, format, cal, baseYear);
+        if (parsed.isValid()) {
+            switch (parsed.timeSpec()) {
+#if QT_CONFIG(timezone)
+            case Qt::TimeZone:
+                qDebug() << "Used zone:" << parsed.timeZone().id();
+                break;
+#endif
+            case Qt::OffsetFromUTC:
+                qDebug() << "Used fixed UTC offset:" << parsed.offsetFromUtc();
+                break;
+            case Qt::LocalTime:
+                qDebug("Used local time");
+                break;
+            case Qt::UTC:
+                qDebug("Used plain UTC");
+                break;
+            }
+        }
+    });
+    QCOMPARE(locale.toDateTime(text, format, cal, baseYear), when);
+    report.dismiss();
 }
 
 void tst_QLocale::toDate_data()
@@ -4175,6 +4260,8 @@ public:
                 return QVariant(QStringList{u"en-CA"_s, u"fr-CA"_s, u"de-AT"_s,
                                             u"en-GB"_s, u"fr-FR"_s});
             }
+            if (m_name == u"pa-Arab-GB") // Pakistani Punjabi in Britain
+                return QVariant(QStringList{u"pa-PK"_s, u"en-GB"_s});
             if (m_name == u"no") // QTBUG-131127
                 return QVariant(QStringList{u"no"_s, u"en-US"_s, u"nb"_s});
             if (m_name == u"no-US") // Empty query result:
@@ -4299,6 +4386,17 @@ void tst_QLocale::mySystemLocale_data()
     QTest::addRow("C-CN") << u"C-CN"_s << QLocale::C << QStringList{u"C-CN"_s, u"C"_s};
     QTest::addRow("C-Hans-CN")
         << u"C-Hans-CN"_s << QLocale::C << QStringList{u"C-Hans-CN"_s, u"C"_s};
+
+    QTest::addRow("pa-Arab-GB")
+        << u"pa-Arab-GB"_s << QLocale::Punjabi
+        << QStringList{u"pa-Arab-GB"_s, u"pa-Arab-PK"_s, u"pa-PK"_s, u"pa-Arab"_s,
+            u"en-Latn-GB"_s, u"en-GB"_s,
+            // Truncations:
+            u"en-Latn"_s, u"en"_s,
+            // Last because its implied script, Guru, doesn't match the Arab
+            // implied by the entry that it's derived from, pa-PK - in contrast
+            // to en-Latn and en.
+            u"pa"_s};
 
     QTest::newRow("en-Dsrt-GB")
         << u"en-Dsrt-GB"_s << QLocale::English

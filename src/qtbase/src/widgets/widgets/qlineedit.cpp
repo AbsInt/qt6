@@ -41,8 +41,9 @@
 #if QT_CONFIG(itemviews)
 #include "qabstractitemview.h"
 #endif
+#if QT_CONFIG(style_stylesheet)
 #include "private/qstylesheetstyle_p.h"
-
+#endif
 #if QT_CONFIG(shortcut)
 #include "private/qapplication_p.h"
 #include "private/qshortcutmap_p.h"
@@ -2070,7 +2071,7 @@ void QLineEdit::paintEvent(QPaintEvent *)
     QPoint topLeft = lineRect.topLeft() - QPoint(d->hscroll, d->control->ascent() - fm.ascent());
 
     // draw text, selections and cursors
-#ifndef QT_NO_STYLE_STYLESHEET
+#if QT_CONFIG(style_stylesheet)
     if (QStyleSheetStyle* cssStyle = qt_styleSheet(style())) {
         cssStyle->styleSheetPalette(this, &panel, &pal);
     }

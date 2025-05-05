@@ -64,7 +64,7 @@ void QWaylandDataControlDeviceV1::invalidateSelectionOffer()
         return;
 
     m_selectionOffer.reset();
-    QGuiApplicationPrivate::platformIntegration()->clipboard()->emitChanged(QClipboard::Selection);
+    QGuiApplicationPrivate::platformIntegration()->clipboard()->emitChanged(QClipboard::Clipboard);
 }
 
 void QWaylandDataControlDeviceV1::setSelectionSource(QWaylandDataControlSourceV1 *source)
@@ -105,14 +105,14 @@ void QWaylandDataControlDeviceV1::zwlr_data_control_device_v1_selection(zwlr_dat
 
     // The selection event may be sent before platfrmIntegration is set.
     if (auto* integration = QGuiApplicationPrivate::platformIntegration())
-            integration->clipboard()->emitChanged(QClipboard::Selection);
+            integration->clipboard()->emitChanged(QClipboard::Clipboard);
 }
 
 void QWaylandDataControlDeviceV1::zwlr_data_control_device_v1_finished()
 {
     m_selectionOffer.reset();
     m_primarySelectionOffer.reset();
-    QGuiApplicationPrivate::platformIntegration()->clipboard()->emitChanged(QClipboard::Selection);
+    QGuiApplicationPrivate::platformIntegration()->clipboard()->emitChanged(QClipboard::Clipboard);
 }
 
 void QWaylandDataControlDeviceV1::zwlr_data_control_device_v1_primary_selection(struct ::zwlr_data_control_offer_v1 *id)

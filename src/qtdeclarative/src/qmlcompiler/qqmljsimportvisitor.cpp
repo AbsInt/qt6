@@ -107,6 +107,12 @@ inline QString getScopeName(const QQmlJSScope::ConstPtr &scope, QQmlJSScope::Sco
         || type == QQmlSA::ScopeType::AttachedPropertyScope)
         return scope->internalName();
 
+    if (!scope->isComposite())
+        return scope->internalName();
+
+    if (scope->isInlineComponent() && scope->inlineComponentName().has_value())
+        return scope->inlineComponentName().value();
+
     return scope->baseTypeName();
 }
 
@@ -139,6 +145,15 @@ void QQmlJSImportVisitor::registerTargetIntoImporter(const QQmlJSScope::Ptr &tar
     }
 }
 
+static void prepareTargetForVisit(const QQmlJSScope::Ptr &target)
+{
+    // rootScopeIsValid() assumes target to be a scope that only contains an internal name and a
+    // moduleName
+    const QString moduleName = target->moduleName();
+    *target = QQmlJSScope{ target->internalName() };
+    target->setOwnModuleName(moduleName);
+}
+
 QQmlJSImportVisitor::QQmlJSImportVisitor(
         const QQmlJSScope::Ptr &target, QQmlJSImporter *importer, QQmlJSLogger *logger,
         const QString &implicitImportDirectory, const QStringList &qmldirFiles)
@@ -154,6 +169,7 @@ QQmlJSImportVisitor::QQmlJSImportVisitor(
                       importer->builtinInternalNames().contextualTypes().arrayType()),
               {})
 {
+    prepareTargetForVisit(target);
     registerTargetIntoImporter(target);
 
     m_currentScope->setScopeType(QQmlSA::ScopeType::JSFunctionScope);
@@ -891,6 +907,26 @@ void QQmlJSImportVisitor::processPropertyBindingObjects()
     }
 }
 
+static QList<QQmlJSScope::ConstPtr> qmlScopeDescendants(const QQmlJSScope::ConstPtr &scope)
+{
+    QList<QQmlJSScope::ConstPtr> descendants;
+    std::vector<QQmlJSScope::ConstPtr> toVisit;
+
+    toVisit.push_back(scope);
+    while (!toVisit.empty()) {
+        const QQmlJSScope::ConstPtr s = toVisit.back();
+        toVisit.pop_back();
+        if (s->scopeType() == QQmlSA::ScopeType::QMLScope) {
+            if (s != scope)
+                descendants << s;
+
+            toVisit.insert(toVisit.end(), s->childScopesBegin(), s->childScopesEnd());
+        }
+    }
+
+    return descendants;
+}
+
 void QQmlJSImportVisitor::populatePropertyAliases()
 {
     for (const auto &alias : std::as_const(m_aliasDefinitions)) {
@@ -923,8 +959,8 @@ void QQmlJSImportVisitor::checkRequiredProperties()
         }
     }
 
-    const auto isInComponent = [this](const QQmlJSScope::ConstPtr &requiredScope) {
-        const auto compType = m_rootScopeImports.type(u"Component"_s).scope;
+    const auto compType = m_rootScopeImports.type(u"Component"_s).scope;
+    const auto isInComponent = [&](const QQmlJSScope::ConstPtr &requiredScope) {
         for (auto s = requiredScope; s; s = s->parentScope()) {
             if (s->isWrappedInImplicitComponent() || s->baseType() == compType)
                 return true;
@@ -933,11 +969,16 @@ void QQmlJSImportVisitor::checkRequiredProperties()
     };
 
     const auto requiredHasBinding = [](const QList<QQmlJSScope::ConstPtr> &scopesToSearch,
+                                       const QQmlJSScope::ConstPtr &owner,
                                        const QString &propName) {
         for (const auto &scope : scopesToSearch) {
+            if (scope->property(propName).isAlias())
+                continue;
             const auto &[begin, end] = scope->ownPropertyBindings(propName);
             for (auto it = begin; it != end; ++it) {
-                if (!scope->property(propName).isAlias())
+                if (!QQmlSA::isRegularBindingType(it->bindingType()))
+                    continue;
+                if (QQmlJSScope::ownerOfProperty(scope, propName).scope == owner)
                     return true;
             }
         }
@@ -979,16 +1020,12 @@ void QQmlJSImportVisitor::checkRequiredProperties()
         return false;
     };
 
-    const auto warn = [this](const QList<QQmlJSScope::ConstPtr> scopesToSearch,
-                             QQmlJSScope::ConstPtr prevRequiredScope,
+    const auto warn = [this](QQmlJSScope::ConstPtr prevRequiredScope,
                              const QString &propName,
                              QQmlJSScope::ConstPtr defScope,
                              QQmlJSScope::ConstPtr requiredScope,
                              QQmlJSScope::ConstPtr descendant) {
-        const QQmlJSScope::ConstPtr propertyScope = scopesToSearch.size() > 1
-                ? scopesToSearch.at(scopesToSearch.size() - 2)
-                : QQmlJSScope::ConstPtr();
-
+        const auto &propertyScope = QQmlJSScope::ownerOfProperty(requiredScope, propName).scope;
         const QString propertyScopeName = !propertyScope.isNull()
                 ? getScopeName(propertyScope, QQmlSA::ScopeType::QMLScope)
                 : u"here"_s;
@@ -1033,15 +1070,20 @@ void QQmlJSImportVisitor::checkRequiredProperties()
 
         QVector<QQmlJSScope::ConstPtr> scopesToSearch;
         for (QQmlJSScope::ConstPtr scope = defScope; scope; scope = scope->baseType()) {
-            const auto descendants = QList<QQmlJSScope::ConstPtr>() << scope << scope->descendantScopes();
+            const auto descendants = QList<QQmlJSScope::ConstPtr>()
+                    << scope << qmlScopeDescendants(scope);
             for (QQmlJSScope::ConstPtr descendant : std::as_const(descendants)) {
-                if (descendant->scopeType() != QQmlSA::ScopeType::QMLScope)
+                // Ignore inline components of children. Base types need to be always checked for
+                // required properties, even if they are defined in an inline component.
+                if (descendant != scope && descendant->isInlineComponent())
                     continue;
                 scopesToSearch << descendant;
                 const auto ownProperties = descendant->ownProperties();
                 for (auto propertyIt = ownProperties.constBegin();
                      propertyIt != ownProperties.constEnd(); ++propertyIt) {
                     const QString propName = propertyIt.key();
+                    if (descendant->hasOwnPropertyBindings(propName))
+                        continue;
 
                     QQmlJSScope::ConstPtr prevRequiredScope;
                     for (QQmlJSScope::ConstPtr requiredScope : std::as_const(scopesToSearch)) {
@@ -1053,7 +1095,7 @@ void QQmlJSImportVisitor::checkRequiredProperties()
                             continue;
                         }
 
-                        if (requiredHasBinding(scopesToSearch, propName))
+                        if (requiredHasBinding(scopesToSearch, descendant, propName))
                             continue;
 
                         if (requiredUsedInRootAlias(defScope, requiredScope, propName))
@@ -1062,9 +1104,7 @@ void QQmlJSImportVisitor::checkRequiredProperties()
                         if (requiredSetThroughAlias(scopesToSearch, requiredScope, propName))
                             continue;
 
-                        warn(scopesToSearch, prevRequiredScope, propName, defScope,
-                             requiredScope, descendant);
-
+                        warn(prevRequiredScope, propName, defScope, requiredScope, descendant);
                         prevRequiredScope = requiredScope;
                     }
                 }

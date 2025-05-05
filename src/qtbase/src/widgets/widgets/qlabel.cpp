@@ -3,13 +3,16 @@
 
 #include "qpainter.h"
 #include "qevent.h"
+#include "qpixmapcache.h"
 #include "qstyle.h"
 #include "qstyleoption.h"
 #include "qlabel_p.h"
 #include "private/qhexstring_p.h"
-#include "private/qstylesheetstyle_p.h"
 #include <qmath.h>
 
+#if QT_CONFIG(style_stylesheet)
+#include "private/qstylesheetstyle_p.h"
+#endif
 #if QT_CONFIG(abstractbutton)
 #include "qabstractbutton.h"
 #endif
@@ -982,7 +985,7 @@ void QLabel::paintEvent(QPaintEvent *)
         QRectF lr = d->layoutRect().toAlignedRect();
         QStyleOption opt;
         opt.initFrom(this);
-#ifndef QT_NO_STYLE_STYLESHEET
+#if QT_CONFIG(style_stylesheet)
         if (QStyleSheetStyle* cssStyle = qt_styleSheet(style))
             cssStyle->styleSheetPalette(this, &opt, &opt.palette);
 #endif

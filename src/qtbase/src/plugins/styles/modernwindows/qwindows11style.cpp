@@ -148,10 +148,8 @@ static void drawArrow(const QStyle *style, const QStyleOptionToolButton *toolbut
 /*!
   Constructs a QWindows11Style object.
 */
-QWindows11Style::QWindows11Style() : QWindowsVistaStyle(*new QWindows11StylePrivate)
+QWindows11Style::QWindows11Style() : QWindows11Style(*new QWindows11StylePrivate)
 {
-    highContrastTheme = QGuiApplicationPrivate::styleHints->colorScheme() == Qt::ColorScheme::Unknown;
-    colorSchemeIndex = QGuiApplicationPrivate::styleHints->colorScheme() == Qt::ColorScheme::Light ? 0 : 1;
 }
 
 /*!
@@ -759,6 +757,7 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
         break;
     }
     case PE_FrameTabWidget:
+#if QT_CONFIG(tabwidget)
         if (const QStyleOptionTabWidgetFrame *frame = qstyleoption_cast<const QStyleOptionTabWidgetFrame *>(option)) {
             QRectF frameRect = frame->rect.marginsRemoved(QMargins(0,0,0,0));
             painter->setPen(Qt::NoPen);
@@ -769,6 +768,7 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
             painter->setBrush(Qt::NoBrush);
             painter->drawRoundedRect(frameRect.marginsRemoved(QMarginsF(0.5,0.5,0.5,0.5)), secondLevelRoundingRadius, secondLevelRoundingRadius);
         }
+#endif  // QT_CONFIG(tabwidget)
         break;
     case PE_FrameGroupBox:
         if (const QStyleOptionFrame *frame = qstyleoption_cast<const QStyleOptionFrame *>(option)) {
@@ -1158,6 +1158,7 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
         }
         break;
     case QStyle::CE_TabBarTabShape:
+#if QT_CONFIG(tabbar)
         if (const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(option)) {
             QRectF tabRect = tab->rect.marginsRemoved(QMargins(2,2,0,0));
             painter->setPen(Qt::NoPen);
@@ -1176,8 +1177,10 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
             painter->drawRoundedRect(tabRect.adjusted(0.5,0.5,-0.5,-0.5),2,2);
 
         }
+#endif  // QT_CONFIG(tabbar)
         break;
     case CE_ToolButtonLabel:
+#if QT_CONFIG(toolbutton)
         if (const QStyleOptionToolButton *toolbutton
             = qstyleoption_cast<const QStyleOptionToolButton *>(option)) {
             QRect rect = toolbutton->rect;
@@ -1261,6 +1264,7 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                 }
             }
         }
+#endif  // QT_CONFIG(toolbutton)
         break;
     case QStyle::CE_ShapedFrame:
         if (const QStyleOptionFrame *f = qstyleoption_cast<const QStyleOptionFrame *>(option)) {

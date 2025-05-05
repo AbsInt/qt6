@@ -41,8 +41,16 @@ namespace QQuickVisualTestUtils
     template<typename F>
     void forEachStep(int steps, F &&func)
     {
+        if (steps == 1) {
+            // that's odd usage, but cut to the chase then
+            func(qreal(1));
+            return;
+        }
+
         for (int i = 0; i < steps; ++i) {
-            const qreal progress = qreal(i) / steps;
+            // - 1 because that gives us {0, 0.5, 1} for progress (if steps == 3),
+            // rather than {0, 0.33, 0.66}.
+            const qreal progress = qreal(i) / (steps - 1);
             func(progress);
         }
     }
@@ -53,6 +61,7 @@ namespace QQuickVisualTestUtils
     {
     public:
         PointLerper(QQuickWindow *window,
+            const QPoint &startingPosition = QPoint(0, 0),
             const QPointingDevice *pointingDevice = QPointingDevice::primaryPointingDevice());
 
         void move(const QPoint &pos, int steps = 10, int delayInMilliseconds = 1);
