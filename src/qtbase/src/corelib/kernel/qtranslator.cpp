@@ -374,6 +374,16 @@ public:
     QCoreApplication::installTranslator(). It will then be the first
     translation to be searched for matching strings.
 
+    \section1 Security Considerations
+
+    Only install translation files from trusted sources.
+
+    Translation files are binary files that are generated from text-based
+    translation source files. The format of these binary files is strictly
+    defined by Qt and any manipulation of the data in the binary file may
+    crash the application when the file is loaded. Furthermore, even well-formed
+    translation files may contain misleading or malicious translations.
+
     \sa QCoreApplication::installTranslator(), QCoreApplication::removeTranslator(),
         QObject::tr(), QCoreApplication::translate(), {I18N Example},
         {Hello tr() Example}, {Arrow Pad Example}, {Troll Print Example}
@@ -1027,8 +1037,6 @@ searchDependencies:
 
 /*
     Empties this translator of all contents.
-
-    This function works with stripped translator files.
 */
 
 void QTranslatorPrivate::clear()
@@ -1094,7 +1102,6 @@ QString QTranslator::translate(const char *context, const char *sourceText, cons
 
 /*!
     Returns \c true if this translator is empty, otherwise returns \c false.
-    This function works with stripped and unstripped translation files.
 */
 bool QTranslator::isEmpty() const
 {
