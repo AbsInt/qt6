@@ -556,18 +556,6 @@ void QWaylandDisplay::checkWaylandError()
     _exit(-1);
 }
 
-void QWaylandDisplay::blockingReadEvents()
-{
-    if (wl_display_dispatch(mDisplay) < 0) {
-        int ecode = wl_display_get_error(mDisplay);
-        if ((ecode == EPIPE || ecode == ECONNRESET))
-            qWarning("The Wayland connection broke during blocking read event. Did the Wayland compositor die?");
-        else
-            qWarning("The Wayland connection experienced a fatal error during blocking read event: %s", strerror(ecode));
-        _exit(-1);
-    }
-}
-
 void QWaylandDisplay::checkTextInputProtocol()
 {
     QStringList tips, timps; // for text input protocols and text input manager protocols

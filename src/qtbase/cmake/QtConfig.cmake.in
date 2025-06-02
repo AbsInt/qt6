@@ -3,6 +3,10 @@
 
 @PACKAGE_INIT@
 
+# This is included before the cmake_minimum_required on purpose.
+include("${CMAKE_CURRENT_LIST_DIR}/QtPublicCMakeEarlyPolicyHelpers.cmake")
+__qt_internal_save_directory_scope_policy_cmp0156()
+
 cmake_minimum_required(VERSION @min_new_policy_version@...@max_new_policy_version@)
 
 include("${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@ConfigExtras.cmake")
@@ -161,7 +165,18 @@ foreach(module ${__qt_umbrella_find_components})
 
     _qt_internal_save_find_package_context_for_debugging(@INSTALL_CMAKE_NAMESPACE@${module})
 
-    if(NOT @INSTALL_CMAKE_NAMESPACE@${module}_FOUND)
+    if(@INSTALL_CMAKE_NAMESPACE@${module}_FOUND)
+        # Tools packages don't usually provide a qt module, so there's no target.
+        if(TARGET @INSTALL_CMAKE_NAMESPACE@::${module})
+            get_target_property(__qt_${module}_is_private @INSTALL_CMAKE_NAMESPACE@::${module}
+                _qt_is_private_module
+            )
+            if(__qt_${module}_is_private)
+                _qt_internal_show_private_module_warning(${module})
+            endif()
+            unset(__qt_${module}_is_private)
+        endif()
+    else()
         find_package(@INSTALL_CMAKE_NAMESPACE@${module}
             ${@INSTALL_CMAKE_NAMESPACE@_FIND_VERSION}
             ${_@INSTALL_CMAKE_NAMESPACE@_FIND_PARTS_QUIET}

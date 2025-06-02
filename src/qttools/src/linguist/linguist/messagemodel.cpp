@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "messagemodel.h"
+#include "globals.h"
 #include "statistics.h"
 
 #include <QtCore/QCoreApplication>
@@ -748,14 +749,24 @@ int MultiContextItem::findMessageById(const QString &id) const
  *
  *****************************************************************************/
 
-static const uchar paletteRGBs[7][3] = {
-    { 236, 244, 255 }, // blue
-    { 236, 255, 255 }, // cyan
-    { 236, 255, 232 }, // green
-    { 255, 255, 230 }, // yellow
-    { 255, 242, 222 }, // orange
-    { 255, 236, 236 }, // red
-    { 252, 236, 255 }  // purple
+static const QColor lightPaletteColors[7]{
+    QColor(210, 235, 250), // blue
+    QColor(210, 250, 220), // green
+    QColor(250, 240, 210), // yellow
+    QColor(210, 250, 250), // cyan
+    QColor(250, 230, 200), // orange
+    QColor(250, 210, 210), // red
+    QColor(235, 210, 250), // purple
+};
+
+static const QColor darkPaletteColors[7] = {
+    QColor(60, 80, 100), // blue
+    QColor(50, 90, 70), // green
+    QColor(100, 90, 50), // yellow
+    QColor(50, 90, 90), // cyan
+    QColor(100, 70, 50), // orange
+    QColor(90, 50, 50), // red
+    QColor(70, 50, 90), // purple
 };
 
 MultiDataModel::MultiDataModel(QObject *parent) :
@@ -765,8 +776,7 @@ MultiDataModel::MultiDataModel(QObject *parent) :
     m_numMessages(0),
     m_modified(false)
 {
-    for (int i = 0; i < 7; ++i)
-        m_colors[i] = QColor(paletteRGBs[i][0], paletteRGBs[i][1], paletteRGBs[i][2]);
+    updateColors();
 
     m_bitmap = QBitmap(8, 8);
     m_bitmap.clear();
@@ -788,6 +798,11 @@ QBrush MultiDataModel::brushForModel(int model) const
     if (!isModelWritable(model))
         brush.setTexture(m_bitmap);
     return brush;
+}
+
+void MultiDataModel::updateColors()
+{
+    m_colors = isDarkMode() ? darkPaletteColors : lightPaletteColors;
 }
 
 bool MultiDataModel::isWellMergeable(const DataModel *dm) const
@@ -1365,18 +1380,26 @@ int MessageModel::columnCount(const QModelIndex &parent) const
 
 QVariant MessageModel::data(const QModelIndex &index, int role) const
 {
-    static QVariant pxOn  =
-        QVariant::fromValue(QPixmap(QLatin1String(":/images/s_check_on.png")));
-    static QVariant pxOff =
-        QVariant::fromValue(QPixmap(QLatin1String(":/images/s_check_off.png")));
-    static QVariant pxObsolete =
-        QVariant::fromValue(QPixmap(QLatin1String(":/images/s_check_obsolete.png")));
-    static QVariant pxDanger =
-        QVariant::fromValue(QPixmap(QLatin1String(":/images/s_check_danger.png")));
-    static QVariant pxWarning =
-        QVariant::fromValue(QPixmap(QLatin1String(":/images/s_check_warning.png")));
-    static QVariant pxEmpty =
-        QVariant::fromValue(QPixmap(QLatin1String(":/images/s_check_empty.png")));
+    static QVariant pxOn;
+    static QVariant pxOff;
+    static QVariant pxObsolete;
+    static QVariant pxDanger;
+    static QVariant pxWarning;
+    static QVariant pxEmpty;
+
+    static Qt::ColorScheme mode = Qt::ColorScheme::Unknown; // to prevent creating new QPixmaps
+                                                            // every time the method is called
+
+    if (bool dark = isDarkMode();
+        (dark && mode != Qt::ColorScheme::Dark) || (!dark && mode != Qt::ColorScheme::Light)) {
+        pxOn = MarkIcon::create(MarkIcon::onMark, dark);
+        pxOff = MarkIcon::create(MarkIcon::offMark, dark);
+        pxObsolete = MarkIcon::create(MarkIcon::obsoleteMark, dark);
+        pxDanger = MarkIcon::create(MarkIcon::dangerMark, dark);
+        pxWarning = MarkIcon::create(MarkIcon::warningMark, dark);
+        pxEmpty = MarkIcon::create(MarkIcon::emptyMark, dark);
+        mode = dark ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light;
+    }
 
     int row = index.row();
     int column = index.column() - 1;

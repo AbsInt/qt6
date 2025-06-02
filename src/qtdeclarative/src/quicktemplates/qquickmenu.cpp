@@ -11,8 +11,6 @@
 #endif
 #include "qquickmenuseparator_p.h"
 #include "qquicknativemenuitem_p.h"
-#include "qquickoverlay_p.h"
-#include "qquickoverlay_p_p.h"
 #include "qquickpopupitem_p_p.h"
 #include "qquickpopuppositioner_p_p.h"
 #include "qquickaction_p.h"
@@ -36,6 +34,7 @@
 #include <private/qqmlobjectmodel_p.h>
 #include <QtQuick/private/qquickitem_p.h>
 #include <QtQuick/private/qquickitemchangelistener_p.h>
+#include <QtQuick/private/qquickitemview_p_p.h>
 #include <QtQuick/private/qquickevents_p_p.h>
 #include <QtQuick/private/qquicklistview_p.h>
 #include <QtQuick/private/qquickrendercontrol_p.h>
@@ -73,7 +72,12 @@ static const int SUBMENU_DELAY = 225;
         \li Popup menus; for example, a menu that is shown after clicking a button
     \endlist
 
-    For context menus, see \l {Context Menus}.
+    When used as a context menu, the recommended way of opening the menu is to call
+    \l popup(). Unless a position is explicitly specified, the menu is positioned at
+    the mouse cursor on desktop platforms that have a mouse cursor available, and
+    otherwise centered over its parent item.
+
+    \snippet qtquickcontrols-menu-contextmenu.qml root
 
     When used as a popup menu, it is easiest to specify the position by specifying
     the desired \l {Popup::}{x} and \l {Popup::}{y} coordinates using the respective
@@ -103,26 +107,6 @@ static const int SUBMENU_DELAY = 225;
 
     Although \l {MenuItem}{MenuItems} are most commonly used with Menu, it can
     contain any type of item.
-
-    \section1 Context Menus
-
-    For context menus, it is easier to use the \l ContextMenu attached type,
-    which creates a menu upon a platform-specific event. In addition, text
-    editing controls such as \l TextField and \l TextArea provide their own
-    context menus by default.
-
-    If not using \c ContextMenu, the recommended way of opening the menu is to
-    call \l popup(). Unless a position is explicitly specified, the menu is
-    positioned at the mouse cursor on desktop platforms that have a mouse
-    cursor available, and otherwise centered over its parent item:
-
-    \snippet qtquickcontrols-menu-contextmenu.qml children
-
-    Note that if you are implementing your own context menu for text editing
-    controls, you only need to show it on desktop platforms, as iOS and Android
-    have their own native context menus:
-
-    \snippet qtquickcontrols-menu-text-editing-contextmenu.qml children
 
     \section1 Margins
 
@@ -613,12 +597,6 @@ void QQuickMenuPrivate::setNativeMenuVisible(bool visible)
     }
 }
 
-// Used by QQuickContextMenu when it's opened on a text-editing control.
-void QQuickMenuPrivate::makeEditMenu()
-{
-    handle->setMenuType(QPlatformMenu::EditMenu);
-}
-
 QQuickItem *QQuickMenuPrivate::itemAt(int index) const
 {
     return qobject_cast<QQuickItem *>(contentModel->get(index));
@@ -978,6 +956,22 @@ bool QQuickMenuPrivate::prepareEnterTransition()
     // If a cascading sub-menu doesn't have enough space to open on
     // the right, it flips on the other side of the parent menu.
     allowHorizontalFlip = cascade && parentMenu;
+
+    // Enter transitions may want to animate the Menu's height based on its implicitHeight.
+    // The Menu's implicitHeight is typically based on the ListView's contentHeight,
+    // among other things. The docs for ListView's forceLayout function say:
+    // "Responding to changes in the model is usually batched to happen only once per frame."
+    // As e.g. NumberAnimation's from and to values are set before any polishes happen,
+    // any re-evaluation of their bindings happen too late, and the starting height can be
+    // out-dated when menu items are added after component completion
+    // (QQuickItemView::componentComplete does a layout, so items declared as children aren't
+    // affected by this). To account for this, we force a layout before the transition starts.
+    // We try to avoid unnecessary re-layouting if we can avoid it.
+    auto *contentItemAsListView = qobject_cast<QQuickListView *>(contentItem);
+    if (contentItemAsListView) {
+        if (QQuickItemViewPrivate::get(contentItemAsListView)->currentChanges.hasPendingChanges())
+            contentItemAsListView->forceLayout();
+    }
 
     if (!QQuickPopupPrivate::prepareEnterTransition())
         return false;
@@ -1685,23 +1679,8 @@ void QQuickMenu::setVisible(bool visible)
     if (visible) {
         // If a right mouse button event opens a menu, don't synthesize QContextMenuEvent
         // (avoid opening redundant menus, e.g. in parent items).
-        auto *window = this->window();
-        Q_ASSERT(window);
-        QQuickWindowPrivate::get(window)->rmbContextMenuEventEnabled = false;
-        // Also, if users have their own custom non-ContextMenu-based text editing context menus,
-        // we want those to take priority over our own. The check above handles that when
-        // the user opens their menu on press, but not on release. For that, we close all
-        // other menus that are open, assuming that we're not a sub-menu.
-        if (!d->parentMenu) {
-            QQuickOverlay *overlay = QQuickOverlay::overlay(window);
-            if (overlay) {
-                const QList<QQuickPopup *> allPopups = QQuickOverlayPrivate::get(overlay)->allPopups;
-                for (auto *popup : allPopups) {
-                    if (popup != this && qobject_cast<QQuickMenu *>(popup))
-                        popup->close();
-                }
-            }
-        }
+        Q_ASSERT(window());
+        QQuickWindowPrivate::get(window())->rmbContextMenuEventEnabled = false;
     }
 
     if (visible && ((d->useNativeMenu() && !d->maybeNativeHandle())

@@ -1201,6 +1201,16 @@ void QQmlJSTypePropagator::generate_CallProperty_SCMath(
 
     QQmlJSRegisterContent math = m_state.registers[base].content;
     const QList<QQmlJSMetaMethod> methods = math.containedType()->ownMethods(name);
+    if (methods.isEmpty()) {
+        setVarAccumulatorAndError();
+        std::optional<QQmlJSFixSuggestion> fixSuggestion = QQmlJSUtils::didYouMean(
+                name, math.containedType()->methods().keys(),
+                currentSourceLocation());
+        m_logger->log(u"Member \"%1\" not found on Math object"_s.arg(name),
+                      qmlMissingProperty, currentSourceLocation(),
+                      true, true, std::move(fixSuggestion));
+        return;
+    }
     Q_ASSERT(methods.length() == 1);
 
     // Declare the Math object as base type of itself so that it gets cloned and won't be
@@ -3164,12 +3174,27 @@ void QQmlJSTypePropagator::saveRegisterStateForJump(int offset)
 
 QString QQmlJSTypePropagator::registerName(int registerIndex) const
 {
-    if (registerIndex == Accumulator)
+    switch (registerIndex) {
+    case InvalidRegister:
+        return u"invalid"_s;
+    case CurrentFunction:
+        return u"function"_s;
+    case Context:
+        return u"context"_s;
+    case Accumulator:
         return u"accumulator"_s;
-    if (registerIndex >= FirstArgument
-            && registerIndex < FirstArgument + m_function->argumentTypes.size()) {
-        return u"argument %1"_s.arg(registerIndex - FirstArgument);
+    case This:
+        return u"this"_s;
+    case Argc:
+        return u"argc"_s;
+    case NewTarget:
+        return u"newTarget"_s;
+    default:
+        break;
     }
+
+    if (isArgument(registerIndex))
+        return u"argument %1"_s.arg(registerIndex - FirstArgument);
 
     return u"temporary register %1"_s.arg(
             registerIndex - FirstArgument - m_function->argumentTypes.size());
@@ -3178,19 +3203,33 @@ QString QQmlJSTypePropagator::registerName(int registerIndex) const
 QQmlJSRegisterContent QQmlJSTypePropagator::checkedInputRegister(int reg)
 {
     const auto regIt = m_state.registers.find(reg);
-    if (regIt == m_state.registers.end()) {
-        if (isArgument(reg))
-            return argumentType(reg);
-        if (reg == This)
-            return m_function->qmlScope;
-        // over-approximation: needed in qmllint to not crash on `eval()`-calls
-        if (reg == NewTarget)
-            return m_typeResolver->syntheticType(m_typeResolver->varType());
+    if (regIt != m_state.registers.end())
+        return regIt.value().content;
 
-        addError(u"Type error: could not infer the type of an expression"_s);
+    switch (reg) {
+    case CurrentFunction:
+        return m_typeResolver->syntheticType(m_typeResolver->functionType());
+    case Context:
+        return m_typeResolver->syntheticType(m_typeResolver->jsValueType());
+    case Accumulator:
+        addError(u"Type error: no value found in accumulator"_s);
         return {};
+    case This:
+        return m_function->qmlScope;
+    case Argc:
+        return m_typeResolver->syntheticType(m_typeResolver->int32Type());
+    case NewTarget:
+        // over-approximation: needed in qmllint to not crash on `eval()`-calls
+        return m_typeResolver->syntheticType(m_typeResolver->varType());
+    default:
+        break;
     }
-    return regIt.value().content;
+
+    if (isArgument(reg))
+        return argumentType(reg);
+
+    addError(u"Type error: could not infer the type of an expression"_s);
+    return {};
 }
 
 bool QQmlJSTypePropagator::canConvertFromTo(

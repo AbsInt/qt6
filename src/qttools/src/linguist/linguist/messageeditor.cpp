@@ -130,7 +130,7 @@ void MessageEditor::setupEditorPage()
 
     QBoxLayout *horizontalLayout = new QHBoxLayout;
     horizontalLayout->addLayout(subLayout);
-    horizontalLayout->addWidget(m_ncrModeBox);
+    horizontalLayout->addWidget(m_ncrModeBox, 0, Qt::AlignTop | Qt::AlignRight);
 
     m_layout = new QVBoxLayout;
     m_layout->setSpacing(2);
@@ -521,6 +521,17 @@ bool MessageEditor::eventFilter(QObject *o, QEvent *e)
         QWidget *widget = static_cast<QWidget *>(o);
         if (widget != m_focusWidget)
             trackFocus(widget);
+    } else if (e->type() == QEvent::ApplicationPaletteChange
+               || e->type() == QEvent::PaletteChange) {
+        QPalette p;
+        p.setBrush(QPalette::Window, p.brush(QPalette::Active, QPalette::Base));
+        setPalette(p);
+        if (m_editors.size() > 1) {
+            for (qsizetype i = 0; i < m_editors.size(); i++) {
+                m_editors[i].container->setPalette(paletteForModel(i));
+                m_editors[i].container->setAutoFillBackground(true);
+            }
+        }
     } else if (e->type() == QEvent::ApplicationPaletteChange
                || e->type() == QEvent::PaletteChange) {
         QPalette p;

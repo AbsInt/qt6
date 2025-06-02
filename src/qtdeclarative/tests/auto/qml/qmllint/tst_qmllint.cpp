@@ -522,7 +522,7 @@ void TestQmllint::dirtyQmlCode_data()
                                             5, 5 } } };
     QTest::newRow("invalidAliasTarget1") << QStringLiteral("invalidAliasTarget.qml")
                                          << Result { { Message {
-                                            QStringLiteral("Invalid alias expression – an initalizer is needed."),
+                                            QStringLiteral("Invalid alias expression - an initalizer is needed."),
                                             6, 18 } } };
     QTest::newRow("invalidAliasTarget2") << QStringLiteral("invalidAliasTarget.qml")
                                          << Result { { Message {
@@ -1385,6 +1385,10 @@ void TestQmllint::dirtyJsSnippet_data()
     QTest::newRow("assignmentWarningLocation")
             << u"console.log(a = 1)"_s
             << Result{ { { "Unqualified access"_L1, 1, 13 } } };
+    QTest::newRow("math_typo")
+            << u"Math.minj(1,2)"_s
+            << Result{ { {"Member \"minj\" not found on Math object", 1, 6},
+                         {"Did you mean \"min\"?", 1, 6} }};
 }
 
 void TestQmllint::dirtyJsSnippet()
@@ -1472,6 +1476,7 @@ void TestQmllint::cleanQmlCode_data()
     QTest::newRow("jsmoduleimport") << QStringLiteral("jsmoduleimport.qml");
     QTest::newRow("overridescript") << QStringLiteral("overridescript.qml");
     QTest::newRow("multiExtension") << QStringLiteral("multiExtension.qml");
+    QTest::newRow("retrieveFunction") << QStringLiteral("retrieveFunction.qml");
     QTest::newRow("segFault") << QStringLiteral("SegFault.qml");
     QTest::newRow("grouped scope failure") << QStringLiteral("groupedScope.qml");
     QTest::newRow("layouts depends quick") << QStringLiteral("layouts.qml");
@@ -1608,9 +1613,6 @@ void TestQmllint::cleanQmlCode_data()
 void TestQmllint::cleanQmlCode()
 {
     QFETCH(QString, filename);
-
-    QJsonArray warnings;
-
     runTest(filename, Result::clean());
 }
 
@@ -1721,8 +1723,6 @@ void TestQmllint::compilerWarnings()
     QFETCH(QString, filename);
     QFETCH(Result, result);
     QFETCH(bool, enableCompilerWarnings);
-
-    QJsonArray warnings;
 
     auto categories = QQmlJSLogger::defaultCategories();
 

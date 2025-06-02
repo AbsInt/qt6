@@ -538,14 +538,6 @@ static void setWindowOpacity(HWND hwnd, Qt::WindowFlags flags, bool hasAlpha, bo
     }
 }
 
-static inline void updateGLWindowSettings(const QWindow *w, HWND hwnd, Qt::WindowFlags flags, qreal opacity)
-{
-    const bool isAccelerated = windowIsAccelerated(w);
-    const bool hasAlpha = w->format().hasAlpha();
-
-    setWindowOpacity(hwnd, flags, hasAlpha, isAccelerated, opacity);
-}
-
 [[nodiscard]] static inline int getResizeBorderThickness(const UINT dpi)
 {
     // The width of the padded border will always be 0 if DWM composition is
@@ -827,6 +819,9 @@ void WindowCreationData::fromWindow(const QWindow *w, const Qt::WindowFlags flag
 
     style |= WS_CLIPSIBLINGS | WS_CLIPCHILDREN ;
 
+    if (flags & Qt::WindowDoesNotAcceptFocus)
+        exStyle |= WS_EX_NOACTIVATE;
+
     if (topLevel) {
         if ((type == Qt::Window || dialog || tool)) {
             if (!(flags & Qt::FramelessWindowHint)) {
@@ -1046,10 +1041,13 @@ void WindowCreationData::initialize(const QWindow *w, HWND hwnd, bool frameChang
             MARGINS margins = { -1, -1, -1, -1 };
             DwmExtendFrameIntoClientArea(hwnd, &margins);
         }
-        updateGLWindowSettings(w, hwnd, flags, opacityLevel);
     } else { // child.
         SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, swpFlags);
     }
+
+    const bool isAccelerated = windowIsAccelerated(w);
+    const bool hasAlpha = w->format().hasAlpha();
+    setWindowOpacity(hwnd, flags, hasAlpha, isAccelerated, opacityLevel);
 }
 
 
@@ -3313,16 +3311,23 @@ bool QWindowsWindow::handleNonClientHitTest(const QPoint &globalPos, LRESULT *re
             const int titleBarHeight = getTitleBarHeight_sys(savedDpi());
             const int titleButtonWidth = titleBarHeight * 1.5;
             int buttons = 1;
+            const bool mouseButtonsSwapped = GetSystemMetrics(SM_SWAPBUTTON);
+            auto mouseButtons = Qt::NoButton;
+            if (mouseButtonsSwapped)
+                mouseButtons = GetAsyncKeyState(VK_LBUTTON) != 0 ? Qt::RightButton : (GetAsyncKeyState(VK_RBUTTON) ? Qt::LeftButton : Qt::NoButton);
+            else
+                mouseButtons = GetAsyncKeyState(VK_LBUTTON) != 0 ? Qt::LeftButton : (GetAsyncKeyState(VK_RBUTTON) ? Qt::RightButton : Qt::NoButton);
+
             if (globalPos.y() < geom.top() + titleBarHeight) {
                 if (m_data.flags.testFlags(Qt::WindowCloseButtonHint) || isDefaultTitleBar) {
                     if ((globalPos.x() > geom.right() - titleButtonWidth * buttons) && (globalPos.x() <= geom.right())) {
-                        if (GetAsyncKeyState(VK_LBUTTON))
+                        if (mouseButtons == Qt::LeftButton)
                             *result = HTCLOSE;
                     }
                     buttons++;
                 } if (m_data.flags.testFlags(Qt::WindowMaximizeButtonHint) || isDefaultTitleBar) {
                     if ((globalPos.x() > geom.right() - titleButtonWidth * buttons) && (globalPos.x() <= geom.right() - titleButtonWidth * (buttons-1))){
-                        if (GetAsyncKeyState(VK_LBUTTON)) {
+                        if (mouseButtons == Qt::LeftButton) {
                             if (IsZoomed(m_data.hwnd))
                                 *result = HTSIZE;
                             else
@@ -3332,18 +3337,17 @@ bool QWindowsWindow::handleNonClientHitTest(const QPoint &globalPos, LRESULT *re
                     buttons++;
                 } if (m_data.flags.testFlags(Qt::WindowMinimizeButtonHint) || isDefaultTitleBar) {
                     if ((globalPos.x() > geom.right() - titleButtonWidth * buttons) && (globalPos.x() <= geom.right() - titleButtonWidth * (buttons-1))){
-                        if (GetAsyncKeyState(VK_LBUTTON))
+                        if (mouseButtons == Qt::LeftButton)
                             *result = HTMINBUTTON;
                     }
                     buttons++;
                 } if ((isCustomized || isDefaultTitleBar) &&
                       *result == HTCLIENT){
                     QWindow* wnd = window();
-                    auto buttons = GetAsyncKeyState(VK_LBUTTON) != 0 ? Qt::LeftButton : Qt::NoButton;
-                    if (buttons != Qt::NoButton) {
-                        QMouseEvent event(QEvent::MouseButtonPress, localPos, globalPos, buttons, buttons, Qt::NoModifier);
+                    if (mouseButtons != Qt::NoButton) {
+                        QMouseEvent event(QEvent::MouseButtonPress, localPos, globalPos, mouseButtons, mouseButtons, Qt::NoModifier);
                         QGuiApplication::sendEvent(wnd, &event);
-                        if (!event.isAccepted() && GetAsyncKeyState(VK_RBUTTON))
+                        if (!event.isAccepted() && mouseButtons == Qt::RightButton)
                             *result = HTSYSMENU;
                         else if (!event.isAccepted())
                             *result = HTCAPTION;

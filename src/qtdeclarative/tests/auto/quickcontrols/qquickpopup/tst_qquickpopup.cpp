@@ -72,6 +72,8 @@ private slots:
     void activeFocusOnClose3();
     void activeFocusOnClosingSeveralPopups();
     void activeFocusAfterExit();
+    void activeFocusAfterExitWithForceActiveFocus();
+    void activeFocusAfterExitNonModal();
     void activeFocusOnDelayedEnter();
     void activeFocusDespiteLowerStackingOrder();
     void activeFocusItemAfterWindowInactive();
@@ -985,6 +987,86 @@ void tst_QQuickPopup::activeFocusAfterExit()
     QVERIFY(!popup2->isVisible());
     QTRY_VERIFY(!popup2->hasActiveFocus());
     QTRY_VERIFY(popup1->hasActiveFocus());
+}
+
+void tst_QQuickPopup::activeFocusAfterExitWithForceActiveFocus()
+{
+    SKIP_IF_NO_WINDOW_ACTIVATION;
+
+    QQuickControlsApplicationHelper helper(this, QStringLiteral("activeFocusAfterExitWithForceActiveFocus.qml"));
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickApplicationWindow *window = helper.appWindow;
+    window->show();
+    window->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(window));
+
+    QQuickItem *rootItem = window->property("rootItem").value<QQuickItem*>();
+    QVERIFY(rootItem);
+    QTRY_VERIFY(rootItem->hasActiveFocus());
+
+    QQuickPopup *popup = window->property("popup").value<QQuickPopup*>();
+    QVERIFY(popup);
+
+    QQuickButton *button = window->property("button").value<QQuickButton*>();
+    QVERIFY(button);
+
+    QSignalSpy closedSpy(popup, SIGNAL(closed()));
+    QVERIFY(closedSpy.isValid());
+
+    popup->open();
+    QVERIFY(popup->isVisible());
+    QTRY_VERIFY(button->hasActiveFocus());
+
+    popup->close();
+    closedSpy.wait();
+
+    QVERIFY(!popup->isVisible());
+    QTRY_VERIFY(!popup->hasActiveFocus());
+    QTRY_VERIFY(rootItem->hasActiveFocus());
+}
+
+void tst_QQuickPopup::activeFocusAfterExitNonModal()
+{
+    SKIP_IF_NO_WINDOW_ACTIVATION;
+
+    QQuickControlsApplicationHelper helper(this, QStringLiteral("activeFocusAfterExitNonModal.qml"));
+    QVERIFY2(helper.ready, helper.failureMessage());
+    auto *win = helper.appWindow;
+    win->show();
+    win->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(win));
+
+    auto *root = win->property("rootItem").value<QQuickItem*>();
+    auto *inner = win->property("focusItem").value<QQuickItem*>();
+    auto *popup = win->property("popup").value<QQuickPopup*>();
+    QVERIFY(root);
+    QVERIFY(inner);
+    QVERIFY(popup);
+
+    // 1) at startup, the inner item has active focus
+    QTRY_VERIFY(inner->hasActiveFocus());
+
+    // 2) open popup, move focus to inner, close -> inner should maintain focus
+    QSignalSpy closedSpy(popup, &QQuickPopup::closed);
+    popup->open();
+    QTRY_VERIFY(popup->isVisible());
+    QTRY_VERIFY(popup->hasActiveFocus());
+    inner->forceActiveFocus();
+    popup->close();
+    closedSpy.wait();
+    QTRY_VERIFY(!popup->hasActiveFocus());
+    QTRY_VERIFY(inner->hasActiveFocus());
+
+    // 3) shift focus to root, open+close -> root should regain focus
+    root->forceActiveFocus();
+    QTRY_VERIFY(root->hasActiveFocus());
+    closedSpy.clear();
+    popup->open();
+    QTRY_VERIFY(popup->isVisible());
+    popup->close();
+    closedSpy.wait();
+    QTRY_VERIFY(!popup->hasActiveFocus());
+    QTRY_VERIFY(root->hasActiveFocus());
 }
 
 void tst_QQuickPopup::activeFocusOnDelayedEnter()
@@ -2582,6 +2664,14 @@ void tst_QQuickPopup::pointerEventsNotBlockedForNonPopupChildrenOfOverlayWithHig
     QCOMPARE(buttonSpy.count(), 1);
     QCOMPARE(lowerMouseAreaSpy.count(), 0);
     QCOMPARE(upperMouseAreaSpy.count(), 1);
+
+    // Verify that the upper mouse area is hovered, even when a mouse press happens on top of a modal dialog
+    upperMouseArea->setHoverEnabled(true);
+    QTest::mouseMove(window, button->mapToScene(button->boundingRect().center() - QPoint(1,1)).toPoint());
+    QVERIFY(!upperMouseArea->hovered());
+    upperMouseArea->setEnabled(true);
+    QTest::mouseMove(window, button->mapToScene(button->boundingRect().center() + QPoint(1,1)).toPoint());
+    QVERIFY(upperMouseArea->hovered());
 
     popup->close();
 }

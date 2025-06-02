@@ -1,6 +1,7 @@
 // Copyright (C) 2016 BogDan Vatra <bogdan@kde.org>
 // Copyright (C) 2023 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 package org.qtproject.qt.android;
 
@@ -69,7 +70,8 @@ public class QtNative
         synchronized (m_mainActivityMutex) {
             m_activity = new WeakReference<>(qtMainActivity);
             try {
-                updateNativeActivity();
+                if (m_stateDetails.isStarted)
+                    updateNativeActivity();
             } catch (UnsatisfiedLinkError ignored) {
                 // No-op - this happens in certain e.g. QtQuick for Android cases when we set the
                 // Activity for the first time, before Qt native libraries have been loaded. The

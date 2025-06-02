@@ -244,7 +244,7 @@ static void set_thread_data(QThreadData *data) noexcept
         // As noted above: one global static for the thread that called
         // ::exit() (which may not be a Qt thread) and the pthread_key_t for
         // all others.
-        QThreadDataDestroyer::EarlyMainThread currentThreadCleanup;
+        static QThreadDataDestroyer::EarlyMainThread currentThreadCleanup;
         pthread_setspecific(threadDataDestroyer.key, data);
     }
     currentThreadData = data;
@@ -718,7 +718,7 @@ static bool calculateUnixPriority(int priority, int *sched_policy, int *sched_pr
 
     int prio_min;
     int prio_max;
-#if defined(Q_OS_VXWORKS) && defined(VXWORKS_DKM)
+#if defined(Q_OS_VXWORKS)
     // for other scheduling policies than SCHED_RR or SCHED_FIFO
     prio_min = SCHED_FIFO_LOW_PRI;
     prio_max = SCHED_FIFO_HIGH_PRI;

@@ -459,7 +459,7 @@
     \endquotation
 
     \note Do not use this command to deprecate a module. Use the
-    \l {deprecated-command}{\\deprecated} instead.
+    \l {deprecated-command}{\\deprecated} command instead.
 
     In HTML output, this state information appears also in the navigation
     bar (breadcrumbs) of reference pages for the module's members.
@@ -744,9 +744,9 @@
     \section2 \\overload
 
     The \\overload command is for indicating that a function is a
-    secondary overload of its name.
-
-    The command must stand on its own line.
+    secondary overload of its name. The command must stand on its own
+    line. If the command is used to with a function that isn't an actual
+    overload, it's considered a no-op.
 
     For a function name that is overloaded (except constructors), QDoc
     expects one primary version of the function, and all the others

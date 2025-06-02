@@ -559,12 +559,32 @@ void QWaylandWindow::resizeFromApplyConfigure(const QSize &sizeWithMargins, cons
 
 void QWaylandWindow::sendExposeEvent(const QRect &rect)
 {
-    if (!(mShellSurface && mShellSurface->handleExpose(rect))) {
-        mLastExposeGeometry = rect;
+    if (mShellSurface && mShellSurface->handleExpose(rect)) {
+        qCDebug(lcQpaWayland) << "sendExposeEvent: intercepted by shell extension, not sending";
+        return;
+    }
+
+    static bool sQtTestMode = qEnvironmentVariableIsSet("QT_QTESTLIB_RUNNING");
+    mLastExposeGeometry = rect;
+
+    if (sQtTestMode) {
+        mExposeEventNeedsAttachedBuffer = true;
+        QWindowSystemInterface::handleExposeEvent<QWindowSystemInterface::SynchronousDelivery>(window(), rect);
+        /**
+            *  If an expose is not handled by application code, explicitly attach a buffer
+            *  This primarily is a workaround for Qt unit tests using QWindow directly and
+            *  wanting focus.
+            */
+        if (mExposeEventNeedsAttachedBuffer && !rect.isNull()) {
+            auto buffer = new QWaylandShmBuffer(mDisplay, rect.size(), QImage::Format_ARGB32);
+            buffer->image()->fill(Qt::transparent);
+            buffer->setDeleteOnRelease(true);
+            attach(buffer, 0, 0);
+        }
+    } else {
         QWindowSystemInterface::handleExposeEvent(window(), rect);
     }
-    else
-        qCDebug(lcQpaWayland) << "sendExposeEvent: intercepted by shell extension, not sending";
+
 }
 
 QPlatformScreen *QWaylandWindow::calculateScreenFromSurfaceEvents() const
@@ -1709,6 +1729,7 @@ void QWaylandWindow::requestUpdate()
 // Can be called from the render thread (without locking anything) so make sure to not make races in this method.
 void QWaylandWindow::handleUpdate()
 {
+    mExposeEventNeedsAttachedBuffer = false;
     qCDebug(lcWaylandBackingstore) << "handleUpdate" << QThread::currentThread();
 
     // TODO: Should sync subsurfaces avoid requesting frame callbacks?

@@ -442,7 +442,7 @@
     You can check for this by calling \l {isRowLoaded()}{isRowLoaded(row)},
     and simply return -1 if that is not yet the case.
 
-    \sa rowHeightProvider, isRowLoaded(), {Row heights and column widths}
+    \sa columnWidthProvider, isRowLoaded(), {Row heights and column widths}
 */
 
 /*!
@@ -4454,6 +4454,9 @@ void QQuickTableViewPrivate::initItemCallback(int modelIndex, QObject *object)
 
     item->setParentItem(q->contentItem());
     item->setZ(1);
+
+    if (auto attached = getAttachedObject(item))
+        attached->setView(q);
 
     const QPoint cell = cellAtModelIndex(modelIndex);
     const QPoint visualCell = QPoint(visualColumnIndex(cell.x()), visualRowIndex(cell.y()));

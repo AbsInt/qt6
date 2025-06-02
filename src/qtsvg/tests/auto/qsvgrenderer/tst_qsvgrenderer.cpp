@@ -71,6 +71,7 @@ private slots:
     void ossFuzzLoad_data();
     void ossFuzzLoad();
     void imageRendering();
+    void imageMalformedDataUrl();
     void illegalAnimateTransform_data();
     void illegalAnimateTransform();
     void tSpanLineBreak();
@@ -518,6 +519,9 @@ void tst_QSvgRenderer::nestedQXmlStreamReader() const
 
 void tst_QSvgRenderer::stylePropagation() const
 {
+#if !QT_CONFIG(cssparser)
+    QSKIP("cssparser feature disabled, skipping test");
+#else
     QByteArray data(R"(<svg>
                       <g id="foo" style="fill:#ffff00;">
                         <g id="bar" style="fill:#ff00ff;">
@@ -561,6 +565,7 @@ void tst_QSvgRenderer::stylePropagation() const
 
     QCOMPARE(image1, image2);
     QCOMPARE(image1, image3);
+#endif // QT_CONFIG(cssparser)
 }
 
 static qreal transformNorm(const QTransform &m)
@@ -1082,20 +1087,20 @@ void tst_QSvgRenderer::opacity()
     const char *svg = R"svg(
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 37 37">
     <g transform="translate(0, 0)">
-        <rect style="fill:#808080" x="0" y="0" width="10" height="10" fill-opacity="0.5"/>
-        <rect style="fill:#808080" x="5" y="5" width="10" height="10" fill-opacity="0.5"/>
+        <rect fill="#808080" x="0" y="0" width="10" height="10" fill-opacity="0.5"/>
+        <rect fill="#808080" x="5" y="5" width="10" height="10" fill-opacity="0.5"/>
     </g>
     <g transform="translate(20, 0)" fill-opacity="0.5">
-        <rect style="fill:#808080" x="0" y="0" width="10" height="10"/>
-        <rect style="fill:#808080" x="5" y="5" width="10" height="10"/>
+        <rect fill="#808080" x="0" y="0" width="10" height="10"/>
+        <rect fill="#808080" x="5" y="5" width="10" height="10"/>
     </g>
     <g transform="translate(0, 20)">
-        <rect style="fill:#808080" x="0" y="0" width="10" height="10" opacity="0.5"/>
-        <rect style="fill:#808080" x="5" y="5" width="10" height="10" opacity="0.5"/>
+        <rect fill="#808080" x="0" y="0" width="10" height="10" opacity="0.5"/>
+        <rect fill="#808080" x="5" y="5" width="10" height="10" opacity="0.5"/>
     </g>
     <g transform="translate(20, 20)" opacity="0.5">
-        <rect style="fill:#808080" x="0" y="0" width="10" height="10"/>
-        <rect style="fill:#808080" x="5" y="5" width="10" height="10"/>
+        <rect fill="#808080" x="0" y="0" width="10" height="10"/>
+        <rect fill="#808080" x="5" y="5" width="10" height="10"/>
     </g>
     </svg>
     )svg";
@@ -1856,6 +1861,16 @@ void tst_QSvgRenderer::imageRendering() {
         p2.end();
         QCOMPARE(img1, img2);
     }
+}
+
+void tst_QSvgRenderer::imageMalformedDataUrl()
+{
+    // The input below triggered an assert in qDecodeDataUrl() which is used when creating svg
+    // nodes. That assert is fixed and tested in qtbase. Still, the input is invalid and should be
+    // treated as such. The test makes sure that QSvgRenderer properly warns about it.
+    QTest::ignoreMessage(QtWarningMsg, R"(Could not create image from "data:charset,")");
+    QVERIFY(QSvgRenderer().load(
+            R"(<svg><image width="1" height="1" xlink:href="data:charset,"/></svg>)"_ba));
 }
 
 void tst_QSvgRenderer::illegalAnimateTransform_data()

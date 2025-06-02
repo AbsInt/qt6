@@ -1029,7 +1029,7 @@ QHttp2Connection::QHttp2Connection(QIODevice *socket) : QObject(socket)
     // socket connections.
 }
 
-QHttp2Connection::~QHttp2Connection() noexcept
+QHttp2Connection::~QHttp2Connection()
 {
     // delete streams now so that any calls it might make back to this
     // Connection will operate on a valid object.
@@ -1875,7 +1875,7 @@ void QHttp2Connection::handleContinuedHEADERS()
 
     const auto streamIt = m_streams.constFind(streamID);
     if (firstFrameType == FrameType::HEADERS) {
-        if (streamIt != m_streams.cend()) {
+        if (streamIt != m_streams.cend() && !streamWasResetLocally(streamID)) {
             QHttp2Stream *stream = streamIt.value();
             if (stream->state() != QHttp2Stream::State::HalfClosedLocal
                 && stream->state() != QHttp2Stream::State::ReservedRemote
