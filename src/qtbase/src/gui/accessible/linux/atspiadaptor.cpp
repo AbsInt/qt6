@@ -1383,10 +1383,10 @@ void AtSpiAdaptor::sendFocusChanged(QAccessibleInterface *interface) const
 void AtSpiAdaptor::childrenChanged(QAccessibleInterface *interface) const
 {
     QString parentPath = pathForInterface(interface);
-    int childCount = interface->childCount();
-    for (int i = 0; i < interface->childCount(); ++i) {
+    const int childCount = interface->childCount();
+    for (int i = 0; i < childCount; ++i) {
         QString childPath = pathForInterface(interface->child(i));
-        QVariantList args = packDBusSignalArguments("add"_L1, childCount, 0, childPath);
+        QVariantList args = packDBusSignalArguments("add"_L1, i, 0, childPath);
         sendDBusSignal(parentPath, ATSPI_DBUS_INTERFACE_EVENT_OBJECT ""_L1, "ChildrenChanged"_L1, args);
     }
 }
@@ -1400,9 +1400,9 @@ void AtSpiAdaptor::notifyAboutCreation(QAccessibleInterface *interface) const
         return;
     }
     QString path = pathForInterface(interface);
-    int childCount = parent->childCount();
+    const int childIndex = parent->indexOfChild(interface);
     QString parentPath = pathForInterface(parent);
-    QVariantList args = packDBusSignalArguments("add"_L1, childCount, 0, variantForPath(path));
+    QVariantList args = packDBusSignalArguments("add"_L1, childIndex, 0, variantForPath(path));
     sendDBusSignal(parentPath, ATSPI_DBUS_INTERFACE_EVENT_OBJECT ""_L1, "ChildrenChanged"_L1, args);
 }
 
@@ -1510,6 +1510,12 @@ bool AtSpiAdaptor::applicationInterface(QAccessibleInterface *interface, const Q
     if (function == "GetId"_L1) {
         Q_ASSERT(message.signature() == "ss"_L1);
         QDBusMessage reply = message.createReply(QVariant::fromValue(QDBusVariant(m_applicationId)));
+        return connection.send(reply);
+    }
+    if (function == "GetAtspiVersion"_L1) {
+        Q_ASSERT(message.signature() == "ss"_L1);
+        // return "2.1" as described in the Application interface spec
+        QDBusMessage reply = message.createReply(QVariant::fromValue(QDBusVariant("2.1"_L1)));
         return connection.send(reply);
     }
     if (function == "GetToolkitName"_L1) {

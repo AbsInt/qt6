@@ -1820,23 +1820,36 @@ QString QFileSystemEngine::rootPath()
     return u"/"_s;
 }
 
+static constexpr QLatin1StringView nativeTempPath() noexcept
+{
+    // _PATH_TMP usually ends in '/' and we don't want that
+    QLatin1StringView temp = _PATH_TMP ""_L1;
+    static_assert(_PATH_TMP[0] == '/', "_PATH_TMP needs to be absolute");
+    static_assert(_PATH_TMP[1] != '\0', "Are you really sure _PATH_TMP should be the root dir??");
+    if (temp.endsWith(u'/'))
+        temp.chop(1);
+    return temp;
+}
+
 QString QFileSystemEngine::tempPath()
 {
 #ifdef QT_UNIX_TEMP_PATH_OVERRIDE
     return QT_UNIX_TEMP_PATH_OVERRIDE ""_L1;
 #else
     QString temp = qEnvironmentVariable("TMPDIR");
-    if (temp.isEmpty()) {
-        if (false) {
-#if defined(Q_OS_DARWIN) && !defined(QT_BOOTSTRAPPED)
-        } else if (NSString *nsPath = NSTemporaryDirectory()) {
-            temp = QString::fromCFString((CFStringRef)nsPath);
-#endif
-        } else {
-            temp = _PATH_TMP ""_L1;
-        }
-    }
-    return QDir(QDir::cleanPath(temp)).canonicalPath();
+#  if defined(Q_OS_DARWIN) && !defined(QT_BOOTSTRAPPED)
+    if (NSString *nsPath; temp.isEmpty() && (nsPath = NSTemporaryDirectory()))
+        temp = QString::fromCFString((CFStringRef)nsPath);
+#  endif
+    if (temp.isEmpty())
+        return nativeTempPath();
+
+    // the environment variable may also end in '/'
+    if (temp.size() > 1 && temp.endsWith(u'/'))
+        temp.chop(1);
+
+    QFileSystemEntry e(temp, QFileSystemEntry::FromInternalPath{});
+    return QFileSystemEngine::absoluteName(e).filePath();
 #endif
 }
 

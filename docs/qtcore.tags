@@ -23435,6 +23435,48 @@
             <arglist>(Flags)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>operator!=</name>
+            <anchorfile>qflags.html</anchorfile>
+            <anchor>operator-not-eq</anchor>
+            <arglist>(Enum lhs, QFlags&lt;T&gt; rhs)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>operator!=</name>
+            <anchorfile>qflags.html</anchorfile>
+            <anchor>operator-not-eq-1</anchor>
+            <arglist>(QFlags&lt;T&gt; lhs, Enum rhs)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>operator!=</name>
+            <anchorfile>qflags.html</anchorfile>
+            <anchor>operator-not-eq-2</anchor>
+            <arglist>(QFlags&lt;T&gt; lhs, QFlags&lt;T&gt; rhs)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>operator==</name>
+            <anchorfile>qflags.html</anchorfile>
+            <anchor>operator-eq-eq</anchor>
+            <arglist>(Enum lhs, QFlags&lt;T&gt; rhs)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>operator==</name>
+            <anchorfile>qflags.html</anchorfile>
+            <anchor>operator-eq-eq-1</anchor>
+            <arglist>(QFlags&lt;T&gt; lhs, Enum rhs)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>operator==</name>
+            <anchorfile>qflags.html</anchorfile>
+            <anchor>operator-eq-eq-2</anchor>
+            <arglist>(QFlags&lt;T&gt; lhs, QFlags&lt;T&gt; rhs)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type>int &amp;</type>
             <name>operator=</name>
             <anchorfile>qflags.html</anchorfile>
@@ -41851,7 +41893,7 @@
             <type>QMarginsF</type>
             <name>operator|</name>
             <anchorfile>qmarginsf.html</anchorfile>
-            <anchor>operator-7c-938</anchor>
+            <anchor>operator-7c-940</anchor>
             <arglist>(const QMarginsF &amp;m1, const QMarginsF &amp;m2)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">

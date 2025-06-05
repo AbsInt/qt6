@@ -1177,17 +1177,9 @@ function(qt_run_config_compile_test name)
             set(_save_CMAKE_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}")
             set(CMAKE_REQUIRED_LIBRARIES "${arg_LIBRARIES}")
 
-            # OUTPUT_VARIABLE is an internal undocumented variable of check_cxx_source_compiles
-            # since 3.23. Allow an opt out in case this breaks in the future.
-            set(try_compile_output "")
-            set(output_var "")
-            if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.23"
-                    AND NOT QT_INTERNAL_NO_TRY_COMPILE_OUTPUT_VARIABLE)
-                set(output_var OUTPUT_VARIABLE try_compile_output)
-            endif()
-
+            _qt_internal_get_check_cxx_source_compiles_out_var(try_compile_output extra_args)
             check_cxx_source_compiles(
-                "${arg_UNPARSED_ARGUMENTS} ${arg_CODE}" HAVE_${name} ${output_var}
+                "${arg_UNPARSED_ARGUMENTS} ${arg_CODE}" HAVE_${name} ${extra_args}
             )
             set(CMAKE_REQUIRED_LIBRARIES "${_save_CMAKE_REQUIRED_LIBRARIES}")
 
@@ -1200,7 +1192,14 @@ function(qt_run_config_compile_test name)
         endif()
     endif()
 
+    # Note this is assigned to the parent scope, and is not a CACHE var, which means the value is
+    # only available on first configuration.
     set(TEST_${name}_OUTPUT "${try_compile_output}" PARENT_SCOPE)
+
+    # Story the compile output for a test in a global property. It will only be available on first
+    # configuration, because we don't cache it across cmake invocations.
+    set_property(GLOBAL PROPERTY _qt_run_config_compile_test_output_${name} "${try_compile_output}")
+
     set(TEST_${name} "${HAVE_${name}}" CACHE INTERNAL "${arg_LABEL}")
 endfunction()
 
