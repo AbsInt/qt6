@@ -1254,6 +1254,16 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
     QTest::newRow("missingRequiredOnObjectDefinitionBinding")
             << QStringLiteral("missingRequiredPropertyOnObjectDefinitionBinding.qml")
             << Result{ { { uR"(Component is missing required property i from QtObject)"_s, 4, 26 } } };
+    QTest::newRow("inlineComponentSearchInfiniteLoop")
+            << QStringLiteral("InlineComponentSearchInfiniteLoop_Main.qml")
+            << Result{ { { "InlineComponentSearchInfiniteLoop_Other.a was not found. "
+                           "Did you add all imports and dependencies?"_L1, 5, 5 } } };
+    QTest::newRow("enumsAreNotTypes_functionAnnotations")
+            << QStringLiteral("EnumsAreNotTypes_functionAnnotations.qml")
+            << Result{ { { "QML enumerations are not types. Use underlying type "
+                           "(int or double) instead."_L1, 5, 17 },
+                         { "QML enumerations are not types. Use underlying type "
+                           "(int or double) instead."_L1, 6, 9 } } };
 }
 
 void TestQmllint::dirtyQmlCode()
