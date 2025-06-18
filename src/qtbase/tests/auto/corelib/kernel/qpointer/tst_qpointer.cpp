@@ -14,6 +14,8 @@
 #include <QWidget>
 #endif
 
+using namespace std::chrono_literals;
+
 class tst_QPointer : public QObject
 {
     Q_OBJECT
@@ -545,7 +547,7 @@ void tst_QPointer::raceCondition()
 
     for (int i = 0; i < NUM_THREADS; ++i) {
         QThread *thread =
-                QThread::create([&startSemaphore, &targetObject] {
+                QThread::create([&] {
                     startSemaphore.acquire();
 
                     for (int j = 0; j < ITERATIONS_PER_THREAD; ++j) {
@@ -558,12 +560,14 @@ void tst_QPointer::raceCondition()
         thread->start();
     }
 
-    QTest::qWait(100);
+    QTest::qWait(100ms);
     startSemaphore.release(NUM_THREADS);
 
+    bool allJoined = true;
     for (const auto &thread : threads) {
-        QVERIFY(thread->wait(30000));
+        allJoined = thread->wait(30s) && allJoined;
     }
+    QVERIFY(allJoined);
 }
 
 void tst_QPointer::qvariantCast()
