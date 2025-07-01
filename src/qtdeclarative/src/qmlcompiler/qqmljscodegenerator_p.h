@@ -371,6 +371,8 @@ private:
         return m_pool->storedIn(m_typeResolver->literalType(contained), contained);
     }
 
+    bool isRegisterAffectedBySideEffects(int registerIndex);
+
     // map from instruction offset to sequential label number
     QHash<int, QString> m_labels;
 
@@ -380,41 +382,15 @@ private:
 
     QStringList m_includes;
 
-    struct RegisterVariablesKey
-    {
-        QString internalName;
-        int registerIndex = -1;
-        int lookupIndex = QQmlJSRegisterContent::InvalidLookupIndex;
-
-    private:
-        friend size_t qHash(const RegisterVariablesKey &key, size_t seed = 0) noexcept
-        {
-            return qHashMulti(seed, key.internalName, key.registerIndex, key.lookupIndex);
-        }
-
-        friend bool operator==(
-                const RegisterVariablesKey &lhs, const RegisterVariablesKey &rhs) noexcept
-        {
-            return lhs.registerIndex == rhs.registerIndex
-                    && lhs.lookupIndex == rhs.lookupIndex
-                    && lhs.internalName == rhs.internalName;
-        }
-
-        friend bool operator!=(
-                const RegisterVariablesKey &lhs, const RegisterVariablesKey &rhs) noexcept
-        {
-            return !(lhs == rhs);
-        }
-    };
-
     struct RegisterVariablesValue
     {
         QString variableName;
         QQmlJSScope::ConstPtr storedType;
+        int initialRegisterIndex = InvalidRegister;
         int numTracked = 0;
     };
 
-    QHash<RegisterVariablesKey, RegisterVariablesValue> m_registerVariables;
+    QHash<QQmlJSRegisterContent, RegisterVariablesValue> m_registerVariables;
 };
 
 QT_END_NAMESPACE

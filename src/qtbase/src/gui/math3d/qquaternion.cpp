@@ -419,7 +419,6 @@ QQuaternion QQuaternion::fromAxisAndAngle
 /*!
     \fn QVector3D QQuaternion::toEulerAngles() const
     \since 5.5
-    \overload
 
     Calculates roll, pitch, and yaw Euler angles (in degrees)
     that corresponds to this quaternion.
@@ -609,7 +608,7 @@ QQuaternion QQuaternion::fromRotationMatrix(const QMatrix3x3 &rot3x3)
         axis[1] = (rot3x3(0, 2) - rot3x3(2, 0)) / s;
         axis[2] = (rot3x3(1, 0) - rot3x3(0, 1)) / s;
     } else {
-        static int s_next[3] = { 1, 2, 0 };
+        constexpr int s_next[3] = { 1, 2, 0 };
         int i = 0;
         if (rot3x3(1, 1) > rot3x3(0, 0))
             i = 1;

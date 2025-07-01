@@ -541,6 +541,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_accessibility
         accessible/qaccessiblebridge.cpp accessible/qaccessiblebridge.h
         accessible/qaccessiblebridgeutils.cpp accessible/qaccessiblebridgeutils_p.h
         accessible/qaccessiblecache.cpp accessible/qaccessiblecache_p.h
+        accessible/qaccessiblehelper.cpp accessible/qaccessiblehelper_p.h
         accessible/qaccessibleobject.cpp accessible/qaccessibleobject.h
         accessible/qaccessibleplugin.cpp accessible/qaccessibleplugin.h
         accessible/qplatformaccessibility.cpp
@@ -1043,7 +1044,7 @@ qt_internal_extend_target(Gui CONDITION TARGET Qt::DBus AND UNIX AND (QT_FEATURE
         Qt::DBus
 )
 
-qt_internal_extend_target(Gui CONDITION UNIX AND (QT_FEATURE_xcb OR NOT MACOS) AND (QT_FEATURE_xcb OR NOT UIKIT)
+qt_internal_extend_target(Gui CONDITION UNIX AND (((QT_FEATURE_xcb OR NOT MACOS) AND (QT_FEATURE_xcb OR NOT UIKIT)) OR QT_FEATURE_wayland)
     SOURCES
         platform/unix/qgenericunixthemes.cpp platform/unix/qgenericunixthemes_p.h
 )

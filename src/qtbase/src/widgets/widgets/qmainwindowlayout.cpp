@@ -1767,8 +1767,6 @@ void QMainWindowLayout::setDocumentMode(bool enabled)
     // Update the document mode for all tab bars
     for (QTabBar *bar : std::as_const(usedTabBars))
         bar->setDocumentMode(_documentMode);
-    for (QTabBar *bar : std::as_const(unusedTabBars))
-        bar->setDocumentMode(_documentMode);
 }
 
 void QMainWindowLayout::setVerticalTabsEnabled(bool enabled)
@@ -1893,7 +1891,7 @@ void QMainWindowLayout::keepSize(QDockWidget *w)
 class QMainWindowTabBar : public QTabBar
 {
     Q_OBJECT
-    QMainWindow *mainWindow;
+    QPointer<QMainWindow> mainWindow;
     QPointer<QDockWidget> draggingDock; // Currently dragging (detached) dock widget
 public:
     QMainWindowTabBar(QMainWindow *parent);
@@ -1907,6 +1905,22 @@ protected:
     void mouseMoveEvent(QMouseEvent*) override;
 
 };
+
+QDebug operator<<(QDebug debug, const QMainWindowTabBar *bar)
+{
+    if (!bar)
+        return debug << "QMainWindowTabBar(0x0)";
+    QDebugStateSaver saver(debug);
+    debug.nospace().noquote() << "QMainWindowTabBar(" << static_cast<const void *>(bar) << ", ";
+    debug.nospace().noquote() << "ParentWidget=(" << bar->parentWidget() << "), ";
+    const auto dockWidgets = bar->dockWidgets();
+    if (dockWidgets.isEmpty())
+        debug.nospace().noquote() << "No QDockWidgets";
+    else
+        debug.nospace().noquote() << "DockWidgets(" << dockWidgets << ")";
+    debug.nospace().noquote() << ")";
+    return debug;
+}
 
 QMainWindowTabBar *QMainWindowLayout::findTabBar(const QDockWidget *dockWidget) const
 {
@@ -1953,7 +1967,7 @@ QDockWidget *QMainWindowTabBar::dockAt(int index) const
 {
     QMainWindowTabBar *that = const_cast<QMainWindowTabBar *>(this);
     QMainWindowLayout* mlayout = qt_mainwindow_layout(mainWindow);
-    QDockAreaLayoutInfo *info = mlayout->dockInfo(that);
+    QDockAreaLayoutInfo *info = mlayout ? mlayout->dockInfo(that) : nullptr;
     if (!info)
         return nullptr;
 
@@ -2044,11 +2058,9 @@ QMainWindowTabBar::~QMainWindowTabBar()
 
     // tab bar is not parented to the main window
     // => can only be a dock widget group window
-    // => remove itself from used and unused tab bar containers
     auto *mwLayout = qt_mainwindow_layout(mainWindow);
     if (!mwLayout)
         return;
-    mwLayout->unusedTabBars.removeOne(this);
     mwLayout->usedTabBars.remove(this);
 }
 
@@ -2104,6 +2116,12 @@ bool QMainWindowLayout::isDockWidgetTabbed(const QDockWidget *dockWidget) const
     return bar && bar->count() > 1;
 }
 
+void QMainWindowLayout::unuseTabBar(QTabBar *bar)
+{
+    Q_ASSERT(qobject_cast<QMainWindowTabBar *>(bar));
+    delete bar;
+}
+
 QTabBar *QMainWindowLayout::getTabBar()
 {
     if (!usedTabBars.isEmpty() && !isInRestoreState) {
@@ -2115,37 +2133,26 @@ QTabBar *QMainWindowLayout::getTabBar()
         activate();
     }
 
-    QTabBar *result = nullptr;
-    if (!unusedTabBars.isEmpty()) {
-        result = unusedTabBars.takeLast();
-    } else {
-        result = new QMainWindowTabBar(static_cast<QMainWindow *>(parentWidget()));
-        result->setDrawBase(true);
-        result->setElideMode(Qt::ElideRight);
-        result->setDocumentMode(_documentMode);
-        result->setMovable(true);
-        connect(result, SIGNAL(currentChanged(int)), this, SLOT(tabChanged()));
-        connect(result, &QTabBar::tabMoved, this, &QMainWindowLayout::tabMoved);
-    }
+    QTabBar *bar = new QMainWindowTabBar(static_cast<QMainWindow *>(parentWidget()));
+    bar->setDrawBase(true);
+    bar->setElideMode(Qt::ElideRight);
+    bar->setDocumentMode(_documentMode);
+    bar->setMovable(true);
+    connect(bar, SIGNAL(currentChanged(int)), this, SLOT(tabChanged()));
+    connect(bar, &QTabBar::tabMoved, this, &QMainWindowLayout::tabMoved);
 
-    usedTabBars.insert(result);
-    return result;
+    usedTabBars.insert(bar);
+    return bar;
 }
 
-// Allocates a new separator widget if needed
 QWidget *QMainWindowLayout::getSeparatorWidget()
 {
-    QWidget *result = nullptr;
-    if (!unusedSeparatorWidgets.isEmpty()) {
-        result = unusedSeparatorWidgets.takeLast();
-    } else {
-        result = new QWidget(parentWidget());
-        result->setAttribute(Qt::WA_MouseNoMask, true);
-        result->setAutoFillBackground(false);
-        result->setObjectName("qt_qmainwindow_extended_splitter"_L1);
-    }
-    usedSeparatorWidgets.insert(result);
-    return result;
+    auto *separator = new QWidget(parentWidget());
+    separator->setAttribute(Qt::WA_MouseNoMask, true);
+    separator->setAutoFillBackground(false);
+    separator->setObjectName("qt_qmainwindow_extended_splitter"_L1);
+    usedSeparatorWidgets.insert(separator);
+    return separator;
 }
 
 /*! \internal
@@ -2730,14 +2737,6 @@ QMainWindowLayout::~QMainWindowLayout()
     layoutState.deleteCentralWidgetItem();
 
     delete statusbar;
-
-#if QT_CONFIG(dockwidget) && QT_CONFIG(tabwidget)
-    // unusedTabBars contains unparented tab bars, which need to be removed manually.
-    // ~QMainWindowTabBar() attempts to remove the bar from unusedTabBars
-    // => move it out of the way first.
-    const auto bars = std::move(unusedTabBars);
-    qDeleteAll(bars);
-#endif // QT_CONFIG(dockwidget) && QT_CONFIG(tabwidget)
 }
 
 void QMainWindowLayout::setDockOptions(QMainWindow::DockOptions opts)
@@ -3212,20 +3211,15 @@ void QMainWindowLayout::applyState(QMainWindowLayoutState &newState, bool animat
     const QSet<QTabBar*> retired = usedTabBars - used;
     usedTabBars = used;
     for (QTabBar *tab_bar : retired) {
-        tab_bar->hide();
-        while (tab_bar->count() > 0)
-            tab_bar->removeTab(0);
-        unusedTabBars.append(tab_bar);
+        unuseTabBar(tab_bar);
     }
 
     if (sep == 1) {
         const QSet<QWidget*> usedSeps = newState.dockAreaLayout.usedSeparatorWidgets();
         const QSet<QWidget*> retiredSeps = usedSeparatorWidgets - usedSeps;
         usedSeparatorWidgets = usedSeps;
-        for (QWidget *sepWidget : retiredSeps) {
-            unusedSeparatorWidgets.append(sepWidget);
-            sepWidget->hide();
-        }
+        for (QWidget *sepWidget : retiredSeps)
+            delete sepWidget;
     }
 
     for (int i = 0; i < QInternal::DockCount; ++i)

@@ -182,6 +182,7 @@ private slots:
     void mathMinMax();
     void mathOperations();
     void mathStaticProperties();
+    void mergeSideEffects();
     void mergedObjectReadWrite();
     void methodOnListLookup();
     void methods();
@@ -286,6 +287,7 @@ private slots:
     void voidFunction();
     void writeBack();
     void writeVariantMap();
+    void writeAndReturnTempArray();
 };
 
 static QByteArray arg1()
@@ -1206,13 +1208,18 @@ void tst_QmlCppCodegen::consoleObject()
     const QRegularExpression re2(u"QQmlComponentAttached\\(0x[0-9a-f]+\\)"_s);
     QTest::ignoreMessage(QtDebugMsg, re2);
 
+    QTest::ignoreMessage(QtDebugMsg, "[1,2,3,4,5] true");
+
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
 
     auto oldHandler = qInstallMessageHandler(
-            [](QtMsgType, const QMessageLogContext &ctxt, const QString &) {
+            [](QtMsgType, const QMessageLogContext &ctxt, const QString &msg) {
         QCOMPARE(ctxt.file, urlString.toUtf8());
-        QCOMPARE(ctxt.function, QByteArray("expression for onCompleted"));
+        if (msg == QString(u"[1,2,3,4,5] true"))
+            QCOMPARE(ctxt.function, QByteArray("xyz"));
+        else
+            QCOMPARE(ctxt.function, QByteArray("expression for onCompleted"));
         QVERIFY(ctxt.line > 0);
     });
     const auto guard = qScopeGuard([oldHandler]() { qInstallMessageHandler(oldHandler); });
@@ -3644,6 +3651,16 @@ void tst_QmlCppCodegen::mathStaticProperties()
     QCOMPARE(object->property("sqrt2").toDouble(), 1.4142135623730951);
 }
 
+void tst_QmlCppCodegen::mergeSideEffects()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/mergeSideEffects.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->property("c").toInt(), 3);
+}
+
 void tst_QmlCppCodegen::mergedObjectReadWrite()
 {
     QQmlEngine e;
@@ -5613,8 +5630,16 @@ void tst_QmlCppCodegen::valueTypeBehavior()
 void tst_QmlCppCodegen::valueTypeLists()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/valueTypeLists.qml"_s));
+    const QUrl url(u"qrc:/qt/qml/TestTypes/valueTypeLists.qml"_s);
+    QQmlComponent c(&engine, url);
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    const QString bindingLoop = url.toString()
+            + uR"(:3:1: QML QObject*: Binding loop detected for property "rectList2":
+qrc:/qt/qml/TestTypes/valueTypeLists.qml:19:5)"_s;
+    for (int i = 0; i < 2; ++i)
+        QTest::ignoreMessage(QtWarningMsg, qPrintable(bindingLoop));
+
     QScopedPointer<QObject> o(c.create());
 
     QCOMPARE(qvariant_cast<QRectF>(o->property("rectInBounds")), QRectF(1, 2, 3, 4));
@@ -5632,6 +5657,10 @@ void tst_QmlCppCodegen::valueTypeLists()
     QCOMPARE(qvariant_cast<QString>(o->property("charInBounds")), QStringLiteral("d"));
     QVERIFY(o->metaObject()->indexOfProperty("charOutOfBounds") > 0);
     QVERIFY(!o->property("charOutOfBounds").isValid());
+
+    const QList<QRectF> rectList = o->property("rectList2").value<QList<QRectF>>();
+    QCOMPARE(rectList.length(), 1);
+    QCOMPARE(rectList[0], QRectF(666, 13, 14, 15));
 }
 
 void tst_QmlCppCodegen::valueTypeProperty()
@@ -5780,6 +5809,46 @@ void tst_QmlCppCodegen::writeVariantMap()
     QCOMPARE(textPlain.metaType(), QMetaType::fromType<QString>());
     QCOMPARE(textPlain.toString(), u"%Drag Me%"_s);
 
+}
+
+void tst_QmlCppCodegen::writeAndReturnTempArray()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/Categorizer.qml"_s));
+
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+
+    const QVariant nnn = object->property("nnn");
+    QCOMPARE(nnn.metaType(), QMetaType::fromType<QList<double>>());
+    QCOMPARE(nnn.value<QList<double>>(), QList<double>{10});
+
+    const QVariant numbers = object->property("numbers");
+    QCOMPARE(numbers.metaType(), QMetaType::fromType<QList<double>>());
+    const QList<double> numbersContent = numbers.value<QList<double>>();
+    QCOMPARE(numbersContent.length(), 32);
+    for (double number: std::as_const(numbersContent))
+        QVERIFY(number >= 0 && number < double(0xf0f0f0));
+
+    QList<double> expected { 0, 0, 0, 0};
+    for (int i = 0; i < 2; ++i) {
+        for (double number : std::as_const(numbersContent)) {
+            const int num = QJSNumberCoercion::toInteger((number)) & 0xabcdef;
+            if (num < 0xf0f)
+                expected[0] += num;
+            else if (num < 0xf0f0)
+                expected[1] += num;
+            else if (num < 0xf0f0f)
+                expected[2] += num;
+            else
+                expected[3] += num;
+        }
+    }
+
+    QList<double> sum;
+    QMetaObject::invokeMethod(object.data(), "sum", Q_RETURN_ARG(QList<double>, sum));
+    QCOMPARE(sum, expected);
 }
 
 QTEST_MAIN(tst_QmlCppCodegen)

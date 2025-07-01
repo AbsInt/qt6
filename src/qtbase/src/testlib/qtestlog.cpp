@@ -187,14 +187,14 @@ namespace QTest {
 
         inline bool matches(QtMsgType tp, const QString &message) const
         {
-            return tp == type
-                   && (pattern.userType() == QMetaType::QString ?
-                       stringsMatch(pattern.toString(), message) :
+            if (tp != type)
+                return false;
 #if QT_CONFIG(regularexpression)
-                       pattern.toRegularExpression().match(message).hasMatch());
-#else
-                       false);
+            if (const auto *regex = get_if<QRegularExpression>(&pattern))
+                return regex->match(message).hasMatch();
 #endif
+            Q_ASSERT(pattern.metaType() == QMetaType::fromType<QString>());
+            return stringsMatch(pattern.toString(), message);
         }
 
         QtMsgType type;
@@ -258,16 +258,18 @@ namespace QTest {
         // failOnWarning can be called multiple times per test function, so let
         // each call cause a failure if required.
         for (const auto &pattern : failOnWarningList) {
-            if (pattern.metaType() == QMetaType::fromType<QString>()) {
-                if (message != pattern.toString())
+            if (const auto *text = get_if<QString>(&pattern)) {
+                if (message != *text)
                     continue;
-            }
 #if QT_CONFIG(regularexpression)
-            else if (pattern.metaType() == QMetaType::fromType<QRegularExpression>()) {
-                if (!message.contains(pattern.toRegularExpression()))
+            } else if (const auto *regex = get_if<QRegularExpression>(&pattern)) {
+                if (!message.contains(*regex))
                     continue;
-            }
 #endif
+            } else {
+                // The no-arg clearFailOnWarnings()'s null pattern matches all messages.
+                Q_ASSERT(pattern.isNull());
+            }
 
             const size_t maxMsgLen = 1024;
             char msg[maxMsgLen] = {'\0'};
@@ -398,13 +400,16 @@ void QTestLog::printUnhandledIgnoreMessages()
     QString message;
     QTest::IgnoreResultList *list = QTest::ignoreResultList;
     while (list) {
-        if (list->pattern.userType() == QMetaType::QString) {
-            message = "Did not receive message: \"%1\""_L1.arg(list->pattern.toString());
-        } else {
+        if (const auto *text = get_if<QString>(&list->pattern)) {
+            message = "Did not receive message: \"%1\""_L1.arg(*text);
 #if QT_CONFIG(regularexpression)
-            message = "Did not receive any message matching: \"%1\""_L1.arg(
-                    list->pattern.toRegularExpression().pattern());
+        } else if (const auto *regex = get_if<QRegularExpression>(&list->pattern)) {
+            message = "Did not receive any message matching: \"%1\""_L1.arg(regex->pattern());
 #endif
+        } else {
+            Q_UNREACHABLE();
+            message = "Missing message of unrecognized pattern type: \"%1\""_L1.arg(
+                list->pattern.metaType().name());
         }
         for (auto &logger : QTest::loggers->allLoggers())
             logger->addMessage(QAbstractTestLogger::Info, message);

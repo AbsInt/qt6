@@ -203,7 +203,7 @@ bool QQmlJSOptimizations::eraseDeadStore(const InstructionAnnotations::iterator 
         m_readerLocations.erase(reader);
 
         // If it's not a label and has no side effects, we can drop the instruction.
-        if (!it->second.hasSideEffects) {
+        if (!it->second.hasInternalSideEffects) {
             if (!it->second.readRegisters.isEmpty()) {
                 it->second.readRegisters.clear();
                 erasedReaders = true;
@@ -269,10 +269,10 @@ void QQmlJSOptimizations::removeReadsFromErasedInstructions(
 bool QQmlJSOptimizations::canMove(int instructionOffset,
                                   const QQmlJSOptimizations::RegisterAccess &access) const
 {
-    if (access.registerReadersAndConversions.size() != 1)
+    if (access.typeReaders.size() != 1)
         return false;
     return QQmlJSBasicBlocks::basicBlockForInstruction(m_basicBlocks, instructionOffset)
-            == QQmlJSBasicBlocks::basicBlockForInstruction(m_basicBlocks, access.registerReadersAndConversions.begin().key());
+            == QQmlJSBasicBlocks::basicBlockForInstruction(m_basicBlocks, access.typeReaders.begin().key());
 }
 
 QList<QQmlJSCompilePass::ObjectOrArrayDefinition>
