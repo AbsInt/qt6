@@ -200,7 +200,7 @@ template <typename Char>
 static inline void putEscapedString(QTextStreamPrivate *d, const Char *begin, size_t length, bool isUnicode = true)
 {
     QChar quote(u'"');
-    d->write(&quote, 1);
+    d->write(quote);
 
     bool lastWasHexEscape = false;
     const Char *end = begin + length;
@@ -227,8 +227,7 @@ static inline void putEscapedString(QTextStreamPrivate *d, const Char *begin, si
                 continue;
             }
         } else if (isPrintable(*p) && *p != '\\' && *p != '"') {
-            QChar c = QLatin1Char(*p);
-            d->write(&c, 1);
+            d->write(char16_t{uchar(*p)});
             continue;
         }
 
@@ -302,7 +301,7 @@ static inline void putEscapedString(QTextStreamPrivate *d, const Char *begin, si
         d->write(reinterpret_cast<QChar *>(buf), buflen);
     }
 
-    d->write(&quote, 1);
+    d->write(quote);
 }
 
 /*!
@@ -332,9 +331,14 @@ void QDebug::putByteArray(const char *begin, size_t length, Latin1Content conten
     if (stream->noQuotes) {
         // no quotes, write the string directly too (no pretty-printing)
         // this respects the QTextStream state, though
-        QString string = content == ContainsLatin1 ? QString::fromLatin1(begin, qsizetype(length))
-                                                   : QString::fromUtf8(begin, qsizetype(length));
-        stream->ts.d_ptr->putString(string);
+        switch (content) {
+        case Latin1Content::ContainsLatin1:
+            stream->ts.d_ptr->putString(QLatin1StringView{begin, qsizetype(length)});
+            break;
+        case Latin1Content::ContainsBinary:
+            stream->ts.d_ptr->putString(QUtf8StringView{begin, qsizetype(length)});
+            break;
+        }
     } else {
         // we'll reset the QTextStream formatting mechanisms, so save the state
         QDebugStateSaver saver(*this);

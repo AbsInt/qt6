@@ -77,14 +77,14 @@ namespace {
 class LoggerRegistry
 {
     using LoggersContainer = std::vector<std::shared_ptr<QAbstractTestLogger>>;
-    using SharedLoggersContainer = std::shared_ptr<LoggersContainer>;
+    using SharedLoggersContainer = std::shared_ptr<const LoggersContainer>;
 
 public:
     void addLogger(std::unique_ptr<QAbstractTestLogger> logger)
     {
         // read/update/clone
         const SharedLoggersContainer currentLoggers = load();
-        SharedLoggersContainer newLoggers = currentLoggers
+        auto newLoggers = currentLoggers
                 ? std::make_shared<LoggersContainer>(*currentLoggers)
                 : std::make_shared<LoggersContainer>();
         newLoggers->emplace_back(std::move(logger));
@@ -115,20 +115,20 @@ public:
 
 private:
 #ifdef __cpp_lib_atomic_shared_ptr
-    SharedLoggersContainer load() const { return loggers.load(std::memory_order_relaxed); }
+    SharedLoggersContainer load() const { return loggers.load(std::memory_order_acquire); }
     void store(SharedLoggersContainer newLoggers)
     {
-        loggers.store(std::move(newLoggers), std::memory_order_relaxed);
+        loggers.store(std::move(newLoggers), std::memory_order_release);
     }
-    std::atomic<SharedLoggersContainer> loggers;
+    std::atomic<SharedLoggersContainer> loggers = nullptr;
 #else
     SharedLoggersContainer load() const
     {
-        return std::atomic_load_explicit(&loggers, std::memory_order_relaxed);
+        return std::atomic_load_explicit(&loggers, std::memory_order_acquire);
     }
     void store(SharedLoggersContainer newLoggers)
     {
-        std::atomic_store_explicit(&loggers, std::move(newLoggers), std::memory_order_relaxed);
+        std::atomic_store_explicit(&loggers, std::move(newLoggers), std::memory_order_release);
     }
     SharedLoggersContainer loggers;
 #endif

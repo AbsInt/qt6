@@ -109,7 +109,7 @@ QT_WARNING_POP
 
 #ifndef QT_NO_VECTOR3D
     inline QVector3D toEulerAngles() const;
-    static inline QQuaternion fromEulerAngles(const QVector3D &eulerAngles);
+    static inline QQuaternion fromEulerAngles(const QVector3D &angles);
 #endif
     QT7_ONLY(Q_GUI_EXPORT) void getEulerAngles(float *pitch, float *yaw, float *roll) const;
     QT7_ONLY(Q_GUI_EXPORT) static QQuaternion fromEulerAngles(float pitch, float yaw, float roll);
@@ -311,23 +311,23 @@ inline QVector3D operator*(const QQuaternion &quaternion, const QVector3D &vec)
     return quaternion.rotatedVector(vec);
 }
 
-inline void QQuaternion::getAxisAndAngle(QVector3D *axis, float *angle) const
+void QQuaternion::getAxisAndAngle(QVector3D *axis, float *angle) const
 {
     float aX, aY, aZ;
     getAxisAndAngle(&aX, &aY, &aZ, angle);
     *axis = QVector3D(aX, aY, aZ);
 }
 
-inline QVector3D QQuaternion::toEulerAngles() const
+QVector3D QQuaternion::toEulerAngles() const
 {
     float pitch, yaw, roll;
     getEulerAngles(&pitch, &yaw, &roll);
     return QVector3D(pitch, yaw, roll);
 }
 
-inline QQuaternion QQuaternion::fromEulerAngles(const QVector3D &eulerAngles)
+QQuaternion QQuaternion::fromEulerAngles(const QVector3D &angles)
 {
-    return QQuaternion::fromEulerAngles(eulerAngles.x(), eulerAngles.y(), eulerAngles.z());
+    return QQuaternion::fromEulerAngles(angles.x(), angles.y(), angles.z());
 }
 
 #endif // QT_NO_VECTOR3D

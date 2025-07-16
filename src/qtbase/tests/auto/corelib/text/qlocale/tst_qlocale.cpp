@@ -74,6 +74,9 @@ private slots:
     void negativeZero_data();
     void negativeZero();
 
+    void signsNeverCompareEqualToNullCharacter_data() { testNames_data(); }
+    void signsNeverCompareEqualToNullCharacter();
+
     void dayOfWeek();
     void dayOfWeek_data();
     void formatDate();
@@ -441,14 +444,16 @@ void tst_QLocale::defaulted_ctor()
     TEST_CTOR(English, UnitedStates, QLocale::English, QLocale::UnitedStates);
     TEST_CTOR(English, France, QLocale::English, QLocale::France);
     TEST_CTOR(English, UnitedKingdom, QLocale::English, QLocale::UnitedKingdom);
+    // Used in tests below to check we pick the likely-best substitute consistently:
+    TEST_CTOR(Arabic, UnitedStates, QLocale::Arabic, QLocale::Egypt);
 
     TEST_CTOR(French, France, QLocale::French, QLocale::France);
     TEST_CTOR(C, France, QLocale::C, QLocale::AnyTerritory);
     TEST_CTOR(Spanish, LatinAmerica, QLocale::Spanish,
               QLocale::LatinAmerica);
 
-    QLocale::setDefault(QLocale(QLocale::English, QLocale::France));
-    CHECK_DEFAULT(QLocale::English, QLocale::France);
+    QLocale::setDefault(QLocale(QLocale::Arabic, QLocale::UnitedStates));
+    CHECK_DEFAULT(QLocale::Arabic, QLocale::Egypt);
 
     TEST_CTOR(French, France, QLocale::French, QLocale::France);
     TEST_CTOR(English, UnitedKingdom, QLocale::English, QLocale::UnitedKingdom);
@@ -456,7 +461,7 @@ void tst_QLocale::defaulted_ctor()
     TEST_CTOR(French, France, QLocale::French, QLocale::France);
     TEST_CTOR(C, AnyTerritory, QLocale::C, QLocale::AnyTerritory);
     TEST_CTOR(C, France, QLocale::C, QLocale::AnyTerritory);
-    TEST_CTOR(Aymara, AnyTerritory, QLocale::English, QLocale::France);
+    TEST_CTOR(Aymara, AnyTerritory, QLocale::Arabic, QLocale::Egypt);
 
     QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedKingdom));
     CHECK_DEFAULT(QLocale::English, QLocale::UnitedKingdom);
@@ -477,6 +482,7 @@ void tst_QLocale::defaulted_ctor()
     TEST_CTOR(English, UnitedStates, QLocale::English, QLocale::UnitedStates);
     TEST_CTOR(English, France, QLocale::English, QLocale::France);
     TEST_CTOR(English, UnitedKingdom, QLocale::English, QLocale::UnitedKingdom);
+    TEST_CTOR(Arabic, UnitedStates, QLocale::Arabic, QLocale::Egypt);
 
     TEST_CTOR(French, France, QLocale::French, QLocale::France);
     TEST_CTOR(C, AnyTerritory, QLocale::C, QLocale::AnyTerritory);
@@ -492,6 +498,7 @@ void tst_QLocale::defaulted_ctor()
     TEST_CTOR(English, UnitedStates, QLocale::English, QLocale::UnitedStates);
     TEST_CTOR(English, France, QLocale::English, QLocale::France);
     TEST_CTOR(English, UnitedKingdom, QLocale::English, QLocale::UnitedKingdom);
+    TEST_CTOR(Arabic, UnitedStates, QLocale::Arabic, QLocale::Egypt);
 
     TEST_CTOR(French, France, QLocale::French, QLocale::France);
     TEST_CTOR(C, AnyTerritory, QLocale::C, QLocale::AnyTerritory);
@@ -1828,6 +1835,19 @@ void tst_QLocale::negativeZero()
     QFETCH(QStringView, expect);
     QLocale locale(language, script, territory);
     QCOMPARE(locale.toString(std::copysign(0.0, -1.0)), expect);
+}
+
+void tst_QLocale::signsNeverCompareEqualToNullCharacter() // otherwise QTextStream has a problem
+{
+    QFETCH(QLocale::Language, language);
+    QFETCH(const QLocale::Territory, country);
+
+    if (language == QLocale::AnyLanguage && country == QLocale::AnyTerritory)
+        language = QLocale::C;
+
+    const QLocale loc(language, country);
+    QCOMPARE_NE(loc.negativeSign(), QChar());
+    QCOMPARE_NE(loc.positiveSign(), QChar());
 }
 
 void tst_QLocale::dayOfWeek_data()

@@ -15,6 +15,8 @@
 
 #include <QtTest/private/qtesthelpers_p.h>
 
+#include <QtCore/qscopeguard.h>
+
 #if defined(Q_OS_WIN)
 # include <shlwapi.h>
 # include <qt_windows.h>
@@ -552,15 +554,18 @@ void tst_QTemporaryFile::stressTest()
     const int iterations = 1000;
 
     QSet<QString> names;
+
+    const auto remover = qScopeGuard([&] {
+            for (const QString &s : std::as_const(names))
+                QFile::remove(s);
+        });
+
     for (int i = 0; i < iterations; ++i) {
         QTemporaryFile file;
         file.setAutoRemove(false);
         QVERIFY2(file.open(), qPrintable(file.errorString()));
         QVERIFY(!names.contains(file.fileName()));
         names.insert(file.fileName());
-    }
-    for (QSet<QString>::const_iterator it = names.constBegin(); it != names.constEnd(); ++it) {
-        QFile::remove(*it);
     }
 }
 
@@ -821,37 +826,26 @@ void tst_QTemporaryFile::autoRemoveAfterFailedRename()
 #if defined(Q_OS_VXWORKS)
     QSKIP("QTBUG-130066");
 #endif
-    struct CleanOnReturn
-    {
-        ~CleanOnReturn()
-        {
+
+    QString tempName;
+    auto cleaner = qScopeGuard([&] {
             if (!tempName.isEmpty())
                 QFile::remove(tempName);
-        }
-
-        void reset()
-        {
-            tempName.clear();
-        }
-
-        QString tempName;
-    };
-
-    CleanOnReturn cleaner;
+        });
 
     {
         QTemporaryFile file;
         QVERIFY( file.open() );
-        cleaner.tempName = file.fileName();
+        tempName = file.fileName();
 
-        QVERIFY( QFile::exists(cleaner.tempName) );
+        QVERIFY(QFile::exists(tempName));
         QVERIFY( !QFileInfo("i-do-not-exist").isDir() );
         QVERIFY( !file.rename("i-do-not-exist/file.txt") );
-        QVERIFY( QFile::exists(cleaner.tempName) );
+        QVERIFY(QFile::exists(tempName));
     }
 
-    QVERIFY( !QFile::exists(cleaner.tempName) );
-    cleaner.reset();
+    QVERIFY(!QFile::exists(tempName));
+    cleaner.dismiss(); // would fail: file is known to no longer exist
 }
 
 void tst_QTemporaryFile::createNativeFile_data()

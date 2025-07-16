@@ -1727,128 +1727,118 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
     }
     case CE_ItemViewItem: {
         if (const QStyleOptionViewItem *vopt = qstyleoption_cast<const QStyleOptionViewItem *>(option)) {
-            if (const QAbstractItemView *view = qobject_cast<const QAbstractItemView *>(widget)) {
-                QRect checkRect = proxy()->subElementRect(SE_ItemViewItemCheckIndicator, vopt, widget);
-                QRect iconRect = proxy()->subElementRect(SE_ItemViewItemDecoration, vopt, widget);
-                QRect textRect = proxy()->subElementRect(SE_ItemViewItemText, vopt, widget);
+            QRect checkRect = proxy()->subElementRect(SE_ItemViewItemCheckIndicator, vopt, widget);
+            QRect iconRect = proxy()->subElementRect(SE_ItemViewItemDecoration, vopt, widget);
+            QRect textRect = proxy()->subElementRect(SE_ItemViewItemText, vopt, widget);
 
-                // draw the background
-                proxy()->drawPrimitive(PE_PanelItemViewItem, option, painter, widget);
+            // draw the background
+            proxy()->drawPrimitive(PE_PanelItemViewItem, option, painter, widget);
 
-                const QRect &rect = vopt->rect;
-                const bool isRtl = option->direction == Qt::RightToLeft;
-                bool onlyOne = vopt->viewItemPosition == QStyleOptionViewItem::OnlyOne ||
-                               vopt->viewItemPosition == QStyleOptionViewItem::Invalid;
-                bool isFirst = vopt->viewItemPosition == QStyleOptionViewItem::Beginning;
-                bool isLast = vopt->viewItemPosition == QStyleOptionViewItem::End;
+            const QRect &rect = vopt->rect;
+            const bool isRtl = option->direction == Qt::RightToLeft;
+            bool onlyOne = vopt->viewItemPosition == QStyleOptionViewItem::OnlyOne ||
+                           vopt->viewItemPosition == QStyleOptionViewItem::Invalid;
+            bool isFirst = vopt->viewItemPosition == QStyleOptionViewItem::Beginning;
+            bool isLast = vopt->viewItemPosition == QStyleOptionViewItem::End;
 
-                // the tree decoration already painted the left side of the rounded rect
-                if (vopt->features.testFlag(QStyleOptionViewItem::IsDecoratedRootColumn) &&
-                    vopt->showDecorationSelected) {
-                    isFirst = false;
-                    if (onlyOne) {
-                        onlyOne = false;
-                        isLast = true;
-                    }
-                }
-
-                if (isRtl) {
-                    if (isFirst) {
-                        isFirst = false;
-                        isLast = true;
-                    } else if (isLast) {
-                        isFirst = true;
-                        isLast = false;
-                    }
-                }
-                const bool highlightCurrent = vopt->state.testAnyFlags(State_Selected | State_MouseOver);
-                if (highlightCurrent) {
-                    const QAbstractItemView *view = qobject_cast<const QAbstractItemView *>(widget);
-                    if (highContrastTheme)
-                        painter->setBrush(vopt->palette.highlight());
-                    else
-                        painter->setBrush(view->alternatingRowColors() ? vopt->palette.highlight() : WINUI3Colors[colorSchemeIndex][subtleHighlightColor]);
-                    QWidget *editorWidget = view ? view->indexWidget(view->currentIndex()) : nullptr;
-                    if (editorWidget) {
-                        QPalette pal = editorWidget->palette();
-                        QColor editorBgColor = vopt->backgroundBrush == Qt::NoBrush ? vopt->palette.color(widget->backgroundRole()) : vopt->backgroundBrush.color();
-                        editorBgColor.setAlpha(255);
-                        pal.setColor(editorWidget->backgroundRole(), editorBgColor);
-                        editorWidget->setPalette(pal);
-                    }
-                } else {
-                    painter->setBrush(vopt->backgroundBrush);
-                }
-                painter->setPen(Qt::NoPen);
-
+            // the tree decoration already painted the left side of the rounded rect
+            if (vopt->features.testFlag(QStyleOptionViewItem::IsDecoratedRootColumn) &&
+                vopt->showDecorationSelected) {
+                isFirst = false;
                 if (onlyOne) {
-                    painter->drawRoundedRect(rect.marginsRemoved(QMargins(2, 2, 2, 2)),
-                                             secondLevelRoundingRadius, secondLevelRoundingRadius);
-                } else if (isFirst) {
-                    painter->save();
-                    painter->setClipRect(rect);
-                    painter->drawRoundedRect(rect.marginsRemoved(QMargins(2, 2, -secondLevelRoundingRadius, 2)),
-                                             secondLevelRoundingRadius, secondLevelRoundingRadius);
-                    painter->restore();
+                    onlyOne = false;
+                    isLast = true;
+                }
+            }
+
+            if (isRtl) {
+                if (isFirst) {
+                    isFirst = false;
+                    isLast = true;
                 } else if (isLast) {
-                    painter->save();
-                    painter->setClipRect(rect);
-                    painter->drawRoundedRect(rect.marginsRemoved(QMargins(-secondLevelRoundingRadius, 2, 2, 2)),
-                                             secondLevelRoundingRadius, secondLevelRoundingRadius);
-                    painter->restore();
+                    isFirst = true;
+                    isLast = false;
+                }
+            }
+            const bool highlightCurrent = vopt->state.testAnyFlags(State_Selected | State_MouseOver);
+            if (highlightCurrent) {
+                if (highContrastTheme) {
+                    painter->setBrush(vopt->palette.highlight());
                 } else {
-                    painter->drawRect(rect.marginsRemoved(QMargins(0, 2, 0, 2)));
-                }
-
-                // draw the check mark
-                if (vopt->features & QStyleOptionViewItem::HasCheckIndicator) {
-                    QStyleOptionViewItem option(*vopt);
-                    option.rect = checkRect;
-                    option.state = option.state & ~QStyle::State_HasFocus;
-
-                    switch (vopt->checkState) {
-                    case Qt::Unchecked:
-                        option.state |= QStyle::State_Off;
-                        break;
-                    case Qt::PartiallyChecked:
-                        option.state |= QStyle::State_NoChange;
-                        break;
-                    case Qt::Checked:
-                        option.state |= QStyle::State_On;
-                        break;
-                    }
-                    proxy()->drawPrimitive(QStyle::PE_IndicatorItemViewItemCheck, &option, painter, widget);
-                }
-
-                // draw the icon
-                QIcon::Mode mode = QIcon::Normal;
-                if (!(vopt->state & QStyle::State_Enabled))
-                    mode = QIcon::Disabled;
-                else if (vopt->state & QStyle::State_Selected)
-                    mode = QIcon::Selected;
-                QIcon::State state = vopt->state & QStyle::State_Open ? QIcon::On : QIcon::Off;
-                vopt->icon.paint(painter, iconRect, vopt->decorationAlignment, mode, state);
-
-                if (!view || !view->isPersistentEditorOpen(vopt->index)) {
-                    painter->setPen(highlightCurrent && highContrastTheme ? vopt->palette.base().color() : option->palette.text().color());
-                    d->viewItemDrawText(painter, vopt, textRect);
-                }
-                // paint a vertical marker for QListView
-                if (vopt->state & State_Selected) {
-                    if (const QListView *lv = qobject_cast<const QListView *>(widget);
-                        lv && lv->viewMode() != QListView::IconMode && !highContrastTheme) {
-                        painter->setPen(vopt->palette.accent().color());
-                        const auto xPos = isRtl ? rect.right() - 1 : rect.left();
-                        const QLineF lines[2] = {
-                            QLineF(xPos, rect.y() + 2, xPos, rect.y() + rect.height() - 2),
-                            QLineF(xPos + 1, rect.y() + 2, xPos + 1, rect.y() + rect.height() - 2),
-                        };
-                        painter->drawLines(lines, 2);
-                    }
+                    const QAbstractItemView *view = qobject_cast<const QAbstractItemView *>(widget);
+                    painter->setBrush(view && view->alternatingRowColors()
+                                              ? vopt->palette.highlight()
+                                              : WINUI3Colors[colorSchemeIndex][subtleHighlightColor]);
                 }
             } else {
-                QRect textRect = proxy()->subElementRect(SE_ItemViewItemText, vopt, widget);
-                d->viewItemDrawText(painter, vopt, textRect);
+                painter->setBrush(vopt->backgroundBrush);
+            }
+            painter->setPen(Qt::NoPen);
+
+            if (onlyOne) {
+                painter->drawRoundedRect(rect.marginsRemoved(QMargins(2, 2, 2, 2)),
+                                         secondLevelRoundingRadius, secondLevelRoundingRadius);
+            } else if (isFirst) {
+                painter->save();
+                painter->setClipRect(rect);
+                painter->drawRoundedRect(rect.marginsRemoved(QMargins(2, 2, -secondLevelRoundingRadius, 2)),
+                                         secondLevelRoundingRadius, secondLevelRoundingRadius);
+                painter->restore();
+            } else if (isLast) {
+                painter->save();
+                painter->setClipRect(rect);
+                painter->drawRoundedRect(rect.marginsRemoved(QMargins(-secondLevelRoundingRadius, 2, 2, 2)),
+                                         secondLevelRoundingRadius, secondLevelRoundingRadius);
+                painter->restore();
+            } else {
+                painter->drawRect(rect.marginsRemoved(QMargins(0, 2, 0, 2)));
+            }
+
+            // draw the check mark
+            if (vopt->features & QStyleOptionViewItem::HasCheckIndicator) {
+                QStyleOptionViewItem option(*vopt);
+                option.rect = checkRect;
+                option.state = option.state & ~QStyle::State_HasFocus;
+
+                switch (vopt->checkState) {
+                case Qt::Unchecked:
+                    option.state |= QStyle::State_Off;
+                    break;
+                case Qt::PartiallyChecked:
+                    option.state |= QStyle::State_NoChange;
+                    break;
+                case Qt::Checked:
+                    option.state |= QStyle::State_On;
+                    break;
+                }
+                proxy()->drawPrimitive(QStyle::PE_IndicatorItemViewItemCheck, &option, painter, widget);
+            }
+
+            // draw the icon
+            QIcon::Mode mode = QIcon::Normal;
+            if (!(vopt->state & QStyle::State_Enabled))
+                mode = QIcon::Disabled;
+            else if (vopt->state & QStyle::State_Selected)
+                mode = QIcon::Selected;
+            QIcon::State state = vopt->state & QStyle::State_Open ? QIcon::On : QIcon::Off;
+            vopt->icon.paint(painter, iconRect, vopt->decorationAlignment, mode, state);
+
+            painter->setPen(highlightCurrent && highContrastTheme ? vopt->palette.base().color()
+                                                                  : vopt->palette.text().color());
+            d->viewItemDrawText(painter, vopt, textRect);
+
+            // paint a vertical marker for QListView
+            if (vopt->state & State_Selected) {
+                if (const QListView *lv = qobject_cast<const QListView *>(widget);
+                    lv && lv->viewMode() != QListView::IconMode && !highContrastTheme) {
+                    painter->setPen(vopt->palette.accent().color());
+                    const auto xPos = isRtl ? rect.right() - 1 : rect.left();
+                    const QLineF lines[2] = {
+                        QLineF(xPos, rect.y() + 2, xPos, rect.y() + rect.height() - 2),
+                        QLineF(xPos + 1, rect.y() + 2, xPos + 1, rect.y() + rect.height() - 2),
+                    };
+                    painter->drawLines(lines, 2);
+                }
             }
         }
         break;
@@ -2293,8 +2283,9 @@ void QWindows11Style::polish(QWidget* widget)
         pal.setColor(scrollarea->viewport()->backgroundRole(), Qt::transparent);
         scrollarea->viewport()->setPalette(pal);
         scrollarea->viewport()->setProperty("_q_original_background_palette", originalPalette);
-        if (qobject_cast<QTableView *>(widget))
-            widget->setAttribute(Qt::WA_Hover, true);
+        // QTreeView & QListView are already set in the base windowsvista style
+        if (auto table = qobject_cast<QTableView *>(widget))
+            table->viewport()->setAttribute(Qt::WA_Hover, true);
     }
 }
 
@@ -2327,10 +2318,11 @@ static void populateLightSystemBasePalette(QPalette &result)
     static QString oldStyleSheet;
     const bool styleSheetChanged = oldStyleSheet != qApp->styleSheet();
 
-    const QColor textColor = QColor(0x00,0x00,0x00,0xE4);
-    const QColor textDisabled = QColor(0x00,0x00,0x00,0x5C);
-    const QColor btnFace = QColor(0xFF,0xFF,0xFF,0xB3);
-    const QColor alternateBase = QColor(0x00,0x00,0x00,0x09);
+    constexpr QColor textColor = QColor(0x00,0x00,0x00,0xE4);
+    constexpr QColor textDisabled = QColor(0x00, 0x00, 0x00, 0x5C);
+    constexpr QColor btnFace = QColor(0xFF, 0xFF, 0xFF, 0xB3);
+    constexpr QColor base = QColor(0xFF, 0xFF, 0xFF, 0xFF);
+    constexpr QColor alternateBase = QColor(0x00, 0x00, 0x00, 0x09);
     const QColor btnHighlight = result.accent().color();
     const QColor btnColor = result.button().color();
 
@@ -2342,7 +2334,7 @@ static void populateLightSystemBasePalette(QPalette &result)
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::Mid, btnColor.darker(150));
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::Text, textColor);
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::BrightText, btnHighlight);
-    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Base, btnFace);
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Base, base);
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::Window, QColor(0xF3,0xF3,0xF3,0xFF));
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::ButtonText, textColor);
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::Midlight, btnColor.lighter(125));
@@ -2359,7 +2351,7 @@ static void populateLightSystemBasePalette(QPalette &result)
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Mid, btnColor.darker(150));
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Text, textColor);
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::BrightText, btnHighlight);
-    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Base, btnFace);
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Base, base);
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Window, QColor(0xF3,0xF3,0xF3,0xFF));
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::ButtonText, textColor);
     SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Midlight, btnColor.lighter(125));
@@ -2380,7 +2372,7 @@ static void populateDarkSystemBasePalette(QPalette &result)
     static QString oldStyleSheet;
     const bool styleSheetChanged = oldStyleSheet != qApp->styleSheet();
 
-    const QColor alternateBase = QColor(0xFF,0xFF,0xFF,0x0F);
+    constexpr QColor alternateBase = QColor(0xFF, 0xFF, 0xFF, 0x0F);
 
     SET_IF_UNRESOLVED(QPalette::Active, QPalette::AlternateBase, alternateBase);
 

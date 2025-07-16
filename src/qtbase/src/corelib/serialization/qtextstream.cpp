@@ -705,7 +705,7 @@ void QTextStreamPrivate::write(const QChar *data, qsizetype len)
 /*!
     \internal
 */
-inline void QTextStreamPrivate::write(QChar ch)
+void QTextStreamPrivate::write(QChar ch)
 {
     if (string) {
         // ### What about seek()??
@@ -827,29 +827,28 @@ QTextStreamPrivate::PaddingResult QTextStreamPrivate::padding(qsizetype len) con
 /*!
     \internal
 */
-void QTextStreamPrivate::putString(const QChar *data, qsizetype len, bool number)
+void QTextStreamPrivate::putString(QStringView data, bool number)
 {
-    if (Q_UNLIKELY(params.fieldWidth > len)) {
+    if (Q_UNLIKELY(params.fieldWidth > data.size())) {
 
         // handle padding:
 
-        const PaddingResult pad = padding(len);
+        const PaddingResult pad = padding(data.size());
 
         if (params.fieldAlignment == QTextStream::AlignAccountingStyle && number) {
-            const QChar sign = len > 0 ? data[0] : QChar();
+            const QChar sign = data.size() > 0 ? data.front() : QChar();
             if (sign == locale.negativeSign() || sign == locale.positiveSign()) {
                 // write the sign before the padding, then skip it later
-                write(&sign, 1);
-                ++data;
-                --len;
+                write(sign);
+                data = data.sliced(1);
             }
         }
 
         writePadding(pad.left);
-        write(data, len);
+        write(data);
         writePadding(pad.right);
     } else {
-        write(data, len);
+        write(data);
     }
 }
 
@@ -868,7 +867,7 @@ void QTextStreamPrivate::putString(QLatin1StringView data, bool number)
             const QChar sign = data.size() > 0 ? QLatin1Char(*data.data()) : QChar();
             if (sign == locale.negativeSign() || sign == locale.positiveSign()) {
                 // write the sign before the padding, then skip it later
-                write(&sign, 1);
+                write(sign);
                 data = QLatin1StringView(data.data() + 1, data.size() - 1);
             }
         }
@@ -2917,6 +2916,7 @@ QTextStream &bom(QTextStream &stream)
 
 
 /*!
+    \since 6.0
     Sets the encoding for this stream to \a encoding. The encoding is used for
     decoding any data that is read from the assigned device, and for
     encoding any data that is written. By default,

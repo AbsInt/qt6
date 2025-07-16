@@ -23,6 +23,8 @@
 #include "../../../network-settings.h"
 #include <QtTest/private/qemulationdetector_p.h>
 
+using namespace Qt::StringLiterals;
+
 QT_BEGIN_NAMESPACE
 template<> struct QMetaTypeId<QIODevice::OpenModeFlag>
 { enum { Defined = 1 }; static inline int qt_metatype_id() { return QMetaType::Int; } };
@@ -1403,17 +1405,14 @@ void tst_QTextStream::pos2()
 // ------------------------------------------------------------------------------
 void tst_QTextStream::pos3LargeFile()
 {
-    if (QTestPrivate::isRunningArmOnX86())
-        QSKIP("Running QTextStream::pos() in tight loop is too slow on emulator");
-
+    // NOTE: The unusual spacing is to ensure non-1-character whitespace.
+    constexpr auto lineString = " 0  1  2\t3  4\t \t5  6  7  8   9 \n"_L1;
     {
         QFile file(testFileName);
         QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
         QTextStream out( &file );
-        // NOTE: The unusual spacing is to ensure non-1-character whitespace.
-        QString lineString = " 0  1  2\t3  4\t \t5  6  7  8   9 \n";
-        // Approximate 50kb text file
-        const int NbLines = (50*1024) / lineString.size() + 1;
+        // Approximately 5kb text file (more is too slow (QTBUG-138435))
+        const int NbLines = (5 * 1024) / lineString.size() + 1;
         for (int line = 0; line < NbLines; ++line)
             out << lineString;
         // File is automatically flushed and closed on destruction.
@@ -1421,11 +1420,18 @@ void tst_QTextStream::pos3LargeFile()
     QFile file(testFileName);
     QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
     QTextStream in( &file );
-    const int testValues[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-    int value;
+    constexpr int testValues[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    qint64 expectedLineEnd = 0;
+#ifdef Q_OS_WIN // CRLF platform
+    constexpr int crlfAdjustment = 1;
+#else
+    constexpr int crlfAdjustment = 0;
+#endif
+    const auto expectedLineLength = lineString.size() + crlfAdjustment;
+    QCOMPARE(in.pos(), 0);
     while (true) {
-        in.pos();
-        for ( int i = 0; i < 10; ++i ) {
+        for (size_t i = 0; i < std::size(testValues); ++i) {
+            int value = -42;
             in >> value;
             if (in.status() != QTextStream::Ok) {
                 // End case, i == 0 && eof reached.
@@ -1435,6 +1441,9 @@ void tst_QTextStream::pos3LargeFile()
             }
             QCOMPARE(value, testValues[i]);
         }
+        expectedLineEnd += expectedLineLength;
+        // Final space and newline are not consumed until next read.
+        QCOMPARE(in.pos(), expectedLineEnd - 2 - crlfAdjustment);
     }
 }
 

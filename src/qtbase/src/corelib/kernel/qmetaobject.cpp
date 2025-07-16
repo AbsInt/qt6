@@ -780,8 +780,7 @@ static int indexOfMethod_helper(const QMetaObject *m, const char *method)
 
 int QMetaObject::indexOfMethod(const char *method) const
 {
-    const QMetaObject *m = this;
-    int i = indexOfMethod_helper(m, method);
+    int i = indexOfMethod_helper(this, method);
     return i;
 }
 
@@ -854,8 +853,7 @@ static int indexOfSignal_helper(const QMetaObject *m, const char *signal)
 
 int QMetaObject::indexOfSignal(const char *signal) const
 {
-    const QMetaObject *m = this;
-    int i = indexOfSignal_helper(m, signal);
+    int i = indexOfSignal_helper(this, signal);
     return i;
 }
 
@@ -910,8 +908,7 @@ static int indexOfSlot_helper(const QMetaObject *m, const char *slot)
 
 int QMetaObject::indexOfSlot(const char *slot) const
 {
-    const QMetaObject *m = this;
-    int i = indexOfSlot_helper(m, slot);
+    int i = indexOfSlot_helper(this, slot);
     return i;
 }
 
@@ -2326,7 +2323,7 @@ QList<QByteArray> QMetaMethod::parameterNames() const
 
     \note In Qt 7, this function will return a null pointer for constructors.
 
-    \sa returnType(), QMetaType::type()
+    \sa returnType(), QMetaType::name()
 */
 const char *QMetaMethod::typeName() const
 {
@@ -3112,6 +3109,20 @@ bool QMetaMethod::invokeOnGadget(void *gadget,
     representation of an enumeration or set value and its literal
     representation. The scope() function returns the class scope this
     enumerator was declared in.
+
+    To use QMetaEnum functionality, register the enumerator within the meta-object
+    system using the Q_ENUM macro.
+
+    \code
+    enum AppleType {
+        Big,
+        Small
+    };
+    Q_ENUM(AppleType)
+
+    QMetaEnum metaEnum = QMetaEnum::fromType<ModelApple::AppleType>();
+    qDebug() << metaEnum.valueToKey(ModelApple::Big);
+    \endcode
 
     \sa QMetaObject, QMetaMethod, QMetaProperty
 */
