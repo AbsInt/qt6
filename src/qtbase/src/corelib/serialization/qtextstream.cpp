@@ -690,16 +690,25 @@ inline void QTextStreamPrivate::restoreToSavedConverterState()
 /*!
     \internal
 */
-void QTextStreamPrivate::write(const QChar *data, qsizetype len)
+template <typename Appendable>
+void QTextStreamPrivate::writeImpl(Appendable s)
 {
     if (string) {
         // ### What about seek()??
-        string->append(data, len);
+        string->append(s);
     } else {
-        writeBuffer.append(data, len);
+        writeBuffer.append(s);
         if (writeBuffer.size() > QTEXTSTREAM_BUFFERSIZE)
             flushWriteBuffer();
     }
+}
+
+/*!
+    \internal
+*/
+void QTextStreamPrivate::write(QStringView s)
+{
+    writeImpl(s);
 }
 
 /*!
@@ -707,14 +716,7 @@ void QTextStreamPrivate::write(const QChar *data, qsizetype len)
 */
 void QTextStreamPrivate::write(QChar ch)
 {
-    if (string) {
-        // ### What about seek()??
-        string->append(ch);
-    } else {
-        writeBuffer += ch;
-        if (writeBuffer.size() > QTEXTSTREAM_BUFFERSIZE)
-            flushWriteBuffer();
-    }
+    writeImpl(ch);
 }
 
 /*!
@@ -722,14 +724,7 @@ void QTextStreamPrivate::write(QChar ch)
 */
 void QTextStreamPrivate::write(QLatin1StringView data)
 {
-    if (string) {
-        // ### What about seek()??
-        string->append(data);
-    } else {
-        writeBuffer += data;
-        if (writeBuffer.size() > QTEXTSTREAM_BUFFERSIZE)
-            flushWriteBuffer();
-    }
+    writeImpl(data);
 }
 
 /*!
@@ -2510,7 +2505,7 @@ QTextStream &QTextStream::operator<<(const QByteArray &array)
 {
     Q_D(QTextStream);
     CHECK_VALID_STREAM(*this);
-    d->putString(QString::fromUtf8(array.constData(), array.size()));
+    d->putString(QUtf8StringView{array});
     return *this;
 }
 
