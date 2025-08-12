@@ -1615,6 +1615,17 @@ QCoreApplicationPrivate::QPostEventListLocker QCoreApplicationPrivate::lockThrea
     details. Events with equal \a priority will be processed in the
     order posted.
 
+    \note QObject::deleteLater() schedules the object for deferred
+    deletion, which is typically handled by the receiver's event
+    loop. If no event loop is running in the thread, the deletion
+    will be performed when the thread finishes. A common and safe
+    pattern is to connect the thread's finished() signal to the
+    object's deleteLater() slot:
+
+    \code
+    QObject::connect(thread, &QThread::finished, worker, &QObject::deleteLater);
+    \endcode
+
     \threadsafe
 
     \sa sendEvent(), notify(), sendPostedEvents(), Qt::EventPriority
@@ -2546,8 +2557,9 @@ static QStringList winCmdArgs()
 
     Otherwise, the arguments() are constructed from the return value of
     \l{https://docs.microsoft.com/en-us/windows/win32/api/processenv/nf-processenv-getcommandlinea}{GetCommandLine()}.
-    As a result of this, the string given by arguments().at(0) might not be
-    the program name on Windows, depending on how the application was started.
+    As a result of this, the string given by arguments().at(0)
+    might not be the exact program used to start the application
+    on Windows.
 
     \sa applicationFilePath(), QCommandLineParser
 */

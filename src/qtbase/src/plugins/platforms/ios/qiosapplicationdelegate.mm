@@ -49,10 +49,13 @@
 {
     qCDebug(lcQpaWindowScene) << "Connecting" << scene << "to" << session;
 
-    // Handle URL contexts, even if we return early
-    const auto handleUrlContexts = qScopeGuard([&]{
+    // Handle connection options, even if we return early
+    const auto handleConnectionOptions = qScopeGuard([&]{
         if (connectionOptions.URLContexts.count > 0)
             [self scene:scene openURLContexts:connectionOptions.URLContexts];
+        // Handle universal link (https) application cold-launch case
+        for (NSUserActivity *activity in connectionOptions.userActivities)
+            [self scene:scene continueUserActivity:activity];
     });
 
 #if defined(Q_OS_VISIONOS)
@@ -73,22 +76,23 @@
     UIWindowScene *windowScene = static_cast<UIWindowScene*>(scene);
 
     QUIWindow *window = [[QUIWindow alloc] initWithWindowScene:windowScene];
-
-    QIOSScreen *screen = [&]{
-        for (auto *screen : qGuiApp->screens()) {
-            auto *platformScreen = static_cast<QIOSScreen*>(screen->handle());
-#if !defined(Q_OS_VISIONOS)
-            if (platformScreen->uiScreen() == windowScene.screen)
-#endif
-                return platformScreen;
-        }
-        Q_UNREACHABLE();
-    }();
-
-    window.rootViewController = [[[QIOSViewController alloc]
-        initWithWindow:window andScreen:screen] autorelease];
+    window.rootViewController = [[[QIOSViewController alloc] initWithWindow:window] autorelease];
 
     self.window = [window autorelease];
+}
+
+- (void)windowScene:(UIWindowScene *)windowScene
+        didUpdateCoordinateSpace:(id<UICoordinateSpace>)previousCoordinateSpace
+        interfaceOrientation:(UIInterfaceOrientation)previousInterfaceOrientation
+        traitCollection:(UITraitCollection *)previousTraitCollection
+{
+    qCDebug(lcQpaWindowScene) << "Scene" << windowScene << "did update properties";
+    if (!self.window)
+        return;
+
+    Q_ASSERT([self.window isKindOfClass:QUIWindow.class]);
+    auto *viewController = static_cast<QIOSViewController*>(self.window.rootViewController);
+    [viewController updatePlatformScreen];
 }
 
 - (void)sceneDidDisconnect:(UIScene *)scene
@@ -112,7 +116,7 @@
 
 - (void)scene:(UIScene *)scene continueUserActivity:(NSUserActivity *)userActivity
 {
-    qCDebug(lcQpaWindowScene) << "Handling continueUserActivity for scene" << scene;
+    qCDebug(lcQpaWindowScene) << "Handling user activity for scene" << scene;
 
     if ([userActivity.activityType isEqualToString:NSUserActivityTypeBrowsingWeb]) {
         QIOSIntegration *iosIntegration = QIOSIntegration::instance();

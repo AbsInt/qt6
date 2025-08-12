@@ -62,8 +62,10 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
     void initLayoutAccessibility(QtLayout layout)
     {
-        if (m_layout == null)
+        if (layout == null) {
             Log.w(TAG, "Unable to initialize the accessibility delegate with a null layout");
+            return;
+        }
 
         m_layout = layout;
 
@@ -258,6 +260,31 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
             if (!group.requestSendAccessibilityEvent(m_view, event))
                 Log.w(TAG, "Failed to send value change announcement for " + event.getClassName());
+        });
+    }
+
+    void notifyAnnouncementEvent(int viewId, String message)
+    {
+        QtNative.runAction(() -> {
+            if (m_view == null)
+                return;
+
+            if (viewId == INVALID_ID) {
+                Log.w(TAG, "notifyAnnouncementEvent() for invalid view");
+                return;
+            }
+
+            if (!m_manager.isEnabled()) {
+                Log.w(TAG, "notifyAnnouncementEvent for disabled AccessibilityManager");
+                return;
+            }
+
+            final AccessibilityEvent event =
+                    AccessibilityEvent.obtain(AccessibilityEvent.TYPE_ANNOUNCEMENT);
+            event.getText().add(message);
+            event.setClassName(getNodeForVirtualViewId(viewId).getClassName());
+            event.setPackageName(m_view.getContext().getPackageName());
+            sendAccessibilityEvent(event);
         });
     }
 

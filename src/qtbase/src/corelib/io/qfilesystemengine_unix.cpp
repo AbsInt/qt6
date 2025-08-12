@@ -114,15 +114,17 @@ enum {
 #if defined(Q_OS_DARWIN)
 static inline bool hasResourcePropertyFlag(const QFileSystemMetaData &data,
                                            const QFileSystemEntry &entry,
-                                           CFStringRef key)
+                                           CFStringRef key, QCFType<CFURLRef> &url)
 {
-    QCFString path = CFStringCreateWithFileSystemRepresentation(0,
-        entry.nativeFilePath().constData());
-    if (!path)
-        return false;
+    if (!url) {
+        QCFString path = CFStringCreateWithFileSystemRepresentation(0,
+            entry.nativeFilePath().constData());
+        if (!path)
+           return false;
 
-    QCFType<CFURLRef> url = CFURLCreateWithFileSystemPath(0, path, kCFURLPOSIXPathStyle,
-        data.hasFlags(QFileSystemMetaData::DirectoryType));
+        url = CFURLCreateWithFileSystemPath(0, path, kCFURLPOSIXPathStyle,
+            data.hasFlags(QFileSystemMetaData::DirectoryType));
+    }
     if (!url)
         return false;
 
@@ -135,7 +137,8 @@ static inline bool hasResourcePropertyFlag(const QFileSystemMetaData &data,
     return false;
 }
 
-static bool isPackage(const QFileSystemMetaData &data, const QFileSystemEntry &entry)
+static bool isPackage(const QFileSystemMetaData &data, const QFileSystemEntry &entry,
+                      QCFType<CFURLRef> &cachedUrl)
 {
     if (!data.isDirectory())
         return false;
@@ -174,7 +177,7 @@ static bool isPackage(const QFileSystemMetaData &data, const QFileSystemEntry &e
     }
 
     // Third step: check if the directory has the package bit set
-    return hasResourcePropertyFlag(data, entry, kCFURLIsPackageKey);
+    return hasResourcePropertyFlag(data, entry, kCFURLIsPackageKey, cachedUrl);
 }
 #endif
 
@@ -336,10 +339,8 @@ flagsFromStMode(mode_t mode, [[maybe_unused]] quint64 attributes)
     // UF_COMPRESSED and STATX_ATTR_COMPRESSED
     // UF_IMMUTABLE and STATX_ATTR_IMMUTABLE
     // UF_NODUMP and STATX_ATTR_NODUMP
-#ifdef UF_HIDDEN
-    if (attributes & UF_HIDDEN)
-        entryFlags |= QFileSystemMetaData::HiddenAttribute;
-#elif defined(Q_OS_VXWORKS) && __has_include(<dosFsLib.h>)
+
+#if defined(Q_OS_VXWORKS) && __has_include(<dosFsLib.h>)
     if (attributes & DOS_ATTR_RDONLY) {
         // on a DOS FS, stat() always returns 0777 bits set in st_mode
         // when DOS FS is read only the write permissions are removed
@@ -907,11 +908,17 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
     }
     if (what & QFileSystemMetaData::AliasType)
         what |= QFileSystemMetaData::LinkType;
-#endif
+#endif // defined(Q_OS_DARWIN)
+
+    bool needLstat = what.testAnyFlag(QFileSystemMetaData::LinkType);
+
 #ifdef UF_HIDDEN
     if (what & QFileSystemMetaData::HiddenAttribute) {
-        // OS X >= 10.5: st_flags & UF_HIDDEN
-        what |= QFileSystemMetaData::PosixStatFlags;
+        // Some OSes (BSDs) have the ability to mark directory entries as
+        // hidden besides the usual Unix way of naming them with a leading dot.
+        // For those OSes, we must lstat() the entry itself so we can find
+        // out if a symlink is hidden or not.
+        needLstat = true;
     }
 #endif // defined(Q_OS_DARWIN)
 
@@ -942,7 +949,7 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
         struct statx statxBuffer;
     };
     int statResult = -1;
-    if (what & QFileSystemMetaData::LinkType) {
+    if (needLstat) {
         mode_t mode = 0;
         statResult = qt_lstatx(nativeFilePath, &statxBuffer);
         if (statResult == -ENOSYS) {
@@ -956,6 +963,14 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
         }
 
         if (statResult >= 0) {
+#ifdef UF_HIDDEN
+            // currently only supported on systems with no statx() call
+            Q_ASSERT(statResult == 0);
+            if (statBuffer.st_flags & UF_HIDDEN)
+                data.entryFlags |= QFileSystemMetaData::HiddenAttribute;
+            data.knownFlagsMask |= QFileSystemMetaData::HiddenAttribute;
+#endif
+
             if (S_ISLNK(mode)) {
                // it's a symlink, we don't know if the file "exists"
                 data.entryFlags |= QFileSystemMetaData::LinkType;
@@ -1065,8 +1080,9 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
     }
 
 #if defined(Q_OS_DARWIN)
+    QCFType<CFURLRef> cachedUrl;
     if (what & QFileSystemMetaData::AliasType) {
-        if (entryErrno == 0 && hasResourcePropertyFlag(data, entry, kCFURLIsAliasFileKey)) {
+        if (entryErrno == 0 && hasResourcePropertyFlag(data, entry, kCFURLIsAliasFileKey, cachedUrl)) {
             // kCFURLIsAliasFileKey includes symbolic links, so filter those out
             if (!(data.entryFlags & QFileSystemMetaData::LinkType))
                 data.entryFlags |= QFileSystemMetaData::AliasType;
@@ -1075,15 +1091,15 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
     }
 
     if (what & QFileSystemMetaData::BundleType) {
-        if (entryErrno == 0 && isPackage(data, entry))
+        if (entryErrno == 0 && isPackage(data, entry, cachedUrl))
             data.entryFlags |= QFileSystemMetaData::BundleType;
 
         data.knownFlagsMask |= QFileSystemMetaData::BundleType;
     }
 
     if (what & QFileSystemMetaData::CaseSensitive) {
-        if (entryErrno == 0 && hasResourcePropertyFlag(
-            data, entry, kCFURLVolumeSupportsCaseSensitiveNamesKey))
+        if (entryErrno == 0 && hasResourcePropertyFlag(data, entry,
+            kCFURLVolumeSupportsCaseSensitiveNamesKey, cachedUrl))
             data.entryFlags |= QFileSystemMetaData::CaseSensitive;
         data.knownFlagsMask |= QFileSystemMetaData::CaseSensitive;
     }
@@ -1101,11 +1117,7 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
             --lastSlash;        // skip non-slashes
         --lastSlash;            // point to the slash or -1 if no slash
 
-        if (nativeFilePath.at(lastSlash + 1) == '.'
-#if defined(Q_OS_DARWIN)
-                || (entryErrno == 0 && hasResourcePropertyFlag(data, entry, kCFURLIsHiddenKey))
-#endif
-                )
+        if (nativeFilePath.at(lastSlash + 1) == '.')
             data.entryFlags |= QFileSystemMetaData::HiddenAttribute;
         data.knownFlagsMask |= QFileSystemMetaData::HiddenAttribute;
     }

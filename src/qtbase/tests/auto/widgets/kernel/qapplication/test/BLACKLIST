@@ -1,15 +1,11 @@
 # This file is mainly used for Android tests since Android
 # packages "test" instead of "qapplication" folder
 # QTBUG-87025
-[libraryPaths]
-android
 [setFont]
 android
 [libraryPaths_qt_plugin_path_2]
 android
 [desktopSettingsAware]
-android
-[touchEventPropagation]
 android
 [wheelEventPropagation]
 android

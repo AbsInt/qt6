@@ -389,6 +389,11 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     endfunction()
 endif()
 
+function(_qt_internal_get_qt_internal_process_resource_args option_args single_args multi_args)
+    set(${option_args} "BIG_RESOURCES" PARENT_SCOPE)
+    set(${single_args} "PREFIX;LANG;BASE;OUTPUT_TARGETS;DESTINATION" PARENT_SCOPE)
+    set(${multi_args} "FILES;OPTIONS" PARENT_SCOPE)
+endfunction()
 
 # qt6_add_resources(target resourcename ...
 # or
@@ -402,11 +407,39 @@ function(qt6_add_resources outfiles )
             set(${arg_OUTPUT_TARGETS} ${${arg_OUTPUT_TARGETS}} PARENT_SCOPE)
         endif()
     else()
-        set(options)
-        set(oneValueArgs)
-        set(multiValueArgs OPTIONS)
+        set(optional_args "")
+        set(single_args "")
+        set(multi_args OPTIONS)
 
-        cmake_parse_arguments(_RCC "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+        _qt_internal_get_qt_internal_process_resource_args(
+            process_resources_optional_args
+            process_resources_single_args
+            process_resources_multi_args
+        )
+        list(REMOVE_ITEM process_resources_optional_args ${optional_args})
+        list(REMOVE_ITEM process_resources_single_args ${single_args})
+        list(REMOVE_ITEM process_resources_multi_args ${multi_args})
+
+        set(contains_suspicious_args FALSE)
+        foreach(arg IN LISTS
+            process_resources_optional_args
+            process_resources_single_args
+            process_resources_multi_args)
+            if(${arg} IN_LIST ARGV)
+                set(contains_suspicious_args TRUE)
+                break()
+            endif()
+        endforeach()
+
+        if(contains_suspicious_args)
+            message(WARNING "qt6_add_resources uses arguments from the"
+                " 'qt6_add_resources(<target> ...)'  signature, but ${outfiles} is not a target."
+                " Make sure that the '${outfiles}' target is created before the respective"
+                " 'qt6_add_resources' call."
+            )
+        endif()
+
+        cmake_parse_arguments(_RCC "${optional_args}" "${single_args}" "${multi_args}" ${ARGN})
 
         set(rcc_files ${_RCC_UNPARSED_ARGUMENTS})
         set(rcc_options ${_RCC_OPTIONS})
@@ -662,6 +695,31 @@ function(_qt_internal_disable_autorcc_zstd_when_not_supported target)
     endif()
 endfunction()
 
+# Link given target to PlatformExampleInternal when the target is part of an example build.
+function(_qt_internal_link_to_platform_example_internal target)
+    # The first variable is set when examples are built using ExternalProject_Add.
+    # The second is set when examples are built in-tree, the scope is in the <repo>/examples subdir.
+    if(QT_INTERNAL_IS_EXAMPLE_EP_BUILD
+        OR QT_INTERNAL_IS_EXAMPLE_IN_TREE_BUILD)
+        target_link_libraries("${target}" PRIVATE
+            ${QT_CMAKE_EXPORT_NAMESPACE}::PlatformExampleInternal)
+    endif()
+endfunction()
+
+# Set up warnings as errors for targets built in example projects.
+function(_qt_internal_setup_warnings_are_errors_for_example_target target)
+    # Only enable warnings as errors when the global variable is enabled and the repo is known
+    # to have clean examples.
+    if(QT_INTERNAL_IS_EXAMPLE_EP_BUILD
+        OR QT_INTERNAL_IS_EXAMPLE_IN_TREE_BUILD)
+        if(WARNINGS_ARE_ERRORS AND QT_REPO_EXAMPLES_WARNINGS_CLEAN)
+            _qt_internal_set_skip_warnings_are_errors("${target}" FALSE)
+        else()
+            _qt_internal_set_skip_warnings_are_errors("${target}" TRUE)
+        endif()
+    endif()
+endfunction()
+
 function(_qt_internal_create_executable target)
     if(ANDROID)
         list(REMOVE_ITEM ARGN "WIN32" "MACOSX_BUNDLE")
@@ -691,6 +749,8 @@ function(_qt_internal_create_executable target)
     endif()
 
     _qt_internal_disable_autorcc_zstd_when_not_supported("${target}")
+    _qt_internal_link_to_platform_example_internal("${target}")
+    _qt_internal_setup_warnings_are_errors_for_example_target("${target}")
     _qt_internal_set_up_static_runtime_library("${target}")
 endfunction()
 
@@ -2263,8 +2323,9 @@ endfunction()
 # targets pass a value to the OUTPUT_TARGETS parameter.
 #
 function(_qt_internal_process_resource target resourceName)
-    cmake_parse_arguments(rcc "BIG_RESOURCES"
-        "PREFIX;LANG;BASE;OUTPUT_TARGETS;DESTINATION" "FILES;OPTIONS" ${ARGN})
+    _qt_internal_get_qt_internal_process_resource_args(options oneValueArgs multiValueArgs)
+
+    cmake_parse_arguments(rcc "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if("${rcc_OPTIONS}" MATCHES "-binary")
         set(isBinary TRUE)
@@ -2785,6 +2846,8 @@ function(_qt_internal_add_library target)
     cmake_policy(POP)
 
     _qt_internal_disable_autorcc_zstd_when_not_supported("${target}")
+    _qt_internal_link_to_platform_example_internal("${target}")
+    _qt_internal_setup_warnings_are_errors_for_example_target("${target}")
     _qt_internal_set_up_static_runtime_library(${target})
 
     if(NOT type_to_create STREQUAL "INTERFACE" AND NOT type_to_create STREQUAL "OBJECT")

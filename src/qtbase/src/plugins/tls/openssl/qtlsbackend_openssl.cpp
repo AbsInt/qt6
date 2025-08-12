@@ -1,5 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qsslsocket_openssl_symbols_p.h"
 #include "qtlsbackend_openssl_p.h"
@@ -388,7 +389,8 @@ QList<QSslCertificate> systemCaCertificates()
     {
         const QList<QByteArray> directories = QSslSocketPrivate::unixRootCertDirectories();
         QSet<QString> certFiles = {
-            QStringLiteral("/etc/pki/tls/certs/ca-bundle.crt"), // Fedora, Mandriva
+            QStringLiteral("/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"), // Red Hat 2013+
+            QStringLiteral("/etc/pki/tls/certs/ca-bundle.crt"), // Red Hat older, Mandriva
             QStringLiteral("/usr/local/share/certs/ca-root-nss.crt") // FreeBSD's ca_root_nss
         };
 

@@ -96,10 +96,12 @@ namespace QtAndroidAccessibility
         QMutexLocker lock(QtAndroid::platformInterfaceMutex());
         QAndroidPlatformIntegration *platformIntegration = QtAndroid::androidPlatformIntegration();
         m_accessibilityActivated = active;
-        if (platformIntegration)
+        if (platformIntegration) {
             platformIntegration->accessibility()->setActive(active);
-        else
-            __android_log_print(ANDROID_LOG_WARN, m_qtTag, "Could not (yet) activate platform accessibility.");
+        } else {
+            __android_log_print(ANDROID_LOG_DEBUG, m_qtTag,
+                "Android platform integration is not ready, accessibility activation deferred.");
+        }
     }
 
     QAccessibleInterface *interfaceFromId(jint objectId)
@@ -150,6 +152,11 @@ namespace QtAndroidAccessibility
     void notifyScrolledEvent(uint accessiblityObjectId)
     {
         QtAndroid::notifyScrolledEvent(accessiblityObjectId);
+    }
+
+    void notifyAnnouncementEvent(uint accessibilityObjectId, const QString &message)
+    {
+        QtAndroid::notifyAnnouncementEvent(accessibilityObjectId, message);
     }
 
     static QVarLengthArray<int, 8> childIdListForAccessibleObject_helper(int objectId)
