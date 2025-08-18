@@ -298,6 +298,7 @@ function(_qt_internal_sbom_add_binary_file target file_path)
         FILENAME "${file_path}"
         FILETYPE BINARY ${optional}
         SPDXID "${spdx_id}"
+        PARENT_PACKAGE_SPDXID "${arg_PACKAGE_SPDX_ID}"
         ${file_common_options}
         ${config_to_install_option}
         ${relationship_option}
@@ -729,6 +730,7 @@ function(_qt_internal_sbom_add_custom_file target installed_file_relative_path)
         FILENAME "${installed_file_relative_path}"
         FILETYPE "${file_type}" ${optional}
         SPDXID "${spdx_id}"
+        PARENT_PACKAGE_SPDXID "${arg_PACKAGE_SPDX_ID}"
         ${file_common_options}
         ${config_to_install_option}
         ${relationship_option}
