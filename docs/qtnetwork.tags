@@ -2769,7 +2769,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhostaddress.html</anchorfile>
-            <anchor>qHash-1</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QHostAddress &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -6171,7 +6171,7 @@
             <type>QDebug</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qnetworkaddressentry.html</anchorfile>
-            <anchor>operator-lt-lt-3</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDebug debug, const QNetworkAddressEntry &amp;entry)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -6350,14 +6350,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qnetworkcachemetadata.html</anchorfile>
-            <anchor>operator-lt-lt-1</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;out, const QNetworkCacheMetaData &amp;metaData)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qnetworkcachemetadata.html</anchorfile>
-            <anchor>operator-gt-gt-1</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QNetworkCacheMetaData &amp;metaData)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -7532,7 +7532,7 @@
             <type>QDebug</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qnetworkinterface.html</anchorfile>
-            <anchor>operator-lt-lt-4</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDebug debug, const QNetworkInterface &amp;networkInterface)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -12088,7 +12088,7 @@
             <type>QDebug</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qssldiffiehellmanparameters.html</anchorfile>
-            <anchor>operator-lt-lt-5</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDebug debug, const QSslDiffieHellmanParameters &amp;dhparam)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -12165,7 +12165,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qssldiffiehellmanparameters.html</anchorfile>
-            <anchor>qHash-4</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QSslDiffieHellmanParameters &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -12218,7 +12218,7 @@
             <type>QDebug</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qsslellipticcurve.html</anchorfile>
-            <anchor>operator-lt-lt-2</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDebug debug, QSslEllipticCurve curve)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">

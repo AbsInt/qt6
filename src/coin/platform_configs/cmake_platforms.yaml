@@ -86,13 +86,13 @@ Configurations:
     Id: 'ubuntu-24.04-x64-developer-build-x11-tests'
     Template: 'qtci-linux-Ubuntu-24.04-x86_64-51'
     Compiler: 'GCC'
-    Features: ['Sccache', 'TestOnly']
+    Features: ['Sccache', 'TestOnly', 'InsignificantTests']
     Platform dependency: 'ubuntu-24.04-x64-developer-build'
 -
     Id: 'ubuntu-24.04-x64-x11-tests'
     Template: 'qtci-linux-Ubuntu-24.04-x86_64-51'
     Compiler: 'GCC'
-    Features: ['Sccache', 'TestOnly']
+    Features: ['Sccache', 'TestOnly', 'InsignificantTests']
     Platform dependency: 'ubuntu-24.04-x64'
 -
     Id: 'opensuse-15.6-developer-build'
@@ -329,7 +329,7 @@ Configurations:
         'DEBIAN_RULES_REF=6.9_gles',
         'COIN_TARGET_DIST=tqtc-bookworm',
         'COIN_EXTRA_DEBIAN_PACKAGES={{.Env.HOME}}/debian_packages/',
-        'COIN_SBUILD_CHROOT=stable-arm64-sbuild',
+        'COIN_SBUILD_CHROOT=bookworm-arm64-sbuild',
         'COIN_EXTRA_DEBIAN_REPO=deb http://deb.debian.org/debian/ bookworm main',
         'COIN_SKIP_DEBIAN_MODULES=qt5 qtqa qtactiveqt qtdoc qtwebengine qtwebview',
     ]

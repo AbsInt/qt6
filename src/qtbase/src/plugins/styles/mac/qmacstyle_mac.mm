@@ -134,6 +134,8 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QDarkNSBox);
         self.titlePosition = NSNoTitle;
         self.boxType = NSBoxCustom;
         self.cornerRadius = 3;
+        if (qt_apple_runningWithLiquidGlass())
+            self.cornerRadius = 11;
         self.borderColor = [NSColor.controlColor colorWithAlphaComponent:0.1];
         self.fillColor = [NSColor.darkGrayColor colorWithAlphaComponent:0.2];
     }
@@ -185,23 +187,31 @@ static void clipTabBarFrame(const QStyleOption *option, const QMacStyle *style, 
     Q_ASSERT(style);
     Q_ASSERT(ctx);
 
-    if (isDarkMode()) {
+    if (isDarkMode() || qt_apple_runningWithLiquidGlass()) {
         QTabWidget *tabWidget = qobject_cast<QTabWidget *>(option->styleObject);
         Q_ASSERT(tabWidget);
-
-        QRect tabBarRect = style->subElementRect(QStyle::SE_TabWidgetTabBar, option, tabWidget).adjusted(2, 0, -3, 0);
+        QRect tabBarRect = style->subElementRect(QStyle::SE_TabWidgetTabBar, option, tabWidget);
+        if (!qt_apple_runningWithLiquidGlass())
+            tabBarRect.adjust(2, 0, -3, 0);
         switch (tabWidget->tabPosition()) {
         case QTabWidget::South:
             tabBarRect.setY(tabBarRect.y() + tabBarRect.height() / 2);
+            if (qt_apple_runningWithLiquidGlass())
+                tabBarRect.adjust(0, 1, 0, 0);
             break;
         case QTabWidget::North:
         case QTabWidget::West:
-            tabBarRect = tabBarRect.adjusted(0, 2, 0, -2);
+            if (!qt_apple_runningWithLiquidGlass())
+                tabBarRect = tabBarRect.adjusted(0, 2, 0, -2);
             break;
         case QTabWidget::East:
             tabBarRect = tabBarRect.adjusted(tabBarRect.width() / 2, 2, tabBarRect.width() / 2, -2);
+            if (qt_apple_runningWithLiquidGlass())
+                tabBarRect.adjust(1, -2, 0, 2);
         }
 
+        // TODO: now that we also use it for light mode (Tahoe and above),
+        // find a better fitting clip path.
         const QRegion clipPath = QRegion(option->rect) - tabBarRect;
         QVarLengthArray<CGRect, 3> cgRects;
         for (const QRect &qtRect : clipPath)
@@ -1534,8 +1544,13 @@ QRectF QMacStylePrivate::CocoaControl::adjustedControlFrame(const QRectF &rect) 
             frameRect.translate(0, 0.5);
         else if (size == QStyleHelper::SizeMini)
             frameRect = frameRect.adjusted(0, 0, -8, 0).translated(4, -0.5);
-        frameRect = frameRect.adjusted(-pushButtonBevelRectOffsets[size], 0,
-                                        pushButtonBevelRectOffsets[size], 0);
+        if (!qt_apple_runningWithLiquidGlass()) {
+            // These adjustments needed because the actual button's bezel
+            // prior to Tahoe with the Liquid Glass enabled was smaller than requested.
+            // Starting from Tahoe the bezel exactly fits the rectangle we draw with.
+            frameRect = frameRect.adjusted(-pushButtonBevelRectOffsets[size], 0,
+                                            pushButtonBevelRectOffsets[size], 0);
+        }
     } else {
         // Center in the style option's rect.
         frameRect = QRectF(QPointF(0, (rect.height() - frameSize.height()) / 2.0),
@@ -1708,17 +1723,24 @@ QRectF QMacStylePrivate::comboboxEditBounds(const QRectF &outerBounds, const Coc
 {
     QRectF ret = outerBounds;
     if (cw.type == ComboBox) {
+        static auto shift = [](QStyleHelper::WidgetSizePolicy size) {
+            const double newButtonWs[] = {30, 25, 22};
+            const double buttonWs[] = {25, 22, 19};
+            static_assert(std::size(newButtonWs) == std::size(buttonWs));
+            assert(size >= 0 && std::size_t(size) < std::size(newButtonWs));
+            return qt_apple_runningWithLiquidGlass() ? newButtonWs[size] : buttonWs[size];
+        };
         switch (cw.size) {
         case QStyleHelper::SizeLarge:
-            ret = ret.adjusted(0, 0, -25, 0).translated(2, 4.5);
+            ret = ret.adjusted(0, 0, -shift(cw.size), 0).translated(2, 4.5);
             ret.setHeight(16);
             break;
         case QStyleHelper::SizeSmall:
-            ret = ret.adjusted(0, 0, -22, 0).translated(2, 3);
+            ret = ret.adjusted(0, 0, -shift(cw.size), 0).translated(2, 3);
             ret.setHeight(14);
             break;
         case QStyleHelper::SizeMini:
-            ret = ret.adjusted(0, 0, -19, 0).translated(2, 2.5);
+            ret = ret.adjusted(0, 0, -shift(cw.size), 0).translated(2, 2.5);
             ret.setHeight(10.5);
             break;
         default:
@@ -3009,8 +3031,9 @@ void QMacStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPai
         // we can use this for now.
         auto adjustedRect = opt->rect;
         bool needTranslation = false;
+        // FIXME: remove condition on macOS Mojave depending on the Qt's minimum version requirement.
         if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::MacOSMojave
-            && !isDarkMode()) {
+            && !qt_apple_runningWithLiquidGlass() && !isDarkMode()) {
             // In Aqua theme we have to use the 'default' NSBox (as opposite
             // to the 'custom' QDarkNSBox we use in dark theme). Since -drawRect:
             // does nothing in default NSBox, we call -displayRectIgnoringOpaticty:.
@@ -3022,6 +3045,7 @@ void QMacStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPai
             // the actual result (which is again smaller than requested),
             // more or less is what we really want. We'll have to adjust CTM
             // and translate accordingly.
+            // NOTE: this adjustment is not needed on macOS Tahoe/Glass.
             adjustedRect.adjust(0, 0, 6, 6);
             needTranslation = true;
         }
@@ -3275,7 +3299,15 @@ void QMacStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPai
                         }
                     }
 
-                    [tf.cell drawWithFrame:rect inView:tf];
+                    CGRect fixedRect = rect;
+                    if (qt_apple_runningWithLiquidGlass()) {
+                        // The text edit cell is drawn with a little offset to the left and
+                        // the size increase compared to the 'rect' we want it to be drawn in. As a
+                        // result, the cell's 'outline' is clipped away. Adjusting the rectangle
+                        // for this, so that it's inside the clip rect, as it was before Tahoe.
+                        fixedRect = CGRectInset(rect, 1., 1.);
+                    }
+                    [tf.cell drawWithFrame:fixedRect inView:tf];
                 });
             } else {
                 QCommonStyle::drawPrimitive(pe, opt, p, w);
@@ -3752,6 +3784,29 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                 return;
             }
 
+            // We use NSButton and NSPopupButton (their 'cells') to draw bezels,
+            // imitating tabs in a tab widget (looking similar to native segmented
+            // control). Since native buttons are horizontally aligned, we have to
+            // apply rotations and translations for the 'West' and 'East' tab positions
+            // - which are also 'vertical' tabs (rotation by pi/2 and -pi/2).
+            // 'needInactiveHack' means a tab is selected but its top-level window
+            // is inactive (not key). In this state the tab must be visibly
+            // different from other tabs (text color and bezel color).
+            // NSButton is used if:
+            // - the tab is a single tab (it's also selected) and window is active;
+            // - the tab is selected and its window is active/key.
+            // NSPopUpButton is used if:
+            // - the tab is not a signle tab, and not selected
+            // - the tab is a single tab and selected, but its window is not key
+            //   (aka needsInactiveHack).
+            //
+            // On macOS Tahoe button bezels are rendered within the rect we pass to
+            // -drawWithFrame:inView:, so a left/right adjustment is not required.
+            // To keep things simple we apply transformations as if
+            // tabOpt->rect is ideal for our tabs (+ we have to increase a width
+            // shift origin.x in case additional clipping required for 'Middle',
+            // 'Beginning' and 'End' tabs).
+
             const bool isActive = tabOpt->state & State_Active;
             const bool isEnabled = tabOpt->state & State_Enabled;
             const bool isPressed = tabOpt->state & State_Sunken;
@@ -3782,7 +3837,7 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
 
             const auto cs = d->effectiveAquaSizeConstrain(opt, w);
             // Extra hacks to get the proper pressed appreance when not selected or selected and inactive
-            const bool needsInactiveHack = (!isActive && isSelected);
+            const bool needsInactiveHack = !isActive && isSelected;
             const bool isBigSurOrAbove = QOperatingSystemVersion::current() >= QOperatingSystemVersion::MacOSBigSur;
             const auto ct = !needsInactiveHack && (isSelected || tp == QStyleOptionTab::OnlyOneTab) ?
                     QMacStylePrivate::Button_PushButton :
@@ -3790,7 +3845,6 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
             const bool isPopupButton = ct == QMacStylePrivate::Button_PopupButton;
             const auto cw = QMacStylePrivate::CocoaControl(ct, cs);
             auto *pb = static_cast<NSButton *>(d->cocoaControl(cw));
-
             auto vOffset = isPopupButton ? 1 : 2;
             if (isBigSurOrAbove) {
                 // Make it 1, otherwise, offset is very visible compared
@@ -3816,11 +3870,10 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                     frameRect = frameRect.adjusted(-outerAdjust, 0, innerAdjust, 0);
 
                 if (isSelected && isBigSurOrAbove) {
-                    // 1 pixed of 'roundness' is still visible on the right
+                    // 1 pixel of 'roundness' is still visible on the right
                     // (the left is OK, it's rounded).
                     frameRect = frameRect.adjusted(0, 0, 1, 0);
                 }
-
                 break;
             case QStyleOptionTab::Middle:
                 frameRect = frameRect.adjusted(-innerAdjust, 0, innerAdjust, 0);
@@ -3917,6 +3970,40 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                             if (tp == QStyleOptionTab::End)
                                 rAdjusted.origin.x -= 2;
                         }
+                    }
+                }
+                if (qt_apple_runningWithLiquidGlass()) {
+                    // All Tahoe adjustments are here, in one place. We preserve
+                    // the previous rotations and translations applied in this lambda
+                    // and we know exactly where our button must be - inside the clip
+                    // bounding box (with cliiped off left/right ends if needed).
+                    // 'deltaW' is an arbitrary number here, but it's enough to move
+                    // one of the button's ends beyond clipping bounds (or even both ends -
+                    // for the option 'Middle'). A single tab does not require
+                    // any adjustment.
+                    const CGFloat deltaW = 20.0;
+                    rAdjusted = CGContextGetClipBoundingBox(ctx);
+                    if (tp == QStyleOptionTab::Beginning) {
+                        // Note: the 'Beginning' tab is on the left for horizontal tabs
+                        // and the first on the top for vertical tabs.
+
+                        // This cuts a part from the left or right of the button:
+                        rAdjusted.size.width += deltaW;
+
+                        if (tabDirection == QMacStylePrivate::West && isSelected && isActive) {
+                            // NSPopUpButton for non-selected or 'inactive hack' already
+                            // has the required transformations, for other cases, shift
+                            // the left end:
+                            rAdjusted.origin.x -= deltaW;
+                        }
+                    } else if (tp == QStyleOptionTab::Middle) {
+                        // Both left/right ends must be clipped:
+                        rAdjusted.origin.x -= deltaW;
+                        rAdjusted.size.width += deltaW * 2;
+                    } else if (tp == QStyleOptionTab::End) {
+                        if (isSelected && isActive && tabDirection != QMacStylePrivate::West)
+                            rAdjusted.origin.x -= deltaW;
+                        rAdjusted.size.width += deltaW;
                     }
                 }
 
@@ -6240,6 +6327,17 @@ QSize QMacStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
                     defaultTabHeight = 24;
                 else
                     defaultTabHeight = 21;
+
+                if (qt_apple_runningWithLiquidGlass() && !tab->documentMode) {
+                    // We render tabs using NSButton and NSPopupButton. The control size
+                    // we use for tabs by default NSControlSizeRegular. With height 21
+                    // the button's bezel is partially clipped (by the clip rect with height 21),
+                    // which does not look good. Switching to NSControlSizeSmall has another
+                    // problem - different heights for NSButton vs. NSPopupButton, which is
+                    // quite visible (-2 pixels). 23 seems to work fine with the regular control
+                    // size. Document mode is not using native controls and thus stays unchanged.
+                    defaultTabHeight = 23;
+                }
                 break;
             case QStyleHelper::SizeSmall:
                 defaultTabHeight = 18;
@@ -6322,7 +6420,7 @@ QSize QMacStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
             else
                 sz.setHeight(pushButtonDefaultHeight[QStyleHelper::SizeLarge]);
         } else {
-            if (!isFlat)
+            if (!isFlat && !qt_apple_runningWithLiquidGlass())
                 sz.rwidth() -= 10;
             if (controlSize == QStyleHelper::SizeMini)
                 sz.setHeight(24);

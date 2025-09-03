@@ -263,6 +263,12 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
         });
     }
 
+    void notifyDescriptionOrNameChanged(int viewId, String value)
+    {
+        if (viewId == m_focusedVirtualViewId)
+            notifyValueChanged(viewId, value);
+    }
+
     void notifyAnnouncementEvent(int viewId, String message)
     {
         QtNative.runAction(() -> {
@@ -562,6 +568,9 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
             success = QtNativeAccessibility.clickAction(virtualViewId);
             if (success)
                 sendEventForVirtualViewId(virtualViewId, AccessibilityEvent.TYPE_VIEW_CLICKED);
+            break;
+        case AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS:
+            success = QtNativeAccessibility.focusAction(virtualViewId);
             break;
         case AccessibilityNodeInfo.ACTION_SCROLL_FORWARD:
             success = QtNativeAccessibility.scrollForward(virtualViewId);

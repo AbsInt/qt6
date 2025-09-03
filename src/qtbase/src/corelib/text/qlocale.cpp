@@ -4184,9 +4184,7 @@ QString QLocaleData::longLongToString(qlonglong n, int precision,
 QString QLocaleData::unsLongLongToString(qulonglong l, int precision,
                                          int base, int width, unsigned flags) const
 {
-    const QString zero = zeroDigit();
-    QString resultZero = base == 10 ? zero : QStringLiteral("0");
-    return applyIntegerFormatting(l ? qulltoa(l, base, zero) : resultZero,
+    return applyIntegerFormatting(qulltoa(l, base, zeroDigit()),
                                   false, precision, base, width, flags);
 }
 
@@ -5113,7 +5111,7 @@ QStringList QLocale::uiLanguages(TagSeparator separator) const
         // We can't say the same for script or territory, though.
 
         // We have various candidates to consider.
-        const auto addIfEquivalent = [&j, &uiLanguages, max, sep, prior, faithful](QLocaleId cid) {
+        const auto addIfEquivalent = [&j, &uiLanguages, max, sep, &prior, faithful](QLocaleId cid) {
             if (cid.withLikelySubtagsAdded() == max) {
                 if (const QByteArray name = cid.name(sep); name != prior)
                     uiLanguages.insert(j, QString::fromLatin1(name));
@@ -5193,10 +5191,9 @@ QStringList QLocale::uiLanguages(TagSeparator separator) const
         if (hasPrefix(entry, u"C") || hasPrefix(entry, u"und"))
             continue;
         qsizetype stopAt = uiLanguages.size();
-        QString prefix = entry;
-        qsizetype at = 0;
-        while ((at = prefix.lastIndexOf(cut)) > 0) {
-            prefix = prefix.first(at);
+        qsizetype at = entry.size(); // if 0, calls lastIndexOf(cut, -1), which is in-contract
+        while ((at = entry.lastIndexOf(cut, at - 1)) > 0) {
+            QString prefix = entry.first(at);
             // Don't test with hasSeen() as we might defer adding to later, when
             // we'll need known to see the later entry's offering of this prefix
             // as a new entry.
@@ -5250,10 +5247,10 @@ QStringList QLocale::uiLanguages(TagSeparator separator) const
             // Now we're committed to adding it, get it into known:
             (void) known.hasSeen(prefix);
             if (justAfter) {
-                uiLanguages.insert(afterTruncs++, prefix);
+                uiLanguages.insert(afterTruncs++, std::move(prefix));
                 ++stopAt; // All later entries have moved one step later.
             } else {
-                uiLanguages.append(prefix);
+                uiLanguages.append(std::move(prefix));
             }
         }
     }

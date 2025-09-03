@@ -1034,17 +1034,10 @@ int QUtf8::compareUtf8(QByteArrayView utf8, QStringView utf16, Qt::CaseSensitivi
         simdCompareAscii(src1, end1, src2, end2);
 
         if (src1 < end1 && src2 < end2) {
-            char32_t uc1 = *src1++;
+            char32_t uc1 = QUtf8Functions::nextUcs4FromUtf8(src1, end1);
             char32_t uc2 = *src2++;
 
             if (uc1 >= 0x80) {
-                char32_t *output = &uc1;
-                qsizetype res = QUtf8Functions::fromUtf8<QUtf8BaseTraitsNoAscii>(uc1, output, src1, end1);
-                if (res < 0) {
-                    // decoding error
-                    uc1 = QChar::ReplacementCharacter;
-                }
-
                 // Only decode the UTF-16 surrogate pair if the UTF-8 code point
                 // wasn't US-ASCII (a surrogate cannot match US-ASCII).
                 if (QChar::isHighSurrogate(uc2) && src2 < end2 && QChar::isLowSurrogate(*src2))
@@ -1065,21 +1058,13 @@ int QUtf8::compareUtf8(QByteArrayView utf8, QStringView utf16, Qt::CaseSensitivi
 
 int QUtf8::compareUtf8(QByteArrayView utf8, QLatin1StringView s, Qt::CaseSensitivity cs)
 {
-    char32_t uc1 = QChar::Null;
-    auto src1 = reinterpret_cast<const uchar *>(utf8.data());
+    auto src1 = reinterpret_cast<const qchar8_t *>(utf8.data());
     auto end1 = src1 + utf8.size();
     auto src2 = reinterpret_cast<const uchar *>(s.latin1());
     auto end2 = src2 + s.size();
 
     while (src1 < end1 && src2 < end2) {
-        uchar b = *src1++;
-        char32_t *output = &uc1;
-        const qsizetype res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, output, src1, end1);
-        if (res < 0) {
-            // decoding error
-            uc1 = QChar::ReplacementCharacter;
-        }
-
+        char32_t uc1 = QUtf8Functions::nextUcs4FromUtf8(src1, end1);
         char32_t uc2 = *src2++;
         if (cs == Qt::CaseInsensitive) {
             uc1 = QChar::toCaseFolded(uc1);
@@ -1098,35 +1083,23 @@ int QUtf8::compareUtf8(QByteArrayView lhs, QByteArrayView rhs, Qt::CaseSensitivi
     if (lhs.isEmpty())
         return qt_lencmp(0, rhs.size());
 
+    if (rhs.isEmpty())
+        return qt_lencmp(lhs.size(), 0);
+
     if (cs == Qt::CaseSensitive) {
         const auto l = std::min(lhs.size(), rhs.size());
         int r = memcmp(lhs.data(), rhs.data(), l);
         return r ? r : qt_lencmp(lhs.size(), rhs.size());
     }
 
-    char32_t uc1 = QChar::Null;
-    auto src1 = reinterpret_cast<const uchar *>(lhs.data());
+    auto src1 = reinterpret_cast<const qchar8_t *>(lhs.data());
     auto end1 = src1 + lhs.size();
-    char32_t uc2 = QChar::Null;
-    auto src2 = reinterpret_cast<const uchar *>(rhs.data());
+    auto src2 = reinterpret_cast<const qchar8_t *>(rhs.data());
     auto end2 = src2 + rhs.size();
 
     while (src1 < end1 && src2 < end2) {
-        uchar b = *src1++;
-        char32_t *output = &uc1;
-        qsizetype res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, output, src1, end1);
-        if (res < 0) {
-            // decoding error
-            uc1 = QChar::ReplacementCharacter;
-        }
-
-        b = *src2++;
-        output = &uc2;
-        res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, output, src2, end2);
-        if (res < 0) {
-            // decoding error
-            uc2 = QChar::ReplacementCharacter;
-        }
+        char32_t uc1 = QUtf8Functions::nextUcs4FromUtf8(src1, end1);
+        char32_t uc2 = QUtf8Functions::nextUcs4FromUtf8(src2, end2);
 
         uc1 = QChar::toCaseFolded(uc1);
         uc2 = QChar::toCaseFolded(uc2);

@@ -1965,55 +1965,62 @@
             <name>QAnyStringView</name>
             <anchorfile>qanystringview.html</anchorfile>
             <anchor>QAnyStringView-1</anchor>
-            <arglist>(const Char (&amp;)[N] string)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type></type>
-            <name>QAnyStringView</name>
-            <anchorfile>qanystringview.html</anchorfile>
-            <anchor>QAnyStringView-7</anchor>
-            <arglist>(const Char *first, const Char *last)</arglist>
+            <arglist>(const Char &amp;ch)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QAnyStringView</name>
             <anchorfile>qanystringview.html</anchorfile>
             <anchor>QAnyStringView-2</anchor>
-            <arglist>(const Char *str)</arglist>
+            <arglist>(const Char (&amp;)[N] string)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QAnyStringView</name>
             <anchorfile>qanystringview.html</anchorfile>
             <anchor>QAnyStringView-8</anchor>
-            <arglist>(const Char *str, qsizetype len)</arglist>
+            <arglist>(const Char *first, const Char *last)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QAnyStringView</name>
             <anchorfile>qanystringview.html</anchorfile>
             <anchor>QAnyStringView-3</anchor>
-            <arglist>(const Container &amp;str)</arglist>
+            <arglist>(const Char *str)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QAnyStringView</name>
+            <anchorfile>qanystringview.html</anchorfile>
+            <anchor>QAnyStringView-9</anchor>
+            <arglist>(const Char *str, qsizetype len)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QAnyStringView</name>
             <anchorfile>qanystringview.html</anchorfile>
             <anchor>QAnyStringView-4</anchor>
-            <arglist>(const QByteArray &amp;str)</arglist>
+            <arglist>(const Container &amp;str)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QAnyStringView</name>
             <anchorfile>qanystringview.html</anchorfile>
             <anchor>QAnyStringView-5</anchor>
-            <arglist>(const QString &amp;str)</arglist>
+            <arglist>(const QByteArray &amp;str)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QAnyStringView</name>
             <anchorfile>qanystringview.html</anchorfile>
             <anchor>QAnyStringView-6</anchor>
+            <arglist>(const QString &amp;str)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QAnyStringView</name>
+            <anchorfile>qanystringview.html</anchorfile>
+            <anchor>QAnyStringView-7</anchor>
             <arglist>(std::nullptr_t)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -4823,27 +4830,34 @@
             <name>QByteArray</name>
             <anchorfile>qbytearray.html</anchorfile>
             <anchor>QByteArray-2</anchor>
-            <arglist>(const QByteArray &amp;other)</arglist>
+            <arglist>(QByteArrayView v)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QByteArray</name>
             <anchorfile>qbytearray.html</anchorfile>
             <anchor>QByteArray-3</anchor>
-            <arglist>(const char *data, qsizetype size)</arglist>
+            <arglist>(const QByteArray &amp;other)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QByteArray</name>
             <anchorfile>qbytearray.html</anchorfile>
             <anchor>QByteArray-4</anchor>
-            <arglist>(qsizetype size, Qt::Initialization)</arglist>
+            <arglist>(const char *data, qsizetype size)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QByteArray</name>
             <anchorfile>qbytearray.html</anchorfile>
             <anchor>QByteArray-5</anchor>
+            <arglist>(qsizetype size, Qt::Initialization)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QByteArray</name>
+            <anchorfile>qbytearray.html</anchorfile>
+            <anchor>QByteArray-6</anchor>
             <arglist>(qsizetype size, char ch)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -4913,14 +4927,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qbytearray.html</anchorfile>
-            <anchor>operator-lt-lt-5</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;out, const QByteArray &amp;ba)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qbytearray.html</anchorfile>
-            <anchor>operator-gt-gt-1</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QByteArray &amp;ba)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -5927,7 +5941,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qbytearray-frombase64result.html</anchorfile>
-            <anchor>qHash-16</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QByteArray::FromBase64Result &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -12635,7 +12649,7 @@
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qchar.html</anchorfile>
-            <anchor>operator-gt-gt-2</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QChar &amp;chr)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -18049,6 +18063,41 @@
             <anchorfile>qdebug.html</anchorfile>
             <anchor>operator-lt-lt-55</anchor>
             <arglist>(QDebug debug, const std::vector&lt;T, Alloc&gt; &amp;vec)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QDebug</type>
+            <name>qCritical</name>
+            <anchorfile>qdebug.html</anchorfile>
+            <anchor>qCritical</anchor>
+            <arglist>QDebug qCritical</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QDebug</type>
+            <name>qDebug</name>
+            <anchorfile>qdebug.html</anchorfile>
+            <anchor>qDebug</anchor>
+            <arglist>QDebug qDebug</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QDebug</type>
+            <name>qFatal</name>
+            <anchorfile>qdebug.html</anchorfile>
+            <anchor>qFatal</anchor>
+            <arglist>QDebug qFatal</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QDebug</type>
+            <name>qInfo</name>
+            <anchorfile>qdebug.html</anchorfile>
+            <anchor>qInfo</anchor>
+            <arglist>QDebug qInfo</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QDebug</type>
+            <name>qWarning</name>
+            <anchorfile>qdebug.html</anchorfile>
+            <anchor>qWarning</anchor>
+            <arglist>QDebug qWarning</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
@@ -23487,7 +23536,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qflags.html</anchorfile>
-            <anchor>qHash-2</anchor>
+            <anchor>qHash</anchor>
             <arglist>(QFlags&lt;Enum&gt; key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -24632,14 +24681,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qhash.html</anchorfile>
-            <anchor>operator-lt-lt-8</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;out, const QHash&lt;Key, T&gt; &amp;hash)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qhash.html</anchorfile>
-            <anchor>operator-gt-gt-6</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QHash&lt;Key, T&gt; &amp;hash)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -24912,7 +24961,7 @@
             <type>qsizetype</type>
             <name>erase_if</name>
             <anchorfile>qhash.html</anchorfile>
-            <anchor>erase_if-1</anchor>
+            <anchor>erase_if</anchor>
             <arglist>(QHash&lt;Key, T&gt; &amp;hash, Predicate pred)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -30433,7 +30482,7 @@
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qkeycombination.html</anchorfile>
-            <anchor>operator-gt-gt-7</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QKeyCombination &amp;combination)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -30601,7 +30650,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qkeycombination.html</anchorfile>
-            <anchor>qHash-3</anchor>
+            <anchor>qHash</anchor>
             <arglist>(QKeyCombination key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -30989,7 +31038,7 @@
             <type>QLatin1StringView</type>
             <name>operator&quot;&quot;_L1</name>
             <anchorfile>qlatin1stringview.html</anchorfile>
-            <anchor>operator-22-22_L1-1</anchor>
+            <anchor>operator-22-22_L1</anchor>
             <arglist>(const char *str, size_t size)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -32349,14 +32398,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qline.html</anchorfile>
-            <anchor>operator-lt-lt-9</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QLine &amp;line)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qline.html</anchorfile>
-            <anchor>operator-gt-gt-8</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QLine &amp;line)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -32558,14 +32607,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qlinef.html</anchorfile>
-            <anchor>operator-lt-lt-10</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QLineF &amp;line)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qlinef.html</anchorfile>
-            <anchor>operator-gt-gt-9</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QLineF &amp;line)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -32850,7 +32899,7 @@
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qlist.html</anchorfile>
-            <anchor>operator-gt-gt-10</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QList&lt;T&gt; &amp;list)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -33242,7 +33291,7 @@
             <type>qsizetype</type>
             <name>erase_if</name>
             <anchorfile>qlist.html</anchorfile>
-            <anchor>erase_if-2</anchor>
+            <anchor>erase_if</anchor>
             <arglist>(QList&lt;T&gt; &amp;list, Predicate pred)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -33270,7 +33319,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qlist.html</anchorfile>
-            <anchor>qHash-20</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QList&lt;T&gt; &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -39289,7 +39338,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qlocale.html</anchorfile>
-            <anchor>qHash-21</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QLocale &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -40479,14 +40528,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qmap.html</anchorfile>
-            <anchor>operator-lt-lt-12</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;out, const QMap&lt;Key, T&gt; &amp;map)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qmap.html</anchorfile>
-            <anchor>operator-gt-gt-11</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QMap&lt;Key, T&gt; &amp;map)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -40696,7 +40745,7 @@
             <type>qsizetype</type>
             <name>erase_if</name>
             <anchorfile>qmap.html</anchorfile>
-            <anchor>erase_if-3</anchor>
+            <anchor>erase_if</anchor>
             <arglist>(QMap&lt;Key, T&gt; &amp;map, Predicate pred)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -41497,14 +41546,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qmargins.html</anchorfile>
-            <anchor>operator-lt-lt-13</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QMargins &amp;m)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qmargins.html</anchorfile>
-            <anchor>operator-gt-gt-12</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QMargins &amp;m)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -41767,14 +41816,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qmarginsf.html</anchorfile>
-            <anchor>operator-lt-lt-14</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QMarginsF &amp;m)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qmarginsf.html</anchorfile>
-            <anchor>operator-gt-gt-13</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QMarginsF &amp;m)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -41886,14 +41935,14 @@
             <type>QMarginsF</type>
             <name>operator/</name>
             <anchorfile>qmarginsf.html</anchorfile>
-            <anchor>operator-2f-2</anchor>
+            <anchor>operator-2f</anchor>
             <arglist>(const QMarginsF &amp;lhs, qreal rhs)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QMarginsF</type>
             <name>operator|</name>
             <anchorfile>qmarginsf.html</anchorfile>
-            <anchor>operator-7c-940</anchor>
+            <anchor>operator-7c</anchor>
             <arglist>(const QMarginsF &amp;m1, const QMarginsF &amp;m2)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -44895,7 +44944,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qmetatype.html</anchorfile>
-            <anchor>qHash-5</anchor>
+            <anchor>qHash</anchor>
             <arglist>(QMetaType key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -45464,7 +45513,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qmimetype.html</anchorfile>
-            <anchor>qHash-22</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QMimeType &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -45931,14 +45980,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qmultihash.html</anchorfile>
-            <anchor>operator-lt-lt-15</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;out, const QMultiHash&lt;Key, T&gt; &amp;hash)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qmultihash.html</anchorfile>
-            <anchor>operator-gt-gt-14</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QMultiHash&lt;Key, T&gt; &amp;hash)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -46034,6 +46083,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QMultiHash&lt;Key, T&gt;::iterator</type>
+            <name>erase</name>
+            <anchorfile>qmultihash.html</anchorfile>
+            <anchor>erase</anchor>
+            <arglist>(QMultiHash&lt;Key, T&gt;::const_iterator pos)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QMultiHash&lt;Key, T&gt;::iterator</type>
             <name>find</name>
             <anchorfile>qmultihash.html</anchorfile>
             <anchor>find</anchor>
@@ -46113,7 +46169,7 @@
             <type>qsizetype</type>
             <name>erase_if</name>
             <anchorfile>qmultihash.html</anchorfile>
-            <anchor>erase_if-4</anchor>
+            <anchor>erase_if</anchor>
             <arglist>(QMultiHash&lt;Key, T&gt; &amp;hash, Predicate pred)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -46141,7 +46197,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qmultihash.html</anchorfile>
-            <anchor>qHash-23</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QMultiHash&lt;Key, T&gt; &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -46592,14 +46648,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qmultimap.html</anchorfile>
-            <anchor>operator-lt-lt-16</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;out, const QMultiMap&lt;Key, T&gt; &amp;map)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qmultimap.html</anchorfile>
-            <anchor>operator-gt-gt-15</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QMultiMap&lt;Key, T&gt; &amp;map)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -46690,7 +46746,7 @@
             <type>QMultiMap&lt;Key, T&gt;</type>
             <name>operator+</name>
             <anchorfile>qmultimap.html</anchorfile>
-            <anchor>operator-2b-9</anchor>
+            <anchor>operator-2b</anchor>
             <arglist>(const QMultiMap&lt;Key, T&gt; &amp;lhs, const QMultiMap&lt;Key, T&gt; &amp;rhs)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -46872,7 +46928,7 @@
             <type>qsizetype</type>
             <name>erase_if</name>
             <anchorfile>qmultimap.html</anchorfile>
-            <anchor>erase_if-5</anchor>
+            <anchor>erase_if</anchor>
             <arglist>(QMultiMap&lt;Key, T&gt; &amp;map, Predicate pred)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -49944,7 +50000,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qpersistentmodelindex.html</anchorfile>
-            <anchor>qHash-24</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QPersistentModelIndex &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -50161,14 +50217,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qpoint.html</anchorfile>
-            <anchor>operator-lt-lt-17</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QPoint &amp;point)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qpoint.html</anchorfile>
-            <anchor>operator-gt-gt-16</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QPoint &amp;point)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -50410,14 +50466,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qpointf.html</anchorfile>
-            <anchor>operator-lt-lt-18</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QPointF &amp;point)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qpointf.html</anchorfile>
-            <anchor>operator-gt-gt-17</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QPointF &amp;point)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -52664,14 +52720,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qrect.html</anchorfile>
-            <anchor>operator-lt-lt-19</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QRect &amp;rectangle)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qrect.html</anchorfile>
-            <anchor>operator-gt-gt-18</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QRect &amp;rectangle)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -52720,7 +52776,7 @@
             <type>QRect</type>
             <name>operator-</name>
             <anchorfile>qrect.html</anchorfile>
-            <anchor>operator--6</anchor>
+            <anchor>operator-</anchor>
             <arglist>(const QRect &amp;lhs, const QMargins &amp;rhs)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -53242,14 +53298,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qrectf.html</anchorfile>
-            <anchor>operator-lt-lt-20</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QRectF &amp;rectangle)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qrectf.html</anchorfile>
-            <anchor>operator-gt-gt-19</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QRectF &amp;rectangle)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -53312,7 +53368,7 @@
             <type>QRectF</type>
             <name>operator-</name>
             <anchorfile>qrectf.html</anchorfile>
-            <anchor>operator--7</anchor>
+            <anchor>operator-</anchor>
             <arglist>(const QRectF &amp;lhs, const QMarginsF &amp;rhs)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -54063,7 +54119,7 @@
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qregularexpression.html</anchorfile>
-            <anchor>operator-gt-gt-20</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QRegularExpression &amp;re)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -54189,7 +54245,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qregularexpression.html</anchorfile>
-            <anchor>qHash-25</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QRegularExpression &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -54344,7 +54400,7 @@
             <type>QDebug</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qregularexpressionmatch.html</anchorfile>
-            <anchor>operator-lt-lt-43</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDebug debug, const QRegularExpressionMatch &amp;match)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -55570,7 +55626,7 @@
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qset.html</anchorfile>
-            <anchor>operator-gt-gt-21</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QSet&lt;T&gt; &amp;set)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -55801,7 +55857,7 @@
             <type>qsizetype</type>
             <name>erase_if</name>
             <anchorfile>qset.html</anchorfile>
-            <anchor>erase_if-6</anchor>
+            <anchor>erase_if</anchor>
             <arglist>(QSet&lt;T&gt; &amp;set, Predicate pred)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -57212,7 +57268,7 @@
             <type>QDebug</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qsharedpointer.html</anchorfile>
-            <anchor>operator-lt-lt-45</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDebug debug, const QSharedPointer&lt;T&gt; &amp;ptr)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -57499,7 +57555,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qsharedpointer.html</anchorfile>
-            <anchor>qHash-27</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QSharedPointer&lt;T&gt; &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -57862,14 +57918,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qsize.html</anchorfile>
-            <anchor>operator-lt-lt-23</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QSize &amp;size)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qsize.html</anchorfile>
-            <anchor>operator-gt-gt-22</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QSize &amp;size)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -58118,14 +58174,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qsizef.html</anchorfile>
-            <anchor>operator-lt-lt-24</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QSizeF &amp;size)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qsizef.html</anchorfile>
-            <anchor>operator-gt-gt-23</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QSizeF &amp;size)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -60184,14 +60240,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qstring.html</anchorfile>
-            <anchor>operator-lt-lt-25</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QString &amp;string)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qstring.html</anchorfile>
-            <anchor>operator-gt-gt-24</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QString &amp;string)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -61123,41 +61179,48 @@
             <name>QString</name>
             <anchorfile>qstring.html</anchorfile>
             <anchor>QString-4</anchor>
-            <arglist>(const QByteArray &amp;ba)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type></type>
-            <name>QString</name>
-            <anchorfile>qstring.html</anchorfile>
-            <anchor>QString-8</anchor>
-            <arglist>(const QChar *unicode, qsizetype size)</arglist>
+            <arglist>(QStringView sv)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QString</name>
             <anchorfile>qstring.html</anchorfile>
             <anchor>QString-5</anchor>
-            <arglist>(const QString &amp;other)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type></type>
-            <name>QString</name>
-            <anchorfile>qstring.html</anchorfile>
-            <anchor>QString-6</anchor>
-            <arglist>(const char *str)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type></type>
-            <name>QString</name>
-            <anchorfile>qstring.html</anchorfile>
-            <anchor>QString-7</anchor>
-            <arglist>(const char8_t *str)</arglist>
+            <arglist>(const QByteArray &amp;ba)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QString</name>
             <anchorfile>qstring.html</anchorfile>
             <anchor>QString-9</anchor>
+            <arglist>(const QChar *unicode, qsizetype size)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QString</name>
+            <anchorfile>qstring.html</anchorfile>
+            <anchor>QString-6</anchor>
+            <arglist>(const QString &amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QString</name>
+            <anchorfile>qstring.html</anchorfile>
+            <anchor>QString-7</anchor>
+            <arglist>(const char *str)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QString</name>
+            <anchorfile>qstring.html</anchorfile>
+            <anchor>QString-8</anchor>
+            <arglist>(const char8_t *str)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QString</name>
+            <anchorfile>qstring.html</anchorfile>
+            <anchor>QString-10</anchor>
             <arglist>(qsizetype size, QChar ch)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -63745,7 +63808,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qstringview.html</anchorfile>
-            <anchor>qHash-7</anchor>
+            <anchor>qHash</anchor>
             <arglist>(QStringView key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -68252,14 +68315,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qtyperevision.html</anchorfile>
-            <anchor>operator-lt-lt-26</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;out, const QTypeRevision &amp;revision)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qtyperevision.html</anchorfile>
-            <anchor>operator-gt-gt-26</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QTypeRevision &amp;revision)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -68710,14 +68773,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qurl.html</anchorfile>
-            <anchor>operator-lt-lt-27</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;out, const QUrl &amp;url)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qurl.html</anchorfile>
-            <anchor>operator-gt-gt-27</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QUrl &amp;url)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -69291,7 +69354,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qurlquery.html</anchorfile>
-            <anchor>qHash-31</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QUrlQuery &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -69959,7 +70022,7 @@
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>quuid.html</anchorfile>
-            <anchor>operator-gt-gt-28</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;s, QUuid &amp;id)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -70155,7 +70218,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>quuid.html</anchorfile>
-            <anchor>qHash-32</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QUuid &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -70243,28 +70306,28 @@
             <type>QUuid::Id128Bytes</type>
             <name>qFromBigEndian</name>
             <anchorfile>quuid-id128bytes.html</anchorfile>
-            <anchor>qFromBigEndian-5</anchor>
+            <anchor>qFromBigEndian</anchor>
             <arglist>(QUuid::Id128Bytes src)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QUuid::Id128Bytes</type>
             <name>qFromLittleEndian</name>
             <anchorfile>quuid-id128bytes.html</anchorfile>
-            <anchor>qFromLittleEndian-5</anchor>
+            <anchor>qFromLittleEndian</anchor>
             <arglist>(QUuid::Id128Bytes src)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QUuid::Id128Bytes</type>
             <name>qToBigEndian</name>
             <anchorfile>quuid-id128bytes.html</anchorfile>
-            <anchor>qToBigEndian-4</anchor>
+            <anchor>qToBigEndian</anchor>
             <arglist>(QUuid::Id128Bytes src)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QUuid::Id128Bytes</type>
             <name>qToLittleEndian</name>
             <anchorfile>quuid-id128bytes.html</anchorfile>
-            <anchor>qToLittleEndian-4</anchor>
+            <anchor>qToLittleEndian</anchor>
             <arglist>(QUuid::Id128Bytes src)</arglist>
         </member>
     </compound>
@@ -70571,7 +70634,7 @@
             <type>qsizetype</type>
             <name>erase_if</name>
             <anchorfile>qvarlengtharray.html</anchorfile>
-            <anchor>erase_if-8</anchor>
+            <anchor>erase_if</anchor>
             <arglist>(QVarLengthArray&lt;T, Prealloc&gt; &amp;array, Predicate pred)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -70599,7 +70662,7 @@
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qvarlengtharray.html</anchorfile>
-            <anchor>qHash-33</anchor>
+            <anchor>qHash</anchor>
             <arglist>(const QVarLengthArray&lt;T, Prealloc&gt; &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -72667,14 +72730,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qversionnumber.html</anchorfile>
-            <anchor>operator-lt-lt-31</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;out, const QVersionNumber &amp;version)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qversionnumber.html</anchorfile>
-            <anchor>operator-gt-gt-31</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QVersionNumber &amp;version)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -73085,43 +73148,29 @@
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QWeakPointer</name>
-            <anchorfile>qweakpointer-obsolete.html</anchorfile>
+            <anchorfile>qweakpointer.html</anchorfile>
             <anchor>QWeakPointer-1</anchor>
-            <arglist>(const QObject *other)</arglist>
+            <arglist>(const QSharedPointer&lt;T&gt; &amp;other)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QWeakPointer</name>
             <anchorfile>qweakpointer.html</anchorfile>
             <anchor>QWeakPointer-2</anchor>
-            <arglist>(const QSharedPointer&lt;T&gt; &amp;other)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type></type>
-            <name>QWeakPointer</name>
-            <anchorfile>qweakpointer.html</anchorfile>
-            <anchor>QWeakPointer-3</anchor>
             <arglist>(const QWeakPointer&lt;T&gt; &amp;other)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QWeakPointer&lt;T&gt; &amp;</type>
             <name>operator=</name>
-            <anchorfile>qweakpointer-obsolete.html</anchorfile>
+            <anchorfile>qweakpointer.html</anchorfile>
             <anchor>operator-eq</anchor>
-            <arglist>(const QObject *other)</arglist>
+            <arglist>(const QSharedPointer&lt;T&gt; &amp;other)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QWeakPointer&lt;T&gt; &amp;</type>
             <name>operator=</name>
             <anchorfile>qweakpointer.html</anchorfile>
             <anchor>operator-eq-1</anchor>
-            <arglist>(const QSharedPointer&lt;T&gt; &amp;other)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QWeakPointer&lt;T&gt; &amp;</type>
-            <name>operator=</name>
-            <anchorfile>qweakpointer.html</anchorfile>
-            <anchor>operator-eq-2</anchor>
             <arglist>(const QWeakPointer&lt;T&gt; &amp;other)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -73220,13 +73269,6 @@
             <name>toStrongRef</name>
             <anchorfile>qweakpointer.html</anchorfile>
             <anchor>toStrongRef</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>T *</type>
-            <name>data</name>
-            <anchorfile>qweakpointer-obsolete.html</anchorfile>
-            <anchor>data</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -82666,7 +82708,7 @@
             <type>QLatin1StringView</type>
             <name>operator&quot;&quot;_L1</name>
             <anchorfile>qlatin1stringview.html</anchorfile>
-            <anchor>operator-22-22_L1-1</anchor>
+            <anchor>operator-22-22_L1</anchor>
             <arglist>(const char *str, size_t size)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -83270,42 +83312,42 @@
             <type>bool</type>
             <name>qFuzzyCompare</name>
             <anchorfile>qfloat16.html</anchorfile>
-            <anchor>qFuzzyCompare-2</anchor>
+            <anchor>qFuzzyCompare</anchor>
             <arglist>(qfloat16 p1, qfloat16 p2)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>qIsFinite</name>
             <anchorfile>qfloat16.html</anchorfile>
-            <anchor>qIsFinite-3</anchor>
+            <anchor>qIsFinite</anchor>
             <arglist>(qfloat16 f)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>qIsInf</name>
             <anchorfile>qfloat16.html</anchorfile>
-            <anchor>qIsInf-3</anchor>
+            <anchor>qIsInf</anchor>
             <arglist>(qfloat16 f)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>qIsNaN</name>
             <anchorfile>qfloat16.html</anchorfile>
-            <anchor>qIsNaN-3</anchor>
+            <anchor>qIsNaN</anchor>
             <arglist>(qfloat16 f)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>int</type>
             <name>qFpClassify</name>
             <anchorfile>qfloat16.html</anchorfile>
-            <anchor>qFpClassify-2</anchor>
+            <anchor>qFpClassify</anchor>
             <arglist>(qfloat16 val)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>int</type>
             <name>qRound</name>
             <anchorfile>qfloat16.html</anchorfile>
-            <anchor>qRound-2</anchor>
+            <anchor>qRound</anchor>
             <arglist>(qfloat16 value)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -83319,7 +83361,7 @@
             <type>qint64</type>
             <name>qRound64</name>
             <anchorfile>qfloat16.html</anchorfile>
-            <anchor>qRound64-2</anchor>
+            <anchor>qRound64</anchor>
             <arglist>(qfloat16 value)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">

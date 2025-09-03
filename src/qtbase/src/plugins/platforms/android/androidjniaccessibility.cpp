@@ -149,6 +149,18 @@ namespace QtAndroidAccessibility
         QtAndroid::notifyValueChanged(accessibilityObjectId, value);
     }
 
+    // Forward declaration
+    static QString descriptionForInterface(QAccessibleInterface *iface);
+
+    void notifyDescriptionOrNameChanged(uint accessibilityObjectId)
+    {
+        QAccessibleInterface *iface = interfaceFromId(accessibilityObjectId);
+        if (iface && iface->isValid()) {
+            const QString value = descriptionForInterface(iface);
+            QtAndroid::notifyDescriptionOrNameChanged(accessibilityObjectId, value);
+        }
+    }
+
     void notifyScrolledEvent(uint accessiblityObjectId)
     {
         QtAndroid::notifyScrolledEvent(accessiblityObjectId);
@@ -304,12 +316,39 @@ namespace QtAndroidAccessibility
         return true;
     }
 
+    static bool focusAction_helper(int objectId)
+    {
+        QAccessibleInterface *iface = interfaceFromId(objectId);
+        if (!iface || !iface->isValid() || !iface->actionInterface())
+            return false;
+
+        const auto& actionNames = iface->actionInterface()->actionNames();
+
+        if (actionNames.contains(QAccessibleActionInterface::setFocusAction())) {
+            invokeActionOnInterfaceInMainThread(iface->actionInterface(),
+                                                QAccessibleActionInterface::setFocusAction());
+            return true;
+        }
+        return false;
+    }
+
     static jboolean clickAction(JNIEnv */*env*/, jobject /*thiz*/, jint objectId)
     {
         bool result = false;
         if (m_accessibilityContext) {
             runInObjectContext(m_accessibilityContext, [objectId]() {
                 return clickAction_helper(objectId);
+            }, &result);
+        }
+        return result;
+    }
+
+    static jboolean focusAction(JNIEnv */*env*/, jobject /*thiz*/, jint objectId)
+    {
+        bool result = false;
+        if (m_accessibilityContext) {
+            runInObjectContext(m_accessibilityContext, [objectId]() {
+                return focusAction_helper(objectId);
             }, &result);
         }
         return result;
@@ -485,9 +524,10 @@ namespace QtAndroidAccessibility
             return QStringLiteral("android.app.ActionBar.Tab");
         case QAccessible::Role::PageTabList:
             return QStringLiteral("android.widget.TabWidget");
-        case QAccessible::Role::ScrollBar: [[fallthrough]];
+        case QAccessible::Role::ScrollBar:
+            return QStringLiteral("android.widget.Scroller");
         case QAccessible::Role::Slider:
-            return QStringLiteral("android.widget.SeekBar");
+            return QStringLiteral("com.google.android.material.slider.Slider");
         case QAccessible::Role::Table:
             // #TODO Evaluate the usage of AccessibleNodeInfo.setCollectionItemInfo() to provide
             // infos about colums, rows und items.
@@ -702,6 +742,7 @@ namespace QtAndroidAccessibility
         {"hitTest", "(FF)I", (void*)hitTest},
         {"populateNode", "(ILandroid/view/accessibility/AccessibilityNodeInfo;)Z", (void*)populateNode},
         {"clickAction", "(I)Z", (void*)clickAction},
+        {"focusAction", "(I)Z", (void*)focusAction},
         {"scrollForward", "(I)Z", (void*)scrollForward},
         {"scrollBackward", "(I)Z", (void*)scrollBackward},
     };

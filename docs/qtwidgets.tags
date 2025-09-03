@@ -43670,14 +43670,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qtablewidgetitem.html</anchorfile>
-            <anchor>operator-lt-lt-2</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;out, const QTableWidgetItem &amp;item)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qtablewidgetitem.html</anchorfile>
-            <anchor>operator-gt-gt-2</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QTableWidgetItem &amp;item)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -47637,14 +47637,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qtreewidgetitem.html</anchorfile>
-            <anchor>operator-lt-lt-3</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;out, const QTreeWidgetItem &amp;item)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qtreewidgetitem.html</anchorfile>
-            <anchor>operator-gt-gt-3</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;in, QTreeWidgetItem &amp;item)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
