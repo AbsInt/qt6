@@ -23,7 +23,6 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 #include <fontconfig/fontconfig.h>
-
 #include <limits.h>
 
 int

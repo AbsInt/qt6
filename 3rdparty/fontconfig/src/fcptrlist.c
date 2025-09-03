@@ -25,29 +25,28 @@
 #include "fcint.h"
 
 typedef struct _FcPtrListEntry {
-    struct _FcPtrListEntry *next;
-    void                   *data;
+    struct _FcPtrListEntry	*next;
+    void			*data;
 } FcPtrListEntry;
 struct _FcPtrList {
-    FcDestroyFunc   destroy_func;
-    FcPtrListEntry *list;
-    FcPtrListEntry *last;
+    FcDestroyFunc	destroy_func;
+    FcPtrListEntry	*list;
 };
 typedef struct _FcPtrListIterPrivate {
-    const FcPtrList *list;
-    FcPtrListEntry  *entry;
-    FcPtrListEntry  *prev;
+    const FcPtrList	*list;
+    FcPtrListEntry	*entry;
+    FcPtrListEntry	*prev;
 } FcPtrListIterPrivate;
 
 FcPtrList *
 FcPtrListCreate (FcDestroyFunc func)
 {
-    FcPtrList *ret = (FcPtrList *)malloc (sizeof (FcPtrList));
+    FcPtrList *ret = (FcPtrList *) malloc (sizeof (FcPtrList));
 
-    if (ret) {
+    if (ret)
+    {
 	ret->destroy_func = func;
 	ret->list = NULL;
-	ret->last = NULL;
     }
 
     return ret;
@@ -58,12 +57,13 @@ FcPtrListDestroy (FcPtrList *list)
 {
     FcPtrListIter iter;
 
-    if (list) {
+    if (list)
+    {
 	FcPtrListIterInit (list, &iter);
-	do {
+	do
+	{
 	    if (FcPtrListIterGetValue (list, &iter))
-		if (list->destroy_func)
-		    list->destroy_func (FcPtrListIterGetValue (list, &iter));
+		list->destroy_func (FcPtrListIterGetValue (list, &iter));
 	    FcPtrListIterRemove (list, &iter);
 	} while (FcPtrListIterIsValid (list, &iter));
 
@@ -72,10 +72,10 @@ FcPtrListDestroy (FcPtrList *list)
 }
 
 void
-FcPtrListIterInit (const FcPtrList *list,
-                   FcPtrListIter   *iter)
+FcPtrListIterInit (const FcPtrList	*list,
+		 FcPtrListIter		*iter)
 {
-    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *)iter;
+    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *) iter;
 
     priv->list = list;
     priv->entry = list->list;
@@ -83,21 +83,26 @@ FcPtrListIterInit (const FcPtrList *list,
 }
 
 void
-FcPtrListIterInitAtLast (FcPtrList     *list,
-                         FcPtrListIter *iter)
+FcPtrListIterInitAtLast (FcPtrList	*list,
+		       FcPtrListIter	*iter)
 {
-    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *)iter;
+    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *) iter;
+    FcPtrListEntry **e, **p;
+
+    e = &list->list;
+    p = e;
+    for (; *e; p = e, e = &(*e)->next);
 
     priv->list = list;
-    priv->entry = NULL;
-    priv->prev = list->last;
+    priv->entry = *e;
+    priv->prev = *p;
 }
 
 FcBool
-FcPtrListIterNext (const FcPtrList *list,
-                   FcPtrListIter   *iter)
+FcPtrListIterNext (const FcPtrList	*list,
+		 FcPtrListIter		*iter)
 {
-    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *)iter;
+    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *) iter;
 
     if (list != priv->list)
 	return FcFalse;
@@ -108,53 +113,58 @@ FcPtrListIterNext (const FcPtrList *list,
 }
 
 FcBool
-FcPtrListIterIsValid (const FcPtrList     *list,
-                      const FcPtrListIter *iter)
+FcPtrListIterIsValid (const FcPtrList	*list,
+		    const FcPtrListIter	*iter)
 {
-    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *)iter;
+    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *) iter;
 
     return list == priv->list && priv->entry;
 }
 
 void *
-FcPtrListIterGetValue (const FcPtrList     *list,
-                       const FcPtrListIter *iter)
+FcPtrListIterGetValue (const FcPtrList		*list,
+		     const FcPtrListIter	*iter)
 {
-    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *)iter;
+    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *) iter;
 
     if (list != priv->list ||
-        !priv->entry)
+	!priv->entry)
 	return NULL;
 
     return priv->entry->data;
 }
 
 FcBool
-FcPtrListIterAdd (FcPtrList     *list,
-                  FcPtrListIter *iter,
-                  void          *data)
+FcPtrListIterAdd (FcPtrList	*list,
+		FcPtrListIter	*iter,
+		void		*data)
 {
-    FcPtrListEntry       *e;
-    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *)iter;
+    FcPtrListEntry *e;
+    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *) iter;
 
     if (list != priv->list)
 	return FcFalse;
 
-    e = (FcPtrListEntry *)malloc (sizeof (FcPtrListEntry));
+    e = (FcPtrListEntry *) malloc (sizeof (FcPtrListEntry));
     if (!e)
 	return FcFalse;
     e->data = data;
 
-    if (priv->entry) {
+    if (priv->entry)
+    {
 	e->next = priv->entry->next;
 	priv->entry->next = e;
-    } else {
+    }
+    else
+    {
 	e->next = NULL;
-	list->last = e;
-	if (priv->prev) {
+	if (priv->prev)
+	{
 	    priv->prev->next = e;
 	    priv->entry = priv->prev;
-	} else {
+	}
+	else
+	{
 	    list->list = e;
 	    priv->entry = e;
 
@@ -166,11 +176,11 @@ FcPtrListIterAdd (FcPtrList     *list,
 }
 
 FcBool
-FcPtrListIterRemove (FcPtrList     *list,
-                     FcPtrListIter *iter)
+FcPtrListIterRemove (FcPtrList		*list,
+		   FcPtrListIter	*iter)
 {
-    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *)iter;
-    FcPtrListEntry       *e;
+    FcPtrListIterPrivate *priv = (FcPtrListIterPrivate *) iter;
+    FcPtrListEntry *e;
 
     if (list != priv->list)
 	return FcFalse;
@@ -184,8 +194,6 @@ FcPtrListIterRemove (FcPtrList     *list,
 	priv->prev->next = priv->entry->next;
     priv->entry = priv->entry->next;
     free (e);
-    if (!priv->entry)
-	list->last = priv->prev;
 
     return FcTrue;
 }

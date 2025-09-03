@@ -235,7 +235,8 @@ output is requested.</para>
       <command>fc-scan</command>(1)
     </para>
 
-    <para><ulink url="https://fontconfig.pages.freedesktop.org/fontconfig/fontconfig-user.html">The fontconfig user's guide</ulink></para>
+    <para>The fontconfig user's guide, in HTML format:
+      <filename>/usr/share/doc/fontconfig/fontconfig-user.html</filename>.</para>
 
  </refsect1>
   <refsect1>

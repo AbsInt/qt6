@@ -40,16 +40,9 @@ FcObjectTypeLookup (register const char *str, register FC_GPERF_SIZE_T len);
 static fc_atomic_int_t next_id = FC_MAX_BASE_OBJECT + FC_EXT_OBJ_INDEX;
 struct FcObjectOtherTypeInfo {
     struct FcObjectOtherTypeInfo *next;
-    FcObjectType                  object;
-    FcObject                      id;
+    FcObjectType object;
+    FcObject id;
 } *other_types;
-static FcRef obj_ref = { .count = 0 };
-
-void
-FcObjectInit (void)
-{
-    FcRefInc (&obj_ref);
-}
 
 void
 FcObjectFini (void)
@@ -57,19 +50,14 @@ FcObjectFini (void)
     struct FcObjectOtherTypeInfo *ots, *ot;
 
 retry:
-    if (obj_ref.count < 1)
-	fprintf (stderr, "Fontconfig warning: too many caller of FcObjectFini()\n");
-    if (obj_ref.count >= 1 && FcRefDec (&obj_ref) != 1)
-	return;
     ots = fc_atomic_ptr_get (&other_types);
     if (!ots)
 	return;
-    if (!fc_atomic_ptr_cmpexch (&other_types, ots, NULL)) {
-	FcRefInc (&obj_ref);
+    if (!fc_atomic_ptr_cmpexch (&other_types, ots, NULL))
 	goto retry;
-    }
 
-    while (ots) {
+    while (ots)
+    {
 	ot = ots->next;
 	if (ots->object.object)
 	    free (ots->object.object);
@@ -82,33 +70,27 @@ static FcObjectType *
 _FcObjectLookupOtherTypeByName (const char *str, FcObject *id)
 {
     struct FcObjectOtherTypeInfo *ots, *ot;
-    static FcBool                 warn = FcFalse;
 
 retry:
     ots = fc_atomic_ptr_get (&other_types);
-    if (obj_ref.count < 1) {
-	if (!warn) {
-	    fprintf (stderr, "Fontconfig warning: using without calling FcInit()\n");
-	    warn = FcTrue;
-	}
-	FcObjectInit();
-    }
 
     for (ot = ots; ot; ot = ot->next)
 	if (0 == strcmp (ot->object.object, str))
 	    break;
 
-    if (!ot) {
+    if (!ot)
+    {
 	ot = malloc (sizeof (*ot));
 	if (!ot)
 	    return NULL;
 
-	ot->object.object = (char *)FcStrdup (str);
+	ot->object.object = (char *) FcStrdup (str);
 	ot->object.type = FcTypeUnknown;
 	ot->id = fc_atomic_int_add (next_id, +1);
-	if (ot->id < (FC_MAX_BASE_OBJECT + FC_EXT_OBJ_INDEX)) {
+	if (ot->id < (FC_MAX_BASE_OBJECT + FC_EXT_OBJ_INDEX))
+	{
 	    fprintf (stderr, "Fontconfig error: No object ID to assign\n");
-	    abort();
+	    abort ();
 	}
 	ot->next = ots;
 
@@ -121,7 +103,7 @@ retry:
     }
 
     if (id)
-	*id = ot->id;
+      *id = ot->id;
 
     return &ot->object;
 }
@@ -141,7 +123,7 @@ FcObject
 FcObjectLookupIdByName (const char *str)
 {
     const struct FcObjectTypeInfo *o = FcObjectTypeLookup (str, strlen (str));
-    FcObject                       id;
+    FcObject id;
     if (o)
 	return o->id;
 
@@ -180,6 +162,7 @@ FcObjectLookupOtherTypeById (FcObject id)
 
     return NULL;
 }
+
 
 #include "fcaliastail.h"
 #undef __fcobjs__

@@ -23,15 +23,14 @@
  */
 
 #include "fcint.h"
-
 #include <stdlib.h>
 
 FcFontSet *
 FcFontSetCreate (void)
 {
-    FcFontSet *s;
+    FcFontSet	*s;
 
-    s = (FcFontSet *)malloc (sizeof (FcFontSet));
+    s = (FcFontSet *) malloc (sizeof (FcFontSet));
     if (!s)
 	return 0;
     s->nfont = 0;
@@ -43,8 +42,9 @@ FcFontSetCreate (void)
 void
 FcFontSetDestroy (FcFontSet *s)
 {
-    if (s) {
-	int i;
+    if (s)
+    {
+	int	    i;
 
 	for (i = 0; i < s->nfont; i++)
 	    FcPatternDestroy (s->fonts[i]);
@@ -57,15 +57,16 @@ FcFontSetDestroy (FcFontSet *s)
 FcBool
 FcFontSetAdd (FcFontSet *s, FcPattern *font)
 {
-    FcPattern **f;
-    int         sfont;
+    FcPattern	**f;
+    int		sfont;
 
-    if (s->nfont == s->sfont) {
+    if (s->nfont == s->sfont)
+    {
 	sfont = s->sfont + 32;
 	if (s->fonts)
-	    f = (FcPattern **)realloc (s->fonts, sfont * sizeof (FcPattern *));
+	    f = (FcPattern **) realloc (s->fonts, sfont * sizeof (FcPattern *));
 	else
-	    f = (FcPattern **)malloc (sfont * sizeof (FcPattern *));
+	    f = (FcPattern **) malloc (sfont * sizeof (FcPattern *));
 	if (!f)
 	    return FcFalse;
 	s->sfont = sfont;
@@ -84,7 +85,8 @@ FcFontSetSerializeAlloc (FcSerialize *serialize, const FcFontSet *s)
 	return FcFalse;
     if (!FcSerializeAlloc (serialize, s->fonts, s->nfont * sizeof (FcPattern *)))
 	return FcFalse;
-    for (i = 0; i < s->nfont; i++) {
+    for (i = 0; i < s->nfont; i++)
+    {
 	if (!FcPatternSerializeAlloc (serialize, s->fonts[i]))
 	    return FcFalse;
     }
@@ -92,12 +94,12 @@ FcFontSetSerializeAlloc (FcSerialize *serialize, const FcFontSet *s)
 }
 
 FcFontSet *
-FcFontSetSerialize (FcSerialize *serialize, const FcFontSet *s)
+FcFontSetSerialize (FcSerialize *serialize, const FcFontSet * s)
 {
-    int         i;
-    FcFontSet  *s_serialize;
-    FcPattern **fonts_serialize;
-    FcPattern  *p_serialize;
+    int		i;
+    FcFontSet	*s_serialize;
+    FcPattern	**fonts_serialize;
+    FcPattern	*p_serialize;
 
     s_serialize = FcSerializePtr (serialize, s);
     if (!s_serialize)
@@ -109,15 +111,16 @@ FcFontSetSerialize (FcSerialize *serialize, const FcFontSet *s)
     if (!fonts_serialize)
 	return NULL;
     s_serialize->fonts = FcPtrToEncodedOffset (s_serialize,
-                                               fonts_serialize, FcPattern *);
+					       fonts_serialize, FcPattern *);
 
-    for (i = 0; i < s->nfont; i++) {
+    for (i = 0; i < s->nfont; i++)
+    {
 	p_serialize = FcPatternSerialize (serialize, s->fonts[i]);
 	if (!p_serialize)
 	    return NULL;
 	fonts_serialize[i] = FcPtrToEncodedOffset (s_serialize,
-	                                           p_serialize,
-	                                           FcPattern);
+						   p_serialize,
+						   FcPattern);
     }
 
     return s_serialize;
@@ -126,19 +129,20 @@ FcFontSetSerialize (FcSerialize *serialize, const FcFontSet *s)
 FcFontSet *
 FcFontSetDeserialize (const FcFontSet *set)
 {
-    int        i;
-    FcFontSet *newp = FcFontSetCreate();
+    int i;
+    FcFontSet *new = FcFontSetCreate ();
 
-    if (!newp)
+    if (!new)
 	return NULL;
-    for (i = 0; i < set->nfont; i++) {
-	if (!FcFontSetAdd (newp, FcPatternDuplicate (FcFontSetFont (set, i))))
+    for (i = 0; i < set->nfont; i++)
+    {
+	if (!FcFontSetAdd (new, FcPatternDuplicate (FcFontSetFont (set, i))))
 	    goto bail;
     }
 
-    return newp;
+    return new;
 bail:
-    FcFontSetDestroy (newp);
+    FcFontSetDestroy (new);
 
     return NULL;
 }

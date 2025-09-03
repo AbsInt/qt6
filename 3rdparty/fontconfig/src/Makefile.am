@@ -71,10 +71,8 @@ uninstall-ms-import-lib:
 endif
 
 AM_CPPFLAGS = 						\
-	-I$(top_builddir)				\
 	-I$(top_srcdir)					\
 	-I$(top_srcdir)/src				\
-	-I$(top_builddir)/fc-lang			\
 	$(FREETYPE_CFLAGS)				\
 	$(ICONV_CFLAGS)					\
 	$(LIBXML2_CFLAGS)				\
@@ -111,7 +109,7 @@ fcobjshash.gperf: Makefile stamp-fcobjshash.gperf
 	@$(MAKE) stamp-fcobjshash.gperf
 	@touch -r stamp-fcobjshash.gperf $@
 stamp-fcobjshash.gperf: fcobjshash.gperf.h fcobjs.h
-	$(AM_V_GEN) $(CPP) -I$(top_builddir) -I$(top_srcdir) $(CPPFLAGS) $< | \
+	$(AM_V_GEN) $(CPP) -I$(top_srcdir) $(CPPFLAGS) $< | \
 	$(SED) 's/^ *//;s/ *, */,/' | \
 	awk ' \
 		/CUT_OUT_BEGIN/ { no_write=1; next; }; \
@@ -180,7 +178,7 @@ uninstall-local: uninstall-ms-import-lib uninstall-libtool-import-lib
 endif
 
 PUBLIC_FILES = \
-	$(top_builddir)/fontconfig/fontconfig.h \
+	$(top_srcdir)/fontconfig/fontconfig.h \
 	$(top_srcdir)/src/fcdeprecate.h \
 	$(top_srcdir)/fontconfig/fcprivate.h
 

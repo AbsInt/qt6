@@ -315,9 +315,7 @@ ORTH = \
 	unm.orth \
 	wae.orth \
 	yue.orth \
-	yuw.orth \
-	got.orth \
-	cop.orth
+	yuw.orth
 #	^-------------- Add new orth files here
 
 BUILT_SOURCES += $(top_builddir)/conf.d/35-lang-normalize.conf

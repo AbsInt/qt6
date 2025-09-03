@@ -40,7 +40,7 @@ MESON_FILES = \
 	fc-case/fc-case.py \
 	fc-lang/fc-lang.py \
 	meson.build \
-	meson.options \
+	meson_options.txt \
 	src/cutout.py \
 	src/fcstdint.h.in \
 	src/fcwindows.h \

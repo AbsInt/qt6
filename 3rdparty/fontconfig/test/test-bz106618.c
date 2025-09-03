@@ -21,27 +21,27 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
-#include <fontconfig/fontconfig.h>
-
 #include <stdio.h>
+#include <fontconfig/fontconfig.h>
 
 int
 main (int argc, char **argv)
 {
-    const FcFontSet *fs = FcConfigGetFonts (NULL, FcSetSystem);
-    int        i;
+    FcFontSet *fs = FcConfigGetFonts (NULL, FcSetSystem);
+    int i;
 
     if (!fs)
 	return 1;
-    for (i = 0; i < fs->nfont; i++) {
+    for (i = 0; i < fs->nfont; i++)
+    {
 	FcPattern *p = fs->fonts[i];
-	FcChar8   *file;
+	FcChar8 *file;
 
 	if (FcPatternGetString (p, FC_FILE, 0, &file) != FcResultMatch)
 	    return 1;
 	printf ("%s\n", file);
     }
-    FcFini();
+    FcFontSetDestroy (fs);
 
     return 0;
 }

@@ -26,19 +26,17 @@
 int
 main (void)
 {
-    const FcChar8 *doc = (const FcChar8 *)
-	""
+    const FcChar8 *doc = (const FcChar8 *) ""
 	"<fontconfig>\n"
 	"  <include ignore_missing=\"yes\">blahblahblah</include>\n"
 	"</fontconfig>\n"
 	"";
-    const FcChar8 *doc2 = (const FcChar8 *)
-	""
+    const FcChar8 *doc2 = (const FcChar8 *) ""
 	"<fontconfig>\n"
 	"  <include ignore_missing=\"no\">blahblahblah</include>\n"
 	"</fontconfig>\n"
 	"";
-    FcConfig *cfg = FcConfigCreate();
+    FcConfig *cfg = FcConfigCreate ();
 
     if (!FcConfigParseAndLoadFromMemory (cfg, doc, FcTrue))
 	return 1;
