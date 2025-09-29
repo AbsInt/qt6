@@ -1,5 +1,6 @@
 // Copyright (C) 2023 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
 
 #ifndef QQMLDOMSCRIPTELEMENTS_P_H
 #define QQMLDOMSCRIPTELEMENTS_P_H
@@ -122,7 +123,7 @@ public:
     bool iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const override
     {
         bool cont =
-                asList(self.pathFromOwner().key(QString())).iterateDirectSubpaths(self, visitor);
+                asList(self.pathFromOwner().withKey(QString())).iterateDirectSubpaths(self, visitor);
         return cont;
     }
     void updatePathFromOwner(const Path &p) override
@@ -130,7 +131,7 @@ public:
         BaseT::updatePathFromOwner(p);
         for (int i = 0; i < m_list.size(); ++i) {
             Q_ASSERT(m_list[i].base());
-            m_list[i].base()->updatePathFromOwner(p.index(i));
+            m_list[i].base()->updatePathFromOwner(p.withIndex(i));
         }
     }
     void createFileLocations(const FileLocations::Tree &base) override

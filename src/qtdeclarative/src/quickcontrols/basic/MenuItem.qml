@@ -67,5 +67,7 @@ T.MenuItem {
         width: control.width - 2
         height: control.height - 2
         color: control.down ? control.palette.midlight : control.highlighted ? control.palette.light : "transparent"
+        border.color: control.palette.dark
+        border.width: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast && control.highlighted ? 1 : 0
     }
 }

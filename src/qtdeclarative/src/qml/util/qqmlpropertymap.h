@@ -5,6 +5,7 @@
 #define QQMLPROPERTYMAP_H
 
 #include <QtQml/qtqmlglobal.h>
+#include <QtQml/qqmlregistration.h>
 
 #include <QtCore/QObject>
 #include <QtCore/QHash>
@@ -18,6 +19,7 @@ class QQmlPropertyMapPrivate;
 class Q_QML_EXPORT QQmlPropertyMap : public QObject
 {
     Q_OBJECT
+    QML_ANONYMOUS
 public:
     explicit QQmlPropertyMap(QObject *parent = nullptr);
     ~QQmlPropertyMap() override;

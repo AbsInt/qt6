@@ -1411,7 +1411,7 @@ void tst_QQuickMouseArea::hoverVisible()
     QCOMPARE(mouseTracker->hovered(), true);
     QCOMPARE(enteredSpy.size(), 1);
 
-    QCOMPARE(QPointF(mouseTracker->mouseX(), mouseTracker->mouseY()), QPointF(11,33));
+    QCOMPARE(QPointF(mouseTracker->mouseX(), mouseTracker->mouseY()).toPoint(), QPoint(11, 33));
 
     // QTBUG-77983
     mouseTracker->setVisible(false);

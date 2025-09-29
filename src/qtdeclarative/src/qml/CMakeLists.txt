@@ -113,7 +113,7 @@ qt_internal_add_qml_module(Qml
         common/qqmljsmemorypool_p.h
         common/qqmljssourcelocation_p.h
         common/qqmlsignalnames_p.h common/qqmlsignalnames.cpp
-        common/qqmltranslation.cpp common/qqmltranslation_p.h
+        common/qqmltranslation_p.h
         common/qv4alloca_p.h
         common/qv4calldata_p.h
         common/qv4compileddata.cpp common/qv4compileddata_p.h
@@ -139,7 +139,7 @@ qt_internal_add_qml_module(Qml
         inlinecomponentutils_p.h
         jsapi/qjsengine.cpp jsapi/qjsengine.h jsapi/qjsengine_p.h
         jsapi/qjslist.cpp jsapi/qjslist.h
-        jsapi/qjsmanagedvalue.cpp jsapi/qjsmanagedvalue.h
+        jsapi/qjsmanagedvalue.cpp jsapi/qjsmanagedvalue.h jsapi/qjsmanagedvalue_p.h
         jsapi/qjsprimitivevalue.cpp jsapi/qjsprimitivevalue.h
         jsapi/qjsvalue.cpp jsapi/qjsvalue.h jsapi/qjsvalue_p.h
         jsapi/qjsvalueiterator.cpp jsapi/qjsvalueiterator.h jsapi/qjsvalueiterator_p.h
@@ -239,7 +239,6 @@ qt_internal_add_qml_module(Qml
         qml/ftw/qbipointer_p.h
         qml/ftw/qdoubleendedlist_p.h
         qml/ftw/qfieldlist_p.h
-        qml/ftw/qfinitestack_p.h
         qml/ftw/qhashedstring.cpp qml/ftw/qhashedstring_p.h
         qml/ftw/qintrusivelist.cpp qml/ftw/qintrusivelist_p.h
         qml/ftw/qlazilyallocated_p.h
@@ -329,6 +328,7 @@ qt_internal_add_qml_module(Qml
         qml/qqmltypecompiler.cpp qml/qqmltypecompiler_p.h
         qml/qqmltypedata.cpp qml/qqmltypedata_p.h
         qml/qqmltypeloader.cpp qml/qqmltypeloader_p.h
+        qml/qqmltypeloaderdata.cpp qml/qqmltypeloaderdata_p.h
         qml/qqmltypeloaderqmldircontent.cpp qml/qqmltypeloaderqmldircontent_p.h
         qml/qqmltypeloaderthread.cpp qml/qqmltypeloaderthread_p.h
         qml/qqmltypemodule.cpp qml/qqmltypemodule_p.h
@@ -521,7 +521,6 @@ set_source_files_properties(compat/removed_api.cpp
 #    ""
 #)
 
-qt_declarative_write_tag_header(Qml)
 set(_qt_qlalr_flags "--no-debug" "--qt")
 qt_process_qlalr(Qml "${CMAKE_CURRENT_SOURCE_DIR}/parser/qqmljs.g" "${_qt_qlalr_flags}")
 qt_declarative_generate_reg_exp_jit_tables(Qml)
@@ -759,11 +758,7 @@ qt_internal_add_docs(Qml
     doc/qtqml.qdocconf
 )
 
-# include snippet projects for developer shared builds
-# static builds fail with
-#   CMake Error: AUTOMOC for target qt_target_qml_sources_example_resources_3:
-#   The "moc" executable does not exist
-if(QT_FEATURE_private_tests AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.19" AND QT_BUILD_SHARED_LIBS)
+if(QT_FEATURE_doc_snippets)
     add_subdirectory(doc/snippets/cmake/qt_target_qml_sources)
     qt_autogen_tools(qt_target_qml_sources_example ENABLE_AUTOGEN_TOOLS moc)
     qt_autogen_tools(qt_target_qml_sources_exampleplugin ENABLE_AUTOGEN_TOOLS moc)

@@ -18,7 +18,7 @@
 #include <QtCore/QList>
 #include <QtCore/QString>
 #include <QtCore/QScopedPointer>
-#include <QtCore/QPair>
+#include <utility>
 
 QT_BEGIN_NAMESPACE
 
@@ -39,7 +39,7 @@ public:
 
     // TODO: Drop this once we can drop qmlplugindump. It is substantially weird.
     void writeEnumObjectLiteralBinding(
-        QByteArrayView name, const QList<QPair<QAnyStringView, int>> &keyValue);
+        QByteArrayView name, const QList<std::pair<QAnyStringView, int>> &keyValue);
 
     // TODO: these would look better with generator functions.
     void writeArrayBinding(QByteArrayView name, const QByteArrayList &elements);

@@ -370,6 +370,16 @@ void tst_qmlls_highlighting::highlights_data()
                 << fileItem
                 << Token(QQmlJS::SourceLocation(265, 4, 11, 30),
                          int(SemanticTokenProtocolTypes::Property), defaultModifier);
+        int finalModifier =
+                definitionModifier | (1 << int(SemanticTokenModifiers::Static));
+        QTest::addRow("final-keyword")
+                << fileItem
+                << Token(QQmlJS::SourceLocation(278, 5, 12, 9),
+                         int(SemanticTokenProtocolTypes::Keyword), 0);
+        QTest::addRow("final-modifier")
+                << fileItem
+                << Token(QQmlJS::SourceLocation(297, 5, 12, 28),
+                         int(SemanticTokenProtocolTypes::Property), finalModifier);
     }
     {
         // methods and signals, lambda functions

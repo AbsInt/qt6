@@ -40,6 +40,7 @@ T.ComboBox {
                                     : Config.controls.combobox[__currentState]) || {}
 
     readonly property Item __focusFrameTarget: control.editable ? null : control
+    readonly property bool __isHighContrast: Application.styleHints.accessibility.contrastPreference === Qt.HighContrast
 
     delegate: ItemDelegate {
         required property var model
@@ -93,19 +94,30 @@ T.ComboBox {
         readonly property Item __focusFrameControl: control
     }
 
-    background: Impl.StyleImage {
-        imageConfig: control.__config.background
-        Item {
-            visible: control.editable && ((control.down && control.popup.visible) || control.activeFocus)
-            width: parent.width
-            height: 2
-            y: parent.height - height
-            Impl.FocusStroke {
+    background: ItemGroup {
+        Impl.StyleImage {
+            visible: !control.__isHighContrast
+            imageConfig: control.__config.background
+            Item {
+                visible: control.editable && ((control.down && control.popup.visible) || control.activeFocus)
                 width: parent.width
-                height: parent.height
-                radius: control.down && control.popup.visible ? 0 : control.__config.background.bottomOffset
-                color: control.palette.accent
+                height: 2
+                y: parent.height - height
+                Impl.FocusStroke {
+                    width: parent.width
+                    height: parent.height
+                    radius: control.down && control.popup.visible ? 0 : control.__config.background.bottomOffset
+                    color: control.palette.accent
+                }
             }
+        }
+        Rectangle {
+            visible: control.__isHighContrast
+            implicitWidth: control.__config.background.width
+            implicitHeight: control.__config.background.height
+            color: control.palette.window
+            border.color: control.hovered ? control.palette.accent : control.palette.text
+            radius: 4
         }
     }
 
@@ -137,8 +149,19 @@ T.ComboBox {
             NumberAnimation { property: "height"; from: control.popup.height / 3; to: control.popup.height; easing.type: Easing.OutCubic; duration: 250 }
         }
 
-        background: Impl.StyleImage {
-            imageConfig: control.__config.popup_background.filePath ? control.__config.popup_background : Config.controls.popup["normal"].background // fallback to regular popup
+        background: ItemGroup {
+            Impl.StyleImage {
+                visible: !control.__isHighContrast
+                imageConfig: control.__config.popup_background.filePath ? control.__config.popup_background : Config.controls.popup["normal"].background // fallback to regular popup
+            }
+            Rectangle {
+                visible: control.__isHighContrast
+                implicitWidth: Config.controls.popup["normal"].background.width
+                implicitHeight: Config.controls.popup["normal"].background.height
+                color: control.palette.window
+                border.color: control.palette.text
+                radius: 4
+            }
         }
     }
 }

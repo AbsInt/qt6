@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qprinter.h"
 #include "qprinter_p.h"
@@ -39,7 +40,7 @@ using namespace Qt::StringLiterals;
         return retValue; \
     }
 
-extern qreal qt_pixelMultiplier(int resolution);
+Q_GUI_EXPORT extern qreal qt_pixelMultiplier(int resolution);
 extern QMarginsF qt_convertMargins(const QMarginsF &margins, QPageLayout::Unit fromUnits, QPageLayout::Unit toUnits);
 
 QPrinterInfo QPrinterPrivate::findValidPrinter(const QPrinterInfo &printer)

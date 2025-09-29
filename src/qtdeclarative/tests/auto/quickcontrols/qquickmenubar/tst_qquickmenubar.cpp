@@ -18,6 +18,7 @@
 #include <QtQuickTemplates2/private/qquickmenubaritem_p.h>
 #include <QtQuickTemplates2/private/qquickmenuitem_p.h>
 #include <QtQuickTemplates2/private/qquickpopupwindow_p_p.h>
+#include <QtQuickTest/quicktest.h>
 #include <QtQuickControlsTestUtils/private/controlstestutils_p.h>
 #include <QtQuickControlsTestUtils/private/qtest_quickcontrols_p.h>
 
@@ -205,7 +206,7 @@ void tst_qquickmenubar::mouse()
     // re-trigger a menubar item to hide the menu - it should close on press
     QTest::mousePress(window.data(), Qt::LeftButton, Qt::NoModifier, itemSceneCenter(editMenuBarItem));
     QVERIFY(editMenuBarItem->isHighlighted());
-    QVERIFY(editMenuBarItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(editMenuBarItem);
     QTRY_VERIFY(!editMenuBarMenu->isVisible());
     QTest::mouseRelease(window.data(), Qt::LeftButton, Qt::NoModifier, itemSceneCenter(editMenuBarItem));
 
@@ -406,7 +407,7 @@ void tst_qquickmenubar::keys()
     QVERIFY(editMenuBarItem->isHighlighted());
     QVERIFY(editMenuBarMenu->isVisible());
     QTRY_VERIFY(editMenuBarMenu->isOpened());
-    QVERIFY(editMenuBarMenu->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(editMenuBarMenu);
 
     // navigate down to the menu
     QQuickMenuItem *cutMenuItem = qobject_cast<QQuickMenuItem *>(editMenuBarMenu->itemAt(0));
@@ -415,13 +416,13 @@ void tst_qquickmenubar::keys()
     QVERIFY(!cutMenuItem->hasActiveFocus());
     QTest::keyClick(window.data(), Qt::Key_Down);
     QVERIFY(cutMenuItem->isHighlighted());
-    QVERIFY(cutMenuItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(cutMenuItem);
 
     // navigate up, back to the menubar
     QTest::keyClick(window.data(), Qt::Key_Up);
     QTRY_VERIFY(!editMenuBarMenu->isVisible());
     QVERIFY(editMenuBarItem->isHighlighted());
-    QVERIFY(editMenuBarItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(editMenuBarItem);
 
 // There seem to be problems in focus handling in webOS QPA, see https://bugreports.qt.io/browse/WEBOSCI-45
 #ifdef Q_OS_WEBOS
@@ -436,9 +437,9 @@ void tst_qquickmenubar::keys()
     QVERIFY(!editMenuBarItem->hasActiveFocus());
     QVERIFY(editMenuBarMenu->isVisible());
     QTRY_VERIFY(editMenuBarMenu->isOpened());
-    QVERIFY(editMenuBarMenu->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(editMenuBarMenu);
     QVERIFY(cutMenuItem->isHighlighted());
-    QVERIFY(cutMenuItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(cutMenuItem);
 
     // navigate left in popup mode (menu open)
     QTest::keyClick(window.data(), Qt::Key_Left);
@@ -482,7 +483,7 @@ void tst_qquickmenubar::keys()
     QVERIFY(viewMenuBarMenu->isVisible());
     QTRY_VERIFY(viewMenuBarMenu->isOpened());
     QVERIFY(!viewMenuBarItem->hasActiveFocus());
-    QVERIFY(viewMenuBarMenu->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(viewMenuBarMenu);
 
     // open a sub-menu
     QQuickMenuItem *alignmentSubMenuItem = qobject_cast<QQuickMenuItem *>(viewMenuBarMenu->itemAt(0));
@@ -627,7 +628,7 @@ void tst_qquickmenubar::mnemonics()
     QVERIFY(!editMenuBarItem->hasActiveFocus());
     QVERIFY(editMenuBarMenu->isVisible());
     QTRY_VERIFY(editMenuBarMenu->isOpened());
-    QVERIFY(editMenuBarMenu->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(editMenuBarMenu);
 
     // press Alt to hide the menu
     keySim.click(Qt::Key_Alt);
@@ -643,7 +644,7 @@ void tst_qquickmenubar::mnemonics()
     QVERIFY(editMenuBarItem->isHighlighted());
     QVERIFY(editMenuBarMenu->isVisible());
     QTRY_VERIFY(editMenuBarMenu->isOpened());
-    QVERIFY(editMenuBarMenu->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(editMenuBarMenu);
     QVERIFY(!editMenuBarItem->hasActiveFocus());
 
     // trigger another menubar item to open another menu, leave Alt pressed
@@ -713,7 +714,7 @@ void tst_qquickmenubar::mnemonics()
     QVERIFY(fileMenuBarItem->isHighlighted());
     QVERIFY(fileMenuBarMenu->isVisible());
     QTRY_VERIFY(fileMenuBarMenu->isOpened());
-    QVERIFY(fileMenuBarMenu->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(fileMenuBarMenu);
 
     // trigger a menu item to close the menu, which shouldn't trigger a button
     // action behind the menu (QTBUG-86276)
@@ -759,7 +760,7 @@ void tst_qquickmenubar::altNavigation()
     // releasing Alt with AltModifier removes the AltModifier.
     QTest::keyPress(window.get(), Qt::Key_Alt);
     QTest::keyRelease(window.get(), Qt::Key_Alt, Qt::AltModifier);
-    QVERIFY(menuBar->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(menuBar);
     QVERIFY(fileMenuBarItem->isHighlighted());
 
     // if menu has focus, pressing the mnemonic without Alt should open the menu
@@ -770,7 +771,7 @@ void tst_qquickmenubar::altNavigation()
     QVERIFY(editMenuBarItem->isHighlighted());
     QVERIFY(editMenuBarMenu->isVisible());
     QTRY_VERIFY(editMenuBarMenu->isOpened());
-    QVERIFY(editMenuBarMenu->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(editMenuBarMenu);
 }
 
 void tst_qquickmenubar::addRemove_data()

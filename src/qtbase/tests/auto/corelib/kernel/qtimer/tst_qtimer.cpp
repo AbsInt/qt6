@@ -105,6 +105,8 @@ private slots:
 
     void negativeInterval();
     void testTimerId();
+
+    void intervalOverflow();
 };
 
 void tst_QTimer::zeroTimer()
@@ -1338,7 +1340,6 @@ void tst_QTimer::crossThreadSingleShotDestruction()
         QVERIFY(!timer);
     }
 
-    return; // Events posted to a thread after event loop exit are leaking.
     QVERIFY(deadTimerDestroyed);
 }
 #endif
@@ -1414,22 +1415,23 @@ void tst_QTimer::bindToTimer()
     timer.stop();
     QVERIFY(!active);
 
-    auto ignoreMsg = [] {
-        QTest::ignoreMessage(QtWarningMsg,
-                             "QObject::startTimer: Timers cannot have negative intervals");
-    };
-
     // also test that using negative interval updates the binding correctly
     timer.start(100);
     QVERIFY(active);
-    ignoreMsg();
+    QTest::ignoreMessage(QtWarningMsg,
+                         "QTimer::setInterval: negative intervals aren't allowed; the interval "
+                         "will be set to 1ms.");
     timer.setInterval(-100);
-    QVERIFY(!active);
+    QVERIFY(active);
+    QCOMPARE(timer.intervalAsDuration(), 1ms);
     timer.start(100);
     QVERIFY(active);
-    ignoreMsg();
+    QTest::ignoreMessage(QtWarningMsg,
+                         "QTimer::start: negative intervals aren't allowed; the interval "
+                         "will be set to 1ms.");
     timer.start(-100);
-    QVERIFY(!active);
+    QVERIFY(active);
+    QCOMPARE(timer.intervalAsDuration(), 1ms);
 }
 
 void tst_QTimer::bindTimer()
@@ -1512,33 +1514,72 @@ void tst_QTimer::automatedBindingTests()
 
 void tst_QTimer::negativeInterval()
 {
-    auto ignoreMsg = [] {
-        QTest::ignoreMessage(QtWarningMsg,
-                             "QObject::startTimer: Timers cannot have negative intervals");
-    };
-
     QTimer timer;
 
-    // Starting with a negative interval does not change active state.
-    ignoreMsg();
+    QTest::ignoreMessage(QtWarningMsg,
+                         "QTimer::start: negative intervals aren't allowed; the interval "
+                         "will be set to 1ms.");
     timer.start(-100ms);
-    QVERIFY(!timer.isActive());
+    QVERIFY(timer.isActive());
+    QCOMPARE(timer.intervalAsDuration(), 1ms);
 
-    // Updating the interval to a negative value stops the timer and changes
-    // the active state.
     timer.start(100ms);
     QVERIFY(timer.isActive());
-    ignoreMsg();
+    QTest::ignoreMessage(QtWarningMsg,
+                         "QTimer::setInterval: negative intervals aren't allowed; the interval "
+                         "will be set to 1ms.");
     timer.setInterval(-100);
-    QVERIFY(!timer.isActive());
+    QVERIFY(timer.isActive());
+    QCOMPARE(timer.intervalAsDuration(), 1ms);
 
-    // Starting with a negative interval when already started leads to stop
-    // and inactive state.
     timer.start(100);
     QVERIFY(timer.isActive());
-    ignoreMsg();
+    QTest::ignoreMessage(QtWarningMsg,
+                         "QTimer::start: negative intervals aren't allowed; the interval "
+                         "will be set to 1ms.");
     timer.start(-100ms);
-    QVERIFY(!timer.isActive());
+    QVERIFY(timer.isActive());
+    QCOMPARE(timer.intervalAsDuration(), 1ms);
+}
+
+void tst_QTimer::intervalOverflow()
+{
+    QTimer timer;
+    constexpr auto maxInterval = INT_MAX * 1ms;
+    constexpr auto tooBig = maxInterval + 1ms;
+    auto ignoreStartWarningMsg = [] {
+        QTest::ignoreMessage(QtWarningMsg,
+                             "QTimer::start: interval exceeds maximum allowed interval, it will "
+                             "be clamped to INT_MAX ms (about 24 days).");
+    };
+    auto ignoreSetIntervalWarningMsg = [] {
+        QTest::ignoreMessage(QtWarningMsg,
+                             "QTimer::setInterval: interval exceeds maximum allowed interval, "
+                             "it will be clamped to INT_MAX ms (about 24 days).");
+    };
+
+    ignoreStartWarningMsg();
+    timer.start(tooBig);
+    QVERIFY(timer.isActive());
+    // Interval clamped to INT_MAX * 1ms
+    QCOMPARE(timer.intervalAsDuration(), maxInterval);
+
+    timer.stop();
+    ignoreSetIntervalWarningMsg();
+    timer.setInterval(tooBig); // The same but with setInterval()
+    QCOMPARE(timer.intervalAsDuration(), maxInterval);
+    timer.start();
+    QVERIFY(timer.isActive());
+
+    timer.stop();
+    ignoreStartWarningMsg();
+    timer.start(tooBig + 10min);
+    QVERIFY(timer.isActive());
+    QCOMPARE(timer.intervalAsDuration(), maxInterval);
+    ignoreSetIntervalWarningMsg();
+    timer.setInterval(tooBig + 1h); // With an already running timer
+    QVERIFY(timer.isActive());
+    QCOMPARE(timer.intervalAsDuration(), maxInterval);
 }
 
 class OrderHelper : public QObject

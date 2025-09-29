@@ -784,7 +784,7 @@ bool QTransform::operator==(const QTransform &o) const
 */
 size_t qHash(const QTransform &key, size_t seed) noexcept
 {
-    QtPrivate::QHashCombine hash;
+    QtPrivate::QHashCombineWithSeed hash(seed);
     seed = hash(seed, key.m11());
     seed = hash(seed, key.m12());
     seed = hash(seed, key.m21());
@@ -1281,7 +1281,7 @@ QPolygonF QTransform::map(const QPolygonF &a) const
     QPointF *dp = p.data();
 
     for(i = 0; i < size; ++i) {
-        do_map(da[i].xp, da[i].yp, dp[i].xp, dp[i].yp);
+        do_map(da[i].x(), da[i].y(), dp[i].rx(), dp[i].ry());
     }
     return p;
 }
@@ -1309,9 +1309,9 @@ QPolygon QTransform::map(const QPolygon &a) const
 
     for(i = 0; i < size; ++i) {
         qreal nx = 0, ny = 0;
-        do_map(da[i].xp, da[i].yp, nx, ny);
-        dp[i].xp = qRound(nx);
-        dp[i].yp = qRound(ny);
+        do_map(da[i].x(), da[i].y(), nx, ny);
+        dp[i].rx() = qRound(nx);
+        dp[i].ry() = qRound(ny);
     }
     return p;
 }
@@ -1325,7 +1325,7 @@ QPolygon QTransform::map(const QPolygon &a) const
     \sa QTransform::map()
 */
 
-extern QPainterPath qt_regionToPath(const QRegion &region);
+Q_GUI_EXPORT extern QPainterPath qt_regionToPath(const QRegion &region);
 
 /*!
     \fn QRegion QTransform::map(const QRegion &region) const
@@ -1526,7 +1526,7 @@ QPainterPath QTransform::map(const QPainterPath &path) const
     if (t == TxTranslate) {
         copy.translate(m_matrix[2][0], m_matrix[2][1]);
     } else {
-        copy.detach();
+        copy.setDirty(true);
         // Full xform
         for (int i=0; i<path.elementCount(); ++i) {
             QPainterPath::Element &e = copy.d_ptr->elements[i];

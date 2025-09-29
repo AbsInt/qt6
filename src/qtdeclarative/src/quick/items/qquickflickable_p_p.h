@@ -241,7 +241,6 @@ public:
 
     QVector2D firstPointLocalVelocity(QPointerEvent *event);
     qint64 computeCurrentTime(QInputEvent *event) const;
-    qreal devicePixelRatio() const;
 
     // flickableData property
     static void data_append(QQmlListProperty<QObject> *, QObject *);

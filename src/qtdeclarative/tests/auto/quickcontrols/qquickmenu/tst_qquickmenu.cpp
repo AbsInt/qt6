@@ -267,7 +267,7 @@ void tst_QQuickMenu::mouse()
     // so that the highlight acts as a way of illustrating press state.
     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, window->mapFromGlobal(firstItem->mapToGlobal(firstItem->boundingRect().center()).toPoint()));
     QTRY_COMPARE(menu->currentIndex(), 0);
-    QTRY_VERIFY(firstItem->hasActiveFocus());
+    QTRY_VERIFY_ACTIVE_FOCUS(firstItem);
     QCOMPARE(menu->contentItem()->property("currentIndex"), QVariant(0));
     QTRY_VERIFY(menu->isOpened());
 
@@ -333,7 +333,7 @@ void tst_QQuickMenu::mouse()
     // Try pressing within the menu and releasing outside of it; it should close.
     // TODO: won't work until QQuickPopup::releasedOutside() actually gets emitted
 //    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, QPoint(firstItem->width() / 2, firstItem->height() / 2));
-//    QVERIFY(firstItem->hasActiveFocus());
+//    QVERIFY_ACTIVE_FOCUS(firstItem);
 //    QCOMPARE(menu->contentItem()->property("currentIndex"), QVariant(0));
 //    QVERIFY(menu->isVisible());
 //    QCOMPARE(triggeredSpy.count(), 1);
@@ -394,6 +394,7 @@ void tst_QQuickMenu::contextMenuKeyboard()
     centerOnScreen(window);
     moveMouseAway(window);
     window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
     window->requestActivate();
     QVERIFY(QTest::qWaitForWindowActive(window));
     QVERIFY(QGuiApplication::focusWindow() == window);
@@ -421,6 +422,20 @@ void tst_QQuickMenu::contextMenuKeyboard()
     QVERIFY(firstItem);
     QSignalSpy visibleSpy(menu, SIGNAL(visibleChanged()));
 
+#if QT_CONFIG(xcb)
+    // The focus-out event is triggered when the expected focus-in event does not occur
+    // within a certain time frame. In this case, the xcb connection sends a focus-out event,
+    // causing the active window to lose focus. As a result, if the menu is already open,
+    // it will be closed automatically.
+    // To prevent this issue, we force the application to process pending and deferred events,
+    // ensuring that the focus-in event is handled before opening the menu.
+    // See also QXcbConnection::QXcbConnection() (line: m_focusInTimer.callOnTimeout(...)).
+    if (QGuiApplication::platformName().compare(QLatin1String("xcb"), Qt::CaseInsensitive)) {
+        QGuiApplication::processEvents();
+        QGuiApplication::sendPostedEvents();
+    }
+#endif
+
     QVERIFY(menu->hasFocus());
     menu->open();
 
@@ -431,12 +446,13 @@ void tst_QQuickMenu::contextMenuKeyboard()
         QTRY_VERIFY(menuPrivate->popupWindow);
         parentItem = menuPrivate->popupWindow->contentItem();
         QVERIFY(QTest::qWaitForWindowExposed(menuPrivate->popupWindow));
-        QQuickTest::qWaitForPolish(menuPrivate->popupWindow);
+        QVERIFY(QTest::qWaitForWindowActive(menuPrivate->popupWindow));
+        QVERIFY(QQuickTest::qWaitForPolish(menuPrivate->popupWindow));
     }
 
     QTRY_VERIFY(menu->isOpened());
     QCOMPARE(visibleSpy.size(), 1);
-    QVERIFY(menu->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(menu);
 
     QVERIFY(parentItem);
     QVERIFY(parentItem->childItems().contains(menu->contentItem()->parentItem()));
@@ -446,7 +462,7 @@ void tst_QQuickMenu::contextMenuKeyboard()
     QCOMPARE(menu->contentItem()->property("currentIndex"), QVariant(-1));
 
     QTest::keyClick(window, Qt::Key_Tab);
-    QVERIFY(firstItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(firstItem);
     VERIFY_VISUAL_FOCUS(firstItem);
     QVERIFY(firstItem->isHighlighted());
     QCOMPARE(firstItem->focusReason(), Qt::TabFocusReason);
@@ -459,7 +475,7 @@ void tst_QQuickMenu::contextMenuKeyboard()
     QVERIFY(!firstItem->hasActiveFocus());
     QVERIFY(!firstItem->hasVisualFocus());
     QVERIFY(!firstItem->isHighlighted());
-    QVERIFY(secondItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(secondItem);
     VERIFY_VISUAL_FOCUS(secondItem);
     QVERIFY(secondItem->isHighlighted());
     QCOMPARE(secondItem->focusReason(), Qt::TabFocusReason);
@@ -492,7 +508,7 @@ void tst_QQuickMenu::contextMenuKeyboard()
     }
     // Give the first item focus.
     QTest::keyClick(window, Qt::Key_Tab);
-    QVERIFY(firstItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(firstItem);
     VERIFY_VISUAL_FOCUS(firstItem);
     QVERIFY(firstItem->isHighlighted());
     QCOMPARE(firstItem->focusReason(), Qt::TabFocusReason);
@@ -532,13 +548,13 @@ void tst_QQuickMenu::contextMenuKeyboard()
     QCOMPARE(menu->contentItem()->property("currentIndex"), QVariant(-1));
 
     QTest::keyClick(window, Qt::Key_Down);
-    QVERIFY(firstItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(firstItem);
     VERIFY_VISUAL_FOCUS(firstItem);
     QVERIFY(firstItem->isHighlighted());
     QCOMPARE(firstItem->focusReason(), Qt::TabFocusReason);
 
     QTest::keyClick(window, Qt::Key_Down);
-    QVERIFY(secondItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(secondItem);
     VERIFY_VISUAL_FOCUS(secondItem);
     QVERIFY(secondItem->isHighlighted());
     QCOMPARE(secondItem->focusReason(), Qt::TabFocusReason);
@@ -552,7 +568,7 @@ void tst_QQuickMenu::contextMenuKeyboard()
     QVERIFY(!secondItem->hasActiveFocus());
     QVERIFY(!secondItem->hasVisualFocus());
     QVERIFY(!secondItem->isHighlighted());
-    QVERIFY(thirdItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(thirdItem);
     VERIFY_VISUAL_FOCUS(thirdItem);
     QVERIFY(thirdItem->isHighlighted());
     QCOMPARE(thirdItem->focusReason(), Qt::TabFocusReason);
@@ -565,7 +581,7 @@ void tst_QQuickMenu::contextMenuKeyboard()
     QVERIFY(!secondItem->hasActiveFocus());
     QVERIFY(!secondItem->hasVisualFocus());
     QVERIFY(!secondItem->isHighlighted());
-    QVERIFY(thirdItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(thirdItem);
     VERIFY_VISUAL_FOCUS(thirdItem);
     QVERIFY(thirdItem->isHighlighted());
     QCOMPARE(thirdItem->focusReason(), Qt::TabFocusReason);
@@ -574,7 +590,7 @@ void tst_QQuickMenu::contextMenuKeyboard()
     QVERIFY(!firstItem->hasActiveFocus());
     QVERIFY(!firstItem->hasVisualFocus());
     QVERIFY(!firstItem->isHighlighted());
-    QVERIFY(secondItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(secondItem);
     VERIFY_VISUAL_FOCUS(secondItem);
     QVERIFY(secondItem->isHighlighted());
     QCOMPARE(secondItem->focusReason(), Qt::BacktabFocusReason);
@@ -583,7 +599,7 @@ void tst_QQuickMenu::contextMenuKeyboard()
     QVERIFY(!thirdItem->isHighlighted());
 
     QTest::keyClick(window, Qt::Key_Backtab);
-    QVERIFY(firstItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(firstItem);
     VERIFY_VISUAL_FOCUS(firstItem);
     QVERIFY(firstItem->isHighlighted());
     QCOMPARE(firstItem->focusReason(), Qt::BacktabFocusReason);
@@ -640,7 +656,7 @@ void tst_QQuickMenu::disabledMenuItemKeyNavigation()
     QCOMPARE(menu->currentIndex(), -1);
 
     QTest::keyClick(window, Qt::Key_Tab);
-    QVERIFY(firstItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(firstItem);
     VERIFY_VISUAL_FOCUS(firstItem);
     QVERIFY(firstItem->isHighlighted());
     QCOMPARE(firstItem->focusReason(), Qt::TabFocusReason);
@@ -651,13 +667,13 @@ void tst_QQuickMenu::disabledMenuItemKeyNavigation()
     QVERIFY(!secondItem->hasActiveFocus());
     QVERIFY(!secondItem->hasVisualFocus());
     QVERIFY(!secondItem->isHighlighted());
-    QVERIFY(thirdItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(thirdItem);
     VERIFY_VISUAL_FOCUS(thirdItem);
     QVERIFY(thirdItem->isHighlighted());
     QCOMPARE(thirdItem->focusReason(), Qt::TabFocusReason);
 
     QTest::keyClick(window, Qt::Key_Up);
-    QVERIFY(firstItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(firstItem);
     VERIFY_VISUAL_FOCUS(firstItem);
     QVERIFY(firstItem->isHighlighted());
     QCOMPARE(firstItem->focusReason(), Qt::BacktabFocusReason);
@@ -961,7 +977,7 @@ void tst_QQuickMenu::menuButton()
 
     QTest::keyClick(window, Qt::Key_Tab);
     QQuickItem *firstItem = menu->itemAt(0);
-    QVERIFY(firstItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(firstItem);
 }
 
 void tst_QQuickMenu::addItem()
@@ -1045,27 +1061,27 @@ void tst_QQuickMenu::menuSeparator()
 
     // Key navigation skips separators
     QTest::keyClick(window, Qt::Key_Down);
-    QVERIFY(newMenuItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(newMenuItem);
     VERIFY_VISUAL_FOCUS(newMenuItem);
     QCOMPARE(newMenuItem->focusReason(), Qt::TabFocusReason);
 
     QTest::keyClick(window, Qt::Key_Down);
-    QVERIFY(saveMenuItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(saveMenuItem);
     VERIFY_VISUAL_FOCUS(saveMenuItem);
     QCOMPARE(saveMenuItem->focusReason(), Qt::TabFocusReason);
 
     QTest::keyClick(window, Qt::Key_Down);
-    QVERIFY(saveMenuItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(saveMenuItem);
     VERIFY_VISUAL_FOCUS(saveMenuItem);
     QCOMPARE(saveMenuItem->focusReason(), Qt::TabFocusReason);
 
     QTest::keyClick(window, Qt::Key_Up);
-    QVERIFY(newMenuItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(newMenuItem);
     VERIFY_VISUAL_FOCUS(newMenuItem);
     QCOMPARE(newMenuItem->focusReason(), Qt::BacktabFocusReason);
 
     QTest::keyClick(window, Qt::Key_Up);
-    QVERIFY(newMenuItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(newMenuItem);
     VERIFY_VISUAL_FOCUS(newMenuItem);
     QCOMPARE(newMenuItem->focusReason(), Qt::BacktabFocusReason);
 }
@@ -2717,7 +2733,7 @@ void tst_QQuickMenu::giveMenuItemFocusOnButtonPress()
     QQuickButton *menuButton = window->property("menuButton").value<QQuickButton*>();
     QVERIFY(menuButton);
     menuButton->forceActiveFocus();
-    QVERIFY(menuButton->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(menuButton);
 
     QSignalSpy clickedSpy(window, SIGNAL(menuButtonClicked()));
     QVERIFY(clickedSpy.isValid());

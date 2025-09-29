@@ -19,7 +19,7 @@ T.Popup {
 
     background: Rectangle {
         color: control.palette.window
-        border.color: control.palette.mid
+        border.color: Fusion.highContrast ? control.palette.windowText : control.palette.mid
         radius: 2
     }
 

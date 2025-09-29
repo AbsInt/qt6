@@ -1,5 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// Qt-Security score:significant
 
 #ifndef QQMLJSANNOTATION_P_H
 #define QQMLJSANNOTATION_P_H
@@ -47,7 +48,7 @@ struct QQmlJSAnnotation
 
     friend size_t qHash(const QQmlJSAnnotation &annotation, size_t seed = 0)
     {
-        QtPrivate::QHashCombine combine;
+        QtPrivate::QHashCombine combine(seed);
         seed = combine(seed, annotation.name);
 
         for (auto it = annotation.bindings.constBegin(); it != annotation.bindings.constEnd(); ++it) {

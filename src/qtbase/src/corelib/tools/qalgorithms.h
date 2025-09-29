@@ -9,6 +9,7 @@
 #endif
 
 #include <QtCore/qglobal.h>
+#include <QtCore/q20functional.h>
 
 #if __has_include(<bit>) && __cplusplus > 201703L
 #include <bit>
@@ -435,6 +436,25 @@ QT_POPCOUNT_RELAXED_CONSTEXPR inline uint qCountLeadingZeroBits(unsigned long v)
 }
 
 #undef QT_POPCOUNT_RELAXED_CONSTEXPR
+
+template <typename InputIterator, typename Result, typename Separator = Result,
+          typename Projection = q20::identity>
+Result qJoin(InputIterator first, InputIterator last, Result init, const Separator &separator = {},
+             Projection p = {})
+{
+    if (first != last) {
+        init += std::invoke(p, *first);
+        ++first;
+    }
+
+    while (first != last) {
+        init += separator;
+        init += std::invoke(p, *first);
+        ++first;
+    }
+
+    return init;
+}
 
 namespace QtPrivate {
 

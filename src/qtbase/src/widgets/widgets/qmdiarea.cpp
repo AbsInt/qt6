@@ -1170,6 +1170,8 @@ void QMdiAreaPrivate::updateScrollBars()
     const int startX = q->isLeftToRight() ? childrenRect.left() : viewportRect.right()
                                                                   - childrenRect.right();
 
+    const auto singleStep = defaultSingleStep();
+
     // Horizontal scroll bar.
     if (isSubWindowsTiled && hbar->value() != 0)
         hbar->setValue(0);
@@ -1177,7 +1179,7 @@ void QMdiAreaPrivate::updateScrollBars()
     hbar->setRange(qMin(0, xOffset),
                    qMax(0, xOffset + childrenRect.width() - viewportRect.width()));
     hbar->setPageStep(childrenRect.width());
-    hbar->setSingleStep(childrenRect.width() / 20);
+    hbar->setSingleStep(childrenRect.width() / singleStep);
 
     // Vertical scroll bar.
     if (isSubWindowsTiled && vbar->value() != 0)
@@ -1186,7 +1188,7 @@ void QMdiAreaPrivate::updateScrollBars()
     vbar->setRange(qMin(0, yOffset),
                    qMax(0, yOffset + childrenRect.height() - viewportRect.height()));
     vbar->setPageStep(childrenRect.height());
-    vbar->setSingleStep(childrenRect.height() / 20);
+    vbar->setSingleStep(childrenRect.height() / singleStep);
 }
 
 /*!

@@ -2504,7 +2504,7 @@ QSGNode *QQuickTextEdit::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *
     while (nodeIterator != d->textNodeMap.end() && !nodeIterator->dirty())
         ++nodeIterator;
 
-    const auto dpr = window()->effectiveDevicePixelRatio();
+    const auto dpr = d->effectiveDevicePixelRatio();
     QQuickTextNodeEngine engine;
     engine.setDevicePixelRatio(dpr);
     QQuickTextNodeEngine frameDecorationsEngine;

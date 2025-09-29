@@ -1,5 +1,6 @@
 // Copyright (C) 2019 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// Qt-Security score:significant
 
 #ifndef QQMLJSIMPORTEDMEMBERSVISITOR_P_H
 #define QQMLJSIMPORTEDMEMBERSVISITOR_P_H
@@ -65,7 +66,6 @@ public:
     {
         return m_signalHandlers;
     }
-    QSet<QQmlJSScope::ConstPtr> literalScopesToCheck() const { return m_literalScopesToCheck; }
     QList<QQmlJSScope::ConstPtr> qmlTypes() const { return m_qmlTypes; }
     QHash<QV4::CompiledData::Location, QQmlJSScope::ConstPtr> scopesBylocation() const
     {
@@ -89,9 +89,6 @@ public:
     QStringList seenModuleQualifiers() const { return m_seenModuleQualifiers; }
 
 protected:
-    // Linter warnings, we might want to move this at some point
-    bool visit(QQmlJS::AST::StringLiteral *) override;
-
     bool visit(QQmlJS::AST::ExpressionStatement *ast) override;
     void endVisit(QQmlJS::AST::ExpressionStatement *ast) override;
 
@@ -152,6 +149,8 @@ protected:
     bool visit(QQmlJS::AST::IdentifierExpression *idexp) override;
 
     bool visit(QQmlJS::AST::PatternElement *) override;
+
+    bool visit(QQmlJS::AST::IfStatement *) override;
 
     void throwRecursionDepthError() override;
 
@@ -259,7 +258,7 @@ protected:
     // true if the scope already exists and \c false if the new scope is created
     bool enterEnvironmentNonUnique(QQmlJSScope::ScopeType type, const QString &name,
                                    const QQmlJS::SourceLocation &location);
-    void leaveEnvironment();
+    virtual void leaveEnvironment();
 
     // A set of types that have not been resolved but have been used during the
     // AST traversal
@@ -301,16 +300,16 @@ protected:
     void processPropertyBindingObjects();
     void flushPendingSignalParameters();
 
-    QQmlJSScope::ConstPtr scopeById(const QString &id, const QQmlJSScope::ConstPtr &current);
-
     void breakInheritanceCycles(const QQmlJSScope::Ptr &scope);
     void checkDeprecation(const QQmlJSScope::ConstPtr &scope);
     void checkGroupedAndAttachedScopes(QQmlJSScope::ConstPtr scope);
     bool rootScopeIsValid() const { return m_exportedRootScope->sourceLocation().isValid(); }
 
     enum class BindingExpressionParseResult { Invalid, Script, Literal, Translation };
-    BindingExpressionParseResult parseBindingExpression(const QString &name,
-                                                        const QQmlJS::AST::Statement *statement);
+    enum class BindingForPropertyDefintion { Yes, No };
+    virtual BindingExpressionParseResult parseBindingExpression(
+            const QString &name, const QQmlJS::AST::Statement *statement,
+            const QQmlJS::AST::UiPublicMember *associatedPropertyDefinition = nullptr);
     bool isImportPrefix(QString prefix) const;
 
     // Used to temporarily store annotations for functions and generators wrapped in UiSourceElements
@@ -380,9 +379,9 @@ protected:
     QHash<Property, QList<Alias>> m_propertyAliases;
 
     QHash<QQmlJS::SourceLocation, QQmlJSMetaSignalHandler> m_signalHandlers;
-    QSet<QQmlJSScope::ConstPtr> m_literalScopesToCheck;
     QQmlJS::SourceLocation m_pendingSignalHandler;
     QStringList m_seenModuleQualifiers;
+    QHash<QStringView, QQmlJS::SourceLocation> m_seenInlineComponents;
 
 private:
     void registerTargetIntoImporter(const QQmlJSScope::Ptr &target);
@@ -394,6 +393,8 @@ private:
     void populatePropertyAliases();
     void resolveGroupProperties();
     void handleIdDeclaration(QQmlJS::AST::UiScriptBinding *scriptBinding);
+    virtual void handleLiteralBinding(const QQmlJSMetaPropertyBinding &,
+                                      const QQmlJS::AST::UiPublicMember *);
 
     void visitFunctionExpressionHelper(QQmlJS::AST::FunctionExpression *fexpr);
     void processImportWarnings(

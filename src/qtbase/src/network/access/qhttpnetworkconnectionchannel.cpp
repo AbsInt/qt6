@@ -158,7 +158,7 @@ void QHttpNetworkConnectionChannel::init()
         if (!ignoreSslErrorsList.isEmpty())
             sslSocket->ignoreSslErrors(ignoreSslErrorsList);
 
-        if (sslConfiguration.data() && !sslConfiguration->isNull())
+        if (sslConfiguration && !sslConfiguration->isNull())
            sslSocket->setSslConfiguration(*sslConfiguration);
     } else {
 #endif // !QT_NO_SSL
@@ -741,10 +741,10 @@ void QHttpNetworkConnectionChannel::setSslConfiguration(const QSslConfiguration 
     if (socket)
         static_cast<QSslSocket *>(socket)->setSslConfiguration(config);
 
-    if (sslConfiguration.data())
+    if (sslConfiguration)
         *sslConfiguration = config;
     else
-        sslConfiguration.reset(new QSslConfiguration(config));
+        sslConfiguration = QSslConfiguration(config);
 }
 
 #endif

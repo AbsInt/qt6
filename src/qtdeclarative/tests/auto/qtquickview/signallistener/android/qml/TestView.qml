@@ -12,6 +12,11 @@ Item {
     signal boolSignal(value: bool)
     signal doubleSignal(value: double)
     signal stringSignal(value: string)
+    signal manyTypeArgSignal(
+        intValue: int,
+        boolValue: bool,
+        doubleValue: double,
+        stringValue: string)
 
     readonly property int signalWaitTime: 1000
 
@@ -44,6 +49,11 @@ Item {
         target: communicator
         signalName: "stringSignal"
     }
+    SignalSpy {
+        id: manyTypeSpy
+        target: communicator
+        signalName: "manyTypeSignal"
+    }
 
     function wipeSpies() {
         basicSpy.clear()
@@ -51,6 +61,7 @@ Item {
         boolSpy.clear()
         doubleSpy.clear()
         stringSpy.clear()
+        manyTypeSpy.clear()
     }
 
     TestCase {
@@ -113,13 +124,31 @@ Item {
             compare(stringSpy.signalArguments.length, 1)
             compare(stringSpy.signalArguments[0][0], testVal)
         }
+
+        function test_manyTypes() {
+            let testInt = 123
+            let testBool = true
+            let testDouble = 123.456
+            let testString = "Testing testing, is this thing on?"
+            compare(manyTypeSpy.count, 0)
+
+            root.manyTypeArgSignal(testInt, testBool, testDouble, testString)
+            manyTypeSpy.wait(root.signalWaitTime)
+
+            compare(manyTypeSpy.count, 1)
+            compare(manyTypeSpy.signalArguments.length, 1)
+            compare(manyTypeSpy.signalArguments[0][0], testInt)
+            compare(manyTypeSpy.signalArguments[0][1], testBool)
+            compare(manyTypeSpy.signalArguments[0][2], testDouble)
+            compare(manyTypeSpy.signalArguments[0][3], testString)
+        }
     }
 
     TestCase {
         name: "spamSignaling"
         when: windowShown
 
-        readonly property int spam_count: 100000
+        readonly property int spam_count: 500
 
         function init() { root.wipeSpies() }
 
@@ -129,7 +158,6 @@ Item {
         }
 
         function test_basic() {
-            skip("QTBUG-138104 Global reference table overflow")
             compare(basicSpy.count, 0)
             for (let i = 0; i < spam_count; ++i) {
                 root.basicSignal()
@@ -140,7 +168,6 @@ Item {
         }
 
         function test_int() {
-            skip("QTBUG-138104 Global reference table overflow")
             const testVal = 123
             compare(intSpy.count, 0)
             for (let i = 0; i < spam_count; ++i) {
@@ -155,7 +182,6 @@ Item {
         }
 
         function test_bool() {
-            skip("QTBUG-138104 Global reference table overflow")
             const testVal = false
             compare(boolSpy.count, 0)
             for (let i = 0; i < spam_count; ++i) {
@@ -170,7 +196,6 @@ Item {
         }
 
         function test_double() {
-            skip("QTBUG-138104 Global reference table overflow")
             const testVal = 123.123
             compare(doubleSpy.count, 0)
             for (let i = 0; i < spam_count; ++i) {
@@ -185,7 +210,6 @@ Item {
         }
 
         function test_string() {
-            skip("QTBUG-138104 Global reference table overflow")
             const testVal = "Testing testing, is this thing on?"
             compare(stringSpy.count, 0)
             for (let i = 0; i < spam_count; ++i) {
@@ -196,6 +220,26 @@ Item {
             compare(stringSpy.count, spam_count)
             for (const arg of stringSpy.signalArguments) {
                 compare(arg[0], testVal)
+            }
+        }
+
+        function test_manyTypes() {
+            const testInt = 123
+            const testBool = true
+            const testDouble = 123.456
+            const testString = "Testing testing, is this thing on?"
+            compare(manyTypeSpy.count, 0)
+            for (let i = 0; i < spam_count; ++i) {
+                root.manyTypeArgSignal(testInt, testBool, testDouble, testString)
+            }
+            waitWhileSignalsArrive(manyTypeSpy, spam_count)
+
+            compare(manyTypeSpy.count, spam_count)
+            for (const arg of manyTypeSpy.signalArguments) {
+                compare(arg[0], testInt)
+                compare(arg[1], testBool)
+                compare(arg[2], testDouble)
+                compare(arg[3], testString)
             }
         }
     }

@@ -64,6 +64,10 @@ void QCocoaScreen::initializeScreens()
         NSApplicationDidChangeScreenParametersNotification, [&]() {
             qCDebug(lcQpaScreen) << "Received screen parameter change notification";
             updateScreens();
+
+            // The notification is posted when the EDR headroom of a display changes,
+            // which might affect the rendering of windows that opt in to EDR.
+            updateHdrWindows();
         });
 }
 
@@ -84,7 +88,7 @@ void QCocoaScreen::updateScreens()
         qCInfo(lcQpaScreen) << "Skipping screen update, already updating";
         return;
     }
-    QBoolBlocker recursionGuard(updatingScreens);
+    QScopedValueRollback recursionGuard(updatingScreens, true);
 
     uint32_t displayCount = 0;
     if (CGGetOnlineDisplayList(0, nullptr, &displayCount) != kCGErrorSuccess)
@@ -498,6 +502,27 @@ void QCocoaScreen::maybeStopDisplayLink()
 
     qCDebug(lcQpaScreenUpdates) << "Stopping display link for" << this;
     CVDisplayLinkStop(m_displayLink);
+}
+
+
+// -----------------------------------------------------------
+
+void QCocoaScreen::updateHdrWindows()
+{
+    if (@available(macOS 14, *)) {
+        for (auto *window : QGuiApplication::allWindows()) {
+            auto *platformWindow = static_cast<QCocoaWindow*>(window->handle());
+            if (!platformWindow)
+                continue;
+
+            NSView *view = platformWindow->view();
+
+            if (!view.layer.wantsExtendedDynamicRangeContent)
+                continue;
+
+            [view setNeedsDisplay:YES];
+        }
+    }
 }
 
 // -----------------------------------------------------------

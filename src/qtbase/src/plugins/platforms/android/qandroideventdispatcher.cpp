@@ -3,7 +3,8 @@
 
 #include "qandroideventdispatcher.h"
 #include "androidjnimain.h"
-#include "androiddeadlockprotector.h"
+
+using namespace Qt::StringLiterals;
 
 QAndroidEventDispatcher::QAndroidEventDispatcher(QObject *parent) :
     QUnixEventDispatcherQPA(parent)
@@ -53,7 +54,8 @@ bool QAndroidEventDispatcher::processEvents(QEventLoop::ProcessEventsFlags flags
         flags |= QEventLoop::ExcludeSocketNotifiers | QEventLoop::X11ExcludeTimers;
 
     {
-        AndroidDeadlockProtector protector;
+        QtAndroidPrivate::AndroidDeadlockProtector protector(
+            u"QAndroidEventDispatcher::processEvents()"_s);
         if (m_stopRequest.testAndSetAcquire(StopRequest, Stopping) && protector.acquire()) {
             m_semaphore.acquire();
             wakeUp();

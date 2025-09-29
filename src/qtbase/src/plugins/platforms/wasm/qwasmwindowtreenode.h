@@ -6,6 +6,8 @@
 
 #include "qwasmwindowstack.h"
 
+#include <QVariant>
+
 namespace emscripten {
 class val;
 }
@@ -17,7 +19,14 @@ enum class QWasmWindowTreeNodeChangeType {
     NodeRemoval,
 };
 
-class QWasmWindowTreeNode
+class QWasmWindowTreeNodeBase
+{
+protected:
+    static uint64_t s_nextActiveIndex;
+};
+
+template<class Window = QWasmWindow>
+class QWasmWindowTreeNode : public QWasmWindowTreeNodeBase
 {
 public:
     QWasmWindowTreeNode();
@@ -28,20 +37,20 @@ public:
 
 protected:
     virtual void onParentChanged(QWasmWindowTreeNode *previous, QWasmWindowTreeNode *current,
-                                 QWasmWindowStack::PositionPreference positionPreference);
-    virtual QWasmWindow *asWasmWindow();
+                                 typename QWasmWindowStack<Window>::PositionPreference positionPreference);
+    virtual Window *asWasmWindow();
     virtual void onSubtreeChanged(QWasmWindowTreeNodeChangeType changeType,
-                                  QWasmWindowTreeNode *parent, QWasmWindow *child);
-    virtual void setWindowZOrder(QWasmWindow *window, int z);
+                                  QWasmWindowTreeNode *parent, Window *child);
+    virtual void setWindowZOrder(Window *window, int z);
 
-    void onPositionPreferenceChanged(QWasmWindowStack::PositionPreference positionPreference);
+    void onPositionPreferenceChanged(typename QWasmWindowStack<Window>::PositionPreference positionPreference);
     void setAsActiveNode();
     void bringToTop();
     void sendToBottom();
-    void shutdown();
 
-    const QWasmWindowStack &childStack() const { return m_childStack; }
-    QWasmWindow *activeChild() const { return m_activeChild; }
+    const QWasmWindowStack<Window> &childStack() const { return m_childStack; }
+    QWasmWindowStack<Window> &childStack() { return m_childStack; }
+    Window *activeChild() const { return m_activeChild; }
 
     uint64_t getActiveIndex() const {
         return m_activeIndex;
@@ -49,13 +58,13 @@ protected:
 
 private:
     void onTopWindowChanged();
-    void setActiveChildNode(QWasmWindow *activeChild);
+    void setActiveChildNode(Window *activeChild);
 
     uint64_t m_activeIndex = 0;
-    static uint64_t s_nextActiveIndex;
 
-    QWasmWindowStack m_childStack;
-    QWasmWindow *m_activeChild = nullptr;
+    QWasmWindowStack<Window> m_childStack;
+    Window *m_activeChild = nullptr;
 };
+#endif
 
-#endif // QWASMWINDOWTREENODE_H
+#include "qwasmwindowtreenode.inc"

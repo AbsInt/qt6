@@ -19,7 +19,7 @@ ScrollablePage {
         }
 
         TextField {
-            id: field
+            enabled: !GalleryConfig.disabled
             placeholderText: qsTr("TextField")
             anchors.horizontalCenter: parent.horizontalCenter
         }

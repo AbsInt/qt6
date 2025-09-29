@@ -92,12 +92,15 @@ struct QQmlTypeWrapper : FunctionObject {
 
 using QQmlTypeConstructor = QQmlTypeWrapper;
 
-struct QQmlScopedEnumWrapper : Object {
+struct QQmlEnumWrapper : Object
+{
     void init() { Object::init(); }
     void destroy();
-    int scopeEnumIndex;
-    const QQmlTypePrivate *typePrivate;
     QQmlType type() const;
+
+    const QQmlTypePrivate *typePrivate;
+    int enumIndex;
+    bool scoped;
 };
 
 }
@@ -106,6 +109,7 @@ struct Q_QML_EXPORT QQmlTypeWrapper : FunctionObject
 {
     V4_OBJECT2(QQmlTypeWrapper, FunctionObject)
     V4_PROTOTYPE(typeWrapperPrototype)
+    Q_MANAGED_TYPE(QMLTypeWrapper);
     V4_NEEDS_DESTROY
 
     bool isSingleton() const;
@@ -130,7 +134,7 @@ struct Q_QML_EXPORT QQmlTypeWrapper : FunctionObject
     static ReturnedValue lookupSingletonProperty(Lookup *l, ExecutionEngine *engine, const Value &base);
     static ReturnedValue lookupSingletonMethod(Lookup *l, ExecutionEngine *engine, const Value &base);
     static ReturnedValue lookupEnumValue(Lookup *l, ExecutionEngine *engine, const Value &base);
-    static ReturnedValue lookupScopedEnum(Lookup *l, ExecutionEngine *engine, const Value &base);
+    static ReturnedValue lookupEnum(Lookup *l, ExecutionEngine *engine, const Value &base);
 
 protected:
     static ReturnedValue virtualGet(const Managed *m, PropertyKey id, const Value *receiver, bool *hasProperty);
@@ -159,9 +163,9 @@ struct QQmlTypeConstructor : QQmlTypeWrapper
     }
 };
 
-struct Q_QML_EXPORT QQmlScopedEnumWrapper : Object
+struct Q_QML_EXPORT QQmlEnumWrapper : Object
 {
-    V4_OBJECT2(QQmlScopedEnumWrapper, Object)
+    V4_OBJECT2(QQmlEnumWrapper, Object)
     V4_NEEDS_DESTROY
 
     static ReturnedValue virtualGet(const Managed *m, PropertyKey id, const Value *receiver, bool *hasProperty);

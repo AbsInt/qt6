@@ -506,7 +506,7 @@ struct Q_QML_COMPILER_EXPORT IRBuilder : public QQmlJS::AST::Visitor
 {
     Q_DECLARE_TR_FUNCTIONS(QQmlCodeGenerator)
 public:
-    IRBuilder(const QSet<QString> &illegalNames);
+    IRBuilder();
     bool generateFromQml(const QString &code, const QString &url, Document *output);
 
     using QQmlJS::AST::Visitor::visit;
@@ -598,11 +598,10 @@ public:
     static bool isStatementNodeScript(QQmlJS::AST::Statement *statement);
     static bool isRedundantNullInitializerForPropertyDeclaration(Property *property, QQmlJS::AST::Statement *statement);
 
-    QString sanityCheckFunctionNames(Object *obj, const QSet<QString> &illegalNames, QQmlJS::SourceLocation *errorLocation);
+    QString sanityCheckFunctionNames(Object *obj, QQmlJS::SourceLocation *errorLocation);
 
     QList<QQmlJS::DiagnosticMessage> errors;
 
-    QSet<QString> illegalNames;
     QSet<QString> inlineComponentsNames;
 
     QList<const QV4::CompiledData::Import *> _imports;
@@ -632,7 +631,7 @@ private:
 
 struct Q_QML_COMPILER_EXPORT JSCodeGen : public QV4::Compiler::Codegen
 {
-    JSCodeGen(Document *document, const QSet<QString> &globalNames,
+    JSCodeGen(Document *document,
               QV4::Compiler::CodegenWarningInterface *iface =
                       QV4::Compiler::defaultCodegenWarningInterface(),
               bool storeSourceLocations = false);

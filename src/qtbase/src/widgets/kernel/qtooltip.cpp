@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 
@@ -387,9 +388,9 @@ void QTipLabel::placeTip(const QPoint &pos, QWidget *w)
 
         QRect screenRect = screen->geometry();
         if (p.x() + this->width() > screenRect.x() + screenRect.width())
-        p.rx() -= 4 + this->width();
+            p.rx() -= 4 + this->width();
         if (p.y() + this->height() > screenRect.y() + screenRect.height())
-        p.ry() -= 24 + this->height();
+            p.ry() -= 24 + this->height();
         if (p.y() < screenRect.y())
             p.setY(screenRect.y());
         if (p.x() + this->width() > screenRect.x() + screenRect.width())

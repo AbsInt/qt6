@@ -948,12 +948,30 @@ void QQuickLayout::itemChange(ItemChange change, const ItemChangeData &value)
 void QQuickLayout::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)
 {
     Q_D(QQuickLayout);
+    qCDebug(lcQuickLayouts) << "QQuickLayout::geometryChange"
+        << oldGeometry << "-->" << newGeometry;
+
     QQuickItem::geometryChange(newGeometry, oldGeometry);
+
     if ((invalidated() && !qobject_cast<QQuickLayout *>(parentItem())) ||
         d->m_disableRearrange || !isReady())
         return;
 
-    qCDebug(lcQuickLayouts) << "QQuickLayout::geometryChange" << newGeometry << oldGeometry;
+    // The geometryChange call above might recursively update the
+    // geometry of this layout, via item change listeners, in which
+    // case the recursive call has already rearranged the layout for
+    // the new size. We don't want to rearrange here based on the old
+    // 'new geometry', as that would revert the most up to date layout.
+    const qreal w = d->width.valueBypassingBindings();
+    const qreal h = d->height.valueBypassingBindings();
+    const QSizeF currentSize(w, h);
+    if (currentSize != newGeometry.size()) {
+        qCDebug(lcQuickLayouts) << "QQuickItem::geometryChange resulted"
+            << "in size change from" << newGeometry.size() << "to"
+            << currentSize << "; layout should already be up to date.";
+        return;
+    }
+
     rearrange(newGeometry.size());
 }
 

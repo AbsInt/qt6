@@ -5,6 +5,8 @@
 #include "qv4debugservice.h"
 #include "qv4datacollector.h"
 
+#include <private/qv4stackframe_p.h>
+
 #include <QtCore/qjsonobject.h>
 #include <QtCore/qjsonarray.h>
 

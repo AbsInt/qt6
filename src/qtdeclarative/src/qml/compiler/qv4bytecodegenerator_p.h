@@ -114,6 +114,10 @@ public:
         {
             Q_ASSERT(!generator || generator->currentExceptionHandler != this);
         }
+        ExceptionHandler(const ExceptionHandler &) = default;
+        ExceptionHandler(ExceptionHandler &&) = default;
+        ExceptionHandler &operator=(const ExceptionHandler &) = default;
+        ExceptionHandler &operator=(ExceptionHandler &&) = default;
         bool isValid() const { return generator != nullptr; }
     };
 

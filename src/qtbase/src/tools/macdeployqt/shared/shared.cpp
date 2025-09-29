@@ -19,6 +19,7 @@
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include "shared.h"
 
 #ifdef Q_OS_DARWIN
@@ -134,13 +135,22 @@ void patch_debugInInfoPlist(const QString &infoPlistPath)
 {
     // Older versions of qmake may have the "_debug" binary as
     // the value for CFBundleExecutable. Remove it.
-    QFile infoPlist(infoPlistPath);
-    infoPlist.open(QIODevice::ReadOnly);
-    QByteArray contents = infoPlist.readAll();
-    infoPlist.close();
-    infoPlist.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    contents.replace("_debug", ""); // surely there are no legit uses of "_debug" in an Info.plist
-    infoPlist.write(contents);
+    if (QFile infoPlist(infoPlistPath); infoPlist.open(QIODevice::ReadOnly)) {
+        QByteArray contents = infoPlist.readAll();
+        infoPlist.close();
+        QSaveFile writableInfoPlist(infoPlistPath);
+        bool success = writableInfoPlist.open(QIODevice::WriteOnly | QIODevice::Truncate);
+        if (success) {
+            contents.replace("_debug", ""); // surely there are no legit uses of "_debug" in an Info.plist
+            writableInfoPlist.write(contents);
+            success = writableInfoPlist.commit();
+        }
+        if (!success) {
+            LogError() << "Failed to write Info.plist file" << infoPlistPath;
+        }
+    } else {
+        LogError() << "Failed to read Info.plist file" << infoPlistPath;
+    }
 }
 
 OtoolInfo findDependencyInfo(const QString &binaryPath)
@@ -1222,8 +1232,7 @@ void createQtConf(const QString &appBundlePath)
 
     QDir().mkpath(filePath);
 
-    QFile qtconf(fileName);
-    if (qtconf.exists() && !alwaysOwerwriteEnabled) {
+    if (QFile::exists(fileName) && !alwaysOwerwriteEnabled) {
         LogWarning();
         LogWarning() << fileName << "already exists, will not overwrite.";
         LogWarning() << "To make sure the plugins are loaded from the correct location,";
@@ -1233,8 +1242,8 @@ void createQtConf(const QString &appBundlePath)
         return;
     }
 
-    qtconf.open(QIODevice::WriteOnly);
-    if (qtconf.write(contents) != -1) {
+    if (QSaveFile qtconf(fileName); qtconf.open(QIODevice::WriteOnly)
+        && qtconf.write(contents) != -1 && qtconf.commit()) {
         LogNormal() << "Created configuration file:" << fileName;
         LogNormal() << "This file sets the plugin search path to" << appBundlePath + "/Contents/PlugIns";
     }

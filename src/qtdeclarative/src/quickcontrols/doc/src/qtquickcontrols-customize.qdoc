@@ -1055,4 +1055,21 @@
 
         \snippet qtquickcontrols-tableviewdelegate-custom.qml delegate
 
+    \section2 Customizing HeaderViewDelegate
+
+        HeaderViewDelegate inherits \l TableViewDelegate, which means that it's
+        composed of two items:
+        \l [QML]{Control::}{background} and
+        \l [QML]{Control::}{contentItem}.
+        You can always customize them with any arbitrary items.
+
+        \image qtquickcontrols-headerviewdelegate-custom.png
+
+        Here is an example of customizing the horizontal header view delegate:
+
+        \snippet qtquickcontrols-headerviewdelegate-custom.qml horizontal-delegate
+
+        Here is an example of customizing the vertical header view delegate:
+
+        \snippet qtquickcontrols-headerviewdelegate-custom.qml vertical-delegate
 */

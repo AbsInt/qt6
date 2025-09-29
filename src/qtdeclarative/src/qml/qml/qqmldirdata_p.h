@@ -33,7 +33,7 @@ public:
     template<typename Callback>
     bool processImports(Blob *blob, const Callback &callback) const
     {
-        Q_ASSERT(isTypeLoaderThread());
+        assertTypeLoaderThread();
         bool result = true;
         const auto range = m_imports.equal_range(blob);
         for (auto it = range.first; it != range.second; ++it) {

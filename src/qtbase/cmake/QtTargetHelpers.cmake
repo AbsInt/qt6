@@ -6,6 +6,10 @@
 # One-value Arguments:
 #   PRECOMPILED_HEADER
 #     Name of the precompiled header that is used for the target.
+#   EXTRA_ELF_LINKER_SCRIPT_CONTENT
+#     Extra content that should be appended to a target linker script. Applicable for ld only.
+#   ELF_LINKER_DYNAMIC_LIST
+#     Pass --dynamic-list to the linker.
 # Multi-value Arguments:
 #   CONDITION
 #     The condition under which the target will be extended.
@@ -14,9 +18,7 @@
 #     module, these files will raise a warning at configure time if the condition is not met.
 #   COMPILE_FLAGS
 #     Custom compilation flags.
-#   EXTRA_LINKER_SCRIPT_CONTENT
-#     Extra content that should be appended to a target linker script. Applicable for ld only.
-#   EXTRA_LINKER_SCRIPT_EXPORTS
+#   EXTRA_ELF_LINKER_SCRIPT_EXPORTS
 #     Extra content that should be added to export section of the linker script.
 #   NO_PCH_SOURCES
 #     Exclude the specified source files from PRECOMPILE_HEADERS and UNITY_BUILD builds.
@@ -45,7 +47,8 @@ function(qt_internal_extend_target target)
     )
     set(single_args
         PRECOMPILED_HEADER
-        EXTRA_LINKER_SCRIPT_CONTENT
+        EXTRA_ELF_LINKER_SCRIPT_CONTENT
+        ELF_LINKER_DYNAMIC_LIST
         ${__qt_internal_sbom_single_args}
     )
     set(multi_args
@@ -55,7 +58,7 @@ function(qt_internal_extend_target target)
         CONDITION
         CONDITION_INDEPENDENT_SOURCES
         COMPILE_FLAGS
-        EXTRA_LINKER_SCRIPT_EXPORTS
+        EXTRA_ELF_LINKER_SCRIPT_EXPORTS
         ${__qt_internal_sbom_multi_args}
     )
 
@@ -250,7 +253,12 @@ function(qt_internal_extend_target target)
                 FORWARD_MULTI
                     ${__qt_internal_sbom_multi_args}
             )
-            _qt_internal_extend_sbom(${target} ${sbom_args})
+            # Don't call extend_sbom unless we actually have any SBOM args, to prevent
+            # recording of a target if it has no SBOM info. Relevant for QtFooModulePrivate targets
+            # which don't appear in the SBOM atm.
+            if(sbom_args)
+                _qt_internal_extend_sbom(${target} ${sbom_args})
+            endif()
         endif()
 
         set(target_private "${target}Private")
@@ -322,13 +330,16 @@ function(qt_internal_extend_target target)
             ${sources_property} "${arg_CONDITION_INDEPENDENT_SOURCES}")
     endif()
 
-    if(arg_EXTRA_LINKER_SCRIPT_CONTENT)
+    if(arg_EXTRA_ELF_LINKER_SCRIPT_CONTENT)
         set_target_properties(${target} PROPERTIES
-            _qt_extra_linker_script_content "${arg_EXTRA_LINKER_SCRIPT_CONTENT}")
+            _qt_extra_elf_linker_script_content "${arg_EXTRA_ELF_LINKER_SCRIPT_CONTENT}")
     endif()
-    if(arg_EXTRA_LINKER_SCRIPT_EXPORTS)
+    if(arg_EXTRA_ELF_LINKER_SCRIPT_EXPORTS)
         set_target_properties(${target} PROPERTIES
-            _qt_extra_linker_script_exports "${arg_EXTRA_LINKER_SCRIPT_EXPORTS}")
+            _qt_extra_elf_linker_script_exports "${arg_EXTRA_ELF_LINKER_SCRIPT_EXPORTS}")
+    endif()
+    if(arg_ELF_LINKER_DYNAMIC_LIST)
+        qt_internal_apply_dynamic_list_linker_flags(${target} "${arg_ELF_LINKER_DYNAMIC_LIST}")
     endif()
 
     if(is_executable)
@@ -1241,9 +1252,10 @@ function(qt_internal_create_tracepoints name tracepoints_file)
         endif()
 
         if(NOT "${QT_HOST_PATH}" STREQUAL "")
+            qt_internal_get_host_info_var_prefix(host_info_var_prefix)
             qt_path_join(tracegen
                 "${QT_HOST_PATH}"
-                "${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_LIBEXECDIR}"
+                "${${host_info_var_prefix}_LIBEXECDIR}"
                 "tracegen")
         else()
             set(tracegen "${QT_CMAKE_EXPORT_NAMESPACE}::tracegen")
@@ -1278,9 +1290,10 @@ function(qt_internal_generate_tracepoints name provider)
         endforeach()
 
         if(NOT "${QT_HOST_PATH}" STREQUAL "")
+            qt_internal_get_host_info_var_prefix(host_info_var_prefix)
             qt_path_join(tracepointgen
                 "${QT_HOST_PATH}"
-                "${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_LIBEXECDIR}"
+                "${${host_info_var_prefix}_LIBEXECDIR}"
                 "tracepointgen")
         else()
             set(tracepointgen "${QT_CMAKE_EXPORT_NAMESPACE}::tracepointgen")
@@ -1311,9 +1324,10 @@ function(qt_internal_generate_tracepoints name provider)
         endif()
 
         if(NOT "${QT_HOST_PATH}" STREQUAL "")
+            qt_internal_get_host_info_var_prefix(host_info_var_prefix)
             qt_path_join(tracegen
                 "${QT_HOST_PATH}"
-                "${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_LIBEXECDIR}"
+                "${${host_info_var_prefix}_LIBEXECDIR}"
                 "tracegen")
         else()
             set(tracegen "${QT_CMAKE_EXPORT_NAMESPACE}::tracegen")
@@ -1825,7 +1839,38 @@ function(qt_internal_add_platform_internal_target target)
     qt_internal_mark_as_internal_library("${target}")
 
     qt_internal_add_sbom("${target}"
-        TYPE QT_MODULE
-        IMMEDIATE_FINALIZATION
+        SBOM_ENTITY_TYPE QT_MODULE
     )
+endfunction()
+
+# A small wrapper for passing --dynamic-list to the linker. It will ensure that the symbols will
+# be mangled when qt is compiled in a namespace
+function(qt_internal_apply_dynamic_list_linker_flags target dynlist_template)
+    if(NOT QT_FEATURE_reduce_relocations)
+        return()
+    endif()
+
+    string(REPLACE ".in" "" dynlist_file "${dynlist_template}")
+    set(dynlist_file_abspath "${CMAKE_CURRENT_BINARY_DIR}/${dynlist_file}")
+
+    if(QT_NAMESPACE)
+        set(QT_NAMESPACE_PREFIX "${QT_NAMESPACE}::")
+        set(QT_NAMESPACE_MANGLE_SUFFIX "_${QT_NAMESPACE}")
+    else()
+        set(QT_NAMESPACE_PREFIX "")
+        set(QT_NAMESPACE_MANGLE_SUFFIX "")
+    endif()
+
+    configure_file(
+        "${dynlist_template}"
+        "${dynlist_file_abspath}"
+    )
+
+    qt_internal_extend_target(${target}
+        SOURCES
+            "${dynlist_template}"
+            "${dynlist_file_abspath}"
+    )
+
+    target_link_options(${target} PRIVATE "LINKER:--dynamic-list=${dynlist_file_abspath}")
 endfunction()

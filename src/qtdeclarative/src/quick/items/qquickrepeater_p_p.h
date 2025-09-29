@@ -44,14 +44,19 @@ private:
     {
         QQmlDelegateModel::applyDelegateChangeOnView(q_func(), this);
     }
+    void applyDelegateModelAccessChange()
+    {
+        QQmlDelegateModel::applyDelegateModelAccessChangeOnView(q_func(), this);
+    }
+
+    void connectModel(QQuickRepeater *q, QQmlDelegateModelPointer *model);
+    void disconnectModel(QQuickRepeater *q, QQmlDelegateModelPointer *model);
 
     QPointer<QQmlInstanceModel> model;
-    QVariant dataSource;
-    QPointer<QObject> dataSourceAsObject;
     bool ownModel : 1;
-    bool dataSourceIsObject : 1;
     bool delegateValidated : 1;
     bool explicitDelegate : 1;
+    bool explicitDelegateModelAccess : 1;
     int itemCount;
 
     QVector<QPointer<QQuickItem> > deletables;

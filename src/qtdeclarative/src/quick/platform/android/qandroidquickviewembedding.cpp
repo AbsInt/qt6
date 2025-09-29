@@ -156,17 +156,9 @@ namespace QtAndroidQuickViewEmbedding
     }
 
     int addRootObjectSignalListener(JNIEnv *env, jobject, jlong windowReference, jstring signalName,
-                                   jclass argType, jobject listener)
+                                    QJniArray<jclass> argTypes, jobject listener)
     {
         Q_ASSERT(env);
-        static QHash<QByteArray, int> javaToQMetaType = {
-            { "java/lang/Void", QMetaType::Type::Void },
-            { "java/lang/String", QMetaType::Type::QString },
-            { "java/lang/Integer", QMetaType::Type::Int },
-            { "java/lang/Double", QMetaType::Type::Double },
-            { "java/lang/Float", QMetaType::Type::Float },
-            { "java/lang/Boolean", QMetaType::Type::Bool }
-        };
 
         auto [view, rootObject] = getViewAndRootObject(windowReference);
         if (!rootObject) {
@@ -176,97 +168,8 @@ namespace QtAndroidQuickViewEmbedding
         }
 
         QAndroidViewSignalManager *signalManager = view->signalManager();
-        const QByteArray javaArgClass = QJniObject(argType).className();
-        const char *qArgName =
-                QMetaType(javaToQMetaType.value(javaArgClass, QMetaType::Type::UnknownType)).name();
-        const QString signalMethodName = QJniObject(signalName).toString();
-
-        const QMetaObject *metaObject = rootObject->metaObject();
-        int signalIndex = -1;
-        int propertyIndex = -1;
-
-        QByteArray signalSignature = QMetaObject::normalizedSignature(qPrintable(
-                QStringLiteral("%1(%2)").arg(signalMethodName).arg(QLatin1StringView(qArgName))));
-        signalIndex = metaObject->indexOfSignal(signalSignature.constData());
-
-        // Try to check if the signal is a parameterless notifier of a property
-        // or a property name itself.
-        if (signalIndex == -1) {
-            signalSignature = QMetaObject::normalizedSignature(
-                    qPrintable(QStringLiteral("%1()").arg(signalMethodName)));
-            for (int i = 0; i < metaObject->propertyCount(); ++i) {
-                QMetaProperty metaProperty = metaObject->property(i);
-                QMetaMethod notifyMethod = metaProperty.notifySignal();
-
-                if (signalSignature == notifyMethod.methodSignature()) {
-                    signalIndex = metaObject->property(i).notifySignalIndex();
-                    propertyIndex = i;
-                    break;
-                } else if (signalMethodName == QLatin1StringView(metaProperty.name())) {
-                    signalIndex = metaObject->property(i).notifySignalIndex();
-                    signalSignature = notifyMethod.methodSignature();
-                    propertyIndex = i;
-                    break;
-                }
-            }
-        }
-
-        if (signalIndex == -1)
-            return -1;
-
-        const QMetaObject *helperMetaObject = signalManager->metaObject();
-        QByteArray helperSignalSignature = signalSignature;
-        helperSignalSignature.replace(0, signalSignature.indexOf('('), "forwardSignal");
-        int helperSlotIndex = helperMetaObject->indexOfSlot(helperSignalSignature.constData());
-        if (helperSlotIndex == -1)
-            return -1;
-
-        // Return the id if the signal is already connected to the same listener.
-        QJniObject listenerJniObject(listener);
-        if (signalManager->connectionInfoMap.contains(signalSignature)) {
-            auto connectionInfos = signalManager->connectionInfoMap.values(signalSignature);
-            auto isSameListener =
-                    [listenerJniObject](
-                            const QAndroidViewSignalManager::ConnectionInfo &connectionInfo) {
-                        return connectionInfo.listener == listenerJniObject;
-                    };
-            auto iterator = std::find_if(connectionInfos.constBegin(),
-                                         connectionInfos.constEnd(),
-                                         isSameListener);
-            if (iterator != connectionInfos.end()) {
-                qWarning("Signal listener with the ID of %i is already connected to %s signal.",
-                         iterator->id,
-                         signalSignature.constData());
-                return iterator->id;
-            }
-        }
-
-        QMetaMethod signalMethod = metaObject->method(signalIndex);
-        QMetaMethod signalForwarderMethod = helperMetaObject->method(helperSlotIndex);
-        signalManager->connectionHandleCounter++;
-
-        QMetaObject::Connection connection;
-        if (signalManager->connectionInfoMap.contains(signalSignature)) {
-            const int existingId = signalManager->connectionInfoMap.value(signalSignature).id;
-            connection = signalManager->connections[existingId];
-        } else {
-            connection = QObject::connect(rootObject,
-                                          signalMethod,
-                                          signalManager,
-                                          signalForwarderMethod);
-        }
-
-        QAndroidViewSignalManager::ConnectionInfo connectionInfo;
-        connectionInfo.listener = listenerJniObject;
-        connectionInfo.javaArgType = javaArgClass;
-        connectionInfo.propertyIndex = propertyIndex;
-        connectionInfo.signalSignature = signalSignature;
-        connectionInfo.id = signalManager->connectionHandleCounter;
-
-        signalManager->connectionInfoMap.insert(signalSignature, connectionInfo);
-        signalManager->connections.insert(connectionInfo.id, connection);
-
-        return connectionInfo.id;
+        return signalManager->addConnection(QJniObject(signalName).toString(), argTypes,
+                                            QJniObject(listener), *rootObject);
     }
 
     bool removeRootObjectSignalListener(JNIEnv *, jobject, jlong windowReference,
@@ -278,28 +181,7 @@ namespace QtAndroidQuickViewEmbedding
                      uninitializedViewMessage);
             return false;
         }
-
-        QAndroidViewSignalManager *signalManager = view->signalManager();
-        if (!signalManager->connections.contains(signalListenerId))
-            return false;
-
-        QByteArray signalSignature;
-        for (auto listenerInfoIter = signalManager->connectionInfoMap.begin();
-             listenerInfoIter != signalManager->connectionInfoMap.end();) {
-            if (listenerInfoIter->id == signalListenerId) {
-                signalSignature = listenerInfoIter->signalSignature;
-                signalManager->connectionInfoMap.erase(listenerInfoIter);
-                break;
-            } else {
-                ++listenerInfoIter;
-            }
-        }
-
-        // disconnect if its the last listener associated with the signal signatures
-        if (!signalManager->connectionInfoMap.contains(signalSignature))
-            rootObject->disconnect(signalManager->connections.value(signalListenerId));
-
-        signalManager->connections.remove(signalListenerId);
+        view->signalManager()->removeConnection(signalListenerId);
         return true;
     }
 

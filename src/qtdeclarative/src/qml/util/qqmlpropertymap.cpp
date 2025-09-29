@@ -38,7 +38,7 @@ public:
 
     QVariant updateValue(const QString &key, const QVariant &input);
     void emitChanged(const QString &key, const QVariant &value);
-    bool validKeyName(const QString& name);
+    static bool validKeyName(const QString& name);
 
     const QString &propertyName(int index) const;
 };

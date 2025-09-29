@@ -140,7 +140,7 @@ public:
     RotationDirection direction() const;
 
 Q_SIGNALS:
-    void directionChanged(RotationDirection dir);
+    void directionChanged(QQuickRotationAnimator::RotationDirection dir);
 
 protected:
     QQuickAnimatorJob *createJob() const override;

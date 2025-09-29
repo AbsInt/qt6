@@ -25,11 +25,11 @@ DEFINE_BOOL_CONFIG_OPTION(
 Q_LOGGING_CATEGORY(lcQmlTypeCompiler, "qt.qml.typecompiler");
 
 QQmlTypeCompiler::QQmlTypeCompiler(
-        QQmlEnginePrivate *engine, QQmlTypeData *typeData, QmlIR::Document *parsedQML,
+        QQmlTypeLoader *typeLoader, QQmlTypeData *typeData, QmlIR::Document *parsedQML,
         QV4::CompiledData::ResolvedTypeReferenceMap *resolvedTypeCache,
         const QV4::CompiledData::DependentTypesHasher &dependencyHasher)
     : resolvedTypes(resolvedTypeCache)
-    , engine(engine)
+    , loader(typeLoader)
     , dependencyHasher(dependencyHasher)
     , document(parsedQML)
     , typeData(typeData)
@@ -51,8 +51,9 @@ QQmlRefPointer<QV4::CompiledData::CompilationUnit> QQmlTypeCompiler::compile()
 
 
     {
-        QQmlPropertyCacheCreator<QQmlTypeCompiler> propertyCacheBuilder(&m_propertyCaches, &pendingGroupPropertyBindings,
-                                                                        engine, this, imports(), typeData->typeClassName());
+        QQmlPropertyCacheCreator<QQmlTypeCompiler> propertyCacheBuilder(
+                &m_propertyCaches, &pendingGroupPropertyBindings,
+                loader, this, imports(), typeData->typeClassName());
         QQmlError cycleError = propertyCacheBuilder.verifyNoICCycle();
         if (cycleError.isValid()) {
             recordError(cycleError);
@@ -68,7 +69,7 @@ QQmlRefPointer<QV4::CompiledData::CompilationUnit> QQmlTypeCompiler::compile()
             } else {
                 // Resolve component boundaries and aliases
 
-                QQmlComponentAndAliasResolver resolver(this, enginePrivate(), &m_propertyCaches);
+                QQmlComponentAndAliasResolver resolver(this, &m_propertyCaches);
                 if (QQmlError error = resolver.resolve(result.processedRoot); error.isValid()) {
                     recordError(error);
                     return nullptr;
@@ -123,7 +124,7 @@ QQmlRefPointer<QV4::CompiledData::CompilationUnit> QQmlTypeCompiler::compile()
 
         Q_ASSERT(document->jsModule.fileName == typeData->urlString());
         Q_ASSERT(document->jsModule.finalUrl == typeData->finalUrlString());
-        QmlIR::JSCodeGen v4CodeGenerator(document, engine->v4engine()->illegalNames());
+        QmlIR::JSCodeGen v4CodeGenerator(document);
         for (QmlIR::Object *object : std::as_const(document->objects)) {
             if (!v4CodeGenerator.generateRuntimeFunctions(object)) {
                 Q_ASSERT(v4CodeGenerator.hasError());
@@ -265,11 +266,10 @@ QQmlCompilePass::QQmlCompilePass(QQmlTypeCompiler *typeCompiler)
 
 SignalHandlerResolver::SignalHandlerResolver(QQmlTypeCompiler *typeCompiler)
     : QQmlCompilePass(typeCompiler)
-    , enginePrivate(typeCompiler->enginePrivate())
+    , typeLoader(typeCompiler->typeLoader())
     , qmlObjects(*typeCompiler->qmlObjects())
     , imports(typeCompiler->imports())
     , customParsers(typeCompiler->customParserCache())
-    , illegalNames(typeCompiler->enginePrivate()->v4engine()->illegalNames())
     , propertyCaches(typeCompiler->propertyCaches())
 {
 }
@@ -308,13 +308,10 @@ bool SignalHandlerResolver::resolveSignalHandlerExpressions(
             const QmlIR::Object *attachedObj = qmlObjects.at(binding->value.objectIndex);
             auto *typeRef = resolvedType(binding->propertyNameIndex);
             QQmlType type = typeRef ? typeRef->type() : QQmlType();
-            if (!type.isValid()) {
-                imports->resolveType(
-                        QQmlTypeLoader::get(enginePrivate), bindingPropertyName, &type, nullptr,
-                        nullptr);
-            }
+            if (!type.isValid())
+                imports->resolveType(typeLoader, bindingPropertyName, &type, nullptr, nullptr);
 
-            const QMetaObject *attachedType = type.attachedPropertiesType(enginePrivate);
+            const QMetaObject *attachedType = type.attachedPropertiesType(typeLoader);
             if (!attachedType)
                 COMPILE_EXCEPTION(binding, tr("Non-existent attached object"));
             QQmlPropertyCache::ConstPtr cache = QQmlMetaType::propertyCache(attachedType);
@@ -371,7 +368,7 @@ bool SignalHandlerResolver::resolveSignalHandlerExpressions(
                     unnamedParameter = true;
                 else if (unnamedParameter) {
                     COMPILE_EXCEPTION(binding, tr("Signal uses unnamed parameter followed by named parameter."));
-                } else if (illegalNames.contains(param)) {
+                } else if (QV4::Compiler::Codegen::isNameGlobal(param)) {
                     COMPILE_EXCEPTION(binding, tr("Signal parameter \"%1\" hides global variable.").arg(param));
                 }
             }
@@ -408,7 +405,7 @@ bool SignalHandlerResolver::resolveSignalHandlerExpressions(
                 }
 
                 for (const QmlIR::Property *property = obj->firstProperty(); property; property = property->next) {
-                    const QString propName = stringAt(property->nameIndex);
+                    const QString propName = stringAt(property->nameIndex());
                     customSignals.insert(propName, QStringList());
                 }
             }
@@ -557,8 +554,7 @@ bool QQmlEnumTypeResolver::tryQualifiedEnumAssignment(
         return true;
     }
     QQmlType type;
-    imports->resolveType(
-            QQmlTypeLoader::get(compiler->enginePrivate()), typeName, &type, nullptr, nullptr);
+    imports->resolveType(compiler->typeLoader(), typeName, &type, nullptr, nullptr);
 
     if (!type.isValid() && !isQtObject)
         return true;
@@ -835,22 +831,29 @@ void QQmlComponentAndAliasResolver<QQmlTypeCompiler>::resolveGeneralizedGroupPro
 template<>
 typename QQmlComponentAndAliasResolver<QQmlTypeCompiler>::AliasResolutionResult
 QQmlComponentAndAliasResolver<QQmlTypeCompiler>::resolveAliasesInObject(
-        const CompiledObject &component, int objectIndex, QQmlError *error)
+        const CompiledObject &component, int objectIndex,
+        QQmlPropertyCacheAliasCreator<QQmlTypeCompiler> *aliasCacheCreator, QQmlError *error)
 {
+    // TODO: This method should not modify the aliases themselves. Rather, all information
+    //       needed for handling them later should be stored in the property cache.
+    //       Some of the information calculated here could be calculated already at compile time.
+    //       See QTBUG-136572.
+
     Q_UNUSED(component);
 
     const QmlIR::Object * const obj = m_compiler->objectAt(objectIndex);
     if (!obj->aliasCount())
         return AllAliasesResolved;
 
-    int numResolvedAliases = 0;
-    bool seenUnresolvedAlias = false;
+    int aliasIndex = 0;
+    int numSkippedAliases = 0;
 
-    for (QmlIR::Alias *alias = obj->firstAlias(); alias; alias = alias->next) {
-        if (alias->hasFlag(QV4::CompiledData::Alias::Resolved))
+    for (QmlIR::Alias *alias = obj->firstAlias(); alias; alias = alias->next, ++aliasIndex) {
+        if (resolvedAliases.contains(alias)) {
+            ++numSkippedAliases;
             continue;
+        }
 
-        seenUnresolvedAlias = true;
 
         const int idIndex = alias->idIndex();
         const int targetObjectIndex = m_idToObjectIndex.value(idIndex, -1);
@@ -910,15 +913,18 @@ QQmlComponentAndAliasResolver<QQmlTypeCompiler>::resolveAliasesInObject(
                     if (targetObjectIndex == objectIndex) {
                         alias->localAliasIndex = localAliasIndex;
                         alias->setIsAliasToLocalAlias(true);
-                        alias->setFlag(QV4::CompiledData::Alias::Resolved);
-                        ++numResolvedAliases;
+                        if (!appendAliasToPropertyCache(
+                                    &component, alias, objectIndex, aliasIndex, -1,
+                                    aliasCacheCreator, error)) {
+                            break;
+                        }
                         continue;
                     }
 
                     // restore
                     alias->setIdIndex(idIndex);
                     // Try again later and resolve the target alias first.
-                    break;
+                    return aliasIndex == numSkippedAliases ? NoAliasResolved : SomeAliasesResolved;
                 }
             }
 
@@ -976,13 +982,18 @@ QQmlComponentAndAliasResolver<QQmlTypeCompiler>::resolveAliasesInObject(
             }
         }
 
-        alias->encodedMetaPropertyIndex = propIdx.toEncoded();
-        alias->setFlag(QV4::CompiledData::Alias::Resolved);
-        numResolvedAliases++;
+        if (!appendAliasToPropertyCache(
+                    &component, alias, objectIndex, aliasIndex, propIdx.toEncoded(),
+                    aliasCacheCreator, error)) {
+            break;
+        }
     }
 
-    if (numResolvedAliases == 0)
-        return seenUnresolvedAlias ? NoAliasResolved : AllAliasesResolved;
+    if (numSkippedAliases == aliasIndex)
+        return NoAliasResolved;
+
+    if (aliasIndex == obj->aliasCount())
+        return AllAliasesResolved;
 
     return SomeAliasesResolved;
 }

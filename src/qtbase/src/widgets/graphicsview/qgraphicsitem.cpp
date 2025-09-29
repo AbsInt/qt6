@@ -1,5 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 /*!
     \class QGraphicsItem
@@ -9313,7 +9314,7 @@ QVariant QGraphicsLineItem::extension(const QVariant &variant) const
     QPixmap::createHeuristicMask().  The performance and memory consumption
     is similar to MaskShape.
 */
-extern QPainterPath qt_regionToPath(const QRegion &region);
+Q_GUI_EXPORT extern QPainterPath qt_regionToPath(const QRegion &region);
 
 class QGraphicsPixmapItemPrivate : public QGraphicsItemPrivate
 {
@@ -11165,10 +11166,8 @@ QDebug operator<<(QDebug debug, const QGraphicsItem *item)
     QDebugStateSaver saver(debug);
     debug.nospace();
 
-    if (!item) {
-        debug << "QGraphicsItem(0)";
-        return debug;
-    }
+    if (!item)
+        return debug << "QGraphicsItem(0x0)";
 
     if (const QGraphicsObject *o = item->toGraphicsObject())
         debug << o->metaObject()->className();
@@ -11183,7 +11182,7 @@ QDebug operator<<(QDebug debug, const QGraphicsItem *item)
                 debug << ", name=" << w->objectName();
             debug << ')';
         } else {
-            debug << "QWidget(0)";
+            debug << "QWidget(0x0)";
         }
     }
     formatGraphicsItemHelper(debug, item);
@@ -11196,10 +11195,8 @@ QDebug operator<<(QDebug debug, const QGraphicsObject *item)
     QDebugStateSaver saver(debug);
     debug.nospace();
 
-    if (!item) {
-        debug << "QGraphicsObject(0)";
-        return debug;
-    }
+    if (!item)
+        return debug << "QGraphicsObject(0x0)";
 
     debug << item->metaObject()->className() << '(' << static_cast<const void *>(item);
     if (!item->objectName().isEmpty())

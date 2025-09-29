@@ -1170,7 +1170,9 @@ void QJSEngine::throwError(QJSValue::ErrorType errorType, const QString &message
 void QJSEngine::throwError(const QJSValue &error)
 {
     // safe, QJSValue holds a persistent reference
-    m_v4Engine->throwError(QV4::Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(&error)));
+    m_v4Engine->throwError(
+            QV4::Value::fromReturnedValue(
+                    QJSValuePrivate::convertToReturnedValue(m_v4Engine, error)));
 }
 
 /*!

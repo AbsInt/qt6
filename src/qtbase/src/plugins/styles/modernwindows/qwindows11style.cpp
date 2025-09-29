@@ -1,5 +1,6 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qwindows11style_p.h"
 #include <qstylehints.h>
@@ -14,7 +15,9 @@
 #include <QGraphicsDropShadowEffect>
 #include <QLatin1StringView>
 #include <QtWidgets/qcombobox.h>
+#if QT_CONFIG(commandlinkbutton)
 #include <QtWidgets/qcommandlinkbutton.h>
+#endif
 #include <QtWidgets/qgraphicsview.h>
 #include <QtWidgets/qlistview.h>
 #include <QtWidgets/qmenu.h>
@@ -37,70 +40,126 @@ QT_BEGIN_NAMESPACE
 static constexpr int topLevelRoundingRadius    = 8; //Radius for toplevel items like popups for round corners
 static constexpr int secondLevelRoundingRadius = 4; //Radius for second level items like hovered menu item round corners
 
-enum WINUI3Color {
-    subtleHighlightColor,             //Subtle highlight based on alpha used for hovered elements
-    subtlePressedColor,               //Subtle highlight based on alpha used for pressed elements
-    frameColorLight,                  //Color of frame around flyouts and controls except for Checkbox and Radiobutton
-    frameColorStrong,                 //Color of frame around Checkbox and Radiobuttons
-    controlStrongFill,                //Color of controls with strong filling such as the right side of a slider
-    controlStrokeSecondary,
-    controlStrokePrimary,
-    controlFillTertiary,              //Color of filled sunken controls
-    controlFillSecondary,             //Color of filled hovered controls
-    menuPanelFill,                    //Color of menu panel
-    textOnAccentPrimary,              //Color of text on controls filled in accent color
-    textOnAccentSecondary,            //Color of text of sunken controls in accent color
-    controlTextSecondary,             //Color of text of sunken controls
-    controlStrokeOnAccentSecondary,   //Color of frame around Buttons in accent color
-    controlFillSolid,                 //Color for solid fill
-    surfaceStroke,                    //Color of MDI window frames
-    controlAccentDisabled,
-    textAccentDisabled
+namespace StyleOptionHelper
+{
+inline bool isChecked(const QStyleOption *option)
+{
+    return option->state.testAnyFlags(QStyle::State_On | QStyle::State_NoChange);
+}
+inline bool isDisabled(const QStyleOption *option)
+{
+    return !option->state.testFlag(QStyle::State_Enabled);
+}
+inline bool isPressed(const QStyleOption *option)
+{
+    return option->state.testFlag(QStyle::State_Sunken);
+}
+inline bool isHover(const QStyleOption *option)
+{
+    return option->state.testFlag(QStyle::State_MouseOver);
+}
+inline bool isAutoRaise(const QStyleOption *option)
+{
+    return option->state.testFlag(QStyle::State_AutoRaise);
+}
+enum class ControlState { Normal, Hover, Pressed, Disabled, Max = 4 };
+inline ControlState calcControlState(const QStyleOption *option)
+{
+    if (isDisabled(option))
+        return ControlState::Disabled;
+    if (isPressed(option))
+        return ControlState::Pressed;
+    if (isHover(option))
+        return ControlState::Hover;
+    return ControlState::Normal;
 };
 
-static const QColor WINUI3ColorsLight [] {
+} // namespace StyleOptionHelper
+
+template <typename R, typename P, typename B>
+static inline void drawRoundedRect(QPainter *p, R &&rect, P &&pen, B &&brush)
+{
+    p->setPen(pen);
+    p->setBrush(brush);
+    p->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
+}
+
+static constexpr int percentToAlpha(double percent)
+{
+    return qRound(percent * 255. / 100.);
+}
+
+static constexpr std::array<QColor, 32> WINUI3ColorsLight {
     QColor(0x00,0x00,0x00,0x09), //subtleHighlightColor
     QColor(0x00,0x00,0x00,0x06), //subtlePressedColor
     QColor(0x00,0x00,0x00,0x0F), //frameColorLight
-    QColor(0x00,0x00,0x00,0x9c), //frameColorStrong
+    QColor(0x00,0x00,0x00,percentToAlpha(60.63)),   //frameColorStrong
+    QColor(0x00,0x00,0x00,percentToAlpha(21.69)),   //frameColorStrongDisabled
     QColor(0x00,0x00,0x00,0x72), //controlStrongFill
     QColor(0x00,0x00,0x00,0x29), //controlStrokeSecondary
     QColor(0x00,0x00,0x00,0x14), //controlStrokePrimary
-    QColor(0xF9,0xF9,0xF9,0x00), //controlFillTertiary
-    QColor(0xF9,0xF9,0xF9,0x80), //controlFillSecondary
     QColor(0xFF,0xFF,0xFF,0xFF), //menuPanelFill
-    QColor(0xFF,0xFF,0xFF,0xFF), //textOnAccentPrimary
-    QColor(0xFF,0xFF,0xFF,0x7F), //textOnAccentSecondary
-    QColor(0x00,0x00,0x00,0x7F), //controlTextSecondary
     QColor(0x00,0x00,0x00,0x66), //controlStrokeOnAccentSecondary
     QColor(0xFF,0xFF,0xFF,0xFF), //controlFillSolid
     QColor(0x75,0x75,0x75,0x66), //surfaceStroke
-    QColor(0x00,0x00,0x00,0x37), //controlAccentDisabled
-    QColor(0xFF,0xFF,0xFF,0xFF), //textAccentDisabled
+    QColor(0xFF,0xFF,0xFF,0xFF), //focusFrameInnerStroke
+    QColor(0x00,0x00,0x00,0xFF), //focusFrameOuterStroke
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(70)),      // fillControlDefault
+    QColor(0xF9,0xF9,0xF9,percentToAlpha(50)),      // fillControlSecondary
+    QColor(0xF9,0xF9,0xF9,percentToAlpha(30)),      // fillControlTertiary
+    QColor(0xF9,0xF9,0xF9,percentToAlpha(30)),      // fillControlDisabled
+    QColor(0x00,0x00,0x00,percentToAlpha(2.41)),    // fillControlAltSecondary
+    QColor(0x00,0x00,0x00,percentToAlpha(5.78)),    // fillControlAltTertiary
+    QColor(0x00,0x00,0x00,percentToAlpha(9.24)),    // fillControlAltQuarternary
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(0.00)),    // fillControlAltDisabled
+    QColor(0x00,0x00,0x00,percentToAlpha(100)),     // fillAccentDefault
+    QColor(0x00,0x00,0x00,percentToAlpha(90)),      // fillAccentSecondary
+    QColor(0x00,0x00,0x00,percentToAlpha(80)),      // fillAccentTertiary
+    QColor(0x00,0x00,0x00,percentToAlpha(21.69)),   // fillAccentDisabled
+    QColor(0x00,0x00,0x00,percentToAlpha(89.56)),   // textPrimary
+    QColor(0x00,0x00,0x00,percentToAlpha(60.63)),   // textSecondary
+    QColor(0x00,0x00,0x00,percentToAlpha(36.14)),   // textDisabled
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(100)),     // textOnAccentPrimary
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(70)),      // textOnAccentSecondary
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(100)),     // textOnAccentDisabled
 };
 
-static const QColor WINUI3ColorsDark[] {
+static constexpr std::array<QColor, 32> WINUI3ColorsDark {
     QColor(0xFF,0xFF,0xFF,0x0F), //subtleHighlightColor
     QColor(0xFF,0xFF,0xFF,0x0A), //subtlePressedColor
     QColor(0xFF,0xFF,0xFF,0x12), //frameColorLight
-    QColor(0xFF,0xFF,0xFF,0x8B), //frameColorStrong
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(60.47)),   //frameColorStrong
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(15.81)),   //frameColorStrongDisabled
     QColor(0xFF,0xFF,0xFF,0x8B), //controlStrongFill
     QColor(0xFF,0xFF,0xFF,0x18), //controlStrokeSecondary
     QColor(0xFF,0xFF,0xFF,0x12), //controlStrokePrimary
-    QColor(0xF9,0xF9,0xF9,0x00), //controlFillTertiary
-    QColor(0xF9,0xF9,0xF9,0x80), //controlFillSecondary
     QColor(0x0F,0x0F,0x0F,0xFF), //menuPanelFill
-    QColor(0x00,0x00,0x00,0xFF), //textOnAccentPrimary
-    QColor(0x00,0x00,0x00,0x80), //textOnAccentSecondary
-    QColor(0xFF,0xFF,0xFF,0x87), //controlTextSecondary
     QColor(0xFF,0xFF,0xFF,0x14), //controlStrokeOnAccentSecondary
     QColor(0x45,0x45,0x45,0xFF), //controlFillSolid
     QColor(0x75,0x75,0x75,0x66), //surfaceStroke
-    QColor(0xFF,0xFF,0xFF,0x28), //controlAccentDisabled
-    QColor(0xFF,0xFF,0xFF,0x87), //textAccentDisabled
+    QColor(0x00,0x00,0x00,0xFF), //focusFrameInnerStroke
+    QColor(0xFF,0xFF,0xFF,0xFF), //focusFrameOuterStroke
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(6.05)),    // fillControlDefault
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(8.37)),    // fillControlSecondary
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(3.26)),    // fillControlTertiary
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(4.19)),    // fillControlDisabled
+    QColor(0x00,0x00,0x00,percentToAlpha(10.0)),    // fillControlAltDefault
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(4.19)),    // fillControlAltSecondary
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(6.98)),    // fillControlAltTertiafillCy
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(0.00)),    // controlAltDisabled
+    QColor(0x00,0x00,0x00,percentToAlpha(100)),     // fillAccentDefault
+    QColor(0x00,0x00,0x00,percentToAlpha(90)),      // fillAccentSecondary
+    QColor(0x00,0x00,0x00,percentToAlpha(80)),      // fillAccentTertiary
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(15.81)),   // fillAccentDisabled
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(100)),     // textPrimary
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(78.6)),    // textSecondary
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(36.28)),   // textDisabled
+    QColor(0x00,0x00,0x00,percentToAlpha(100)),     // textOnAccentPrimary
+    QColor(0x00,0x00,0x00,percentToAlpha(70)),      // textOnAccentSecondary
+    QColor(0xFF,0xFF,0xFF,percentToAlpha(53.02)),   // textOnAccentDisabled
 };
 
-static const QColor* WINUI3Colors[] {
+static constexpr std::array<std::array<QColor,32>, 2> WINUI3Colors {
     WINUI3ColorsLight,
     WINUI3ColorsDark
 };
@@ -133,6 +192,29 @@ static void drawArrow(const QStyle *style, const QStyleOptionToolButton *toolbut
     style->drawPrimitive(pe, &arrowOpt, painter, widget);
 }
 #endif // QT_CONFIG(toolbutton)
+
+static qreal radioButtonInnerRadius(int state)
+{
+    qreal radius = 7.0;
+    if (state & QStyle::State_Sunken)
+        radius = 4.0f;
+    else if (state & QStyle::State_MouseOver && !(state & QStyle::State_On))
+        radius = 7.0f;
+    else if (state & QStyle::State_MouseOver && (state & QStyle::State_On))
+        radius = 5.0f;
+    else if (state & QStyle::State_On)
+        radius = 4.0f;
+    return radius;
+}
+
+static qreal sliderInnerRadius(QStyle::State state, bool insideHandle)
+{
+    if (state & QStyle::State_Sunken)
+        return 0.29;
+    else if (insideHandle)
+        return 0.71;
+    return 0.43;
+}
 /*!
   \class QWindows11Style
   \brief The QWindows11Style class provides a look and feel suitable for applications on Microsoft Windows 11.
@@ -186,7 +268,7 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
-    if (d->transitionsEnabled()) {
+    if (d->transitionsEnabled() && option->styleObject) {
         if (control == CC_Slider) {
             if (const auto *slider = qstyleoption_cast<const QStyleOptionSlider *>(option)) {
                 QObject *styleObject = option->styleObject; // Can be widget or qquickitem
@@ -221,13 +303,7 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
                 if (doTransition) {
                     QNumberStyleAnimation *t = new QNumberStyleAnimation(styleObject);
                     t->setStartValue(styleObject->property("_q_inner_radius").toFloat());
-                    if (state & State_Sunken)
-                        t->setEndValue(outerRadius * 0.29);
-                    else if (isInsideHandle)
-                        t->setEndValue(outerRadius * 0.71);
-                    else
-                        t->setEndValue(outerRadius * 0.43);
-
+                    t->setEndValue(outerRadius * sliderInnerRadius(state, isInsideHandle));
                     styleObject->setProperty("_q_end_radius", t->endValue());
 
                     t->setStartTime(d->animationTime());
@@ -245,42 +321,24 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
             QCachedPainter cp(painter, QLatin1StringView("win11_spinbox") % HexString<uint8_t>(colorSchemeIndex),
                               sb, sb->rect.size());
             if (cp.needsPainting()) {
-                if (sb->frame && (sub & SC_SpinBoxFrame)) {
-                    const qreal sublineOffset = secondLevelRoundingRadius + 2.0;
-                    cp->save();
-                    cp->setClipRect(option->rect.adjusted(-2, -2, 2, 2));
-                    cp->setPen(editSublineColor(option, colorSchemeIndex));
-                    cp->drawLine(option->rect.bottomLeft() + QPointF(sublineOffset, 0.5),
-                                 option->rect.bottomRight() + QPointF(-sublineOffset, 0.5));
-                    cp->restore();
-                }
-                const QRectF frameRect = QRectF(option->rect).marginsRemoved(QMarginsF(1.5, 1.5, 1.5, 1.5));
-                cp->setBrush(option->palette.brush(QPalette::Base));
-                cp->setPen(highContrastTheme == true ? sb->palette.buttonText().color()
-                                                     : WINUI3Colors[colorSchemeIndex][frameColorLight]);
-                cp->drawRoundedRect(frameRect, secondLevelRoundingRadius, secondLevelRoundingRadius);
-                const QPoint mousePos = widget ? widget->mapFromGlobal(QCursor::pos()) : QPoint();
-                if (sub & SC_SpinBoxEditField) {
-                    const QRect rect = proxy()->subControlRect(CC_SpinBox, option, SC_SpinBoxEditField,
-                                                               widget).adjusted(0, 0, 0, 1);
-                    if (!(state & State_HasFocus) && rect.contains(mousePos)) {
-                        cp->setPen(Qt::NoPen);
-                        cp->setBrush(WINUI3Colors[colorSchemeIndex][subtleHighlightColor]);
-                        cp->drawRoundedRect(option->rect.adjusted(2, 2, -2, -2), secondLevelRoundingRadius,
-                                            secondLevelRoundingRadius);
-                    }
-                }
+                const auto frameRect = QRectF(option->rect).marginsRemoved(QMarginsF(1.5, 1.5, 1.5, 1.5));
+                drawRoundedRect(cp.painter(), frameRect, Qt::NoPen, option->palette.brush(QPalette::Base));
+
+                if (sb->frame && (sub & SC_SpinBoxFrame))
+                    drawLineEditFrame(cp.painter(), frameRect, option);
+
+                const bool isMouseOver = state & State_MouseOver;
+                const bool hasFocus = state & State_HasFocus;
+                if (isMouseOver && !hasFocus && !highContrastTheme)
+                    drawRoundedRect(cp.painter(), frameRect, Qt::NoPen, winUI3Color(subtleHighlightColor));
+
                 const auto drawUpDown = [&](QStyle::SubControl sc) {
                     const bool isUp = sc == SC_SpinBoxUp;
-                    QRect rect = proxy()->subControlRect(CC_SpinBox, option, isUp ? SC_SpinBoxUp : SC_SpinBoxDown, widget);
-                    if (isUp)
-                        rect.adjust(0, 0, 0, 1);
-                    if (rect.contains(mousePos)) {
-                        cp->setPen(Qt::NoPen);
-                        cp->setBrush(WINUI3Colors[colorSchemeIndex][subtleHighlightColor]);
-                        cp->drawRoundedRect(rect.adjusted(1, 1, -1, -1), secondLevelRoundingRadius,
-                                            secondLevelRoundingRadius);
-                    }
+                    const QRect rect = proxy()->subControlRect(CC_SpinBox, option, sc, widget);
+                    if (sb->activeSubControls & sc)
+                        drawRoundedRect(cp.painter(), rect.adjusted(1, 1, -1, -2), Qt::NoPen,
+                                        winUI3Color(subtleHighlightColor));
+
                     cp->setFont(assetFont);
                     cp->setPen(sb->palette.buttonText().color());
                     cp->setBrush(Qt::NoBrush);
@@ -289,6 +347,11 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
                 };
                 if (sub & SC_SpinBoxUp) drawUpDown(SC_SpinBoxUp);
                 if (sub & SC_SpinBoxDown) drawUpDown(SC_SpinBoxDown);
+                if (state & State_KeyboardFocusChange && state & State_HasFocus) {
+                    QStyleOptionFocusRect fropt;
+                    fropt.QStyleOption::operator=(*option);
+                    proxy()->drawPrimitive(PE_FrameFocusRect, &fropt, cp.painter(), widget);
+                }
             }
         }
         break;
@@ -312,12 +375,14 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
                     rightRect = QRect(handlePos.x(), rect.top(), (rect.width() - handlePos.x()), rect.height());
                 } else {
                     rect = QRect(rect.center().x() - 2, slrect.top(), 4, slrect.height() - 5);
-                    rightRect = QRect(rect.left(), rect.top() + 1, rect.width(), (handlePos.y() - rect.top()));
-                    leftRect = QRect(rect.left(), handlePos.y(), rect.width(), (rect.height() - handlePos.y()));
+                    leftRect = QRect(rect.left(), rect.top() + 1, rect.width(), (handlePos.y() - rect.top()));
+                    rightRect = QRect(rect.left(), handlePos.y(), rect.width(), (rect.height() - handlePos.y()));
                 }
+                if (slider->upsideDown)
+                    qSwap(leftRect, rightRect);
 
                 painter->setPen(Qt::NoPen);
-                painter->setBrush(option->palette.accent());
+                painter->setBrush(calculateAccentColor(option));
                 painter->drawRoundedRect(leftRect,1,1);
                 painter->setBrush(WINUI3Colors[colorSchemeIndex][controlStrongFill]);
                 painter->drawRoundedRect(rightRect,1,1);
@@ -358,8 +423,9 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
                         break;
                     const int v_ = qMin(v, slider->maximum);
                     int tickLength = (v_ == slider->minimum || v_ >= slider->maximum) ? 4 : 3;
-                    pos = QStyle::sliderPositionFromValue(slider->minimum, slider->maximum,
-                                                          v_, available) + fudge;
+                    pos = QStyle::sliderPositionFromValue(slider->minimum, slider->maximum, v_,
+                                                          available, slider->upsideDown);
+                    pos += fudge;
                     if (slider->orientation == Qt::Horizontal) {
                         if (ticks & QSlider::TicksAbove) {
                             lines.append(QLineF(pos, tickOffset - 1 - bothOffset + 0.5,
@@ -398,23 +464,27 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
                 const QRectF rect = proxy()->subControlRect(CC_Slider, option, SC_SliderHandle, widget);
                 const QPointF center = rect.center();
 
-                const QNumberStyleAnimation* animation = qobject_cast<QNumberStyleAnimation*>(d->animation(option->styleObject));
-
-                float innerRadius = 0;
-                if (animation != nullptr)
-                    innerRadius = animation->currentValue();
-                else
-                    innerRadius = option->styleObject->property("_q_end_radius").toFloat();
-                option->styleObject->setProperty("_q_inner_radius", innerRadius);
                 const qreal outerRadius = qMin(8.0,(slider->orientation == Qt::Horizontal ? rect.height() / 2.0 : rect.width() / 2.0) - 1);
+                float innerRadius = outerRadius * 0.43;
+
+                if (option->styleObject) {
+                    const QNumberStyleAnimation* animation = qobject_cast<QNumberStyleAnimation *>(d->animation(option->styleObject));
+                    if (animation != nullptr) {
+                        innerRadius = animation->currentValue();
+                        option->styleObject->setProperty("_q_inner_radius", innerRadius);
+                    } else {
+                        bool isInsideHandle = option->activeSubControls == SC_SliderHandle;
+                        innerRadius = outerRadius * sliderInnerRadius(state, isInsideHandle);
+                    }
+                }
 
                 painter->setPen(Qt::NoPen);
-                painter->setBrush(WINUI3Colors[colorSchemeIndex][controlFillSolid]);
+                painter->setBrush(winUI3Color(controlFillSolid));
                 painter->drawEllipse(center, outerRadius, outerRadius);
-                painter->setBrush(option->palette.accent());
+                painter->setBrush(calculateAccentColor(option));
                 painter->drawEllipse(center, innerRadius, innerRadius);
 
-                painter->setPen(WINUI3Colors[colorSchemeIndex][controlStrokeSecondary]);
+                painter->setPen(winUI3Color(controlStrokeSecondary));
                 painter->setBrush(Qt::NoBrush);
                 painter->drawEllipse(center, outerRadius + 0.5, outerRadius + 0.5);
                 painter->drawEllipse(center, innerRadius + 0.5, innerRadius + 0.5);
@@ -431,35 +501,30 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
 #if QT_CONFIG(combobox)
     case CC_ComboBox:
         if (const QStyleOptionComboBox *combobox = qstyleoption_cast<const QStyleOptionComboBox *>(option)) {
-            QRectF rect = option->rect.marginsRemoved(QMargins(1, 1, 1, 1));
-            painter->setBrush(combobox->palette.brush(QPalette::Base));
-            painter->setPen(Qt::NoPen);
-            painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
+            const auto frameRect = QRectF(option->rect).marginsRemoved(QMarginsF(1.5, 1.5, 1.5, 1.5));
+            drawRoundedRect(painter, frameRect, Qt::NoPen, option->palette.brush(QPalette::Base));
 
-            const bool comboboxHovered = state & State_MouseOver;
-            // In case the QComboBox is hovered overdraw the background with a alpha mask to
-            // highlight the QComboBox.
-            if (comboboxHovered && !highContrastTheme) {
-                painter->setBrush(WINUI3Colors[colorSchemeIndex][subtleHighlightColor]);
-                painter->setPen(Qt::NoPen);
-                painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
-            }
+            if (combobox->frame)
+                drawLineEditFrame(painter, frameRect, combobox, combobox->editable);
 
-            rect.adjust(0.5,0.5,-0.5,-0.5);
-            painter->setBrush(Qt::NoBrush);
-            painter->setPen(highContrastTheme ? (comboboxHovered ? combobox->palette.accent().color() : combobox->palette.buttonText().color()) : WINUI3Colors[colorSchemeIndex][frameColorLight]);
-            painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
+            const bool isMouseOver = state & State_MouseOver;
+            const bool hasFocus = state & State_HasFocus;
+            if (isMouseOver && !hasFocus && !highContrastTheme)
+                drawRoundedRect(painter, frameRect, Qt::NoPen, winUI3Color(subtleHighlightColor));
+
             if (sub & SC_ComboBoxArrow) {
                 QRectF rect = proxy()->subControlRect(CC_ComboBox, option, SC_ComboBoxArrow, widget).adjusted(4, 0, -4, 1);
                 painter->setFont(assetFont);
                 painter->setPen(combobox->palette.text().color());
                 painter->drawText(rect, QStringLiteral(u"\uE70D"), Qt::AlignVCenter | Qt::AlignHCenter);
             }
-
-            if (combobox->editable) {
-                const qreal sublineOffset = secondLevelRoundingRadius;
-                painter->setPen(editSublineColor(option, colorSchemeIndex));
-                painter->drawLine(rect.bottomLeft() + QPointF(sublineOffset, 1.0), rect.bottomRight() + QPointF(-sublineOffset, 1.0));
+            if (state & State_HasFocus) {
+                drawPrimitive(PE_FrameFocusRect, option, painter, widget);
+            }
+            if (state & State_KeyboardFocusChange && state & State_HasFocus) {
+                QStyleOptionFocusRect fropt;
+                fropt.QStyleOption::operator=(*option);
+                proxy()->drawPrimitive(PE_FrameFocusRect, &fropt, painter, widget);
             }
         }
         break;
@@ -684,100 +749,85 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
     int state = option->state;
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
-    if (d->transitionsEnabled() && (element == PE_IndicatorCheckBox || element == PE_IndicatorRadioButton)) {
+    if (d->transitionsEnabled() && option->styleObject && (element == PE_IndicatorCheckBox || element == PE_IndicatorRadioButton)) {
         QObject *styleObject = option->styleObject; // Can be widget or qquickitem
-        if (styleObject) {
-            int oldState = styleObject->property("_q_stylestate").toInt();
-            styleObject->setProperty("_q_stylestate", int(option->state));
-            styleObject->setProperty("_q_stylerect", option->rect);
-            bool doTransition = (((state & State_Sunken) != (oldState & State_Sunken)
-                                 || ((state & State_MouseOver) != (oldState & State_MouseOver))
-                                 || (state & State_On) != (oldState & State_On))
-                                 && state & State_Enabled);
-            if (doTransition) {
-                if (element == PE_IndicatorRadioButton) {
+        int oldState = styleObject->property("_q_stylestate").toInt();
+        styleObject->setProperty("_q_stylestate", int(option->state));
+        styleObject->setProperty("_q_stylerect", option->rect);
+        bool doTransition = (((state & State_Sunken) != (oldState & State_Sunken)
+                             || ((state & State_MouseOver) != (oldState & State_MouseOver))
+                             || (state & State_On) != (oldState & State_On))
+                             && state & State_Enabled);
+        if (doTransition) {
+            if (element == PE_IndicatorRadioButton) {
+                QNumberStyleAnimation *t = new QNumberStyleAnimation(styleObject);
+                t->setStartValue(styleObject->property("_q_inner_radius").toFloat());
+                t->setEndValue(radioButtonInnerRadius(state));
+                styleObject->setProperty("_q_end_radius", t->endValue());
+                t->setStartTime(d->animationTime());
+                t->setDuration(150);
+                d->startAnimation(t);
+            }
+            else if (element == PE_IndicatorCheckBox) {
+                if ((oldState & State_Off && state & State_On) || (oldState & State_NoChange && state & State_On)) {
                     QNumberStyleAnimation *t = new QNumberStyleAnimation(styleObject);
-                    t->setStartValue(styleObject->property("_q_inner_radius").toFloat());
-                    t->setEndValue(7.0f);
-                    if (option->state & State_Sunken)
-                        t->setEndValue(2.0f);
-                    else if (option->state & State_MouseOver && !(option->state & State_On))
-                        t->setEndValue(7.0f);
-                    else if (option->state & State_MouseOver && (option->state & State_On))
-                        t->setEndValue(5.0f);
-                    else if (option->state & State_On)
-                        t->setEndValue(4.0f);
-                    styleObject->setProperty("_q_end_radius", t->endValue());
+                    t->setStartValue(0.0f);
+                    t->setEndValue(1.0f);
                     t->setStartTime(d->animationTime());
                     t->setDuration(150);
                     d->startAnimation(t);
                 }
-                else if (element == PE_IndicatorCheckBox) {
-                    if ((oldState & State_Off && state & State_On) || (oldState & State_NoChange && state & State_On)) {
-                        QNumberStyleAnimation *t = new QNumberStyleAnimation(styleObject);
-                        t->setStartValue(0.0f);
-                        t->setEndValue(1.0f);
-                        t->setStartTime(d->animationTime());
-                        t->setDuration(150);
-                        d->startAnimation(t);
-                    }
-                }
             }
-        }
-    } else if (!d->transitionsEnabled() && element == PE_IndicatorRadioButton) {
-        QObject *styleObject = option->styleObject; // Can be widget or qquickitem
-        if (styleObject) {
-            styleObject->setProperty("_q_end_radius",7.0);
-            if (option->state & State_Sunken)
-                styleObject->setProperty("_q_end_radius",2.0);
-            else if (option->state & State_MouseOver && !(option->state & State_On))
-                styleObject->setProperty("_q_end_radius",7.0);
-            else if (option->state & State_MouseOver && (option->state & State_On))
-                styleObject->setProperty("_q_end_radius",5.0);
-            else if (option->state & State_On)
-                styleObject->setProperty("_q_end_radius",4.0);
         }
     }
 
     switch (element) {
-    case PE_PanelTipLabel: {
-        QRectF tipRect = option->rect.marginsRemoved(QMargins(1,1,1,1));
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(option->palette.toolTipBase());
-        painter->drawRoundedRect(tipRect, secondLevelRoundingRadius, secondLevelRoundingRadius);
+    case PE_FrameFocusRect: {
+        if (const QStyleOptionFocusRect *fropt = qstyleoption_cast<const QStyleOptionFocusRect *>(option)) {
+            if (!(fropt->state & State_KeyboardFocusChange))
+                break;
+            QRectF focusRect = option->rect;
+            focusRect = focusRect.marginsRemoved(QMarginsF(1.5,1.5,1.5,1.5));
+            painter->setPen(winUI3Color(focusFrameInnerStroke));
+            painter->drawRoundedRect(focusRect,4,4);
 
-        painter->setPen(highContrastTheme == true ? option->palette.buttonText().color() : WINUI3Colors[colorSchemeIndex][frameColorLight]);
-        painter->setBrush(Qt::NoBrush);
-        painter->drawRoundedRect(tipRect.marginsAdded(QMarginsF(0.5,0.5,0.5,0.5)), secondLevelRoundingRadius, secondLevelRoundingRadius);
+            focusRect = focusRect.marginsAdded(QMarginsF(1.0,1.0,1.0,1.0));
+            painter->setPen(QPen(winUI3Color(focusFrameOuterStroke),1));
+            painter->drawRoundedRect(focusRect,4,4);
+        }
+        break;
+    }
+    case PE_PanelTipLabel: {
+        const auto rect = QRectF(option->rect).marginsRemoved(QMarginsF(0.5, 0.5, 0.5, 0.5));
+        const auto pen = highContrastTheme ? option->palette.buttonText().color()
+                                           : winUI3Color(frameColorLight);
+        drawRoundedRect(painter, rect, pen, option->palette.toolTipBase());
         break;
     }
     case PE_FrameTabWidget:
 #if QT_CONFIG(tabwidget)
         if (const QStyleOptionTabWidgetFrame *frame = qstyleoption_cast<const QStyleOptionTabWidgetFrame *>(option)) {
-            QRectF frameRect = frame->rect.marginsRemoved(QMargins(0,0,0,0));
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(frame->palette.base());
-            painter->drawRoundedRect(frameRect, secondLevelRoundingRadius, secondLevelRoundingRadius);
-
-            painter->setPen(highContrastTheme == true ? frame->palette.buttonText().color() : WINUI3Colors[colorSchemeIndex][frameColorLight]);
-            painter->setBrush(Qt::NoBrush);
-            painter->drawRoundedRect(frameRect.marginsRemoved(QMarginsF(0.5,0.5,0.5,0.5)), secondLevelRoundingRadius, secondLevelRoundingRadius);
+            const auto rect = QRectF(option->rect).marginsRemoved(QMarginsF(0.5, 0.5, 0.5, 0.5));
+            const auto pen = highContrastTheme ? frame->palette.buttonText().color()
+                                               : winUI3Color(frameColorLight);
+            drawRoundedRect(painter, rect, pen, frame->palette.base());
         }
 #endif  // QT_CONFIG(tabwidget)
         break;
     case PE_FrameGroupBox:
         if (const QStyleOptionFrame *frame = qstyleoption_cast<const QStyleOptionFrame *>(option)) {
-            QRectF frameRect = frame->rect;
-            frameRect.adjust(0.5,0.5,-0.5,-0.5);
-            painter->setPen(highContrastTheme == true ? frame->palette.buttonText().color() : WINUI3Colors[colorSchemeIndex][frameColorStrong]);
-            painter->setBrush(Qt::NoBrush);
+            const auto pen = highContrastTheme ? frame->palette.buttonText().color()
+                                               : winUI3Color(frameColorStrong);
             if (frame->features & QStyleOptionFrame::Flat) {
-                QRect fr = frame->rect;
+                painter->setBrush(Qt::NoBrush);
+                painter->setPen(pen);
+                const QRect &fr = frame->rect;
                 QPoint p1(fr.x(), fr.y() + 1);
                 QPoint p2(fr.x() + fr.width(), p1.y());
-                painter->drawLine(p1,p2);
+                painter->drawLine(p1, p2);
             } else {
-                painter->drawRoundedRect(frameRect.marginsRemoved(QMargins(1,1,1,1)), secondLevelRoundingRadius, secondLevelRoundingRadius);
+                const auto frameRect = QRectF(frame->rect).marginsRemoved(QMarginsF(1.5, 1.5, 1.5, 1.5));
+                drawRoundedRect(painter, frameRect, pen, Qt::NoBrush);
             }
         }
         break;
@@ -795,40 +845,42 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
             }
         }
         break;
-    case PE_IndicatorCheckBox:
-        {
+    case PE_IndicatorCheckBox: {
             const bool isRtl = option->direction == Qt::RightToLeft;
-            QNumberStyleAnimation* animation = qobject_cast<QNumberStyleAnimation*>(d->animation(option->styleObject));
-            QFontMetrics fm(assetFont);
+            const bool isOn = option->state & State_On;
+            const bool isPartial = option->state & State_NoChange;
 
             QRectF rect = isRtl ? option->rect.adjusted(0, 0, -2, 0) : option->rect.adjusted(2, 0, 0, 0);
-            QPointF center = QPointF(rect.x() + rect.width() / 2, rect.y() + rect.height() / 2);
+            const QPointF center = rect.center();
             rect.setWidth(15);
             rect.setHeight(15);
             rect.moveCenter(center);
 
-            float clipWidth = animation != nullptr ? animation->currentValue() : 1.0f;
-            QRectF clipRect = fm.boundingRect(QStringLiteral(u"\uE73E"));
-            clipRect.moveCenter(center);
-            clipRect.setLeft(rect.x() + (rect.width() - clipRect.width()) / 2.0);
-            clipRect.setWidth(clipWidth * clipRect.width());
+            drawRoundedRect(painter, rect, borderPenControlAlt(option),
+                            controlFillBrush(option, ControlType::ControlAlt));
 
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(buttonFillBrush(option));
-            painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius, Qt::AbsoluteSize);
+            if (isOn) {
+                painter->setFont(assetFont);
+                painter->setPen(controlTextColor(option, QPalette::Window));
+                qreal clipWidth = 1.0;
+                QFontMetrics fm(assetFont);
+                QRectF clipRect = fm.boundingRect(QStringLiteral(u"\uE73E"));
+                if (d->transitionsEnabled() && option->styleObject) {
+                    QNumberStyleAnimation *animation = qobject_cast<QNumberStyleAnimation *>(
+                            d->animation(option->styleObject));
+                    if (animation)
+                        clipWidth = animation->currentValue();
+                }
 
-            painter->setPen(highContrastTheme == true ? option->palette.buttonText().color()
-                                                      : WINUI3Colors[colorSchemeIndex][frameColorStrong]);
-            painter->setBrush(Qt::NoBrush);
-            painter->drawRoundedRect(rect, secondLevelRoundingRadius + 0.5, secondLevelRoundingRadius + 0.5, Qt::AbsoluteSize);
-
-            painter->setFont(assetFont);
-            painter->setPen(option->palette.highlightedText().color());
-            painter->setBrush(option->palette.highlightedText());
-            if (option->state & State_On)
+                clipRect.moveCenter(center);
+                clipRect.setLeft(rect.x() + (rect.width() - clipRect.width()) / 2.0);
+                clipRect.setWidth(clipWidth * clipRect.width());
                 painter->drawText(clipRect, Qt::AlignVCenter | Qt::AlignLeft, QStringLiteral(u"\uE73E"));
-            else if (option->state & State_NoChange)
-                painter->drawText(rect, Qt::AlignVCenter | Qt::AlignHCenter, QStringLiteral(u"\uE73C"));
+            } else if (isPartial) {
+                painter->setFont(assetFont);
+                painter->setPen(controlTextColor(option, QPalette::Window));
+                painter->drawText(rect, Qt::AlignCenter, QStringLiteral(u"\uE73C"));
+            }
         }
         break;
     case PE_IndicatorBranch: {
@@ -846,46 +898,36 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
             }
         }
         break;
-    case PE_IndicatorRadioButton:
-        {
+    case PE_IndicatorRadioButton: {
             const bool isRtl = option->direction == Qt::RightToLeft;
-            qreal innerRadius = option->state & State_On ? 4.0f :7.0f;
-            if (option->styleObject) {
+            const bool isOn = option->state & State_On;
+            qreal innerRadius = 7.0f;
+            if (d->transitionsEnabled() && option->styleObject) {
                 if (option->styleObject->property("_q_end_radius").isNull())
                     option->styleObject->setProperty("_q_end_radius", innerRadius);
                 QNumberStyleAnimation *animation = qobject_cast<QNumberStyleAnimation *>(d->animation(option->styleObject));
                 innerRadius = animation ? animation->currentValue() : option->styleObject->property("_q_end_radius").toFloat();
                 option->styleObject->setProperty("_q_inner_radius", innerRadius);
+            } else {
+                innerRadius = radioButtonInnerRadius(state);
             }
 
-            QPainterPath path;
             QRectF rect = isRtl ? option->rect.adjusted(0, 0, -2, 0) : option->rect.adjusted(2, 0, 0, 0);
-            QPointF center = QPoint(rect.x() + rect.width() / 2, rect.y() + rect.height() / 2);
-            rect.setWidth(15);
-            rect.setHeight(15);
-            rect.moveCenter(center);
-            QRectF innerRect = rect;
-            innerRect.setWidth(8);
-            innerRect.setHeight(8);
-            innerRect.moveCenter(center);
+            const QPointF center = rect.center();
 
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(option->palette.accent());
-            path.addEllipse(center,7,7);
-            path.addEllipse(center,innerRadius,innerRadius);
-            painter->drawPath(path);
-
-            painter->setPen(WINUI3Colors[colorSchemeIndex][frameColorStrong]);
-            painter->setBrush(Qt::NoBrush);
-            painter->drawEllipse(center, 7.5, 7.5);
-            painter->drawEllipse(center,innerRadius + 0.5, innerRadius + 0.5);
-
-            painter->setPen(Qt::NoPen);
-            if (option->state & State_MouseOver && option->state & State_Enabled)
-                painter->setBrush(option->palette.window().color().darker(107));
-            else
-                painter->setBrush(option->palette.window());
-            painter->drawEllipse(center,innerRadius, innerRadius);
+            painter->setPen(borderPenControlAlt(option));
+            painter->setBrush(controlFillBrush(option, ControlType::ControlAlt));
+            if (isOn) {
+                QPainterPath path;
+                path.addEllipse(center, 7.5, 7.5);
+                path.addEllipse(center, innerRadius, innerRadius);
+                painter->drawPath(path);
+                // Text On Accent/Primary
+                painter->setBrush(option->palette.window().color());
+                painter->drawEllipse(center, innerRadius, innerRadius);
+            } else {
+                painter->drawEllipse(center, 7.5, 7.5);
+            }
         }
         break;
     case PE_PanelButtonTool:
@@ -898,7 +940,7 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
                 painter->setPen(Qt::NoPen);
             else
                 painter->setPen(WINUI3Colors[colorSchemeIndex][controlStrokePrimary]);
-            painter->setBrush(buttonFillBrush(option));
+            painter->setBrush(controlFillBrush(option, ControlType::Control));
             painter->drawRoundedRect(rect,
                                      secondLevelRoundingRadius, secondLevelRoundingRadius);
 
@@ -918,76 +960,53 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
         break;
     case PE_PanelMenu: {
         const QRect rect = option->rect.marginsRemoved(QMargins(2, 2, 2, 2));
-        painter->save();
-        if (highContrastTheme)
-            painter->setPen(QPen(option->palette.windowText().color(), 2));
-        else
-            painter->setPen(WINUI3Colors[colorSchemeIndex][frameColorLight]);
-        painter->setBrush(WINUI3Colors[colorSchemeIndex][menuPanelFill]);
-        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setPen(highContrastTheme ? QPen(option->palette.windowText().color(), 2)
+                                          : winUI3Color(frameColorLight));
+        painter->setBrush(winUI3Color(menuPanelFill));
         painter->drawRoundedRect(rect, topLevelRoundingRadius, topLevelRoundingRadius);
-        painter->restore();
         break;
     }
     case PE_PanelLineEdit:
-        if (widget && widget->objectName() == QStringLiteral(u"qt_spinbox_lineedit"))
-            break;
         if (const auto *panel = qstyleoption_cast<const QStyleOptionFrame *>(option)) {
-            QRectF frameRect = option->rect.marginsRemoved(QMargins(1, 1, 1, 1));
-            painter->setBrush(option->palette.brush(QPalette::Base));
-            painter->setPen(Qt::NoPen);
-            painter->drawRoundedRect(frameRect, secondLevelRoundingRadius, secondLevelRoundingRadius);
-            // In case the QLineEdit is hovered overdraw the background with a alpha mask to
-            // highlight the QLineEdit.
-            if (state & State_MouseOver && !(state & State_HasFocus)) {
-                painter->setBrush(WINUI3Colors[colorSchemeIndex][subtleHighlightColor]);
-                painter->setPen(Qt::NoPen);
-                painter->drawRoundedRect(frameRect, secondLevelRoundingRadius, secondLevelRoundingRadius);
-            }
+            const auto frameRect = QRectF(option->rect).marginsRemoved(QMarginsF(1.5, 1.5, 1.5, 1.5));
+            drawRoundedRect(painter, frameRect, Qt::NoPen, option->palette.brush(QPalette::Base));
+
             if (panel->lineWidth > 0)
                 proxy()->drawPrimitive(PE_FrameLineEdit, panel, painter, widget);
+
+            const bool isMouseOver = state & State_MouseOver;
+            const bool hasFocus = state & State_HasFocus;
+            if (isMouseOver && !hasFocus && !highContrastTheme)
+                drawRoundedRect(painter, frameRect, Qt::NoPen, winUI3Color(subtleHighlightColor));
         }
         break;
     case PE_FrameLineEdit: {
-        const qreal sublineOffset = secondLevelRoundingRadius + 1.5;
-        if (widget && widget->parent() && qobject_cast<QComboBox*>(widget->parent()))
-            break;
-        QRectF rect = option->rect;
-        rect.adjust(1.5, 1.5, -1.5, -1.5);
-        painter->setBrush(Qt::NoBrush);
-        painter->setPen(highContrastTheme == true ? option->palette.buttonText().color() : WINUI3Colors[colorSchemeIndex][frameColorLight]);
-        painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
-        painter->setPen(editSublineColor(option, colorSchemeIndex));
-        painter->drawLine(option->rect.bottomLeft() + QPointF(sublineOffset, 0.5), option->rect.bottomRight() + QPointF(-sublineOffset, 0.5));
-    }
+        const auto frameRect = QRectF(option->rect).marginsRemoved(QMarginsF(1.5, 1.5, 1.5, 1.5));
+        drawLineEditFrame(painter, frameRect, option);
+        if (state & State_KeyboardFocusChange && state & State_HasFocus) {
+            QStyleOptionFocusRect fropt;
+            fropt.QStyleOption::operator=(*option);
+            proxy()->drawPrimitive(PE_FrameFocusRect, &fropt, painter, widget);
+        }
         break;
+    }
     case PE_Frame: {
         if (const auto *frame = qstyleoption_cast<const QStyleOptionFrame *>(option)) {
+            const auto rect = QRectF(option->rect).marginsRemoved(QMarginsF(1.5, 1.5, 1.5, 1.5));
+            if (qobject_cast<const QComboBoxPrivateContainer *>(widget)) {
+                QPen pen;
+                if (highContrastTheme)
+                    pen = QPen(option->palette.windowText().color(), 2);
+                else
+                    pen = Qt::NoPen;
+                drawRoundedRect(painter, rect, pen, WINUI3Colors[colorSchemeIndex][menuPanelFill]);
+            } else
+                drawRoundedRect(painter, rect, Qt::NoPen, option->palette.brush(QPalette::Base));
+
             if (frame->frameShape == QFrame::NoFrame)
                 break;
-            QRectF rect = option->rect.adjusted(1,1,-1,-1);
-            if (qobject_cast<const QComboBoxPrivateContainer *>(widget)) {
-                if (highContrastTheme)
-                    painter->setPen(QPen(option->palette.windowText().color(), 2));
-                else
-                    painter->setPen(Qt::NoPen);
-                painter->setBrush(WINUI3Colors[colorSchemeIndex][menuPanelFill]);
-                painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
-            }
-            painter->setBrush(option->palette.base());
-            painter->setPen(Qt::NoPen);
-            painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
 
-            painter->setBrush(Qt::NoBrush);
-            painter->setPen(WINUI3Colors[colorSchemeIndex][frameColorLight]);
-            painter->drawRoundedRect(rect.marginsRemoved(QMarginsF(0.5,0.5,0.5,0.5)), secondLevelRoundingRadius, secondLevelRoundingRadius);
-
-            if (qobject_cast<const QTextEdit *>(widget)) {
-                QRegion clipRegion = option->rect;
-                QColor lineColor = state & State_HasFocus ? option->palette.accent().color() : option->palette.base().color();
-                painter->setPen(lineColor);
-                painter->drawLine(option->rect.bottomLeft() + QPoint(1,-1), option->rect.bottomRight() + QPoint(-1,-1));
-            }
+            drawLineEditFrame(painter, rect, option, qobject_cast<const QTextEdit *>(widget) != nullptr);
         }
         break;
     }
@@ -1193,7 +1212,8 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                 rect.translate(shiftX, shiftY);
                 painter->setFont(toolbutton->font);
                 const QString text = d->toolButtonElideText(toolbutton, rect, alignment);
-                painter->setPen(buttonLabelColor(option, colorSchemeIndex));
+                // option->state has no State_Sunken here, windowsvistastyle/CC_ToolButton removes it
+                painter->setPen(controlTextColor(option));
                 proxy()->drawItemText(painter, rect, alignment, toolbutton->palette,
                                       toolbutton->state & State_Enabled, text);
             } else {
@@ -1244,7 +1264,7 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                     }
                     tr.translate(shiftX, shiftY);
                     const QString text = d->toolButtonElideText(toolbutton, tr, alignment);
-                    painter->setPen(buttonLabelColor(option, colorSchemeIndex));
+                    painter->setPen(controlTextColor(option));
                     proxy()->drawItemText(painter, QStyle::visualRect(toolbutton->direction, rect, tr), alignment, toolbutton->palette,
                                           toolbutton->state & State_Enabled, text);
                 } else {
@@ -1321,13 +1341,6 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
             const qreal offset = (orientation == Qt::Horizontal && int(rect.height()) % 2 == 0)
                             || (orientation == Qt::Vertical && int(rect.width()) % 2 == 0) ? 0.5 : 0.0;
 
-            if (isIndeterminate) {
-                if (!d->animation(option->styleObject))
-                    d->startAnimation(new QProgressStyleAnimation(d->animationFps, option->styleObject));
-            } else {
-                d->stopAnimation(option->styleObject);
-            }
-
             if (!isIndeterminate) {
                 fillPercentage = ((float(progbaropt->progress) - float(progbaropt->minimum)) / (float(progbaropt->maximum) - float(progbaropt->minimum)));
                 if (orientation == Qt::Horizontal) {
@@ -1342,23 +1355,22 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                     rect.setHeight(oldHeight * fillPercentage);
                 }
             } else {
-                if (qobject_cast<QProgressStyleAnimation *>(d->animation(option->styleObject))) {
-                    auto elapsedTime = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
-                    fillPercentage = (elapsedTime.time_since_epoch().count() % 5000)/(5000.0f*0.75);
-                    if (orientation == Qt::Horizontal) {
-                        float barBegin = qMin(qMax(fillPercentage-0.25,0.0) * rect.width(), float(rect.width()));
-                        float barEnd = qMin(fillPercentage * rect.width(), float(rect.width()));
-                        rect = QRect(QPoint(rect.left() + barBegin, rect.top()), QPoint(rect.left() + barEnd, rect.bottom()));
-                        rect.setHeight(progressBarThickness);
-                        rect.moveTop(center.y() - progressBarHalfThickness - offset);
-                    } else {
-                        float barBegin = qMin(qMax(fillPercentage-0.25,0.0) * rect.height(), float(rect.height()));
-                        float barEnd = qMin(fillPercentage * rect.height(), float(rect.height()));
-                        rect = QRect(QPoint(rect.left(), rect.bottom() - barEnd), QPoint(rect.right(), rect.bottom() - barBegin));
-                        rect.setWidth(progressBarThickness);
-                        rect.moveLeft(center.x() - progressBarHalfThickness - offset);
-                    }
+                auto elapsedTime = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
+                fillPercentage = (elapsedTime.time_since_epoch().count() % 5000)/(5000.0f*0.75);
+                if (orientation == Qt::Horizontal) {
+                    float barBegin = qMin(qMax(fillPercentage-0.25,0.0) * rect.width(), float(rect.width()));
+                    float barEnd = qMin(fillPercentage * rect.width(), float(rect.width()));
+                    rect = QRect(QPoint(rect.left() + barBegin, rect.top()), QPoint(rect.left() + barEnd, rect.bottom()));
+                    rect.setHeight(progressBarThickness);
+                    rect.moveTop(center.y() - progressBarHalfThickness - offset);
+                } else {
+                    float barBegin = qMin(qMax(fillPercentage-0.25,0.0) * rect.height(), float(rect.height()));
+                    float barEnd = qMin(fillPercentage * rect.height(), float(rect.height()));
+                    rect = QRect(QPoint(rect.left(), rect.bottom() - barEnd), QPoint(rect.right(), rect.bottom() - barBegin));
+                    rect.setWidth(progressBarThickness);
+                    rect.moveLeft(center.x() - progressBarHalfThickness - offset);
                 }
+                const_cast<QWidget*>(widget)->update();
             }
             if (progbaropt->invertedAppearance && orientation == Qt::Horizontal)
                 rect.moveLeft(originalRect.width() * (1.0 - fillPercentage));
@@ -1452,7 +1464,7 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                 tf |= Qt::AlignHCenter;
             }
 
-            painter->setPen(buttonLabelColor(option, colorSchemeIndex));
+            painter->setPen(controlTextColor(option));
             proxy()->drawItemText(painter, textRect, tf, option->palette,btn->state & State_Enabled, btn->text);
         }
         break;
@@ -1471,16 +1483,7 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                 }
                 painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
             } else {
-                if (option->palette.isBrushSet(QPalette::Current, QPalette::Button))
-                    painter->setBrush(option->palette.button());
-                else if (flags & (State_Sunken))
-                    painter->setBrush(flags & State_On ? option->palette.accent().color().lighter(120) : WINUI3Colors[colorSchemeIndex][controlFillTertiary]);
-                else if (flags & State_MouseOver)
-                    painter->setBrush(flags & State_On ? option->palette.accent().color().lighter(110) : WINUI3Colors[colorSchemeIndex][controlFillSecondary]);
-                else if (!(flags & State_Enabled))
-                    painter->setBrush(flags & State_On ? WINUI3Colors[colorSchemeIndex][controlAccentDisabled] : option->palette.button());
-                else
-                    painter->setBrush(flags & State_On ? option->palette.accent() : option->palette.button());
+                painter->setBrush(controlFillBrush(option, ControlType::Control));
                 painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
 
                 rect.adjust(0.5,0.5,-0.5,-0.5);
@@ -1744,7 +1747,7 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                     const QAbstractItemView *view = qobject_cast<const QAbstractItemView *>(widget);
                     painter->setBrush(view && view->alternatingRowColors()
                                               ? vopt->palette.highlight()
-                                              : WINUI3Colors[colorSchemeIndex][subtleHighlightColor]);
+                                              : winUI3Color(subtleHighlightColor));
                 }
             } else {
                 painter->setBrush(vopt->backgroundBrush);
@@ -1850,6 +1853,17 @@ QRect QWindows11Style::subElementRect(QStyle::SubElement element, const QStyleOp
 {
     QRect ret;
     switch (element) {
+    case QStyle::SE_RadioButtonIndicator:
+    case QStyle::SE_CheckBoxIndicator:
+        ret = QWindowsVistaStyle::subElementRect(element, option, widget);
+        ret = ret.marginsRemoved(QMargins(4,0,0,0));
+        break;
+    case QStyle::SE_ComboBoxFocusRect:
+    case QStyle::SE_CheckBoxFocusRect:
+    case QStyle::SE_RadioButtonFocusRect:
+    case QStyle::SE_PushButtonFocusRect:
+        ret = option->rect;
+        break;
     case QStyle::SE_LineEditContents:
         ret = option->rect.adjusted(4,0,-4,0);
         break;
@@ -2029,27 +2043,13 @@ QRect QWindows11Style::subControlRect(ComplexControl control, const QStyleOption
     {
         ret = QCommonStyle::subControlRect(control, option, subControl, widget);
 
-        switch (subControl) {
-        case QStyle::SC_ScrollBarAddLine:
+        if (subControl == SC_ScrollBarAddLine || subControl == SC_ScrollBarSubLine) {
             if (const QStyleOptionSlider *scrollbar = qstyleoption_cast<const QStyleOptionSlider *>(option)) {
-                if (scrollbar->orientation == Qt::Vertical) {
+                if (scrollbar->orientation == Qt::Vertical)
                     ret = ret.adjusted(2,2,-2,-3);
-                } else {
+                else
                     ret = ret.adjusted(3,2,-2,-2);
-                }
             }
-            break;
-        case QStyle::SC_ScrollBarSubLine:
-            if (const QStyleOptionSlider *scrollbar = qstyleoption_cast<const QStyleOptionSlider *>(option)) {
-                if (scrollbar->orientation == Qt::Vertical) {
-                    ret = ret.adjusted(2,2,-2,-3);
-                } else {
-                    ret = ret.adjusted(3,2,-2,-2);
-                }
-            }
-            break;
-        default:
-            break;
         }
         break;
     }
@@ -2210,8 +2210,11 @@ int QWindows11Style::pixelMetric(PixelMetric metric, const QStyleOption *option,
 
 void QWindows11Style::polish(QWidget* widget)
 {
+#if QT_CONFIG(commandlinkbutton)
     if (!qobject_cast<QCommandLinkButton *>(widget))
+#endif // QT_CONFIG(commandlinkbutton)
         QWindowsVistaStyle::polish(widget);
+
     const bool isScrollBar = qobject_cast<QScrollBar *>(widget);
     const auto comboBoxContainer = qobject_cast<const QComboBoxPrivateContainer *>(widget);
     if (isScrollBar || qobject_cast<QMenu *>(widget) || comboBoxContainer) {
@@ -2268,8 +2271,11 @@ void QWindows11Style::polish(QWidget* widget)
 
 void QWindows11Style::unpolish(QWidget *widget)
 {
+#if QT_CONFIG(commandlinkbutton)
     if (!qobject_cast<QCommandLinkButton *>(widget))
+#endif // QT_CONFIG(commandlinkbutton)
         QWindowsVistaStyle::unpolish(widget);
+
     if (const auto *scrollarea = qobject_cast<QAbstractScrollArea *>(widget);
         scrollarea
 #if QT_CONFIG(mdiarea)
@@ -2391,42 +2397,105 @@ void QWindows11Style::polish(QPalette& result)
         result.setColor(QPalette::Active, QPalette::HighlightedText, result.windowText().color());
 }
 
-QBrush QWindows11Style::buttonFillBrush(const QStyleOption *option)
+QColor QWindows11Style::calculateAccentColor(const QStyleOption *option) const
 {
+    using namespace StyleOptionHelper;
+    if (isDisabled(option))
+        return winUI3Color(fillAccentDisabled);
+    const auto alphaColor = isPressed(option) ? fillAccentTertiary
+                                              : isHover(option) ? fillAccentSecondary
+                                                                : fillAccentDefault;
+    const auto alpha = winUI3Color(alphaColor);
+    QColor col = option->palette.accent().color();
+    col.setAlpha(alpha.alpha());
+    return col;
+}
+
+QPen QWindows11Style::borderPenControlAlt(const QStyleOption *option) const
+{
+    using namespace StyleOptionHelper;
+    if (isChecked(option))
+        return Qt::NoPen;   // same color as fill color, so no pen needed
+    if (highContrastTheme)
+        return option->palette.buttonText().color();
+    if (isDisabled(option) || isPressed(option))
+        return winUI3Color(frameColorStrongDisabled);
+    return winUI3Color(frameColorStrong);
+}
+
+QBrush QWindows11Style::controlFillBrush(const QStyleOption *option, ControlType controlType) const
+{
+    using namespace StyleOptionHelper;
+    static constexpr WINUI3Color colorEnums[2][int(ControlState::Max)] = {
+        // Light & Dark Control
+        { fillControlDefault, fillControlSecondary,
+          fillControlTertiary, fillControlDisabled },
+        // Light & Dark Control Alt
+        { fillControlAltSecondary, fillControlAltTertiary,
+          fillControlAltQuarternary, fillControlAltDisabled },
+    };
+
     if (option->palette.isBrushSet(QPalette::Current, QPalette::Button))
         return option->palette.button();
 
-    const bool isOn = (option->state & QStyle::State_On || option->state & QStyle::State_NoChange);
-    QBrush brush = isOn ? option->palette.accent() : option->palette.window();
-    if (!isOn && option->state & QStyle::State_AutoRaise)
+    if (!isChecked(option) && isAutoRaise(option))
         return Qt::NoBrush;
-    if (option->state & QStyle::State_MouseOver)
-        brush.setColor(isOn ? brush.color().lighter(107) : brush.color().darker(107));
-    return brush;
+
+    // checked is the same for Control (Buttons) and Control Alt (Radiobuttons/Checkboxes)
+    if (isChecked(option))
+        return calculateAccentColor(option);
+
+    const auto state = calcControlState(option);
+    return winUI3Color(colorEnums[int(controlType)][int(state)]);
 }
 
-QColor QWindows11Style::buttonLabelColor(const QStyleOption *option, int colorSchemeIndex)
+QColor QWindows11Style::controlTextColor(const QStyleOption *option, QPalette::ColorRole role) const
 {
+    using namespace StyleOptionHelper;
+    static constexpr WINUI3Color colorEnums[2][int(ControlState::Max)] = {
+        // Control, unchecked
+        { textPrimary, textPrimary, textSecondary, textDisabled },
+        // Control, checked
+        { textOnAccentPrimary, textOnAccentPrimary, textOnAccentSecondary, textOnAccentDisabled },
+    };
+
     if (option->palette.isBrushSet(QPalette::Current, QPalette::ButtonText))
         return option->palette.buttonText().color();
 
-    const bool isOn = option->state & QStyle::State_On;
-    if (option->state & QStyle::State_Sunken)
-        return isOn ? WINUI3Colors[colorSchemeIndex][textOnAccentSecondary]
-                    : WINUI3Colors[colorSchemeIndex][controlTextSecondary];
-    if (!(option->state & QStyle::State_Enabled))
-        return isOn ? WINUI3Colors[colorSchemeIndex][textAccentDisabled]
-                    : option->palette.buttonText().color();
-    return isOn ? WINUI3Colors[colorSchemeIndex][textOnAccentPrimary]
-                : option->palette.buttonText().color();
+    const int colorIndex = isChecked(option) ? 1 : 0;
+    const auto state = calcControlState(option);
+    const auto alpha = winUI3Color(colorEnums[colorIndex][int(state)]);
+    QColor col = option->palette.color(role);
+    col.setAlpha(alpha.alpha());
+    return col;
 }
 
-QColor QWindows11Style::editSublineColor(const QStyleOption *option, int colorSchemeIndex)
+void QWindows11Style::drawLineEditFrame(QPainter *p, const QRectF &rect, const QStyleOption *o, bool isEditable) const
 {
-    const State state = option->state;
-    return state & State_HasFocus ? option->palette.accent().color()
-                                  : (colorSchemeIndex == 0 ? QColor(0x80, 0x80, 0x80)
-                                                           : QColor(0xa0, 0xa0, 0xa0));
+    const bool isHovered = o->state & State_MouseOver;
+    const auto frameCol = highContrastTheme
+            ? o->palette.color(isHovered ? QPalette::Accent
+                                         : QPalette::ButtonText)
+            : winUI3Color(frameColorLight);
+    drawRoundedRect(p, rect, frameCol, Qt::NoBrush);
+
+    if (!isEditable)
+        return;
+
+    QPainterStateGuard psg(p);
+    p->setClipRect(rect.marginsRemoved(QMarginsF(0, rect.height() - 0.5, 0, -1)));
+    const bool hasFocus = o->state & State_HasFocus;
+    const auto underlineCol = hasFocus
+            ? o->palette.color(QPalette::Accent)
+            : colorSchemeIndex == 0 ? QColor(0x80, 0x80, 0x80)
+                                    : QColor(0xa0, 0xa0, 0xa0);
+    const auto penUnderline = QPen(underlineCol, hasFocus ? 2 : 1);
+    drawRoundedRect(p, rect, penUnderline, Qt::NoBrush);
+}
+
+QColor QWindows11Style::winUI3Color(enum WINUI3Color col) const
+{
+    return WINUI3Colors[colorSchemeIndex][col];
 }
 
 #undef SET_IF_UNRESOLVED

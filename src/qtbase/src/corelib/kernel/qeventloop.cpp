@@ -68,7 +68,7 @@ QEventLoop::QEventLoop(QObject *parent)
 {
     Q_D(QEventLoop);
     QThreadData *threadData = d->threadData.loadRelaxed();
-    if (!QCoreApplication::instance() && threadData->requiresCoreApplication) {
+    if (!QCoreApplication::instanceExists() && threadData->requiresCoreApplication) {
         qWarning("QEventLoop: Cannot be used without QCoreApplication");
     } else {
         threadData->ensureEventDispatcher();

@@ -33,7 +33,7 @@ QQmlRefPointer<QQmlScriptData> QQmlScriptBlob::scriptData() const
 
 void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
 {
-    Q_ASSERT(isTypeLoaderThread());
+    assertTypeLoaderThread();
 
     if (data.isCacheable()) {
         if (auto unit = QQmlMetaType::obtainCompilationUnit(url())) {
@@ -41,7 +41,7 @@ void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
             return;
         }
 
-        if (readCacheFile()) {
+        if (m_typeLoader->readCacheFile()) {
             auto unit = QQml::makeRefPointer<QV4::CompiledData::CompilationUnit>();
             QString error;
             if (unit->loadFromDisk(url(), data.sourceTimeStamp(), &error)) {
@@ -73,15 +73,16 @@ void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
 
     if (m_isModule) {
         QList<QQmlJS::DiagnosticMessage> diagnostics;
-        unit = QV4::Compiler::Codegen::compileModule(isDebugging(), urlString(), source,
-                                                     data.sourceTimeStamp(), &diagnostics);
+        unit = QV4::Compiler::Codegen::compileModule(
+                m_typeLoader->isDebugging(), urlString(), source, data.sourceTimeStamp(),
+                &diagnostics);
         QList<QQmlError> errors = QQmlEnginePrivate::qmlErrorFromDiagnostics(urlString(), diagnostics);
         if (!errors.isEmpty()) {
             setError(errors);
             return;
         }
     } else {
-        QmlIR::Document irUnit(urlString(), finalUrlString(), isDebugging());
+        QmlIR::Document irUnit(urlString(), finalUrlString(), m_typeLoader->isDebugging());
 
         irUnit.jsModule.sourceTimeStamp = data.sourceTimeStamp();
 
@@ -104,7 +105,7 @@ void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
         unit = std::move(irUnit.javaScriptCompilationUnit);
     }
 
-    if (writeCacheFile()) {
+    if (m_typeLoader->writeCacheFile()) {
         QString errorString;
         if (unit->saveToDisk(url(), &errorString)) {
             QString error;
@@ -122,14 +123,14 @@ void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
 
 void QQmlScriptBlob::initializeFromCachedUnit(const QQmlPrivate::CachedQmlUnit *cachedUnit)
 {
-    Q_ASSERT(isTypeLoaderThread());
+    assertTypeLoaderThread();
     initializeFromCompilationUnit(QQml::makeRefPointer<QV4::CompiledData::CompilationUnit>(
             cachedUnit->qmlData, cachedUnit->aotCompiledFunctions, urlString(), finalUrlString()));
 }
 
 void QQmlScriptBlob::done()
 {
-    Q_ASSERT(isTypeLoaderThread());
+    assertTypeLoaderThread();
 
     if (isError())
         return;
@@ -187,7 +188,7 @@ QString QQmlScriptBlob::stringAt(int index) const
 
 void QQmlScriptBlob::scriptImported(const QQmlRefPointer<QQmlScriptBlob> &blob, const QV4::CompiledData::Location &location, const QString &qualifier, const QString &nameSpace)
 {
-    Q_ASSERT(isTypeLoaderThread());
+    assertTypeLoaderThread();
 
     ScriptReference ref;
     ref.script = blob;
@@ -201,7 +202,7 @@ void QQmlScriptBlob::scriptImported(const QQmlRefPointer<QQmlScriptBlob> &blob, 
 void QQmlScriptBlob::initializeFromCompilationUnit(
         QQmlRefPointer<QV4::CompiledData::CompilationUnit> &&unit)
 {
-    Q_ASSERT(isTypeLoaderThread());
+    assertTypeLoaderThread();
     Q_ASSERT(!m_scriptData);
     Q_ASSERT(unit);
 

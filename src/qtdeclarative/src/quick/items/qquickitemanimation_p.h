@@ -163,7 +163,7 @@ Q_SIGNALS:
     void easingChanged(const QEasingCurve &);
     void pathChanged();
     void targetChanged();
-    void orientationChanged(Orientation);
+    void orientationChanged(QQuickPathAnimation::Orientation);
     void anchorPointChanged(const QPointF &);
     void orientationEntryDurationChanged(qreal);
     void orientationExitDurationChanged(qreal);

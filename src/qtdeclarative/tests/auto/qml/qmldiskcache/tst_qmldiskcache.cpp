@@ -281,11 +281,8 @@ void tst_qmldiskcache::loadLocalAsFallback()
         QV4::CompiledData::Unit unit = {};
         memcpy(unit.magic, QV4::CompiledData::magic_str, sizeof(unit.magic));
         unit.version = QV4_DATA_STRUCTURE_VERSION;
-        unit.qtVersion = QT_VERSION;
         unit.sourceTimeStamp = testCompiler.mappedFile.fileTime(QFile::FileModificationTime).toMSecsSinceEpoch();
         unit.unitSize = ~0U;    // make the size a silly number
-        // write something to the library hash that should cause it not to be loaded
-        memset(unit.libraryVersionHash, 'z', sizeof(unit.libraryVersionHash));
         memset(unit.md5Checksum, 0, sizeof(unit.md5Checksum));
 
         // leave the other fields unset, since they don't matter
@@ -422,20 +419,6 @@ void tst_qmldiskcache::basicVersionChecks()
         testCompiler.clearCache();
         QVERIFY2(testCompiler.compile(contents), qPrintable(testCompiler.lastErrorString));
         QVERIFY2(testCompiler.verify(), qPrintable(testCompiler.lastErrorString));
-    }
-
-    {
-        testCompiler.clearCache();
-        QVERIFY2(testCompiler.compile(contents), qPrintable(testCompiler.lastErrorString));
-
-        const QString qtVersionFile = QStringLiteral("qtversion.qml");
-        QVERIFY(testCompiler.tweakHeader([](QV4::CompiledData::Unit *header) {
-            header->qtVersion = 0;
-        }, qtVersionFile));
-
-        QVERIFY(!testCompiler.verify(qtVersionFile));
-        QCOMPARE(testCompiler.lastErrorString, QString::fromUtf8("Qt version mismatch. Found 0 expected %1").arg(QT_VERSION, 0, 16));
-        testCompiler.clearCache(qtVersionFile);
     }
 
     {
@@ -1014,7 +997,7 @@ void tst_qmldiskcache::cacheModuleScripts()
 
         auto componentPrivate = QQmlComponentPrivate::get(&component);
         QVERIFY(componentPrivate);
-        auto compilationUnit = componentPrivate->compilationUnit->dependentScriptsPtr()
+        auto compilationUnit = componentPrivate->compilationUnit()->dependentScriptsPtr()
                                        ->first()->compilationUnit();
         QVERIFY(compilationUnit);
         auto unitData = compilationUnit->unitData();

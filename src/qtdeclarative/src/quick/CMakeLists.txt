@@ -14,7 +14,7 @@ qt_internal_add_qml_module(Quick
     CLASS_NAME QtQuick2Plugin
     IMPORTS
         QtQml/auto
-    PLUGIN_TYPES scenegraph
+    PLUGIN_TYPES scenegraph vectorimageformats
     SOURCES
         handlers/qquickdragaxis.cpp handlers/qquickdragaxis_p.h
         handlers/qquickdraghandler.cpp handlers/qquickdraghandler_p.h

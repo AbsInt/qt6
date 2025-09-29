@@ -35,7 +35,19 @@ T.ToolButton {
         implicitWidth: 40
         implicitHeight: 40
 
-        opacity: control.down ? 1.0 : 0.5
+        opacity: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast || control.down ? 1.0 : 0.5
         color: control.down || control.checked || control.highlighted ? control.palette.mid : control.palette.button
+
+        border.color: {
+            if (control.visualFocus)
+                return control.palette.highlight
+            else if (Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast)
+                return Color.blend(control.palette.buttonText, control.palette.button,
+                                   control.enabled ? 0.0 : 0.8)
+            else
+                return control.palette.windowText
+        }
+        border.width: control.visualFocus ? 2 :
+                      Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ? 1 : 0
     }
 }

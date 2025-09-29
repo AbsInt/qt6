@@ -33,7 +33,7 @@ QAccessibleInterface *getOrCreateMenu(QWidget *menu, QAction *action)
 }
 
 QAccessibleMenu::QAccessibleMenu(QWidget *w)
-: QAccessibleWidget(w)
+: QAccessibleWidgetV2(w)
 {
     Q_ASSERT(menu());
 }
@@ -58,7 +58,7 @@ QAccessibleInterface *QAccessibleMenu::childAt(int x, int y) const
 
 QString QAccessibleMenu::text(QAccessible::Text t) const
 {
-    QString tx = QAccessibleWidget::text(t);
+    QString tx = QAccessibleWidgetV2::text(t);
     if (!tx.isEmpty())
         return tx;
 
@@ -98,7 +98,7 @@ QAccessibleInterface *QAccessibleMenu::parent() const
             }
         }
     }
-    return QAccessibleWidget::parent();
+    return QAccessibleWidgetV2::parent();
 }
 
 int QAccessibleMenu::indexOfChild( const QAccessibleInterface *child) const
@@ -112,7 +112,7 @@ int QAccessibleMenu::indexOfChild( const QAccessibleInterface *child) const
 
 #if QT_CONFIG(menubar)
 QAccessibleMenuBar::QAccessibleMenuBar(QWidget *w)
-    : QAccessibleWidget(w, QAccessible::MenuBar)
+    : QAccessibleWidgetV2(w, QAccessible::MenuBar)
 {
     Q_ASSERT(menuBar());
 }

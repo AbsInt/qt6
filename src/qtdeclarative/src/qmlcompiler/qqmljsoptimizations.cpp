@@ -1,5 +1,6 @@
 // Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// Qt-Security score:significant
 
 #include "qqmljsoptimizations_p.h"
 #include "qqmljsbasicblocks_p.h"
@@ -195,10 +196,22 @@ bool QQmlJSOptimizations::eraseDeadStore(const InstructionAnnotations::iterator 
             it->second.changedRegisterIndex = InvalidRegister;
             it->second.changedRegister = QQmlJSRegisterContent();
         } else {
-            // void the output, rather than deleting it. We still need its variant.
-            const bool adjusted = m_typeResolver->adjustTrackedType(
-                    it->second.changedRegister, m_typeResolver->voidType());
-            Q_ASSERT(adjusted); // Can always convert to void
+            // We can't do this with certain QObjects because they still need tracking as
+            // implicitly destructible by the garbage collector. We may be calling a factory
+            // function and then forgetting the object after all.
+            //
+            // However, objects we need to track that way can only be produced through external
+            // side effects (i.e. function calls).
+
+            const QQmlJSScope::ConstPtr contained = it->second.changedRegister.containedType();
+            if (!it->second.hasExternalSideEffects
+                    || (!contained->isReferenceType()
+                        && !m_typeResolver->canHold(contained, m_typeResolver->qObjectType()))) {
+                // void the output, rather than deleting it. We still need its variant.
+                const bool adjusted = m_typeResolver->adjustTrackedType(
+                        it->second.changedRegister, m_typeResolver->voidType());
+                Q_ASSERT(adjusted); // Can always convert to void
+            }
         }
         m_readerLocations.erase(reader);
 
@@ -330,8 +343,8 @@ void QQmlJSOptimizations::adjustTypes()
     // Handle the array definitions first.
     // Changing the array type changes the expected element types.
     auto adjustArray = [&](int instructionOffset, int mode) {
-        auto it = m_readerLocations.find(instructionOffset);
-        if (it == m_readerLocations.end())
+        auto it = m_readerLocations.constFind(instructionOffset);
+        if (it == m_readerLocations.cend())
             return;
 
         const InstructionAnnotation &annotation = m_annotations[instructionOffset];
@@ -439,7 +452,7 @@ void QQmlJSOptimizations::adjustTypes()
         }
     }
 
-    for (auto it = m_readerLocations.begin(), end = m_readerLocations.end(); it != end; ++it) {
+    for (auto it = m_readerLocations.cbegin(), end = m_readerLocations.cend(); it != end; ++it) {
         handleRegisterReadersAndConversions(it);
 
         // There is always one first occurrence of any tracked type. Conversions don't change
@@ -467,7 +480,7 @@ void QQmlJSOptimizations::adjustTypes()
 
             QQmlJSScope::ConstPtr newResult;
             const auto content = conversion->second.content;
-            if (content.isConversion()) {
+            if (content.isConversion() && !content.original().isValid()) {
                 const auto conversionOrigins = content.conversionOrigins();
                 for (const auto &origin : conversionOrigins)
                     newResult = m_typeResolver->merge(newResult, origin.containedType());

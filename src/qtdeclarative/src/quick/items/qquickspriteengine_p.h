@@ -26,10 +26,10 @@ QT_REQUIRE_CONFIG(quick_sprite);
 #include <QList>
 #include <QQmlListProperty>
 #include <QImage>
-#include <QPair>
 #include <QRandomGenerator>
 #include <private/qquickpixmap_p.h>
 #include <private/qtquickglobal_p.h>
+#include <utility>
 
 QT_BEGIN_NAMESPACE
 
@@ -216,7 +216,7 @@ protected:
     QVector<int> m_goals;
     QVector<int> m_duration;
     QVector<int> m_startTimes;
-    QVector<QPair<uint, QVector<int> > > m_stateUpdates;//### This could be done faster - priority queue?
+    QVector<std::pair<uint, QVector<int> > > m_stateUpdates;//### This could be done faster - priority queue?
 
     QElapsedTimer m_advanceTimer;
     uint m_timeOffset;

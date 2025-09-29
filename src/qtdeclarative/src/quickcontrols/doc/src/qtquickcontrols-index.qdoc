@@ -234,5 +234,5 @@
     Furthermore, Qt Quick Controls potentially contains third party
     modules under the following permissive licenses:
 
-    \generatelist{groupsbymodule attributions-qtquickcontrols}
+    \annotatedlist attributions-qtquickcontrols
 */

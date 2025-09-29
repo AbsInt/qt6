@@ -1025,7 +1025,7 @@ void QQuickDeliveryAgentPrivate::deliverToPassiveGrabbers(const QVector<QPointer
 {
     const QVector<QObject *> &eventDeliveryTargets =
             QQuickPointerHandlerPrivate::deviceDeliveryTargets(pointerEvent->device());
-    QVarLengthArray<QPair<QQuickItem *, bool>, 4> sendFilteredPointerEventResult;
+    QVarLengthArray<std::pair<QQuickItem *, bool>, 4> sendFilteredPointerEventResult;
     hasFiltered.clear();
     for (QObject *grabberObject : passiveGrabbers) {
         // a null pointer in passiveGrabbers is unlikely, unless the grabbing handler was deleted dynamically
@@ -1039,14 +1039,14 @@ void QQuickDeliveryAgentPrivate::deliverToPassiveGrabbers(const QVector<QPointer
 
                 // see if we already have sent a filter event to the parent
                 auto it = std::find_if(sendFilteredPointerEventResult.begin(), sendFilteredPointerEventResult.end(),
-                                       [par](const QPair<QQuickItem *, bool> &pair) { return pair.first == par; });
+                                       [par](const std::pair<QQuickItem *, bool> &pair) { return pair.first == par; });
                 if (it != sendFilteredPointerEventResult.end()) {
                     // Yes, the event was sent to that parent for filtering: do not call it again, but use
                     // the result of the previous call to determine whether we should call the handler.
                     alreadyFiltered = it->second;
                 } else if (par) {
                     alreadyFiltered = sendFilteredPointerEvent(pointerEvent, par);
-                    sendFilteredPointerEventResult << qMakePair(par, alreadyFiltered);
+                    sendFilteredPointerEventResult << std::make_pair(par, alreadyFiltered);
                 }
                 if (!alreadyFiltered) {
                     if (par)
@@ -1550,6 +1550,7 @@ bool QQuickDeliveryAgentPrivate::isTouchEvent(const QPointerEvent *ev)
 
 bool QQuickDeliveryAgentPrivate::isTabletEvent(const QPointerEvent *ev)
 {
+#if QT_CONFIG(tabletevent)
     switch (ev->type()) {
     case QEvent::TabletPress:
     case QEvent::TabletMove:
@@ -1558,8 +1559,12 @@ bool QQuickDeliveryAgentPrivate::isTabletEvent(const QPointerEvent *ev)
     case QEvent::TabletLeaveProximity:
         return true;
     default:
-        return false;
+        break;
     }
+#else
+    Q_UNUSED(ev);
+#endif // tabletevent
+    return false;
 }
 
 bool QQuickDeliveryAgentPrivate::isEventFromMouseOrTouchpad(const QPointerEvent *ev)

@@ -671,7 +671,7 @@ QSGNode *QQuickShaderEffectSource::updatePaintNode(QSGNode *oldNode, UpdatePaint
                       : m_sourceRect;
     m_texture->setRect(sourceRect);
     QQuickItemPrivate *d = static_cast<QQuickItemPrivate *>(QObjectPrivate::get(this));
-    const float dpr = d->window->effectiveDevicePixelRatio();
+    const float dpr = d->effectiveDevicePixelRatio();
     QSize textureSize = m_textureSize.isEmpty()
             ? QSize(qCeil(qAbs(sourceRect.width())), qCeil(qAbs(sourceRect.height()))) * dpr
             : m_textureSize;
@@ -684,7 +684,7 @@ QSGNode *QQuickShaderEffectSource::updatePaintNode(QSGNode *oldNode, UpdatePaint
     while (textureSize.height() < minTextureSize.height())
         textureSize.rheight() *= 2;
 
-    m_texture->setDevicePixelRatio(d->window->effectiveDevicePixelRatio());
+    m_texture->setDevicePixelRatio(d->effectiveDevicePixelRatio());
     m_texture->setSize(textureSize);
     m_texture->setRecursive(m_recursive);
     m_texture->setFormat(toLayerFormat(m_format));

@@ -35,7 +35,11 @@ private slots:
     void actionAccessibility();
     void actionAccessibilityImplicitName();
 
+    void sliderTest();
+
     void accessibleName();
+    void locale();
+
 private:
     QQmlEngine engine;
 };
@@ -337,6 +341,55 @@ void tst_accessibility::actionAccessibilityImplicitName()
 #endif
 }
 
+void tst_accessibility::sliderTest()
+{
+#if QT_CONFIG(accessibility)
+    if (!QAccessible::isActive()) {
+        QPlatformAccessibility *accessibility = platformAccessibility();
+        if (!accessibility)
+            QSKIP("No QPlatformAccessibility available.");
+        accessibility->setActive(true);
+    }
+
+    QQmlComponent component(&engine);
+    component.loadUrl(testFileUrl("item.qml"));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY2(!object.isNull(), qPrintable(component.errorString()));
+
+    auto root = QAccessible::queryAccessibleInterface(object.get());
+    QVERIFY(root);
+    QCOMPARE(root->childCount(), 4);
+
+    for (int childIndex = 0; childIndex < 4; ++childIndex)
+    {
+        auto item = root->child(childIndex);
+        auto actionIface = item->actionInterface();
+        QVERIFY(actionIface);
+        auto valueIface = item->valueInterface();
+        QVERIFY(valueIface);
+
+        QVERIFY(actionIface->actionNames().contains(QAccessibleActionInterface::increaseAction()));
+        QVERIFY(actionIface->actionNames().contains(QAccessibleActionInterface::decreaseAction()));
+        QCOMPARE(valueIface->currentValue(), 25);
+        QCOMPARE(valueIface->minimumValue(), 0);
+        QCOMPARE(valueIface->maximumValue(), 100);
+
+        valueIface->setCurrentValue(30);
+        QCOMPARE(valueIface->currentValue(), 30);
+
+        const auto stepSize = valueIface->minimumStepSize();
+
+        actionIface->doAction(QAccessibleActionInterface::increaseAction());
+        QCOMPARE(valueIface->currentValue(), 30 + stepSize.toDouble());
+
+        actionIface->doAction(QAccessibleActionInterface::decreaseAction());
+        QCOMPARE(valueIface->currentValue(), 30);
+        QCOMPARE(valueIface->minimumValue(), 0);
+        QCOMPARE(valueIface->maximumValue(), 100);
+    }
+#endif
+}
+
 void tst_accessibility::accessibleName()
 {
 #if QT_CONFIG(accessibility)
@@ -373,6 +426,48 @@ void tst_accessibility::accessibleName()
     QAccessibleInterface *button3Acc = QAccessible::queryAccessibleInterface(object3.get());
     QVERIFY(button3Acc);
     QCOMPARE(button3Acc->text(QAccessible::Name), "Explicitly set accessible name");
+#endif
+}
+
+void tst_accessibility::locale()
+{
+#if QT_CONFIG(accessibility)
+    if (!QAccessible::isActive()) {
+        QPlatformAccessibility *accessibility = platformAccessibility();
+        if (!accessibility)
+            QSKIP("No QPlatformAccessibility available.");
+        accessibility->setActive(true);
+    }
+
+    QQmlComponent component(&engine);
+
+    // verify that locale is the default locale if none was set explicitly
+    component.loadUrl(testFileUrl("locale/button.qml"));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY2(!object.isNull(), qPrintable(component.errorString()));
+    QAccessibleInterface *buttonAcc = QAccessible::queryAccessibleInterface(object.get());
+    QVERIFY(buttonAcc);
+    QVERIFY(buttonAcc->attributesInterface());
+    QVERIFY(buttonAcc->attributesInterface()->attributeKeys().contains(
+            QAccessible::Attribute::Locale));
+    const QVariant localeVariant =
+            buttonAcc->attributesInterface()->attributeValue(QAccessible::Attribute::Locale);
+    QVERIFY(localeVariant.isValid() && localeVariant.canConvert<QLocale>());
+    QCOMPARE(localeVariant.toLocale(), QLocale());
+
+    // verify that locale is the one explicitly set for the button
+    component.loadUrl(testFileUrl("locale/button2.qml"));
+    QScopedPointer<QObject> object2(component.create());
+    QVERIFY2(!object2.isNull(), qPrintable(component.errorString()));
+    QAccessibleInterface *chineseButtonAcc = QAccessible::queryAccessibleInterface(object2.get());
+    QVERIFY(chineseButtonAcc);
+    QVERIFY(chineseButtonAcc->attributesInterface());
+    QVERIFY(chineseButtonAcc->attributesInterface()->attributeKeys().contains(
+            QAccessible::Attribute::Locale));
+    const QVariant chineseLocaleVariant =
+            chineseButtonAcc->attributesInterface()->attributeValue(QAccessible::Attribute::Locale);
+    QVERIFY(chineseLocaleVariant.isValid() && localeVariant.canConvert<QLocale>());
+    QCOMPARE(chineseLocaleVariant.toLocale(), QLocale("zh_CN"));
 #endif
 }
 

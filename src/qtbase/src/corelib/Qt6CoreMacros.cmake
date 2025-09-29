@@ -390,7 +390,7 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
 endif()
 
 function(_qt_internal_get_qt_internal_process_resource_args option_args single_args multi_args)
-    set(${option_args} "BIG_RESOURCES" PARENT_SCOPE)
+    set(${option_args} "BIG_RESOURCES;DISCARD_FILE_CONTENTS" PARENT_SCOPE)
     set(${single_args} "PREFIX;LANG;BASE;OUTPUT_TARGETS;DESTINATION" PARENT_SCOPE)
     set(${multi_args} "FILES;OPTIONS" PARENT_SCOPE)
 endfunction()
@@ -737,10 +737,10 @@ function(_qt_internal_create_executable target)
             OBJC_VISIBILITY_PRESET default
             OBJCXX_VISIBILITY_PRESET default
             _qt_android_apply_arch_suffix_called_from_qt_impl TRUE
+            _qt_android_target_type APPLICATION
         )
 
         qt6_android_apply_arch_suffix("${target}")
-        set_property(TARGET "${target}" PROPERTY _qt_is_android_executable TRUE)
     else()
         cmake_policy(PUSH)
         __qt_internal_set_cmp0156()
@@ -871,9 +871,9 @@ function(qt6_finalize_target target)
     _qt_internal_expose_deferred_files_to_ide(${target})
     _qt_internal_finalize_source_groups(${target})
     get_target_property(target_type ${target} TYPE)
-    get_target_property(is_android_executable "${target}" _qt_is_android_executable)
+    get_target_property(android_type "${target}" _qt_android_target_type)
 
-    if(target_type STREQUAL "EXECUTABLE" OR is_android_executable)
+    if(target_type STREQUAL "EXECUTABLE" OR android_type STREQUAL "APPLICATION")
         _qt_internal_finalize_executable(${ARGV})
     endif()
 
@@ -1485,12 +1485,7 @@ function(qt6_extract_metatypes target)
         message(FATAL_ERROR "Metatype generation requires either the use of AUTOMOC or a manual list of generated json files")
     endif()
 
-    if (CMAKE_BUILD_TYPE AND NOT is_multi_config)
-        string(TOLOWER ${target}_${CMAKE_BUILD_TYPE} target_lowercase)
-    else()
-        string(TOLOWER ${target} target_lowercase)
-    endif()
-
+    string(TOLOWER ${target} target_lowercase)
     set(metatypes_file_name "qt6${target_lowercase}_metatypes.json")
     set(metatypes_file "${target_binary_dir}/meta_types/${metatypes_file_name}")
     set(metatypes_file_gen "${target_binary_dir}/meta_types/${metatypes_file_name}.gen")
@@ -2441,7 +2436,7 @@ function(_qt_internal_process_resource target resourceName)
         )
 
         string(APPEND qrcContents "    <file alias=\"${escaped_file_resource_path}\"")
-        if(is_empty)
+        if(is_empty OR rcc_DISCARD_FILE_CONTENTS)
             string(APPEND qrcContents " empty=\"true\"")
         endif()
         string(APPEND qrcContents ">${escaped_file}</file>\n")
@@ -2677,7 +2672,16 @@ function(qt6_add_plugin target)
     set(plugin_class_name "")
     if (NOT "${arg_PLUGIN_TYPE}" STREQUAL "qml_plugin")
         if (NOT arg_CLASS_NAME)
-            set(plugin_class_name "${target}")
+            string(MAKE_C_IDENTIFIER "${target}" plugin_class_name)
+            if(NOT "${target}" STREQUAL "${plugin_class_name}"
+                AND target_type STREQUAL "STATIC_LIBRARY" AND NOT QT_SKIP_PLUGIN_CLASS_NAME_WARNING)
+                message(WARNING "The target name '${target}' is not a valid C++ class name and"
+                    " cannot be used as the plugin CLASS_NAME. It's converted to"
+                    " '${plugin_class_name}' implicitly. Please adjust the related code paths"
+                    " accordingly(e.g. Q_IMPORT_PLUGIN(...) calls) or use the CLASS_NAME argument"
+                    " explicitly. Setting QT_SKIP_PLUGIN_CLASS_NAME_WARNING to ON suppresses this"
+                    " warning.")
+            endif()
         else()
             set(plugin_class_name "${arg_CLASS_NAME}")
         endif()
@@ -2689,6 +2693,14 @@ function(qt6_add_plugin target)
         else()
             message(FATAL_ERROR "Qml plugin target has no CLASS_NAME specified: '${target}'")
         endif()
+    endif()
+
+    _qt_internal_is_c_identifier(is_c_indentifier "${plugin_class_name}")
+    if(NOT is_c_indentifier)
+        message(FATAL_ERROR "The provided plugin CLASS_NAME '${plugin_class_name}' of"
+            " the '${target}' target is not a valid C++ class name. Please use only valid C++"
+            " identifiers."
+        )
     endif()
 
     set_target_properties(${target} PROPERTIES QT_PLUGIN_CLASS_NAME "${plugin_class_name}")
@@ -3233,11 +3245,13 @@ endif()
 
 # These are internal implementation details. They may be removed at any time.
 set(__QT_DEPLOY_SYSTEM_NAME \"${CMAKE_SYSTEM_NAME}\")
+set(__QT_DEPLOY_SHARED_LIBRARY_SUFFIX \"${CMAKE_SHARED_LIBRARY_SUFFIX}\")
 set(__QT_DEPLOY_IS_SHARED_LIBS_BUILD \"${QT6_IS_SHARED_LIBS_BUILD}\")
 set(__QT_DEPLOY_TOOL \"${__QT_DEPLOY_TOOL}\")
 set(__QT_DEPLOY_IMPL_DIR \"${deploy_impl_dir}\")
 set(__QT_DEPLOY_VERBOSE \"${QT_ENABLE_VERBOSE_DEPLOYMENT}\")
 set(__QT_CMAKE_EXPORT_NAMESPACE \"${QT_CMAKE_EXPORT_NAMESPACE}\")
+set(__QT_LIBINFIX \"${QT_LIBINFIX}\")
 set(__QT_DEPLOY_GENERATOR_IS_MULTI_CONFIG \"${is_multi_config}\")
 set(__QT_DEPLOY_ACTIVE_CONFIG \"$<CONFIG>\")
 set(__QT_NO_CREATE_VERSIONLESS_FUNCTIONS \"${QT_NO_CREATE_VERSIONLESS_FUNCTIONS}\")
@@ -3246,11 +3260,11 @@ set(__QT_DEPLOY_QT_ADDITIONAL_PACKAGES_PREFIX_PATH \"${QT_ADDITIONAL_PACKAGES_PR
 set(__QT_DEPLOY_QT_INSTALL_PREFIX \"${QT6_INSTALL_PREFIX}\")
 set(__QT_DEPLOY_QT_INSTALL_BINS \"${QT6_INSTALL_BINS}\")
 set(__QT_DEPLOY_QT_INSTALL_DATA \"${QT6_INSTALL_DATA}\")
+set(__QT_DEPLOY_QT_INSTALL_DESCRIPTIONSDIR \"${QT6_INSTALL_DESCRIPTIONSDIR}\")
 set(__QT_DEPLOY_QT_INSTALL_LIBEXECS \"${QT6_INSTALL_LIBEXECS}\")
 set(__QT_DEPLOY_QT_INSTALL_PLUGINS \"${QT6_INSTALL_PLUGINS}\")
 set(__QT_DEPLOY_QT_INSTALL_TRANSLATIONS \"${QT6_INSTALL_TRANSLATIONS}\")
 set(__QT_DEPLOY_TARGET_QT_PATHS_PATH \"${target_qtpaths_path}\")
-set(__QT_DEPLOY_PLUGINS \"\")
 set(__QT_DEPLOY_MUST_ADJUST_PLUGINS_RPATH \"${must_adjust_plugins_rpath}\")
 set(__QT_DEPLOY_USE_PATCHELF \"${QT_DEPLOY_USE_PATCHELF}\")
 set(__QT_DEPLOY_PATCHELF_EXECUTABLE \"${QT_DEPLOY_PATCHELF_EXECUTABLE}\")
@@ -3670,10 +3684,6 @@ function(qt6_generate_deploy_script)
         OUTPUT_SCRIPT
         NAME
         TARGET
-
-        # TODO: For backward compatibility / transitional use only,
-        # remove at some point
-        FILENAME_VARIABLE
     )
     set(multi_value_options "")
     cmake_parse_arguments(PARSE_ARGV 0 arg
@@ -3681,21 +3691,6 @@ function(qt6_generate_deploy_script)
     )
     if(arg_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "Unexpected arguments: ${arg_UNPARSED_ARGUMENTS}")
-    endif()
-
-    # TODO: Remove when FILENAME_VARIABLE is fully removed
-    # Handle the slow deprecation of FILENAME_VARIABLE
-    if(arg_FILENAME_VARIABLE)
-        if(arg_OUTPUT_SCRIPT AND NOT arg_FILENAME_VARIABLE STREQUAL arg_OUTPUT_SCRIPT)
-            message(FATAL_ERROR
-                "Both FILENAME_VARIABLE and OUTPUT_SCRIPT were given and were different. "
-                "Only one of the two should be used."
-            )
-        endif()
-        message(AUTHOR_WARNING
-            "The FILENAME_VARIABLE keyword is deprecated and will be removed soon. Please use OUTPUT_SCRIPT instead.")
-        set(arg_OUTPUT_SCRIPT "${arg_FILENAME_VARIABLE}")
-        unset(arg_FILENAME_VARIABLE)
     endif()
 
     if(NOT arg_OUTPUT_SCRIPT)
@@ -3716,16 +3711,6 @@ function(qt6_generate_deploy_script)
                 "qt_finalize_target(${arg_TARGET}) after generating the deployment script."
             )
         endif()
-    endif()
-
-    # Mark the target as "to be deployed".
-    set_property(TARGET ${arg_TARGET} PROPERTY _qt_marked_for_deployment ON)
-
-    # If the target already was finalized, maybe because it was defined in a subdirectory, generate
-    # the plugin deployment information here.
-    get_target_property(is_finalized "${arg_TARGET}" _qt_is_finalized)
-    if(is_finalized)
-        __qt_internal_generate_plugin_deployment_info(${arg_TARGET})
     endif()
 
     # Create a file name that will be unique for this target and the combination
@@ -3779,6 +3764,7 @@ function(qt6_generate_deploy_app_script)
     # package). We would add an EXECUTABLE keyword for that, which would be
     # mutually exclusive with the TARGET keyword.
     set(no_value_options
+        NO_PLUGINS
         NO_TRANSLATIONS
         NO_COMPILER_RUNTIME
         NO_UNSUPPORTED_PLATFORM_ERROR
@@ -3786,14 +3772,14 @@ function(qt6_generate_deploy_app_script)
     set(single_value_options
         TARGET
         OUTPUT_SCRIPT
-
-        # TODO: For backward compatibility / transitional use only,
-        # remove at some point
-        FILENAME_VARIABLE
     )
     set(qt_deploy_runtime_dependencies_options
         # These options are forwarded as is to qt_deploy_runtime_dependencies.
         DEPLOY_TOOL_OPTIONS
+        EXCLUDE_PLUGINS
+        EXCLUDE_PLUGIN_TYPES
+        INCLUDE_PLUGINS
+        INCLUDE_PLUGIN_TYPES
         PRE_INCLUDE_REGEXES
         PRE_EXCLUDE_REGEXES
         POST_INCLUDE_REGEXES
@@ -3812,21 +3798,6 @@ function(qt6_generate_deploy_app_script)
     endif()
     if(NOT arg_TARGET)
         message(FATAL_ERROR "TARGET must be specified")
-    endif()
-
-    # TODO: Remove when FILENAME_VARIABLE is fully removed
-    # Handle the slow deprecation of FILENAME_VARIABLE
-    if(arg_FILENAME_VARIABLE)
-        if(arg_OUTPUT_SCRIPT AND NOT arg_FILENAME_VARIABLE STREQUAL arg_OUTPUT_SCRIPT)
-            message(FATAL_ERROR
-                "Both FILENAME_VARIABLE and OUTPUT_SCRIPT were given and were different. "
-                "Only one of the two should be used."
-            )
-        endif()
-        message(AUTHOR_WARNING
-            "The FILENAME_VARIABLE keyword is deprecated and will be removed soon. Please use OUTPUT_SCRIPT instead.")
-        set(arg_OUTPUT_SCRIPT "${arg_FILENAME_VARIABLE}")
-        unset(arg_FILENAME_VARIABLE)
     endif()
 
     if(NOT arg_OUTPUT_SCRIPT)
@@ -3858,6 +3829,9 @@ function(qt6_generate_deploy_app_script)
     )
 
     set(common_deploy_args "")
+    if(arg_NO_PLUGINS)
+        string(APPEND common_deploy_args "    NO_PLUGINS\n")
+    endif()
     if(arg_NO_TRANSLATIONS)
         string(APPEND common_deploy_args "    NO_TRANSLATIONS\n")
     endif()

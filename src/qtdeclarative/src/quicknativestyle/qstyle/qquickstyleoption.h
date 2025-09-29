@@ -34,7 +34,7 @@ public:
         SO_TabBarBase, SO_RubberBand, SO_ToolBar, SO_GraphicsItem,
 
         SO_Complex = 0xf0000, SO_Slider, SO_SpinBox, SO_ToolButton, SO_ComboBox,
-        SO_TitleBar, SO_GroupBox, SO_SizeGrip,
+        SO_TitleBar, SO_GroupBox, SO_SizeGrip, SO_SearchField,
 
         SO_CustomBase = 0xf00,
         SO_ComplexCustomBase = 0xf000000
@@ -598,6 +598,27 @@ public:
 
 protected:
     QStyleOptionComboBox(int version);
+};
+
+
+class QStyleOptionSearchField : public QStyleOptionComplex
+{
+public:
+    enum StyleOptionType { Type = SO_SearchField };
+    enum StyleOptionVersion { Version = 1 };
+
+    QRect popupRect;
+    bool frame;
+    QString text;
+    QIcon currentIcon;
+    QSize iconSize;
+
+    QStyleOptionSearchField();
+    QStyleOptionSearchField(const QStyleOptionSearchField &other) : QStyleOptionComplex(Version, Type) { *this = other;}
+    QStyleOptionSearchField &operator=(const QStyleOptionSearchField &) = default;
+
+protected:
+    QStyleOptionSearchField(int version);
 };
 
 class QStyleOptionTitleBar : public QStyleOptionComplex

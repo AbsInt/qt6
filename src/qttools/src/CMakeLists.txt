@@ -17,6 +17,8 @@ qt_exclude_tool_directories_from_default_target(
 # The config files will be written in the src/global module.
 qt_feature_evaluate_features("${CMAKE_CURRENT_SOURCE_DIR}/../configure.cmake")
 
+option(QT_INSTALL_XDG_DESKTOP_ENTRIES "Enable XDG desktop entries installation" OFF)
+
 if(TARGET Qt::Widgets)
     add_subdirectory(uiplugin)
     add_subdirectory(uitools)

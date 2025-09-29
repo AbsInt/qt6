@@ -1014,20 +1014,10 @@ QDataStream &operator>>(QDataStream &s, QPen &p)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QPen &p)
 {
-    const char *PEN_STYLES[] = {
-        "NoPen",
-        "SolidLine",
-        "DashLine",
-        "DotLine",
-        "DashDotLine",
-        "DashDotDotLine",
-        "CustomDashLine"
-    };
-
     QDebugStateSaver saver(dbg);
     dbg.nospace() << "QPen(" << p.width() << ',' << p.brush()
-                  << ',' << PEN_STYLES[p.style()] << ',' << int(p.capStyle())
-                  << ',' << int(p.joinStyle()) << ',' << p.dashPattern()
+                  << ',' << p.style() << ',' << p.capStyle()
+                  << ',' << p.joinStyle() << ',' << p.dashPattern()
                   << ',' << p.dashOffset()
                   << ',' << p.miterLimit() << ')';
     return dbg;

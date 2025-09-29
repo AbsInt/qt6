@@ -151,8 +151,8 @@ instructions:
               property: target.arch
               in_values: ["AARCH64", "ARM64"]
             - condition: property
-              property: host
-              equals_property: target
+              property: host.arch
+              in_values: ["AARCH64", "ARM64"]
       - type: EnvironmentVariable
         # HACK. Overwrite TARGET_ARCHITECTURE as we do not use standard MSVC cross
         # compilation targets here. The target architecture will be detected by Qt.
@@ -347,11 +347,11 @@ instructions:
       condition: and
       conditions:
         - condition: property
-          property: target.os
+          property: host.os
           equals_value: Windows
         - condition: property
-          property: target.arch
-          not_equals_property: host.arch
+          property: host.compiler
+          contains_value: MSVC
     instructions:
       - type: EnvironmentVariable
         variableName: TARGET_ENV_PREFIX
@@ -540,6 +540,8 @@ instructions:
 
   # Always pass the location of the python intrepreter meant to be used for SBOM generation,
   # because the Qt default has changed to always generate an SBOM.
+  # Don't forget to adjust tests/auto/cmake/RunCMake/Sbom/RunCMakeTest.cmake
+  # in case of changing / removing these args.
   - type: EnvironmentVariable
     variableName: SBOM_PYTHON_ARGS
     variableValue: >-

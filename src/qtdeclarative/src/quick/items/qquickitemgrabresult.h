@@ -14,8 +14,6 @@
 
 QT_BEGIN_NAMESPACE
 
-class QImage;
-
 class QQuickItemGrabResultPrivate;
 
 class Q_QUICK_EXPORT QQuickItemGrabResult : public QObject

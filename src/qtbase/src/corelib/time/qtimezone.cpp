@@ -16,6 +16,7 @@
 
 QT_BEGIN_NAMESPACE
 
+static_assert(!std::is_constructible_v<QTimeZone, Qt::TimeSpec>);
 using namespace Qt::StringLiterals;
 
 #if QT_CONFIG(timezone)
@@ -1443,6 +1444,7 @@ QTimeZone QTimeZone::systemTimeZone()
 }
 
 /*!
+    \fn QTimeZone QTimeZone::utc()
     \since 5.5
     Returns a QTimeZone object that describes UTC as a time zone.
 
@@ -1453,9 +1455,18 @@ QTimeZone QTimeZone::systemTimeZone()
 
     \sa systemTimeZone(), Initialization, asBackendZone()
 */
+QTimeZone QTimeZonePrivate::utcQTimeZone()
+{
+    return QTimeZone(*new QUtcTimeZonePrivate());
+}
+
+Q_GLOBAL_STATIC(QTimeZone, utcTimeZone, QTimeZonePrivate::utcQTimeZone());
+
 QTimeZone QTimeZone::utc()
 {
-    return QTimeZone(0);
+    if (Q_UNLIKELY(utcTimeZone.isDestroyed()))
+        return QTimeZonePrivate::utcQTimeZone(); // create a new, unshared one
+    return *utcTimeZone; // take a shallow copy
 }
 
 /*!

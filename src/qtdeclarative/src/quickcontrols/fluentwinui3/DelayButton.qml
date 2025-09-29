@@ -26,6 +26,14 @@ T.DelayButton {
     icon.color: __buttonText
 
     readonly property color __buttonText: {
+        if (Application.styleHints.accessibility.contrastPreference === Qt.HighContrast) {
+            return (control.enabled && ((control.flat && (control.down || control.hovered))
+                || ((control.highlighted || control.checked) && !control.down)))
+                ? control.palette.button
+                : control.enabled && (control.hovered || control.down)
+                ? control.palette.highlight
+                : control.palette.buttonText
+        }
         if (control.down) {
             return (control.checked)
                 ? Application.styleHints.colorScheme == Qt.Light
@@ -67,7 +75,7 @@ T.DelayButton {
 
             text: control.text
             font: control.font
-            color: control.palette.buttonText
+            color: control.icon.color
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
@@ -81,7 +89,7 @@ T.DelayButton {
 
             text: control.text
             font: control.font
-            color: control.palette.brightText
+            color: control.icon.color
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight

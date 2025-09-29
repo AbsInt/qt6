@@ -149,7 +149,9 @@ WidgetGallery::WidgetGallery(QWidget *parent)
         QGuiApplication::styleHints()->setColorScheme(static_cast<Qt::ColorScheme>(index));
     });
 
-    auto helpLabel = createWidget1<QLabel>(tr("Press F1 over a widget to see Documentation"), "helpLabel");
+    const QKeySequence helpKeySequence(QKeySequence::HelpContents);
+    auto helpLabel = createWidget1<QLabel>(tr("Press <kbd>%1</kbd> over a widget to see Documentation")
+                                            .arg(helpKeySequence.toString(QKeySequence::NativeText)), "helpLabel");
 
     auto disableWidgetsCheckBox = createWidget1<QCheckBox>(tr("&Disable widgets"), "disableWidgetsCheckBox");
 
@@ -197,7 +199,7 @@ WidgetGallery::WidgetGallery(QWidget *parent)
 
     setWindowTitle(tr("Widget Gallery Qt %1").arg(QT_VERSION_STR));
 
-    new QShortcut(QKeySequence::HelpContents, this, this, &WidgetGallery::helpOnCurrentWidget);
+    new QShortcut(helpKeySequence, this, this, &WidgetGallery::helpOnCurrentWidget);
 }
 
 void  WidgetGallery::setVisible(bool visible)

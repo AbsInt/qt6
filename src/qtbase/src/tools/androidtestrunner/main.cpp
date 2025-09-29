@@ -38,6 +38,7 @@ struct Options
     int timeoutSecs = 600; // 10 minutes
     int resultsPullRetries = 3;
     QString buildPath;
+    QString manifestPath;
     QString adbCommand{"adb"_L1};
     QString serial;
     QString makeCommand;
@@ -137,6 +138,11 @@ static bool parseOptions()
                 g_options.helpRequested = true;
             else
                 g_options.buildPath = arguments.at(++i);
+        } else if (argument.compare("--manifest"_L1, Qt::CaseInsensitive) == 0) {
+            if (i + 1 == arguments.size())
+                g_options.helpRequested = true;
+            else
+                g_options.manifestPath = arguments.at(++i);
         } else if (argument.compare("--make"_L1, Qt::CaseInsensitive) == 0) {
             if (i + 1 == arguments.size())
                 g_options.helpRequested = true;
@@ -208,6 +214,9 @@ static bool parseOptions()
             g_options.ndkStackPath = ndkStackPath;
     }
 
+    if (g_options.manifestPath.isEmpty())
+        g_options.manifestPath = g_options.buildPath + "/AndroidManifest.xml"_L1;
+
     return true;
 }
 
@@ -242,7 +251,6 @@ static void printHelp()
                     "\n"
                     "    --show-logcat: Print Logcat output to stdout. If an ANR occurs during\n"
                     "       the test run, logs from the system_server process are included.\n"
-                    "       This argument is implied if a test crashes.\n"
                     "\n"
                     "    --ndk-stack: Path to ndk-stack tool that symbolizes crash stacktraces.\n"
                     "       By default, ANDROID_NDK_ROOT env var is used to deduce the tool path.\n"
@@ -253,6 +261,8 @@ static void printHelp()
                     "\n"
                     "    --pre-test-adb-command <command>: call the adb <command> after\n"
                     "       installation and before the test run.\n"
+                    "\n"
+                    "    --manifest <path>: Custom path to the AndroidManifest.xml.\n"
                     "\n"
                     "    --help: Displays this information.\n",
                     qPrintable(QCoreApplication::arguments().at(0))
@@ -733,7 +743,7 @@ void analyseLogcat(const QString &timeStamp, int *exitCode)
     // If we have a crash, attempt to print both logcat and the crash buffer which
     // includes the crash stacktrace that is not included in the default logcat.
     const bool testCrashed = *exitCode == EXIT_ERROR && !g_testInfo.isTestRunnerInterrupted.load();
-    if (g_options.showLogcatOutput || testCrashed) {
+    if (testCrashed) {
         qDebug() << "********** logcat dump **********";
         qDebug().noquote() << testLogcat.join(u'\n').trimmed();
         qDebug() << "********** End logcat dump **********";
@@ -860,14 +870,13 @@ int main(int argc, char *argv[])
 
     g_testInfo.userId = userId();
 
-    QString manifest = g_options.buildPath + "/AndroidManifest.xml"_L1;
-    if (!QFile::exists(manifest)) {
-        qCritical("Unable to find '%s'.", qPrintable(manifest));
+    if (!QFile::exists(g_options.manifestPath)) {
+        qCritical("Unable to find '%s'.", qPrintable(g_options.manifestPath));
         return EXIT_ERROR;
     }
-    g_options.package = packageNameFromAndroidManifest(manifest);
+    g_options.package = packageNameFromAndroidManifest(g_options.manifestPath);
     if (g_options.activity.isEmpty())
-        g_options.activity = activityFromAndroidManifest(manifest);
+        g_options.activity = activityFromAndroidManifest(g_options.manifestPath);
 
     // parseTestArgs depends on g_options.package
     if (!parseTestArgs())
@@ -912,7 +921,8 @@ int main(int argc, char *argv[])
 
     int exitCode = testExitCode();
 
-    analyseLogcat(formattedStartTime, &exitCode);
+    if (g_options.showLogcatOutput)
+        analyseLogcat(formattedStartTime, &exitCode);
 
     exitCode = pullResults() ? exitCode : EXIT_ERROR;
 

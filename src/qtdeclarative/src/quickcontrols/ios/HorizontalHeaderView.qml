@@ -3,7 +3,6 @@
 
 pragma ComponentBehavior: Bound
 
-import QtQuick
 import QtQuick.Templates as T
 
 T.HorizontalHeaderView {
@@ -17,24 +16,5 @@ T.HorizontalHeaderView {
     // TableView won't bother loading any delegates at all.
     implicitHeight: Math.max(1, contentHeight)
 
-    delegate: Rectangle {
-        id: delegate
-
-        required property var model
-
-        readonly property real cellPadding: 8
-
-        implicitWidth: text.implicitWidth + (cellPadding * 2)
-        implicitHeight: Math.max(control.height, text.implicitHeight + (cellPadding * 2))
-        color: control.palette.button
-
-        Label {
-            id: text
-            text: delegate.model[control.textRole]
-            width: delegate.width
-            height: delegate.height
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-    }
+    delegate: HorizontalHeaderViewDelegate { }
 }

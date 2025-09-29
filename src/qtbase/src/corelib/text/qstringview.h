@@ -1,6 +1,7 @@
 // Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
 // Copyright (C) 2019 Mail.ru Group.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 #ifndef QSTRINGVIEW_H
 #define QSTRINGVIEW_H
 
@@ -166,7 +167,7 @@ public:
 #endif
 
     template <typename Container, if_compatible_container<Container> = true>
-    constexpr Q_ALWAYS_INLINE QStringView(const Container &c) noexcept
+    Q_ALWAYS_INLINE constexpr QStringView(const Container &c) noexcept
         : QStringView(std::data(c), QtPrivate::lengthHelperContainer(c)) {}
 
     template <typename Char, size_t Size, if_compatible_char<Char> = true>
@@ -284,7 +285,7 @@ public:
     [[nodiscard]] inline qsizetype indexOf(QLatin1StringView s, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
 
     [[nodiscard]] bool contains(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
-    { return indexOf(QStringView(&c, 1), 0, cs) != qsizetype(-1); }
+    { return indexOf(c, 0, cs) != qsizetype(-1); }
     [[nodiscard]] bool contains(QStringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
     { return indexOf(s, 0, cs) != qsizetype(-1); }
     [[nodiscard]] inline bool contains(QLatin1StringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
@@ -511,6 +512,17 @@ qsizetype QtPrivate::findString(QStringView str, qsizetype from, QChar ch, Qt::C
     }
     return -1;
 }
+
+namespace Qt {
+inline namespace Literals {
+inline namespace StringLiterals {
+constexpr QStringView operator""_sv(const char16_t *str, size_t size) noexcept
+{
+    return QStringView(str, qsizetype(size));
+}
+} // StringLiterals
+} // Literals
+} // Qt
 
 QT_END_NAMESPACE
 

@@ -56,7 +56,9 @@ public:
         QQmlBoundSignal = 1,
         QQmlJavaScriptExpressionGuard = 2,
         QQmlVMEMetaObjectEndpoint = 3,
-        QQmlPropertyGuard = 4,
+        QQmlUnbindableToUnbindableGuard = 4,
+        QQmlUnbindableToBindableGuard = 5,
+        QQmlDirtyReferenceObject = 6,
     };
 
     inline QQmlNotifierEndpoint(Callback callback);

@@ -2943,7 +2943,7 @@ void tst_QGraphicsGridLayout::styleInfoLeak()
 
 void tst_QGraphicsGridLayout::task236367_maxSizeHint()
 {
-    QGraphicsWidget *widget = new QGraphicsWidget;
+    const auto widget = std::make_unique<QGraphicsWidget>();
     QGraphicsGridLayout *layout = new QGraphicsGridLayout;
     widget->setLayout(layout);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -3048,7 +3048,7 @@ void tst_QGraphicsGridLayout::heightForWidth()
 
 void tst_QGraphicsGridLayout::widthForHeight()
 {
-    QGraphicsWidget *widget = new QGraphicsWidget;
+    const auto widget = std::make_unique<QGraphicsWidget>();
     QGraphicsGridLayout *layout = new QGraphicsGridLayout;
     widget->setLayout(layout);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -3125,7 +3125,7 @@ void tst_QGraphicsGridLayout::widthForHeight()
 
 void tst_QGraphicsGridLayout::heightForWidthWithSpanning()
 {
-    QGraphicsWidget *widget = new QGraphicsWidget;
+    const auto widget = std::make_unique<QGraphicsWidget>();
     QGraphicsGridLayout *layout = new QGraphicsGridLayout;
     widget->setLayout(layout);
     layout->setContentsMargins(0, 0, 0, 0);

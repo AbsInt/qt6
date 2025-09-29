@@ -48,6 +48,9 @@ T.TreeViewDelegate {
 
     background: Rectangle {
         implicitHeight: 40 // same as Button.qml
+        border.color: control.current ? control.palette.highlight : control.palette.windowText
+        border.width: Qt.styleHints.accessibility.contrastPreference !== Qt.HighContrast ? 0 :
+                      control.current ? 2 : 1
         color: control.highlighted
                ? control.palette.highlight
                : (control.treeView.alternatingRows && control.row % 2 !== 0

@@ -115,6 +115,23 @@ if(UNIX)
     )
 endif()
 
+if(QT_INSTALL_XDG_DESKTOP_ENTRIES)
+    if(UNIX AND NOT APPLE)
+        qt_path_join(xdg_install_dir ${QT_INSTALL_DIR} ${CMAKE_INSTALL_DATAROOTDIR})
+
+        qt_install(FILES designer.desktop
+            DESTINATION "${xdg_install_dir}/applications"
+        )
+        qt_install(FILES designer.metainfo.xml
+            RENAME io.qt.Designer.metainfo.xml
+            DESTINATION "${xdg_install_dir}/metainfo"
+        )
+        qt_install(FILES images/designer.png
+            DESTINATION "${xdg_install_dir}/icons/hicolor/128x128/apps"
+        )
+    endif()
+endif()
+
 if(APPLE)
     set_target_properties(designer PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info_mac.plist"

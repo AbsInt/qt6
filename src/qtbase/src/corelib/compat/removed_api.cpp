@@ -321,7 +321,6 @@ void QSharedMemory::setNativeKey(const QString &key)
 // these implementations aren't as efficient as they used to be prior to
 // replacement, but there's no way to call the ambiguous overload
 QVariant::QVariant(const QUuid &uuid) : QVariant(QVariant::fromValue(uuid)) {}
-#ifndef QT_NO_GEOM_VARIANT
 #include "qline.h"
 #include "qpoint.h"
 #include "qrect.h"
@@ -334,7 +333,6 @@ QVariant::QVariant(const QLine &l) : QVariant(QVariant::fromValue(l)) {}
 QVariant::QVariant(const QLineF &l) : QVariant(QVariant::fromValue(l)) {}
 QVariant::QVariant(const QSize &s) : QVariant(QVariant::fromValue(s)) {}
 QVariant::QVariant(const QSizeF &s) : QVariant(QVariant::fromValue(s)) {}
-#endif
 
 #if QT_CONFIG(xmlstreamreader)
 
@@ -1256,10 +1254,12 @@ QUuid QUuid::createUuidV5(const QUuid &ns, const QByteArray &baseData) noexcept
 
 #include "qexceptionhandling.h"
 
+QT_BEGIN_NAMESPACE
 Q_NORETURN void qTerminate() noexcept
 {
     std::terminate();
 }
+QT_END_NAMESPACE
 
 
 #include "qmetatype.h"
@@ -1384,3 +1384,102 @@ QUuid::Version QUuid::version() const noexcept
 // order sections alphabetically to reduce chances of merge conflicts
 
 #endif // QT_CORE_REMOVED_SINCE(6, 9)
+
+#if QT_CORE_REMOVED_SINCE(6, 10)
+
+#include "qcborstreamwriter.h"      // Q_WEAK_OVERLOAD added
+
+#include "qcoreapplication.h"
+
+#if QT_CONFIG(permissions)
+void QCoreApplication::requestPermission(const QPermission &requestedPermission,
+    QtPrivate::QSlotObjectBase *slotObjRaw, const QObject *context)
+{
+    return requestPermissionImpl(requestedPermission, slotObjRaw, context);
+}
+#endif
+
+#include "qdir.h"
+
+bool QDir::mkdir(const QString &dirName) const
+{
+    return mkdir(dirName, std::nullopt);
+}
+
+bool QDir::mkdir(const QString &dirName, QFile::Permissions permissions) const
+{
+    return mkdir(dirName, std::optional{permissions});
+}
+
+bool QDir::mkpath(const QString &dirPath) const
+{
+    return mkpath(dirPath, std::nullopt);
+}
+
+#if QT_CONFIG(future)
+#include "qfuture.h" // for ContinuationWrapper
+#include "qfutureinterface.h"
+
+void QtPrivate::watchContinuationImpl(const QObject *context,
+                                      QtPrivate::QSlotObjectBase *slotObj,
+                                      QFutureInterfaceBase &fi)
+{
+    Q_ASSERT(context);
+    Q_ASSERT(slotObj);
+
+    auto slot = QtPrivate::SlotObjUniquePtr(slotObj);
+
+    // That is now a double-inderection, because the setContinuation() overload
+    // also uses QSlotObjectBase approach. But that's a solution for backwards
+    // compatibility, so should be fine.
+    // We pass a default-constructed QVariant() and an Unknown type, because
+    // that's effectively the same as passing a nullptr continuationData, and
+    // that's what the old code was doing.
+    fi.setContinuation(context, QtPrivate::ContinuationWrapper([slot = std::move(slot)]()
+    {
+        void *args[] = { nullptr }; // for `void` return value
+        slot->call(nullptr, args);
+    }), QVariant(), QFutureInterfaceBase::ContinuationType::Unknown);
+}
+
+void QFutureInterfaceBase::setContinuation(std::function<void(const QFutureInterfaceBase &)> func)
+{
+    setContinuation(std::move(func), nullptr);
+}
+
+void QFutureInterfaceBase::setContinuation(std::function<void(const QFutureInterfaceBase &)> func,
+                                           QFutureInterfaceBasePrivate *continuationFutureData)
+{
+    // Backwards compatibility - the continuation data was used for
+    // then-continuations
+    setContinuation(std::move(func), continuationFutureData, ContinuationType::Then);
+}
+#endif // QT_CONFIG(future)
+
+#include "qlockfile.h" // inlined API
+
+#include "qlogging.h"
+
+QNoDebug QMessageLogger::noDebug() const noexcept
+{
+    return QNoDebug();
+}
+
+#include "qmutex.h" // removed, previously-inline API
+
+#include "qobject.h"
+
+bool QObject::doSetProperty(const char *name, const QVariant *lvalue, QVariant *rvalue)
+{
+    return doSetProperty(name, *lvalue, rvalue);
+}
+
+#include "qstring.h" // inlined API
+
+#include "qvariant.h"   // inlined API
+
+// #include "qotherheader.h"
+// // implement removed functions from qotherheader.h
+// order sections alphabetically to reduce chances of merge conflicts
+
+#endif // QT_CORE_REMOVED_SINCE(6, 10)

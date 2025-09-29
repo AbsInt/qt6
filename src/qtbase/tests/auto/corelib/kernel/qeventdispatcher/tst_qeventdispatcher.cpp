@@ -195,9 +195,9 @@ private:
                 // For precise timers, we expect the fudge factor to be present
                 QAbstractEventDispatcher::Duration interval =
                         fudgeInterval(PreciseTimerInterval, Qt::PreciseTimer);
-#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
-                if (!qobject_cast<QAbstractEventDispatcherV2 *>(m_eventDispatcher))
-                    interval = PreciseTimerInterval;
+#ifdef Q_OS_WIN
+                // Windows does not have a nanosecond-resolution timer
+                interval = PreciseTimerInterval;
 #endif
                 QCOMPARE(timerInfo.interval, interval);
                 QCOMPARE(timerInfo.timerType, Qt::PreciseTimer);

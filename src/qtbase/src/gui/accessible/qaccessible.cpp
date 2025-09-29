@@ -450,6 +450,12 @@ Q_STATIC_LOGGING_CATEGORY(lcAccessibilityCore, "qt.accessibility.core");
                                 Defines the hierarchical level of an element within a structure,
                                 e.g. the heading level of a heading. This attribute conceptually
                                 matches the "aria-level" property in ARIA.
+    \value [since 6.10] Locale  value type: \a QLocale
+                                Locale of the element.
+                                This can be used to specify that an element has a locale that
+                                differs from the application's default locale, e.g. for documents
+                                or paragraphs within a document that use a language that differs
+                                from the application's user interface language.
 
     \sa QAccessibleAttributesInterface
 */
@@ -688,6 +694,11 @@ void QAccessible::installActivationObserver(QAccessible::ActivationObserver *obs
     if (qAccessibleActivationObservers()->contains(observer))
         return;
     qAccessibleActivationObservers()->append(observer);
+
+    // Make sure the newly added observer gets a callback on the next
+    // QPlatformAccessibility::setActive() callback
+    if (QPlatformAccessibility *pfAccessibility = platformAccessibility())
+        pfAccessibility->clearActiveNotificationState();
 }
 
 /*!
@@ -699,6 +710,17 @@ void QAccessible::installActivationObserver(QAccessible::ActivationObserver *obs
 void QAccessible::removeActivationObserver(ActivationObserver *observer)
 {
     qAccessibleActivationObservers()->removeAll(observer);
+}
+
+/*!
+    \internal
+
+    Sends accessibility activation notifications to all registered observers.
+*/
+void qAccessibleNotifyActivationObservers(bool active)
+{
+    for (int i = 0; i < qAccessibleActivationObservers()->size(); ++i)
+        qAccessibleActivationObservers()->at(i)->accessibilityActiveChanged(active);
 }
 
 /*!
@@ -870,10 +892,9 @@ bool QAccessible::isActive()
 */
 void QAccessible::setActive(bool active)
 {
-    for (int i = 0; i < qAccessibleActivationObservers()->size() ;++i)
-        qAccessibleActivationObservers()->at(i)->accessibilityActiveChanged(active);
+    if (QPlatformAccessibility *pfAccessibility = platformAccessibility())
+        pfAccessibility->setActive(active);
 }
-
 
 /*!
   Sets the root object of the accessible objects of this application
@@ -1957,10 +1978,9 @@ const char *qAccessibleEventString(QAccessible::Event event)
 Q_GUI_EXPORT QDebug operator<<(QDebug d, const QAccessibleInterface *iface)
 {
     QDebugStateSaver saver(d);
-    if (!iface) {
-        d << "QAccessibleInterface(null)";
-        return d;
-    }
+    if (!iface)
+        return d << "QAccessibleInterface(0x0)";
+
     d.nospace();
     d << "QAccessibleInterface(" << Qt::hex << (const void *) iface << Qt::dec;
     if (iface->isValid()) {

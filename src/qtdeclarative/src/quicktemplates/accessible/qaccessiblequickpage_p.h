@@ -15,13 +15,13 @@
 // We mean it.
 //
 
-#include <QtQuick/private/qaccessiblequickitem_p.h>
+#include "qaccessiblequickcontrol_p.h"
 
 QT_BEGIN_NAMESPACE
 
 class QQuickPage;
 
-class QAccessibleQuickPage : public QAccessibleQuickItem
+class QAccessibleQuickPage : public QAccessibleQuickControl
 {
 public:
     QAccessibleQuickPage(QQuickPage *page);

@@ -3,10 +3,8 @@
 
 pragma ComponentBehavior: Bound
 
-import QtQuick
 import QtQuick.Templates as T
 import QtQuick.Controls.Material
-import QtQuick.Controls.Material.impl
 
 T.VerticalHeaderView {
     id: control
@@ -19,26 +17,5 @@ T.VerticalHeaderView {
     implicitWidth: Math.max(1, contentWidth)
     implicitHeight: syncView ? syncView.height : 0
 
-    delegate: Rectangle {
-        id: delegate
-
-        required property var model
-
-        // Qt6: add cellPadding (and font etc) as public API in headerview
-        readonly property real cellPadding: 8
-
-        implicitWidth: Math.max(control.width, text.implicitWidth + (cellPadding * 2))
-        implicitHeight: text.implicitHeight + (cellPadding * 2)
-        color: control.Material.backgroundColor
-
-        Label {
-            id: text
-            text: delegate.model[control.textRole]
-            width: delegate.width
-            height: delegate.height
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            color: enabled ? control.Material.foreground : control.Material.hintTextColor
-        }
-    }
+    delegate: VerticalHeaderViewDelegate { }
 }

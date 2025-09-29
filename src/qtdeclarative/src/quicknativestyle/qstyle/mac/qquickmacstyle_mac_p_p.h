@@ -13,7 +13,6 @@
 #include <QtCore/qhash.h>
 #include <QtCore/qmap.h>
 #include <QtCore/qmath.h>
-#include <QtCore/qpair.h>
 #include <QtCore/qpointer.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qvector.h>
@@ -100,6 +99,7 @@ public:
         ProgressIndicator_Indeterminate,
         Scroller_Horizontal,
         Scroller_Vertical,
+        SearchField,
         SegmentedControl_First, // QTabBar buttons focus ring
         SegmentedControl_Middle,
         SegmentedControl_Last,

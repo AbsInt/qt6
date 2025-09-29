@@ -18,7 +18,7 @@ T.MenuSeparator {
 
     contentItem: Rectangle {
         implicitWidth: 188
-        implicitHeight: 1
+        implicitHeight: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ? 2 : 1
         color: control.palette.mid
     }
 }

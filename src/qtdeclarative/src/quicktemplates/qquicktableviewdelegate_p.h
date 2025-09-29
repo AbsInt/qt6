@@ -59,6 +59,8 @@ Q_SIGNALS:
     void editingChanged();
 
 protected:
+    QQuickTableViewDelegate(QQuickTableViewDelegatePrivate &dd, QQuickItem *parent);
+
     QFont defaultFont() const override;
     void mousePressEvent(QMouseEvent *event) override;
 

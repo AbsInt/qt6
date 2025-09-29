@@ -133,7 +133,7 @@ NativeWindow::NativeWindow()
         RegisterClass(&wc);
         return wc.lpszClassName;
     }();
-    m_handle = CreateWindowEx(0, className, nullptr, WS_POPUP,
+    m_handle = CreateWindowEx(0, className, nullptr, WS_POPUP | WS_CLIPCHILDREN,
                 CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                 nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
 }

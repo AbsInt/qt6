@@ -11,6 +11,7 @@
 
 #include <QtCore/qcborarray.h>
 #include <QtCore/qcbormap.h>
+#include <QtCore/qdir.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qjsondocument.h>
 #include <QtCore/qqueue.h>
@@ -56,7 +57,7 @@ QList<QAnyStringView> MetaTypesJsonProcessor::namespaces(const MetaType &classDe
 bool MetaTypesJsonProcessor::processTypes(const QStringList &files)
 {
     for (const QString &source: files) {
-        if (m_seenMetaTypesFiles.hasSeen(source))
+        if (m_seenMetaTypesFiles.hasSeen(QDir::cleanPath(source)))
             continue;
 
         QCborValue metaObjects;
@@ -132,7 +133,7 @@ bool MetaTypesJsonProcessor::processForeignTypes(const QStringList &foreignTypes
     bool success = true;
 
     for (const QString &types : foreignTypesFiles) {
-        if (m_seenMetaTypesFiles.hasSeen(types))
+        if (m_seenMetaTypesFiles.hasSeen(QDir::cleanPath(types)))
             continue;
 
         if (!processForeignTypes(types))
@@ -644,7 +645,7 @@ QString MetaTypesJsonProcessor::resolvedInclude(QAnyStringView include)
 
 void MetaTypesJsonProcessor::processTypes(const QCborMap &types)
 {
-    const QString include = resolvedInclude(toStringView(types, S_INPUT_FILE));
+    const QString include = resolvedInclude(types[S_INPUT_FILE].toStringView());
     const QCborArray classes = types[S_CLASSES].toArray();
     for (const QCborValue &cls : classes) {
         const MetaType classDef(cls.toMap(), include);
@@ -686,7 +687,7 @@ void MetaTypesJsonProcessor::processTypes(const QCborMap &types)
 
 void MetaTypesJsonProcessor::processForeignTypes(const QCborMap &types)
 {
-    const QString include = resolvedInclude(toStringView(types, S_INPUT_FILE));
+    const QString include = resolvedInclude(types[S_INPUT_FILE].toStringView());
     const QCborArray classes = types[S_CLASSES].toArray();
     for (const QCborValue &cls : classes) {
         const MetaType classDef(cls.toMap(), include);
@@ -713,7 +714,7 @@ static QTypeRevision getRevision(const QCborMap &cbor)
 
 static Access getAccess(const QCborMap &cbor)
 {
-    const QAnyStringView access = toStringView(cbor, S_ACCESS);
+    const QAnyStringView access = cbor[S_ACCESS].toStringView();
     if (access == S_PUBLIC)
         return Access::Public;
     if (access == S_PROTECTED)
@@ -722,14 +723,14 @@ static Access getAccess(const QCborMap &cbor)
 }
 
 BaseType::BaseType(const QCborMap &cbor)
-    : name(toStringView(cbor, S_NAME))
+    : name(cbor[S_NAME].toStringView())
     , access(getAccess(cbor))
 {
 }
 
 ClassInfo::ClassInfo(const QCborMap &cbor)
-    : name(toStringView(cbor, S_NAME))
-    , value(toStringView(cbor, S_VALUE))
+    : name(cbor[S_NAME].toStringView())
+    , value(cbor[S_VALUE].toStringView())
 {
 }
 
@@ -738,24 +739,25 @@ Interface::Interface(const QCborValue &cbor)
     if (cbor.isArray()) {
         QCborArray needlessWrapping = cbor.toArray();
         className = needlessWrapping.size() > 0
-                ? toStringView(needlessWrapping[0].toMap(), S_CLASS_NAME)
+                ? needlessWrapping[0].toMap()[S_CLASS_NAME].toStringView()
                 : QAnyStringView();
     } else {
-        className = toStringView(cbor.toMap(), S_CLASS_NAME);
+        className = cbor.toMap()[S_CLASS_NAME].toStringView();
     }
 }
 
 Property::Property(const QCborMap &cbor)
-    : name(toStringView(cbor, S_NAME))
-    , type(toStringView(cbor, S_TYPE))
-    , member(toStringView(cbor, S_MEMBER))
-    , read(toStringView(cbor, S_READ))
-    , write(toStringView(cbor, S_WRITE))
-    , reset(toStringView(cbor, S_RESET))
-    , notify(toStringView(cbor, S_NOTIFY))
-    , bindable(toStringView(cbor, S_BINDABLE))
-    , privateClass(toStringView(cbor, S_PRIVATE_CLASS))
+    : name(cbor[S_NAME].toStringView())
+    , type(cbor[S_TYPE].toStringView())
+    , member(cbor[S_MEMBER].toStringView())
+    , read(cbor[S_READ].toStringView())
+    , write(cbor[S_WRITE].toStringView())
+    , reset(cbor[S_RESET].toStringView())
+    , notify(cbor[S_NOTIFY].toStringView())
+    , bindable(cbor[S_BINDABLE].toStringView())
+    , privateClass(cbor[S_PRIVATE_CLASS].toStringView())
     , index(cbor[S_INDEX].toInteger(-1))
+    , lineNumber(cbor[S_LINENUMBER].toInteger(0))
     , revision(getRevision(cbor))
     , isFinal(cbor[S_FINAL].toBool())
     , isConstant(cbor[S_CONSTANT].toBool())
@@ -764,15 +766,16 @@ Property::Property(const QCborMap &cbor)
 }
 
 Argument::Argument(const QCborMap &cbor)
-    : name(toStringView(cbor, S_NAME))
-    , type(toStringView(cbor, S_TYPE))
+    : name(cbor[S_NAME].toStringView())
+    , type(cbor[S_TYPE].toStringView())
 {
 }
 
 Method::Method(const QCborMap &cbor, bool isConstructor)
-    : name(toStringView(cbor, S_NAME))
-    , returnType(toStringView(cbor, S_RETURN_TYPE))
+    : name(cbor[S_NAME].toStringView())
+    , returnType(cbor[S_RETURN_TYPE].toStringView())
     , index(cbor[S_INDEX].toInteger(InvalidIndex))
+    , lineNumber(cbor[S_LINENUMBER].toInteger(0))
     , revision(getRevision(cbor))
     , access(getAccess(cbor))
     , isCloned(cbor[S_IS_CLONED].toBool())
@@ -794,24 +797,25 @@ Method::Method(const QCborMap &cbor, bool isConstructor)
 }
 
 Enum::Enum(const QCborMap &cbor)
-    : name(toStringView(cbor, S_NAME))
-    , alias(toStringView(cbor, S_ALIAS))
-    , type(toStringView(cbor, S_TYPE))
+    : name(cbor[S_NAME].toStringView())
+    , alias(cbor[S_ALIAS].toStringView())
+    , type(cbor[S_TYPE].toStringView())
+    , lineNumber(cbor[S_LINENUMBER].toInteger(0))
     , isFlag(cbor[S_IS_FLAG].toBool())
     , isClass(cbor[S_IS_CLASS].toBool())
 {
     const QCborArray vals = cbor[S_VALUES].toArray();
     for (const QCborValue &value : vals)
-        values.emplace_back(toStringView(value));
+        values.emplace_back(value.toStringView());
 }
 
 MetaTypePrivate::MetaTypePrivate(const QCborMap &cbor, const QString &inputFile)
     : cbor(cbor)
     , inputFile(inputFile)
 {
-    className = toStringView(cbor, S_CLASS_NAME);
+    className = cbor[S_CLASS_NAME].toStringView();
     lineNumber = cbor[S_LINENUMBER].toInteger(0);
-    qualifiedClassName = toStringView(cbor, S_QUALIFIED_CLASS_NAME);
+    qualifiedClassName = cbor[S_QUALIFIED_CLASS_NAME].toStringView();
 
     const QCborArray cborSuperClasses = cbor[S_SUPER_CLASSES].toArray();
     for (const QCborValue &superClass : cborSuperClasses)

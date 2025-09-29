@@ -553,7 +553,7 @@ void QQuickAnimatedSprite::setSource(const QUrl &arg)
     Q_D(QQuickAnimatedSprite);
 
     if (d->m_sprite->m_source != arg) {
-        const qreal targetDevicePixelRatio = (window() ? window()->effectiveDevicePixelRatio() : qApp->devicePixelRatio());
+        const qreal targetDevicePixelRatio = d->effectiveDevicePixelRatio();
         d->m_sprite->setDevicePixelRatio(targetDevicePixelRatio);
         d->m_sprite->setSource(arg);
         Q_EMIT sourceChanged(arg);

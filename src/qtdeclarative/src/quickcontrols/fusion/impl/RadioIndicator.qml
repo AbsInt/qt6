@@ -19,6 +19,8 @@ Rectangle {
     radius: width / 2
     color: control.down ? indicator.pressedColor : Qt.lighter(control.palette.base, 1.75)
     border.color: control.visualFocus ? Fusion.highlightedOutline(control.palette)
+                                      : Fusion.highContrast
+                                      ? Fusion.outline(control.palette)
                                       : Qt.darker(control.palette.window, 1.5)
 
     Rectangle {

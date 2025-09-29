@@ -29,6 +29,9 @@ include(macros-online.qdocconf)
 #extra configuration data DITA information
 include(config.qdocconf)
 
+# Enable automatic linking to sources
+url.sources.enabled = true
+
 # single-directory output mode
 HTML.nosubdirs = "true"
 HTML.outputsubdir = "../html"

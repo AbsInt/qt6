@@ -72,7 +72,7 @@ public:
     bool parseUnorderedListAttributes(const QChar *&ch, const QString &textIn);
     bool parseAnchorAttributes(const QChar *&ch, const QString &textIn, QTextCharFormat &format);
     void parseImageAttributes(const QChar *&ch, const QString &textIn, QString &textOut);
-    QPair<QStringView,QStringView> parseAttribute(const QChar *&ch, const QString &textIn);
+    std::pair<QStringView,QStringView> parseAttribute(const QChar *&ch, const QString &textIn);
     QStringView parseValue(const QChar *&ch, const QString &textIn);
     void setFontSize(int size, QTextCharFormat &format);
 
@@ -552,7 +552,7 @@ void QQuickStyledTextPrivate::parseEntity(const QChar *&ch, const QString &textI
 bool QQuickStyledTextPrivate::parseFontAttributes(const QChar *&ch, const QString &textIn, QTextCharFormat &format)
 {
     bool valid = false;
-    QPair<QStringView,QStringView> attr;
+    std::pair<QStringView,QStringView> attr;
     do {
         attr = parseAttribute(ch, textIn);
         if (is_equal_ignoring_case(attr.first, QLatin1String("color"))) {
@@ -580,7 +580,7 @@ bool QQuickStyledTextPrivate::parseOrderedListAttributes(const QChar *&ch, const
     listItem.type = Ordered;
     listItem.format = Decimal;
 
-    QPair<QStringView,QStringView> attr;
+    std::pair<QStringView,QStringView> attr;
     do {
         attr = parseAttribute(ch, textIn);
         if (is_equal_ignoring_case(attr.first, QLatin1String("type"))) {
@@ -609,7 +609,7 @@ bool QQuickStyledTextPrivate::parseUnorderedListAttributes(const QChar *&ch, con
     listItem.type = Unordered;
     listItem.format = Bullet;
 
-    QPair<QStringView,QStringView> attr;
+    std::pair<QStringView,QStringView> attr;
     do {
         attr = parseAttribute(ch, textIn);
         if (is_equal_ignoring_case(attr.first, QLatin1String("type"))) {
@@ -629,7 +629,7 @@ bool QQuickStyledTextPrivate::parseAnchorAttributes(const QChar *&ch, const QStr
 {
     bool valid = false;
 
-    QPair<QStringView,QStringView> attr;
+    std::pair<QStringView,QStringView> attr;
     do {
         attr = parseAttribute(ch, textIn);
         if (is_equal_ignoring_case(attr.first, QLatin1String("href"))) {
@@ -654,7 +654,7 @@ void QQuickStyledTextPrivate::parseImageAttributes(const QChar *&ch, const QStri
         QQuickStyledTextImgTag *image = new QQuickStyledTextImgTag;
         image->position = textOut.size() + (trailingSpace ? 0 : 1);
 
-        QPair<QStringView,QStringView> attr;
+        std::pair<QStringView,QStringView> attr;
         do {
             attr = parseAttribute(ch, textIn);
             if (is_equal_ignoring_case(attr.first, QLatin1String("src"))) {
@@ -703,7 +703,7 @@ void QQuickStyledTextPrivate::parseImageAttributes(const QChar *&ch, const QStri
         image->position = textOut.size() + (trailingSpace ? 0 : 1);
         imgWidth = image->size.width();
         image->offset = -std::fmod(imgWidth, spaceWidth) / 2.0;
-        QPair<QStringView,QStringView> attr;
+        std::pair<QStringView,QStringView> attr;
         do {
             attr = parseAttribute(ch, textIn);
         } while (!ch->isNull() && !attr.first.isEmpty());
@@ -716,7 +716,7 @@ void QQuickStyledTextPrivate::parseImageAttributes(const QChar *&ch, const QStri
     textOut += padding + QLatin1Char(' ');
 }
 
-QPair<QStringView,QStringView> QQuickStyledTextPrivate::parseAttribute(const QChar *&ch, const QString &textIn)
+std::pair<QStringView,QStringView> QQuickStyledTextPrivate::parseAttribute(const QChar *&ch, const QString &textIn)
 {
     skipSpace(ch);
 
@@ -738,7 +738,7 @@ QPair<QStringView,QStringView> QQuickStyledTextPrivate::parseAttribute(const QCh
             auto attr = QStringView(textIn).mid(attrStart, attrLength);
             QStringView val = parseValue(ch, textIn);
             if (!val.isEmpty())
-                return QPair<QStringView,QStringView>(attr,val);
+                return std::pair<QStringView,QStringView>(attr,val);
             break;
         } else {
             ++attrLength;
@@ -746,7 +746,7 @@ QPair<QStringView,QStringView> QQuickStyledTextPrivate::parseAttribute(const QCh
         ++ch;
     }
 
-    return QPair<QStringView,QStringView>();
+    return std::pair<QStringView,QStringView>();
 }
 
 QStringView QQuickStyledTextPrivate::parseValue(const QChar *&ch, const QString &textIn)

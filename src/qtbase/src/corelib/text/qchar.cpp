@@ -1,9 +1,8 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qchar.h"
-
-#include "qdatastream.h"
 
 #include "qunicodetables_p.h"
 #include "qunicodetables.cpp"
@@ -832,8 +831,9 @@ bool QChar::isPrint(char32_t ucs4) noexcept
 */
 bool QT_FASTCALL QChar::isSpace_helper(char32_t ucs4) noexcept
 {
-    if (ucs4 > LastValidCodePoint)
+    if (ucs4 > MaxSeparatorCodepoint)
         return false;
+
     const int test = FLAG(Separator_Space) |
                      FLAG(Separator_Line) |
                      FLAG(Separator_Paragraph);
@@ -1571,7 +1571,7 @@ static auto fullConvertCase(char32_t uc, QUnicodeTables::Case which) noexcept
 
     auto pp = result.chars;
 
-    const auto fold = qGetProp(uc)->cases[which];
+    const auto fold = caseConversion(uc)[which];
     const auto caseDiff = fold.diff;
 
     if (Q_UNLIKELY(fold.special)) {
@@ -1591,7 +1591,7 @@ static auto fullConvertCase(char32_t uc, QUnicodeTables::Case which) noexcept
 template <typename T>
 Q_DECL_CONST_FUNCTION static inline T convertCase_helper(T uc, QUnicodeTables::Case which) noexcept
 {
-    const auto fold = qGetProp(uc)->cases[which];
+    const auto fold = caseConversion(uc)[which];
 
     if (Q_UNLIKELY(fold.special)) {
         const ushort *specialCase = specialCaseMap + fold.diff;
@@ -1748,36 +1748,6 @@ char32_t QChar::toCaseFolded(char32_t ucs4) noexcept
 
     \sa toLatin1(), unicode()
 */
-
-#ifndef QT_NO_DATASTREAM
-/*!
-    \relates QChar
-
-    Writes the char \a chr to the stream \a out.
-
-    \sa {Serializing Qt Data Types}
-*/
-QDataStream &operator<<(QDataStream &out, QChar chr)
-{
-    out << quint16(chr.unicode());
-    return out;
-}
-
-/*!
-    \relates QChar
-
-    Reads a char from the stream \a in into char \a chr.
-
-    \sa {Serializing Qt Data Types}
-*/
-QDataStream &operator>>(QDataStream &in, QChar &chr)
-{
-    quint16 u;
-    in >> u;
-    chr.unicode() = char16_t(u);
-    return in;
-}
-#endif // QT_NO_DATASTREAM
 
 /*!
     \fn QChar::unicode()

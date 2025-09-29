@@ -39,5 +39,8 @@ T.MenuBarItem {
         implicitWidth: 40
         implicitHeight: 40
         color: control.down || control.highlighted ? control.palette.mid : "transparent"
+        border.color: control.palette.dark
+        border.width: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast &&
+                      control.highlighted ? 1 : 0
     }
 }

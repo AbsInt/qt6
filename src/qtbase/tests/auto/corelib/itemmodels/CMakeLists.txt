@@ -2,12 +2,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 add_subdirectory(qstringlistmodel)
+add_subdirectory(qrangemodel)
 if(TARGET Qt::Gui)
     add_subdirectory(qabstractitemmodel)
     if(QT_FEATURE_proxymodel)
-        if (NOT WASM) # QTBUG-121822
         add_subdirectory(qabstractproxymodel)
-        endif()
         add_subdirectory(qconcatenatetablesproxymodel)
         add_subdirectory(qidentityproxymodel)
         add_subdirectory(qsortfilterproxymodel_recursive)

@@ -2355,6 +2355,8 @@ void tst_QSettings::testRegistryShortRootNames()
 {
 #ifndef Q_OS_WIN
     QSKIP("This test is specific to the Windows registry only.");
+#elif defined(Q_PROCESSOR_ARM)
+    QSKIP("This test fails on Windows for ARM. See QTBUG-135470.");
 #else
     QVERIFY(QSettings("HKEY_CURRENT_USER", QSettings::NativeFormat).childGroups() == QSettings("HKCU", QSettings::NativeFormat).childGroups());
     QVERIFY(QSettings("HKEY_LOCAL_MACHINE", QSettings::NativeFormat).childGroups() == QSettings("HKLM", QSettings::NativeFormat).childGroups());

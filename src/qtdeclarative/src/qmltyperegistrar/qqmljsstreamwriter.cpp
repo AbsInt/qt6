@@ -192,7 +192,7 @@ void QQmlJSStreamWriter::write(QByteArrayView data)
 }
 
 void QQmlJSStreamWriter::writeEnumObjectLiteralBinding(
-    QByteArrayView name, const QList<QPair<QAnyStringView, int> > &keyValue)
+    QByteArrayView name, const QList<std::pair<QAnyStringView, int> > &keyValue)
 {
     flushPotentialLinesWithNewlines();
     writeIndent();

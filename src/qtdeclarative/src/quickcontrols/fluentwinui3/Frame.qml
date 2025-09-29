@@ -29,7 +29,16 @@ T.Frame {
     readonly property string __currentState: !control.enabled ? "disabled" : "normal";
     readonly property var __config: Config.controls.frame[__currentState] || {}
 
-    background: Impl.StyleImage {
-        imageConfig: control.__config.background
+    background: Rectangle {
+        implicitWidth: control.__config.background.width
+        implicitHeight: control.__config.background.height
+        color: "transparent"
+        border.color: Application.styleHints.accessibility.contrastPreference === Qt.HighContrast ? control.palette.text : "transparent"
+        radius: 4
+        Impl.StyleImage {
+            width: parent.width
+            height: parent.height
+            imageConfig: control.__config.background
+        }
     }
 }

@@ -17,8 +17,8 @@ T.ToolSeparator {
     verticalPadding: vertical ? 2 : 6
 
     contentItem: Rectangle {
-        implicitWidth: control.vertical ? 1 : 30
-        implicitHeight: control.vertical ? 30 : 1
+        implicitWidth: control.vertical ? (Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ? 2 : 1) : 30
+        implicitHeight: control.vertical ? 30 : (Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ? 2 : 1)
         color: control.palette.mid
     }
 }

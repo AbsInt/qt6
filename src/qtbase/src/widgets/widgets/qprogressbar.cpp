@@ -54,7 +54,14 @@ QProgressBarPrivate::QProgressBarPrivate()
 
 void QProgressBarPrivate::initDefaultFormat()
 {
-    if (defaultFormat)
+    if (defaultFormat) {
+        //: %p is the percent value, % is the percent sign. When translated
+        //: to the identical %p%, then the second % symbol will be replaced
+        //: by the percentage-symbol from the user's locale.
+        format = QProgressBar::tr("%p%");
+    }
+
+    if (format == "%p%"_L1)
         format = "%p"_L1 + locale.percent();
 }
 

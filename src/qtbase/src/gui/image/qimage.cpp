@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <qpa/qplatformpixmap.h>
+#include <qalloc.h>
 #include <private/qcolorspace_p.h>
 #include <private/qcolortransform_p.h>
 #include <private/qmemrotate_p.h>
@@ -162,7 +163,7 @@ QImageData::~QImageData()
         QImagePixmapCleanupHooks::executeImageHooks((((qint64) ser_no) << 32) | ((qint64) detach_no));
     delete paintEngine;
     if (data && own_data)
-        free(data);
+        QtPrivate::sizedFree(data, nbytes);
     data = nullptr;
 }
 

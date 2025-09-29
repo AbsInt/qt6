@@ -20,6 +20,8 @@
 #include <emscripten/html5.h>
 #include <emscripten/val.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 class QWasmEventTranslator;
@@ -33,6 +35,7 @@ class QWasmClipboard;
 class QWasmAccessibility;
 class QWasmServices;
 class QWasmDrag;
+class QWasmSuspendResumeControl;
 
 class QWasmIntegration : public QObject, public QPlatformIntegration
 {
@@ -43,6 +46,7 @@ public:
 
     bool hasCapability(QPlatformIntegration::Capability cap) const override;
     QPlatformWindow *createPlatformWindow(QWindow *window) const override;
+    QPlatformWindow *createForeignWindow(QWindow *window, WId nativeHandle) const override;
     QPlatformBackingStore *createPlatformBackingStore(QWindow *window) const override;
 #ifndef QT_NO_OPENGL
     QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const override;
@@ -55,7 +59,9 @@ public:
     QStringList themeNames() const override;
     QPlatformTheme *createPlatformTheme(const QString &name) const override;
     QPlatformServices *services() const override;
+#if QT_CONFIG(clipboard)
     QPlatformClipboard *clipboard() const override;
+#endif
 #ifndef QT_NO_ACCESSIBILITY
     QPlatformAccessibility *accessibility() const override;
 #endif
@@ -84,10 +90,15 @@ public:
     int touchPoints;
 
 private:
+    QWasmWindow *createWindow(QWindow *, WId nativeHandle) const;
+
     struct ScreenMapping {
         emscripten::val emscriptenVal;
         QWasmScreen *wasmScreen;
     };
+
+    // m_suspendResume should be created first and destroyed early as other fields depend on it
+    std::shared_ptr<QWasmSuspendResumeControl> m_suspendResume;
 
     mutable QWasmFontDatabase *m_fontDb;
     mutable QWasmServices *m_desktopServices;

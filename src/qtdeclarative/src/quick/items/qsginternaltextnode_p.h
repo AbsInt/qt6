@@ -168,7 +168,7 @@ public:
                             QSGNode *parentNode = 0);
 
     QSGInternalRectangleNode *cursorNode() const { return m_cursorNode; }
-    QPair<int, int> renderedLineRange() const { return { m_firstLineInViewport, m_firstLinePastViewport }; }
+    std::pair<int, int> renderedLineRange() const { return { m_firstLineInViewport, m_firstLinePastViewport }; }
 
 protected:
     void doAddTextLayout(QPointF position,

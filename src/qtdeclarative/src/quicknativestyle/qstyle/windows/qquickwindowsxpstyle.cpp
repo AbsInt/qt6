@@ -2401,6 +2401,30 @@ void QWindowsXPStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCo
         }
         break;
 //#endif // QT_CONFIG(spinbox)
+//#if QT_CONFIG(searchfield)
+    case CC_SearchField:
+        if (const QStyleOptionSearchField *sf = qstyleoption_cast<const QStyleOptionSearchField *>(option))
+        {
+            if (sf->frame && (sub & SC_SearchFieldFrame)) {
+                partId = EP_EDITBORDER_NOSCROLL;
+                if (!(flags & State_Enabled))
+                    stateId = ETS_DISABLED;
+                else if (flags & State_MouseOver)
+                    stateId = ETS_HOT;
+                else if (flags & State_HasFocus)
+                    stateId = ETS_FOCUSED;
+                else
+                    stateId = ETS_NORMAL;
+
+                XPThemeData theme(option->window, p,
+                                  QWindowsXPStylePrivate::EditTheme,
+                                  partId, stateId, r);
+
+                d->drawBackground(theme);
+            }
+        }
+        break;
+//#endif QT_CONFIG(searchfield)
 //#if QT_CONFIG(combobox)
     case CC_ComboBox:
         if (const QStyleOptionComboBox *cmb = qstyleoption_cast<const QStyleOptionComboBox *>(option))
@@ -3063,6 +3087,7 @@ int QWindowsXPStyle::pixelMetric(PixelMetric pm, const QStyleOption *option) con
         break;
     case PM_MenuPanelWidth:
     case PM_SpinBoxFrameWidth:
+    case PM_SearchFieldFrameWidth:
         res = 1;
         break;
 
@@ -3310,7 +3335,6 @@ QRect QWindowsXPStyle::subControlRect(ComplexControl cc, const QStyleOptionCompl
             }
         }
         break;
-
     case CC_ComboBox:
         if (const QStyleOptionComboBox *cmb = qstyleoption_cast<const QStyleOptionComboBox *>(option)) {
             const int x = cmb->rect.x(), y = cmb->rect.y(), wi = cmb->rect.width(), he = cmb->rect.height();

@@ -80,7 +80,7 @@ public:
         int leftChildIndex;
         int rightChildIndex;
 
-        QList<QPair<int, int> > ranges;
+        QList<std::pair<int, int> > ranges;
 
         static void insert(QVarLengthArray<BinaryTreeNode, 16> *binaryTree, const QRectF &rect, const QImage &image, qreal ascent, SelectionState selectionState)
         { insert(binaryTree, BinaryTreeNode(rect, image, selectionState, ascent)); }
@@ -227,7 +227,7 @@ private:
     QTextLine m_currentLine;
     Qt::LayoutDirection m_currentTextDirection;
 
-    QList<QPair<QRectF, QColor> > m_backgrounds;
+    QList<std::pair<QRectF, QColor> > m_backgrounds;
     QList<QRectF> m_selectionRects;
     QVarLengthArray<BinaryTreeNode, 16> m_currentLineTree;
 

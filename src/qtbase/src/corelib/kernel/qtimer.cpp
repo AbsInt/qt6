@@ -205,6 +205,11 @@ Qt::TimerId QTimer::id() const
 //! [singleshot-activation]
     If \l singleShot is true, the timer will be activated only once.
 //! [singleshot-activation]
+
+//! [eventloop-busy]
+    \note   Keeping the event loop busy with a zero-timer is bound to
+            cause trouble and highly erratic behavior of the UI.
+//! [eventloop-busy]
 */
 void QTimer::start()
 {
@@ -234,19 +239,56 @@ void QTimer::start()
 
     \include qtimer.cpp singleshot-activation
 
-    \note   Keeping the event loop busy with a zero-timer is bound to
-            cause trouble and highly erratic behavior of the UI.
+    \include timers-common.qdocinc negative-intervals-not-allowed
+
+    \include qtimer.cpp eventloop-busy
 */
 void QTimer::start(int msec)
 {
     start(msec * 1ms);
 }
 
+static std::chrono::milliseconds
+checkInterval(const char *caller, std::chrono::milliseconds interval)
+{
+    constexpr auto maxInterval = INT_MAX * 1ms;
+    if (interval < 0ms) {
+        qWarning("%s: negative intervals aren't allowed; the interval will be set to 1ms.", caller);
+        interval = 1ms;
+    } else if (interval > maxInterval) {
+        qWarning("%s: interval exceeds maximum allowed interval, it will be clamped to "
+                 "INT_MAX ms (about 24 days).", caller);
+        interval = maxInterval;
+    }
+    return interval;
+}
+
+/*!
+    \since 5.8
+    \overload
+
+    Starts or restarts the timer with a timeout of duration \a interval milliseconds.
+
+    This is equivalent to:
+
+    \code
+        timer.setInterval(interval);
+        timer.start();
+    \endcode
+
+    \include qtimer.cpp stop-restart-timer
+
+    \include qtimer.cpp singleshot-activation
+
+    \include timers-common.qdocinc negative-intervals-not-allowed
+
+    \include qtimer.cpp eventloop-busy
+*/
 void QTimer::start(std::chrono::milliseconds interval)
 {
     Q_D(QTimer);
-    // This could be narrowing as the interval is stored in an `int` QProperty,
-    // and the type can't be changed in Qt6.
+
+    interval = checkInterval("QTimer::start", interval);
     const int msec = interval.count();
     const bool intervalChanged = msec != d->inter;
     d->inter.setValue(msec);
@@ -371,6 +413,8 @@ void QTimer::singleShotImpl(std::chrono::nanoseconds ns, Qt::TimerType timerType
     The \a receiver is the receiving object and the \a member is the
     slot. The time interval is \a msec milliseconds.
 
+    \include timers-common.qdocinc negative-intervals-not-allowed
+
     \sa start()
 */
 
@@ -389,6 +433,8 @@ void QTimer::singleShotImpl(std::chrono::nanoseconds ns, Qt::TimerType timerType
     time interval is \a msec milliseconds. The \a timerType affects the
     accuracy of the timer.
 
+    \include timers-common.qdocinc negative-intervals-not-allowed
+
     \sa start()
 */
 
@@ -396,8 +442,9 @@ void QTimer::singleShot(std::chrono::nanoseconds ns, Qt::TimerType timerType,
                         const QObject *receiver, const char *member)
 {
     if (ns < 0ns) {
-        qWarning("QTimer::singleShot: Timers cannot have negative timeouts");
-        return;
+        qWarning("QTimer::singleShot: negative intervals aren't allowed; the "
+                 "interval will be set to 1ms.");
+        ns = 1ms;
     }
     if (receiver && member) {
         if (ns == 0ns) {
@@ -441,6 +488,8 @@ void QTimer::singleShot(std::chrono::nanoseconds ns, Qt::TimerType timerType,
     The \a interval parameter can be an \c int (interpreted as a millisecond
     count) or a \c std::chrono type that implicitly converts to nanoseconds.
 
+    \include timers-common.qdocinc negative-intervals-not-allowed
+
     \note In Qt versions prior to 6.8, the chrono overloads took chrono::milliseconds,
     not chrono::nanoseconds. The compiler will automatically convert for you,
     but the conversion may overflow for extremely large milliseconds counts.
@@ -462,6 +511,8 @@ void QTimer::singleShot(std::chrono::nanoseconds ns, Qt::TimerType timerType,
 
     The \a receiver is the receiving object and the \a member is the slot. The
     time interval is given in the duration object \a nsec.
+
+    \include timers-common.qdocinc negative-intervals-not-allowed
 
 //! [qtimer-ns-overflow]
     \note In Qt versions prior to 6.8, this function took chrono::milliseconds,
@@ -487,6 +538,9 @@ void QTimer::singleShot(std::chrono::nanoseconds ns, Qt::TimerType timerType,
     The \a receiver is the receiving object and the \a member is the slot. The
     time interval is given in the duration object \a nsec. The \a timerType affects the
     accuracy of the timer.
+
+
+    \include timers-common.qdocinc negative-intervals-not-allowed
 
     \include qtimer.cpp qtimer-ns-overflow
 
@@ -525,25 +579,6 @@ void QTimer::singleShot(std::chrono::nanoseconds ns, Qt::TimerType timerType,
     \endcode
 
     \sa QObject::connect(), timeout()
-*/
-
-/*!
-    \fn void QTimer::start(std::chrono::milliseconds msec)
-    \since 5.8
-    \overload
-
-    Starts or restarts the timer with a timeout of duration \a msec milliseconds.
-
-    This is equivalent to:
-
-    \code
-        timer.setInterval(msec);
-        timer.start();
-    \endcode
-
-    \include qtimer.cpp stop-restart-timer
-
-    \include qtimer.cpp singleshot-activation
 */
 
 /*!
@@ -602,9 +637,13 @@ QBindable<bool> QTimer::bindableSingleShot()
     interval of 0 will time out as soon as all the events in the window
     system's event queue have been processed.
 
+    \include qtimer.cpp eventloop-busy
+
     Setting the interval of a running timer will change the interval,
     stop() and then start() the timer, and acquire a new id().
     If the timer is not running, only the interval is changed.
+
+    \include timers-common.qdocinc negative-intervals-not-allowed
 
     \sa singleShot
 */
@@ -616,8 +655,8 @@ void QTimer::setInterval(int msec)
 void QTimer::setInterval(std::chrono::milliseconds interval)
 {
     Q_D(QTimer);
-    // This could be narrowing as the interval is stored in an `int` QProperty,
-    // and the type can't be changed in Qt6.
+
+    interval = checkInterval("QTimer::setInterval", interval);
     const int msec = interval.count();
     d->inter.removeBindingUnlessInWrapper();
     const bool intervalChanged = msec != d->inter.valueBypassingBindings();

@@ -19,13 +19,14 @@ ScrollablePage {
         }
 
         RangeSlider {
-            id: slider
+            enabled: !GalleryConfig.disabled
             first.value: 0.25
             second.value: 0.75
             anchors.horizontalCenter: parent.horizontalCenter
         }
 
         RangeSlider {
+            enabled: !GalleryConfig.disabled
             orientation: Qt.Vertical
             first.value: 0.25
             second.value: 0.75

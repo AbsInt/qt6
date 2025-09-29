@@ -23,7 +23,7 @@ public:
     // random values
     static constexpr quint64 ZeroSeed = 0;
     static constexpr quint64 RandomSeed32 = 1045982819;
-    static constexpr quint64 RandomSeed64 = QtPrivate::QHashCombine{}(RandomSeed32, RandomSeed32);
+    static constexpr quint64 RandomSeed64 = qHashMulti(0, RandomSeed32, RandomSeed32);
     size_t seed;
 
     template <typename T1, typename T2> void stdPair_template(const T1 &t1, const T2 &t2);

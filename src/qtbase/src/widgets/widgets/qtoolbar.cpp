@@ -106,6 +106,8 @@ void QToolBarPrivate::updateWindowFlags(bool floating, bool unplug)
     // the platform window when it would be removed later
     if (unplug && !QMainWindowLayout::needsPlatformDrag())
         flags |= Qt::X11BypassWindowManagerHint;
+#else
+    Q_UNUSED(unplug);
 #endif
 
     q->setWindowFlags(flags);

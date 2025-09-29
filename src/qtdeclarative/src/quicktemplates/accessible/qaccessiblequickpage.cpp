@@ -7,7 +7,7 @@
 QT_BEGIN_NAMESPACE
 
 QAccessibleQuickPage::QAccessibleQuickPage(QQuickPage *page)
-    : QAccessibleQuickItem(page)
+    : QAccessibleQuickControl(page)
 {
 }
 

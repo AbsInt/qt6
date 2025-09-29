@@ -35,7 +35,7 @@ using namespace Qt::StringLiterals;
 
 #if QT_CONFIG(spinbox)
 QAccessibleAbstractSpinBox::QAccessibleAbstractSpinBox(QWidget *w)
-: QAccessibleWidget(w, QAccessible::SpinBox), lineEdit(nullptr)
+    : QAccessibleWidgetV2(w, QAccessible::SpinBox), lineEdit(nullptr)
 {
     Q_ASSERT(abstractSpinBox());
 }
@@ -69,7 +69,7 @@ QString QAccessibleAbstractSpinBox::text(QAccessible::Text t) const
 {
     if (t == QAccessible::Value)
         return abstractSpinBox()->text();
-    return QAccessibleWidget::text(t);
+    return QAccessibleWidgetV2::text(t);
 }
 
 void *QAccessibleAbstractSpinBox::interface_cast(QAccessible::InterfaceType t)
@@ -80,7 +80,7 @@ void *QAccessibleAbstractSpinBox::interface_cast(QAccessible::InterfaceType t)
         return static_cast<QAccessibleTextInterface*>(this);
     if (t == QAccessible::EditableTextInterface)
         return static_cast<QAccessibleEditableTextInterface*>(this);
-    return QAccessibleWidget::interface_cast(t);
+    return QAccessibleWidgetV2::interface_cast(t);
 }
 
 QVariant QAccessibleAbstractSpinBox::currentValue() const
@@ -251,7 +251,7 @@ QString QAccessibleDoubleSpinBox::text(QAccessible::Text textType) const
 {
     if (textType == QAccessible::Value)
         return doubleSpinBox()->textFromValue(doubleSpinBox()->value());
-    return QAccessibleWidget::text(textType);
+    return QAccessibleWidgetV2::text(textType);
 }
 
 #endif // QT_CONFIG(spinbox)
@@ -326,7 +326,7 @@ QString QAccessibleSlider::text(QAccessible::Text t) const
 }
 
 QAccessibleAbstractSlider::QAccessibleAbstractSlider(QWidget *w, QAccessible::Role r)
-    : QAccessibleWidget(w, r)
+    : QAccessibleWidgetV2(w, r)
 {
     Q_ASSERT(qobject_cast<QAbstractSlider *>(w));
 }
@@ -335,7 +335,7 @@ void *QAccessibleAbstractSlider::interface_cast(QAccessible::InterfaceType t)
 {
     if (t == QAccessible::ValueInterface)
         return static_cast<QAccessibleValueInterface*>(this);
-    return QAccessibleWidget::interface_cast(t);
+    return QAccessibleWidgetV2::interface_cast(t);
 }
 
 QVariant QAccessibleAbstractSlider::currentValue() const

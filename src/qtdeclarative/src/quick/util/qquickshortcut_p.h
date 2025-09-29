@@ -34,8 +34,8 @@ class Q_QUICK_EXPORT QQuickShortcut : public QObject, public QQmlParserStatus
     Q_INTERFACES(QQmlParserStatus)
     Q_PROPERTY(QVariant sequence READ sequence WRITE setSequence NOTIFY sequenceChanged FINAL)
     Q_PROPERTY(QVariantList sequences READ sequences WRITE setSequences NOTIFY sequencesChanged FINAL REVISION(2, 9))
-    Q_PROPERTY(QString nativeText READ nativeText NOTIFY sequenceChanged FINAL REVISION(2, 6))
-    Q_PROPERTY(QString portableText READ portableText NOTIFY sequenceChanged FINAL REVISION(2, 6))
+    Q_PROPERTY(QString nativeText READ nativeText NOTIFY nativeTextChanged FINAL REVISION(2, 6))
+    Q_PROPERTY(QString portableText READ portableText NOTIFY portableTextChanged FINAL REVISION(2, 6))
     Q_PROPERTY(bool enabled READ isEnabled WRITE setEnabled NOTIFY enabledChanged FINAL)
     Q_PROPERTY(bool autoRepeat READ autoRepeat WRITE setAutoRepeat NOTIFY autoRepeatChanged FINAL)
     Q_PROPERTY(Qt::ShortcutContext context READ context WRITE setContext NOTIFY contextChanged FINAL)
@@ -67,6 +67,8 @@ public:
 Q_SIGNALS:
     void sequenceChanged();
     Q_REVISION(2, 9) void sequencesChanged();
+    Q_REVISION(6, 10) void nativeTextChanged();
+    Q_REVISION(6, 10) void portableTextChanged();
     void enabledChanged();
     void autoRepeatChanged();
     void contextChanged();

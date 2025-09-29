@@ -15,11 +15,6 @@ T.Menu {
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
                              implicitContentHeight + topPadding + bottomPadding)
 
-    leftInset: -__config.background.leftShadow
-    topInset: -__config.background.topShadow
-    rightInset: -__config.background.rightShadow
-    bottomInset: -__config.background.bottomShadow
-
     leftPadding: 5
     topPadding: 5
     rightPadding: 5
@@ -28,6 +23,12 @@ T.Menu {
     overlap: 4
 
     readonly property var __config: Config.controls.popup["normal"]
+    readonly property bool __isHighContrast: Application.styleHints.accessibility.contrastPreference === Qt.HighContrast
+
+    leftInset: -__config.background.leftShadow
+    topInset: -__config.background.topShadow
+    rightInset: -__config.background.rightShadow
+    bottomInset: -__config.background.bottomShadow
 
     delegate: MenuItem { }
 
@@ -59,6 +60,17 @@ T.Menu {
         implicitHeight: 30 + imageConfig.topShadow + imageConfig.bottomShadow
         imageConfig: control.__config.background
         drawShadowWithinBounds: true
+        Rectangle {
+            x: -control.leftInset
+            y: -control.topInset
+            implicitWidth: parent.width + control.leftInset + control.rightInset
+            implicitHeight: parent.height + control.topInset + control.bottomInset
+            visible: control.__isHighContrast
+            radius: 8
+            color: control.palette.window
+            border.color: control.palette.text
+            border.width: 2
+        }
     }
 
     T.Overlay.modal: Rectangle {

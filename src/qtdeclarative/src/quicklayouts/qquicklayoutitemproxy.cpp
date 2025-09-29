@@ -3,6 +3,8 @@
 #include "qquicklayoutitemproxy_p.h"
 #include "qquicklayout_p.h"
 
+QT_BEGIN_NAMESPACE
+
 /*!
     \qmltype LayoutItemProxy
     \nativetype QQuickLayoutItemProxy
@@ -537,3 +539,5 @@ bool QQuickLayoutItemProxyAttachedData::proxyHasControl() const
 {
     return controllingProxy != nullptr;
 }
+
+QT_END_NAMESPACE

@@ -4,6 +4,7 @@
 #include <private/qmlutils_p.h>
 #include <private/qqmlengine_p.h>
 #include <private/qqmlimport_p.h>
+#include <private/qqmlpluginimporter_p.h>
 
 #include <QtQuick/qquickview.h>
 #include <QtQuick/qquickitem.h>
@@ -102,8 +103,8 @@ void tst_QQmlImport::envResourceImportPath()
 
     qputenv("QML_IMPORT_PATH", envPaths.join(QDir::listSeparator()).toUtf8());
 
-    QQmlImportDatabase importDb(nullptr);
-    const QStringList importPaths = importDb.importPathList();
+    QQmlEngine engine;
+    const QStringList importPaths = QQmlEnginePrivate::get(&engine)->typeLoader.importPathList();
 
     for (const QString &path : envPaths)
         QVERIFY((importPaths.contains(path.startsWith(u':') ? QLatin1String("qrc") + path : path)));
@@ -234,7 +235,7 @@ void tst_QQmlImport::containsAllQtConfEntries()
 void tst_QQmlImport::sanitizeUNCPath()
 {
     QString wildUNCPath = QStringLiteral("//Server2/Sh%re/foO/qmldir");
-    QQmlImportDatabase::sanitizeUNCPath(&wildUNCPath);
+    QQmlTypeLoader::sanitizeUNCPath(&wildUNCPath);
 
     // It lowercases the "server" component of the path. The rest is left as-is
     QCOMPARE(wildUNCPath, QStringLiteral("//server2/Sh%re/foO/qmldir"));
@@ -497,12 +498,11 @@ void tst_QQmlImport::removeDynamicPlugin()
         // check will fail if we do.
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     }
-    QQmlImportDatabase *imports = &QQmlEnginePrivate::get(&engine)->importDatabase;
-    const QStringList &plugins = imports->dynamicPlugins();
+    const QStringList &plugins = QQmlPluginImporter::plugins();
     QVERIFY(!plugins.isEmpty());
     for (const QString &plugin : plugins)
-        QVERIFY(imports->removeDynamicPlugin(plugin));
-    QVERIFY(imports->dynamicPlugins().isEmpty());
+        QVERIFY(QQmlPluginImporter::removePlugin(plugin));
+    QVERIFY(QQmlPluginImporter::plugins().isEmpty());
     qmlClearTypeRegistrations();
 }
 

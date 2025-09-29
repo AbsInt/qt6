@@ -462,6 +462,29 @@ QAccessible::State QAccessibleQuickItem::state() const
     return state;
 }
 
+QList<std::pair<QAccessibleInterface *, QAccessible::Relation>>
+QAccessibleQuickItem::relations(QAccessible::Relation match) const
+{
+    QList<std::pair<QAccessibleInterface *, QAccessible::Relation>> rels =
+            QAccessibleObject::relations(match);
+    if (QQuickAccessibleAttached *attached = QQuickAccessibleAttached::attachedProperties(item())) {
+        if (match & QAccessible::Labelled) {
+            if (auto *labelFor = attached->labelFor()) {
+                rels.append({QAccessible::queryAccessibleInterface(labelFor),
+                             QAccessible::Labelled});
+            }
+        }
+
+        if (match & QAccessible::Label) {
+            if (auto *labelledBy = attached->labelledBy()) {
+                rels.append({QAccessible::queryAccessibleInterface(labelledBy),
+                             QAccessible::Label});
+            }
+        }
+    }
+    return rels;
+}
+
 QAccessible::Role QAccessibleQuickItem::role() const
 {
     // Workaround for setAccessibleRole() not working for
@@ -494,6 +517,7 @@ QStringList QAccessibleQuickItem::actionNames() const
     switch (role()) {
     case QAccessible::Link:
     case QAccessible::PushButton:
+    case QAccessible::MenuItem:
         actions << QAccessibleActionInterface::pressAction();
         break;
     case QAccessible::RadioButton:
@@ -681,21 +705,28 @@ void QAccessibleQuickItem::setText(QAccessible::Text textType, const QString &te
 
 void *QAccessibleQuickItem::interface_cast(QAccessible::InterfaceType t)
 {
-    QAccessible::Role r = role();
-    if (t == QAccessible::ActionInterface)
+    const QAccessible::Role r = role();
+    switch (t) {
+    case QAccessible::ActionInterface:
         return static_cast<QAccessibleActionInterface*>(this);
-    if (t == QAccessible::ValueInterface &&
-           (r == QAccessible::Slider ||
-            r == QAccessible::SpinBox ||
-            r == QAccessible::Dial ||
-            r == QAccessible::ScrollBar))
-       return static_cast<QAccessibleValueInterface*>(this);
-
-    if (t == QAccessible::TextInterface) {
-        if (r == QAccessible::EditableText ||
-            r == QAccessible::StaticText ||
-            r == QAccessible::Heading)
-        return static_cast<QAccessibleTextInterface*>(this);
+    case QAccessible::ValueInterface:
+        if (r == QAccessible::Slider
+         || r == QAccessible::SpinBox
+         || r == QAccessible::Dial
+         || r == QAccessible::ScrollBar
+         || r == QAccessible::ProgressBar) {
+            return static_cast<QAccessibleValueInterface*>(this);
+        }
+        break;
+    case QAccessible::TextInterface:
+        if (r == QAccessible::EditableText
+         || r == QAccessible::StaticText
+         || r == QAccessible::Heading) {
+            return static_cast<QAccessibleTextInterface*>(this);
+        }
+        break;
+    default:
+        break;
     }
 
     return QAccessibleObject::interface_cast(t);
@@ -713,12 +744,34 @@ void QAccessibleQuickItem::setCurrentValue(const QVariant &value)
 
 QVariant QAccessibleQuickItem::maximumValue() const
 {
-    return item()->property("maximumValue");
+    const auto minimumValue = item()->property("minimumValue");
+    const auto maximumValue = item()->property("maximumValue");
+    const auto from = item()->property("from");
+    const auto to   = item()->property("to");
+
+    if (minimumValue.isValid() && maximumValue.isValid())
+        return maximumValue;
+
+    if (from.isValid() && to.isValid())
+        return to;
+
+    return QVariant();
 }
 
 QVariant QAccessibleQuickItem::minimumValue() const
 {
-    return item()->property("minimumValue");
+    const auto minimumValue = item()->property("minimumValue");
+    const auto maximumValue = item()->property("maximumValue");
+    const auto from = item()->property("from");
+    const auto to   = item()->property("to");
+
+    if (minimumValue.isValid() && maximumValue.isValid())
+        return minimumValue;
+
+    if (from.isValid() && to.isValid())
+        return from;
+
+    return QVariant();
 }
 
 QVariant QAccessibleQuickItem::minimumStepSize() const
@@ -813,7 +866,7 @@ QString QAccessibleQuickItem::textBeforeOffset(int offset, QAccessible::TextBoun
     if (m_doc) {
         QTextCursor cursor = QTextCursor(m_doc);
         cursor.setPosition(offset);
-        QPair<int, int> boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
+        std::pair<int, int> boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
         cursor.setPosition(boundaries.first - 1);
         boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
 
@@ -835,7 +888,7 @@ QString QAccessibleQuickItem::textAfterOffset(int offset, QAccessible::TextBound
     if (m_doc) {
         QTextCursor cursor = QTextCursor(m_doc);
         cursor.setPosition(offset);
-        QPair<int, int> boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
+        std::pair<int, int> boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
         cursor.setPosition(boundaries.second);
         boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
 
@@ -857,7 +910,7 @@ QString QAccessibleQuickItem::textAtOffset(int offset, QAccessible::TextBoundary
     if (m_doc) {
         QTextCursor cursor = QTextCursor(m_doc);
         cursor.setPosition(offset);
-        QPair<int, int> boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
+        std::pair<int, int> boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
 
         *startOffset = boundaries.first;
         *endOffset = boundaries.second;

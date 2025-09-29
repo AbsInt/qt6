@@ -1,5 +1,6 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// Qt-Security score:significant
 
 #include "qqmljsmetatypes_p.h"
 #include "qqmljstyperesolver_p.h"
@@ -84,13 +85,13 @@ QSharedPointer<const QQmlJSScope> QQmlJSMetaPropertyBinding::literalType(const Q
     case BindingType::BoolLiteral:
         return resolver->boolType();
     case BindingType::NumberLiteral:
-        return resolver->typeForName(QLatin1String("double"));
+        return resolver->realType();
     case BindingType::Translation: // translations are strings
     case BindingType::TranslationById:
     case BindingType::StringLiteral:
         return resolver->stringType();
     case BindingType::RegExpLiteral:
-        return resolver->typeForName(QLatin1String("regexp"));
+        return resolver->regexpType();
     case BindingType::Null:
         return resolver->nullType();
     case BindingType::Invalid:

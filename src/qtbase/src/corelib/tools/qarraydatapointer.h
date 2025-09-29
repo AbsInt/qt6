@@ -111,7 +111,7 @@ public:
         }
     }
 
-    bool isNull() const noexcept
+    constexpr bool isNull() const noexcept
     {
         return !ptr;
     }

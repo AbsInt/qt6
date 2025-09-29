@@ -9,16 +9,12 @@ import android.content.Context;
 import android.os.Build;
 import android.util.Log;
 import android.view.inputmethod.TextAttribute;
-import android.view.WindowMetrics;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputMethodManager;
 import android.view.KeyEvent;
-import android.graphics.Rect;
-import android.app.Activity;
-import android.util.DisplayMetrics;
 
 class QtExtractedText
 {

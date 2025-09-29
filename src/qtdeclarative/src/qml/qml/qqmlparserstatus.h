@@ -20,11 +20,7 @@ public:
     virtual void componentComplete()=0;
 
 private:
-    friend class QQmlComponent;
-    friend class QQmlComponentPrivate;
-    friend class QQmlEnginePrivate;
-    friend class QQmlObjectCreator;
-    QQmlParserStatus **d;
+    quintptr d;
 };
 
 #define QQmlParserStatus_iid "org.qt-project.Qt.QQmlParserStatus"

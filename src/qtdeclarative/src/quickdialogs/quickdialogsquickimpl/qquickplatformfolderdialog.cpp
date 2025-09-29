@@ -10,6 +10,7 @@
 #include <QtQml/qqmlinfo.h>
 #include <QtQuick/qquickwindow.h>
 #include <QtQuickTemplates2/private/qquickdialog_p.h>
+#include <QtQuickTemplates2/private/qquickdialog_p_p.h>
 #include <QtQuickTemplates2/private/qquickpopup_p_p.h>
 #include <QtQuickTemplates2/private/qquickpopupanchors_p.h>
 
@@ -154,7 +155,7 @@ bool QQuickPlatformFolderDialog::show(Qt::WindowFlags flags, Qt::WindowModality 
         ? options->labelText(QFileDialogOptions::Accept) : QString());
     m_dialog->setRejectLabel(options->isLabelExplicitlySet(QFileDialogOptions::Reject)
         ? options->labelText(QFileDialogOptions::Reject) : QString());
-
+    m_dialog->setWindowModality(modality);
     m_dialog->open();
     return true;
 }

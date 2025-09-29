@@ -325,7 +325,7 @@ emscripten::val QWasmScreen::containerElement()
     return m_shadowContainer;
 }
 
-QWasmWindowTreeNode *QWasmScreen::parentNode()
+QWasmWindowTreeNode<> *QWasmScreen::parentNode()
 {
     return nullptr;
 }

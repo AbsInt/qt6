@@ -1428,7 +1428,7 @@ void QEasingCurve::setType(Type type)
     where \e progress and the return value are considered to be normalized between 0 and 1.
     (In some cases the return value can be outside that range)
     After calling this function type() will return QEasingCurve::Custom.
-    \a func cannot be zero.
+    \a func cannot be \nullptr.
 
     \sa customType()
     \sa valueForProgress()

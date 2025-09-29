@@ -275,10 +275,10 @@ typedef QSharedPointer<QFileDialogOptions> SharedPointerFileDialogOptions;
 {
     Q_ASSERT(sender == m_panel);
 
-    if (!m_panel.allowedFileTypes && !m_selectedNameFilter.isEmpty()) {
+    if (![m_panel.allowedContentTypes count] && !m_selectedNameFilter.isEmpty()) {
         // The save panel hasn't done filtering on our behalf,
         // either because we couldn't represent the filter via
-        // allowedFileTypes, or we opted out due to a multi part
+        // allowedContentTypes, or we opted out due to a multi part
         // extension, so do the filtering/validation ourselves.
         QFileInfo fileInfo(QString::fromNSString(url.path).normalized(QString::NormalizationForm_C));
 
@@ -447,9 +447,9 @@ typedef QSharedPointer<QFileDialogOptions> SharedPointerFileDialogOptions;
 
     m_popupButton.hidden = chooseDirsOnly;    // TODO hide the whole sunken pane instead?
 
-    m_panel.allowedFileTypes = [self computeAllowedFileTypes];
+    m_panel.allowedContentTypes = [self computeAllowedContentTypes];
 
-    // Setting allowedFileTypes to nil is not enough to reset any
+    // Setting allowedContentTypes to @[] is not enough to reset any
     // automatically added extension based on a previous filter.
     // This is problematic because extensions can in some cases
     // be hidden from the user, resulting in confusion when the
@@ -458,10 +458,10 @@ typedef QSharedPointer<QFileDialogOptions> SharedPointerFileDialogOptions;
     // content type to one without an extension, which forces
     // the save panel to update and remove the extension.
     const bool nameFieldHasExtension = m_panel.nameFieldStringValue.pathExtension.length > 0;
-    if (!m_panel.allowedFileTypes && !nameFieldHasExtension && !openpanel_cast(m_panel)) {
+    if (![m_panel.allowedContentTypes count] && !nameFieldHasExtension && !openpanel_cast(m_panel)) {
         if (!UTTypeDirectory.preferredFilenameExtension) {
             m_panel.allowedContentTypes = @[ UTTypeDirectory ];
-            m_panel.allowedFileTypes = nil;
+            m_panel.allowedContentTypes = @[];
         } else {
             qWarning() << "UTTypeDirectory unexpectedly reported an extension";
         }
@@ -508,20 +508,20 @@ typedef QSharedPointer<QFileDialogOptions> SharedPointerFileDialogOptions;
 }
 
 /*
-    Computes a list of extensions (e.g. "png", "jpg", "gif")
-    for the current name filter, and updates the save panel.
+    Computes a list of UTTypes ("public.plain-text" e.g.)
+    for the current name filter.
 
     If a filter do not conform to the format *.xyz or * or *.*,
     or contains an extensions with more than one part (e.g. "tar.gz")
     we treat that as allowing all file types, and do our own
     validation in panel:validateURL:error.
 */
-- (NSArray<NSString*>*)computeAllowedFileTypes
+- (NSArray<UTType*>*)computeAllowedContentTypes
 {
     if (m_options->acceptMode() != QFileDialogOptions::AcceptSave)
-        return nil; // panel:shouldEnableURL: does the file filtering for NSOpenPanel
+        return @[]; // panel:shouldEnableURL: does the file filtering for NSOpenPanel
 
-    QStringList fileTypes;
+    auto *types = [[NSMutableArray<UTType*> new] autorelease];
     for (const QString &filter : std::as_const(m_selectedNameFilter)) {
         if (!filter.startsWith("*."_L1))
             continue;
@@ -534,12 +534,13 @@ typedef QSharedPointer<QFileDialogOptions> SharedPointerFileDialogOptions;
 
         auto extensions = filter.split('.', Qt::SkipEmptyParts);
         if (extensions.count() > 2)
-            return nil;
+            return @[];
 
-        fileTypes += extensions.last();
+        auto *utType = [UTType typeWithFilenameExtension:extensions.last().toNSString()];
+        [types addObject:utType];
     }
 
-    return fileTypes.isEmpty() ? nil : qt_mac_QStringListToNSMutableArray(fileTypes);
+    return types;
 }
 
 - (QString)removeExtensions:(const QString &)filter

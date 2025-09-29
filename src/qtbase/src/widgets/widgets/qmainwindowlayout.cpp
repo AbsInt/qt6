@@ -146,8 +146,9 @@ QDebug operator<<(QDebug debug, const QDockAreaLayout &layout)
 
 QDebug operator<<(QDebug debug, const QMainWindowLayout *layout)
 {
-    debug << layout->layoutState.dockAreaLayout;
-    return debug;
+    if (layout)
+        return std::move(debug) << layout->layoutState.dockAreaLayout;
+    return debug << "QMainWindowLayout(0x0)";
 }
 
 // Use this to dump item lists of all populated main window docks.

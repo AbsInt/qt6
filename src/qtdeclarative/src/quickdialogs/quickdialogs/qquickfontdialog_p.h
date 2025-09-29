@@ -28,7 +28,7 @@ class Q_QUICKDIALOGS2_EXPORT QQuickFontDialog : public QQuickAbstractDialog
     Q_PROPERTY(QFont currentFont READ currentFont WRITE setCurrentFont NOTIFY currentFontChanged FINAL)
     Q_PROPERTY(QFontDialogOptions::FontDialogOptions options READ options WRITE setOptions
                RESET resetOptions NOTIFY optionsChanged)
-    Q_FLAGS(QFontDialogOptions::FontDialogOptions)
+    QML_EXTENDED_NAMESPACE(QFontDialogOptions)
     QML_NAMED_ELEMENT(FontDialog)
     QML_ADDED_IN_VERSION(6, 2)
 

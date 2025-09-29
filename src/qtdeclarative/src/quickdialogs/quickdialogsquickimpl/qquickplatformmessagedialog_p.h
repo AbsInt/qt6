@@ -18,9 +18,10 @@
 #include <QtGui/qpa/qplatformdialoghelper.h>
 
 #include "qtquickdialogs2quickimplglobal_p.h"
-#include "qquickmessagedialogimpl_p.h"
 
 QT_BEGIN_NAMESPACE
+
+class QQuickMessageDialogImpl;
 
 class Q_QUICKDIALOGS2QUICKIMPL_EXPORT QQuickPlatformMessageDialog
     : public QPlatformMessageDialogHelper

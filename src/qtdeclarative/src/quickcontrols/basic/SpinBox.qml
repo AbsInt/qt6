@@ -57,6 +57,8 @@ T.SpinBox {
         implicitWidth: 40
         implicitHeight: 40
         color: control.up.pressed ? control.palette.mid : control.palette.button
+        border.color: enabled ? control.palette.text : control.palette.mid
+        border.width: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ? 1 : 0
 
         Rectangle {
             x: (parent.width - width) / 2
@@ -80,6 +82,8 @@ T.SpinBox {
         implicitWidth: 40
         implicitHeight: 40
         color: control.down.pressed ? control.palette.mid : control.palette.button
+        border.color: enabled ? control.palette.text : control.palette.mid
+        border.width: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ? 1 : 0
 
         Rectangle {
             x: (parent.width - width) / 2
@@ -93,6 +97,10 @@ T.SpinBox {
     background: Rectangle {
         implicitWidth: 140
         color: enabled ? control.palette.base : control.palette.button
-        border.color: control.palette.button
+        border.color: {
+            if (Qt.styleHints.accessibility.contrastPreference !== Qt.HighContrast)
+                return control.palette.button
+            return enabled ? control.palette.text : control.palette.mid
+        }
     }
 }

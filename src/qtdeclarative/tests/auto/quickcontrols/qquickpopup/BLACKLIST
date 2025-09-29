@@ -1,16 +1,7 @@
 # See qtbase/src/testlib/qtestblacklist.cpp for format
 
-# QTBUG-114718 (begin)
-[invisibleToolTipOpen]
-macos
-[cursorShape]
-macos
 [doubleClickInMouseArea]
-macos
-# QTBUG-114718 (end)
-
-[zOrder]
-macos # QTBUG-89938
+macos # QTBUG-139571
 
 [popupWindowFocus]
 offscreen # QTBUG-128321

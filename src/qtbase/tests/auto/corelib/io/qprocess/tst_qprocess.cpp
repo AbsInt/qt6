@@ -25,6 +25,9 @@
 #  include <sys/resource.h>
 #  include <sys/wait.h>
 #endif
+#ifdef Q_OS_WIN
+#  include <winerror.h>
+#endif
 
 #include <QtTest/private/qemulationdetector_p.h>
 
@@ -424,8 +427,13 @@ void tst_QProcess::simpleStartFail()
 
 #ifdef Q_OS_UNIX
     QVERIFY2(process.errorString().contains(": execve: "), process.errorString().toLocal8Bit());
-    QVERIFY2(process.errorString().contains(qt_error_string(ENOENT)), process.errorString().toLocal8Bit());
+    int errorcode = ENOENT;
+#else
+    // value happens to match ENOENT, but that's a coincidence
+    int errorcode = ERROR_FILE_NOT_FOUND;
 #endif
+    QVERIFY2(process.errorString().contains(qt_error_string(errorcode)),
+             process.errorString().toLocal8Bit());
 }
 
 void tst_QProcess::readFromProcess()
@@ -2939,8 +2947,13 @@ void tst_QProcess::setNonExistentWorkingDirectory()
     QCOMPARE_NE(process.errorString(), "Unknown error");
 
 #ifdef Q_OS_UNIX
-    QVERIFY2(process.errorString().startsWith("chdir:"), process.errorString().toLocal8Bit());
+    QVERIFY2(process.errorString().contains(": chdir: "), process.errorString().toLocal8Bit());
+    int errorcode = ENOENT;
+#else
+    int errorcode = ERROR_DIRECTORY;
 #endif
+    QVERIFY2(process.errorString().contains(qt_error_string(errorcode)),
+             process.errorString().toLocal8Bit());
 }
 
 void tst_QProcess::startFinishStartFinish()

@@ -1,5 +1,7 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
+
 #include "qqmldomitem_p.h"
 #include "qqmldomstringdumper_p.h"
 #include "qqmldomfilelocations_p.h"
@@ -325,8 +327,9 @@ QLatin1String ErrorMessage::msg(const char *errorId, ErrorMessage &&err)
 
 QLatin1String ErrorMessage::msg(QLatin1String errorId, ErrorMessage &&err)
 {
+    using namespace Qt::StringLiterals;
     bool doubleRegister = false;
-    ErrorMessage old = myErrors().debug(u"dummy");
+    ErrorMessage old = myErrors().debug(u"dummy"_sv);
     {
         QMutexLocker l(registryMutex());
         auto &r = registry();

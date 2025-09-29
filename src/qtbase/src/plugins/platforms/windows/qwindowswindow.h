@@ -126,6 +126,8 @@ public:
     static QWindowsBaseWindow *baseWindowOf(const QWindow *w);
     static HWND handleOf(const QWindow *w);
 
+    bool windowEvent(QEvent *event) override;
+
 protected:
     HWND parentHwnd() const { return GetAncestor(handle(), GA_PARENT); }
     bool isTopLevel_sys() const;
@@ -314,6 +316,7 @@ public:
     void releaseDC();
     void getSizeHints(MINMAXINFO *mmi) const;
     bool handleNonClientHitTest(const QPoint &globalPos, LRESULT *result) const;
+    bool handleNonClientActivate(LRESULT *result) const;
     void updateCustomTitlebar();
 
 #ifndef QT_NO_CURSOR
@@ -383,7 +386,6 @@ private:
     mutable unsigned m_flags = WithinCreate;
     HDC m_hdc = nullptr;
     Qt::WindowStates m_windowState = Qt::WindowNoState;
-    bool m_windowWasArranged = false;
     QString m_windowTitle;
     qreal m_opacity = 1;
 #ifndef QT_NO_CURSOR

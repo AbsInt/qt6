@@ -40,7 +40,8 @@ T.Button {
         visible: !control.flat || control.down || control.checked || control.highlighted
         color: Color.blend(control.checked || control.highlighted ? control.palette.dark : control.palette.button,
                                                                     control.palette.mid, control.down ? 0.5 : 0.0)
-        border.color: control.palette.highlight
-        border.width: control.visualFocus ? 2 : 0
+        border.color: control.visualFocus ? control.palette.highlight : control.palette.windowText
+        border.width: control.visualFocus ? 2 :
+                      Qt.styleHints.accessibility.contrastPreference == Qt.HighContrast ? 1 : 0
     }
 }

@@ -19,6 +19,7 @@ ScrollablePage {
         }
 
         TextArea {
+            enabled: !GalleryConfig.disabled
             width: page.availableWidth / 3
             anchors.horizontalCenter: parent.horizontalCenter
 

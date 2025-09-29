@@ -441,8 +441,8 @@ QStringList QIconTheme::parents() const
 QDebug operator<<(QDebug debug, const std::unique_ptr<QIconLoaderEngineEntry> &entry)
 {
     QDebugStateSaver saver(debug);
-    debug.noquote() << entry->filename;
-    return debug;
+    if (entry) return debug.noquote() << entry->filename;
+    return debug << "QIconLoaderEngineEntry(0x0)";
 }
 
 QThemeIconInfo QIconLoader::findIconHelper(const QString &themeName,

@@ -145,6 +145,7 @@ public:
 private:
     bool maybeAddComponent(const QString &typeName, const QString &fileName, const QString &version, QHash<QString,Component> &hash, int lineNumber = -1, bool multi = true);
     void reportError(quint16 line, quint16 column, const QString &message);
+    QString scanQuotedWord(const QChar *&ch, quint16 lineNumber, quint16 columnNumber);
     void insertComponentOrScript(
             const QString &name, const QString &fileName, QTypeRevision version);
 

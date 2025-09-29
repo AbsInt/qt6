@@ -35,7 +35,7 @@ class QAbstractScrollArea;
 class QScrollArea;
 
 #if QT_CONFIG(scrollarea)
-class QAccessibleAbstractScrollArea : public QAccessibleWidget
+class QAccessibleAbstractScrollArea : public QAccessibleWidgetV2
 {
 public:
     explicit QAccessibleAbstractScrollArea(QWidget *widget);
@@ -70,7 +70,7 @@ public:
 #endif // QT_CONFIG(scrollarea)
 
 #if QT_CONFIG(tabbar)
-class QAccessibleTabBar : public QAccessibleWidget, public QAccessibleSelectionInterface
+class QAccessibleTabBar : public QAccessibleWidgetV2, public QAccessibleSelectionInterface
 {
 public:
     explicit QAccessibleTabBar(QWidget *w);
@@ -102,7 +102,7 @@ protected:
 #endif // QT_CONFIG(tabbar)
 
 #if QT_CONFIG(combobox)
-class QAccessibleComboBox : public QAccessibleWidget
+class QAccessibleComboBox : public QAccessibleWidgetV2
 {
 public:
     explicit QAccessibleComboBox(QWidget *w);

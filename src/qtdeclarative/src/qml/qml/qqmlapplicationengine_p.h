@@ -39,6 +39,8 @@ public:
     void _q_loadTranslations();
     void finishLoad(QQmlComponent *component);
     void ensureLoadingFinishes(QQmlComponent *component);
+    void updateTranslationDirectory(const QUrl &url);
+
     QList<QObject *> objects;
     QVariantMap initialProperties;
     QStringList extraFileSelectors;

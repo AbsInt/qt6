@@ -56,6 +56,8 @@ struct Event
 {
     Event(EventType type, emscripten::val webEvent);
 
+    bool isTargetedForQtElement() const;
+
     emscripten::val webEvent;
     EventType type;
     emscripten::val target() const { return webEvent["target"]; }
@@ -63,10 +65,7 @@ struct Event
 
 struct KeyEvent : public Event
 {
-    static std::optional<KeyEvent>
-    fromWebWithDeadKeyTranslation(emscripten::val webEvent, QWasmDeadKeySupport *deadKeySupport);
-
-    KeyEvent(EventType type, emscripten::val webEvent);
+    KeyEvent(EventType type, emscripten::val webEvent, QWasmDeadKeySupport *deadKeySupport);
 
     Qt::Key key;
     QFlags<Qt::KeyboardModifier> modifiers;

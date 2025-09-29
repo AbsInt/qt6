@@ -111,16 +111,17 @@ public:
 
     enum BindingFlag {
         None = 0,
-        DontEnable = 0x1
+        DontEnable = 0x1,
+        OverrideSticky = 0x2
     };
     Q_DECLARE_FLAGS(BindingFlags, BindingFlag)
 
     static void setBinding(QQmlAbstractBinding *binding, BindingFlags flags = None,
                            QQmlPropertyData::WriteFlags writeFlags = QQmlPropertyData::DontRemoveBinding);
 
-    static void removeBinding(const QQmlProperty &that);
-    static void removeBinding(QObject *o, QQmlPropertyIndex index);
-    static void removeBinding(QQmlAbstractBinding *b);
+    static bool removeBinding(const QQmlProperty &that, BindingFlags flags = None);
+    static bool removeBinding(QObject *o, QQmlPropertyIndex index, BindingFlags flags = None);
+    static bool removeBinding(QQmlAbstractBinding *b, QQmlPropertyPrivate::BindingFlags flags = None);
     static QQmlAbstractBinding *binding(QObject *, QQmlPropertyIndex index);
 
     static QQmlProperty restore(QObject *, const QQmlPropertyData &, const QQmlPropertyData *,
@@ -152,7 +153,6 @@ public:
             QObject *target, const QString &propertyName,
             const QQmlRefPointer<QQmlContextData> &context,
             QQmlPropertyPrivate::InitFlags flags);
-
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QQmlPropertyPrivate::BindingFlags)

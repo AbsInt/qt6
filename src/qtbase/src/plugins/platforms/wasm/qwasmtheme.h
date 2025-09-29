@@ -7,6 +7,10 @@
 #include <qpa/qplatformtheme.h>
 #include <QtGui/QFont>
 
+#include <memory>
+
+#include <private/qstdweb_p.h>
+
 QT_BEGIN_NAMESPACE
 
 class QWasmEventTranslator;
@@ -17,6 +21,30 @@ class QWasmScreen;
 class QWasmCompositor;
 class QWasmBackingStore;
 
+// this reflects @media/prefers-contrast
+constexpr auto colorSchemePreferenceDark =  "(prefers-color-scheme: dark)";
+constexpr auto contrastPreferenceNoPreference =  "(prefers-contrast: no-preference)";
+constexpr auto contrastPreferenceMore =  "(prefers-contrast: more)";
+constexpr auto contrastPreferenceLess =  "(prefers-contrast: less)";
+constexpr auto contrastPreferenceCustom =  "(prefers-contrast: custom)";
+
+template <typename MediaName, typename CallbackFn, typename Container>
+void registerCallbacks(std::initializer_list<MediaName> mediaNames, CallbackFn callback, Container &callbacksContainer)
+{
+    emscripten::val window = emscripten::val::global("window");
+    if (!window.isUndefined()) {
+        for (auto &&mediaName : mediaNames) {
+            auto media = window.call<emscripten::val>("matchMedia", emscripten::val(mediaName));
+            if constexpr (std::is_same_v<Container, std::vector<QWasmEventHandler>>) {
+                callbacksContainer.emplace_back(media, "change", callback);
+            } else {
+                Q_ASSERT(mediaNames.size() == 1);
+                callbacksContainer = QWasmEventHandler(media, "change", callback);
+            }
+        }
+    }
+}
+
 class QWasmTheme : public QPlatformTheme
 {
 public:
@@ -26,19 +54,21 @@ public:
     const QPalette *palette(Palette type = SystemPalette) const override;
     Qt::ColorScheme colorScheme() const override;
     void requestColorScheme(Qt::ColorScheme scheme) override;
+    Qt::ContrastPreference contrastPreference() const override;
     QVariant themeHint(ThemeHint hint) const override;
     const QFont *font(Font type) const override;
     QFont *fixedFont = nullptr;
 
-    static void onColorSchemeChange(emscripten::val event);
+    void onColorSchemeChange();
+    void onContrastPreferenceChange();
 
 private:
     Qt::ColorScheme m_colorScheme = Qt::ColorScheme::Unknown;
+    QWasmEventHandler m_colorSchemeChangeCallback;
     std::unique_ptr<QPalette> m_palette;
     mutable bool m_paletteIsDirty = false;
-
-    static Qt::ColorScheme s_autoColorScheme;
-    static bool s_autoPaletteIsDirty;
+    Qt::ContrastPreference m_contrastPreference;
+    std::vector<QWasmEventHandler> m_contrastPreferenceChangeCallbacks;
 };
 
 QT_END_NAMESPACE

@@ -20,6 +20,8 @@
 
 #include <QtGui/qfontvariableaxis.h>
 
+#include <QtGui/QScreen>
+
 #include <QtQml/qqml.h>
 
 //
@@ -123,6 +125,14 @@ struct QFontVariableAxisForeign
     QML_ANONYMOUS
     QML_ADDED_IN_VERSION(6, 9)
     QML_FOREIGN(QFontVariableAxis)
+};
+
+struct QScreenForeign
+{
+    Q_GADGET
+    QML_FOREIGN(QScreen)
+    QML_ANONYMOUS
+    QML_ADDED_IN_VERSION(2, 3) // used in ScreenInfo
 };
 
 QT_END_NAMESPACE

@@ -180,7 +180,6 @@ void QQuickColorDialogImplPrivate::alphaSliderMoved()
 QQuickColorDialogImpl::QQuickColorDialogImpl(QObject *parent)
     : QQuickDialog(*(new QQuickColorDialogImplPrivate), parent)
 {
-    setPopupType(QQuickPopup::Window);
 }
 
 QQuickColorDialogImplAttached *QQuickColorDialogImpl::qmlAttachedProperties(QObject *object)

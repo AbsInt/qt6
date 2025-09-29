@@ -22,6 +22,8 @@ Rectangle {
         : Qt.lighter(indicator.control.checked
             ? indicator.palette.accent : "#454545", indicator.control.down ? indicator.downTintFactor : 1)
 
+    border.color: Application.styleHints.accessibility.contrastPreference === Qt.HighContrast ? Application.styleHints.colorScheme === Qt.Light ? "#b3000000" : "#b3ffffff" : "transparent"
+
     states: [
         State {
             name: "checked"
@@ -76,7 +78,7 @@ Rectangle {
 
     SwitchHandle {
         id: handle
-        x: Math.max(1, Math.min(parent.width - width - 1, indicator.control.visualPosition * parent.width - (width / 2)))
+        x: Math.max(0, Math.min(parent.width - width, indicator.control.visualPosition * parent.width - (width / 2)))
         y: (parent.height - height) / 2
         down: indicator.control.down
 

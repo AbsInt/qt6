@@ -249,6 +249,8 @@ installPackages+=(zlib1g-dev)
 installPackages+=(libusb-1.0-0-dev)
 # password management support for Qt Creator
 installPackages+=(libsecret-1-dev)
+installPackages+=(debian-archive-keyring)
+
 
 echo "Running update for apt"
 waitLoop
@@ -261,7 +263,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get -q -y install cmake apt-cacher-ng -t
 # Disable keyring password prompt
 keyring --disable
 
-pip install --user -r "${BASH_SOURCE%/*}/../common/shared/sbom_requirements.txt"
+pip install --user -r "${BASH_SOURCE%/*}/../common/shared/requirements.txt"
 
 source "${BASH_SOURCE%/*}/../common/unix/SetEnvVar.sh"
 

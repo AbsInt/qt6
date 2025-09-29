@@ -2423,6 +2423,7 @@ void QProcessPrivate::start(QIODevice::OpenMode mode)
     errorString.clear();
     startProcess();
 }
+#endif // QT_CONFIG(process)
 
 /*!
     \since 5.15
@@ -2473,6 +2474,7 @@ QStringList QProcess::splitCommand(QStringView command)
     return args;
 }
 
+#if QT_CONFIG(process)
 /*!
     \since 5.0
 
@@ -2728,4 +2730,6 @@ QString QProcess::nullDevice()
 
 QT_END_NAMESPACE
 
+#if QT_CONFIG(process)
 #include "moc_qprocess.cpp"
+#endif

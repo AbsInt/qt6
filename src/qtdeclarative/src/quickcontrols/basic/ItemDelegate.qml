@@ -39,5 +39,7 @@ T.ItemDelegate {
         visible: control.down || control.highlighted || control.visualFocus
         color: Color.blend(control.down ? control.palette.midlight : control.palette.light,
                                           control.palette.highlight, control.visualFocus ? 0.15 : 0.0)
+        border.width: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ? 1 : 0
+        border.color: control.highlighted ? control.palette.highlight : control.palette.text
     }
 }

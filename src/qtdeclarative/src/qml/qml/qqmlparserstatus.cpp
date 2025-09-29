@@ -37,16 +37,13 @@ QT_BEGIN_NAMESPACE
 
 /*! \internal */
 QQmlParserStatus::QQmlParserStatus()
-: d(nullptr)
+: d(0)
 {
+    Q_UNUSED(d);
 }
 
 /*! \internal */
-QQmlParserStatus::~QQmlParserStatus()
-{
-    if(d)
-        (*d) = nullptr;
-}
+QQmlParserStatus::~QQmlParserStatus() = default;
 
 /*!
     \fn void QQmlParserStatus::classBegin()

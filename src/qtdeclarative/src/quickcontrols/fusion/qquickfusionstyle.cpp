@@ -5,6 +5,8 @@
 
 #include <QtGui/qcolor.h>
 #include <QtGui/qpalette.h>
+#include <QtGui/qstylehints.h>
+#include <QtGui/qaccessibilityhints.h>
 #include <QtGui/qpa/qplatformtheme.h>
 #include <QtGui/private/qguiapplication_p.h>
 
@@ -15,6 +17,7 @@ QT_BEGIN_NAMESPACE
 QQuickFusionStyle::QQuickFusionStyle(QObject *parent)
     : QObject(parent)
 {
+    connect(QGuiApplication::styleHints()->accessibility(), &QAccessibilityHints::contrastPreferenceChanged, this, &QQuickFusionStyle::highContrastChanged);
 }
 
 QColor QQuickFusionStyle::lightShade()
@@ -37,6 +40,11 @@ QColor QQuickFusionStyle::innerContrastLine()
     return QColor(255, 255, 255, 30);
 }
 
+bool QQuickFusionStyle::isHighContrast()
+{
+    return QGuiApplication::styleHints()->accessibility()->contrastPreference() == Qt::ContrastPreference::HighContrast;
+}
+
 QColor QQuickFusionStyle::highlight(QQuickPalette *palette)
 {
     return palette->highlight();
@@ -49,11 +57,20 @@ QColor QQuickFusionStyle::highlightedText(QQuickPalette *palette)
 
 QColor QQuickFusionStyle::outline(QQuickPalette *palette)
 {
-    return palette->window().darker(140);
+    return isHighContrast() ? palette->windowText() : palette->window().darker(140);
 }
 
 QColor QQuickFusionStyle::highlightedOutline(QQuickPalette *palette)
 {
+    if (isHighContrast()) {
+        if (QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Light) {
+            return highlight(palette).darker(125);
+        } else {
+            QColor highlightedOutline = highlight(palette).toHsv();
+            highlightedOutline.setHsv(highlightedOutline.hsvHue(), highlightedOutline.hsvSaturation(), 255);
+            return highlightedOutline;
+        }
+    }
     QColor highlightedOutline = highlight(palette).darker(125).toHsv();
     if (highlightedOutline.value() > 160)
         highlightedOutline.setHsl(highlightedOutline.hue(), highlightedOutline.saturation(), 160);

@@ -17,7 +17,6 @@
 
 #include <QtCore/qobject.h>
 #include <QtCore/qlist.h>
-#include <QtCore/qpair.h>
 #include <QtCore/qhash.h>
 #include <QtCore/qset.h>
 #include <QtCore/qpointer.h>

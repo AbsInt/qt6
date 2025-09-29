@@ -1,18 +1,24 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
-#include <qtest.h>
-#include <QQmlEngine>
-#include <QQmlComponent>
-#include <QQmlContext>
-#include <QDebug>
-#include <QScopedPointer>
-#include <private/qqmlglobal_p.h>
-#include <private/qquickvaluetypes_p.h>
-#include <QtQuickTestUtils/private/qmlutils_p.h>
 #include "testtypes.h"
 
+#include <private/qmlutils_p.h>
+#include <private/qqmlglobal_p.h>
+#include <private/qquickvaluetypes_p.h>
+#include <private/qv4object_p.h>
+#include <private/qv4scopedvalue_p.h>
+
+#include <QtTest/qtest.h>
+
+#include <QtQml/qqmlengine.h>
+#include <QtQml/qqmlcomponent.h>
+#include <QtQml/qqmlcontext.h>
+
 #include <QtGui/qquaternion.h>
+
+#include <QtCore/qdebug.h>
+#include <QtCore/qscopedpointer.h>
 
 QT_BEGIN_NAMESPACE
 extern int qt_defaultDpi(void);

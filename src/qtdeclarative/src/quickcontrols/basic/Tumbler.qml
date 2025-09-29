@@ -45,4 +45,10 @@ T.Tumbler {
             }
         }
     }
+
+    background: Rectangle {
+        visible: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast
+        border.color: control.visualFocus ? control.palette.highlight : control.palette.windowText
+        border.width: control.visualFocus ? 2 : 1
+    }
 }

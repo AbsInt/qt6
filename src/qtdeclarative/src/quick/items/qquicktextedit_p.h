@@ -245,7 +245,7 @@ public:
     Q_INVOKABLE QRectF positionToRectangle(int) const;
     Q_INVOKABLE int positionAt(qreal x, qreal y) const;
     Q_INVOKABLE void moveCursorSelection(int pos);
-    Q_INVOKABLE void moveCursorSelection(int pos, SelectionMode mode);
+    Q_INVOKABLE void moveCursorSelection(int pos, QQuickTextEdit::SelectionMode mode);
 
     QQuickTextSelection *cursorSelection() const;
 

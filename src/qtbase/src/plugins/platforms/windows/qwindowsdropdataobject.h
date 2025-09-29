@@ -15,8 +15,8 @@ public:
     ~QWindowsDropDataObject() override;
 
     // overridden IDataObject methods
-    STDMETHOD(GetData)(LPFORMATETC pformatetcIn, LPSTGMEDIUM pmedium) override;
-    STDMETHOD(QueryGetData)(LPFORMATETC pformatetc) override;
+    STDMETHOD(GetData)(LPFORMATETC pformatetcIn, LPSTGMEDIUM pmedium) noexcept override;
+    STDMETHOD(QueryGetData)(LPFORMATETC pformatetc) noexcept override;
 
 private:
     bool shouldIgnore(LPFORMATETC pformatetc) const;

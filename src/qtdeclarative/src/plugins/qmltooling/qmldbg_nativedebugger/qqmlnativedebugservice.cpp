@@ -4,17 +4,18 @@
 #include "qqmlnativedebugservice.h"
 
 #include <private/qqmldebugconnector_p.h>
+#include <private/qqmldebugserviceinterfaces_p.h>
+#include <private/qv4debugging_p.h>
 #include <private/qv4debugging_p.h>
 #include <private/qv4engine_p.h>
-#include <private/qv4debugging_p.h>
-#include <private/qv4script_p.h>
-#include <private/qv4string_p.h>
-#include <private/qv4objectiterator_p.h>
 #include <private/qv4identifierhash_p.h>
-#include <private/qv4runtime_p.h>
-#include <private/qversionedpacket_p.h>
-#include <private/qqmldebugserviceinterfaces_p.h>
 #include <private/qv4identifiertable_p.h>
+#include <private/qv4objectiterator_p.h>
+#include <private/qv4runtime_p.h>
+#include <private/qv4script_p.h>
+#include <private/qv4stackframe_p.h>
+#include <private/qv4string_p.h>
+#include <private/qversionedpacket_p.h>
 
 #include <QtQml/qjsengine.h>
 #include <QtCore/qjsonarray.h>

@@ -1101,11 +1101,6 @@ qint64 QQuickFlickablePrivate::computeCurrentTime(QInputEvent *event) const
     return timer.elapsed();
 }
 
-qreal QQuickFlickablePrivate::devicePixelRatio() const
-{
-    return (window ? window->effectiveDevicePixelRatio() : qApp->devicePixelRatio());
-}
-
 void QQuickFlickablePrivate::handlePressEvent(QPointerEvent *event)
 {
     Q_Q(QQuickFlickable);
@@ -1249,7 +1244,7 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
                     }
                     if (velocitySensitiveOverBounds) {
                         qreal overshoot = (newY - minY) * vData.velocity / maxVelocity / QML_FLICK_OVERSHOOTFRICTION;
-                        overshoot = QML_FLICK_OVERSHOOT * devicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / devicePixelRatio());
+                        overshoot = QML_FLICK_OVERSHOOT * effectiveDevicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / effectiveDevicePixelRatio());
                         newY = minY + overshoot;
                     } else {
                         newY = minY + (newY - minY) / 2;
@@ -1265,7 +1260,7 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
                     }
                     if (velocitySensitiveOverBounds) {
                         qreal overshoot = (newY - maxY) * vData.velocity / maxVelocity / QML_FLICK_OVERSHOOTFRICTION;
-                        overshoot = QML_FLICK_OVERSHOOT * devicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / devicePixelRatio());
+                        overshoot = QML_FLICK_OVERSHOOT * effectiveDevicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / effectiveDevicePixelRatio());
                         newY = maxY - overshoot;
                     } else {
                         newY = maxY + (newY - maxY) / 2;
@@ -1322,7 +1317,7 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
                     }
                     if (velocitySensitiveOverBounds) {
                         qreal overshoot = (newX - minX) * hData.velocity / maxVelocity / QML_FLICK_OVERSHOOTFRICTION;
-                        overshoot = QML_FLICK_OVERSHOOT * devicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / devicePixelRatio());
+                        overshoot = QML_FLICK_OVERSHOOT * effectiveDevicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / effectiveDevicePixelRatio());
                         newX = minX + overshoot;
                     } else {
                         newX = minX + (newX - minX) / 2;
@@ -1338,7 +1333,7 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
                     }
                     if (velocitySensitiveOverBounds) {
                         qreal overshoot = (newX - maxX) * hData.velocity / maxVelocity / QML_FLICK_OVERSHOOTFRICTION;
-                        overshoot = QML_FLICK_OVERSHOOT * devicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / devicePixelRatio());
+                        overshoot = QML_FLICK_OVERSHOOT * effectiveDevicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / effectiveDevicePixelRatio());
                         newX = maxX - overshoot;
                     } else {
                         newX = maxX + (newX - maxX) / 2;
@@ -2487,6 +2482,7 @@ void QQuickFlickable::setTopMargin(qreal m)
     d->vData.startMargin = m;
     d->vData.markExtentsDirty();
     if (!d->pressed && !d->hData.moving && !d->vData.moving) {
+        // FIXME: We're not consistently updating the contentY, see QTBUG-131478
         d->fixupMode = QQuickFlickablePrivate::Immediate;
         d->fixupY();
     }
@@ -2508,6 +2504,7 @@ void QQuickFlickable::setBottomMargin(qreal m)
     d->vData.endMargin = m;
     d->vData.markExtentsDirty();
     if (!d->pressed && !d->hData.moving && !d->vData.moving) {
+        // FIXME: We're not consistently updating the contentY, see QTBUG-131478
         d->fixupMode = QQuickFlickablePrivate::Immediate;
         d->fixupY();
     }
@@ -2529,6 +2526,7 @@ void QQuickFlickable::setLeftMargin(qreal m)
     d->hData.startMargin = m;
     d->hData.markExtentsDirty();
     if (!d->pressed && !d->hData.moving && !d->vData.moving) {
+        // FIXME: We're not consistently updating the contentX, see QTBUG-131478
         d->fixupMode = QQuickFlickablePrivate::Immediate;
         d->fixupX();
     }
@@ -2550,6 +2548,7 @@ void QQuickFlickable::setRightMargin(qreal m)
     d->hData.endMargin = m;
     d->hData.markExtentsDirty();
     if (!d->pressed && !d->hData.moving && !d->vData.moving) {
+        // FIXME: We're not consistently updating the contentX, see QTBUG-131478
         d->fixupMode = QQuickFlickablePrivate::Immediate;
         d->fixupX();
     }

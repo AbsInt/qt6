@@ -5,10 +5,11 @@
 #include "qv4debugjob.h"
 #include "qv4datacollector.h"
 
-#include <private/qv4scopedvalue_p.h>
-#include <private/qv4script_p.h>
 #include <private/qqmlcontext_p.h>
 #include <private/qqmlengine_p.h>
+#include <private/qv4scopedvalue_p.h>
+#include <private/qv4script_p.h>
+#include <private/qv4stackframe_p.h>
 
 QT_BEGIN_NAMESPACE
 

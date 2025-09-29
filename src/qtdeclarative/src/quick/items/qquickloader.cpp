@@ -648,8 +648,8 @@ void QQuickLoaderPrivate::setInitialState(QObject *obj)
         return;
 
     QQmlComponentPrivate *d = QQmlComponentPrivate::get(component);
-    Q_ASSERT(d && d->engine);
-    QV4::ExecutionEngine *v4 = d->engine->handle();
+    Q_ASSERT(d && d->engine());
+    QV4::ExecutionEngine *v4 = d->engine()->handle();
     Q_ASSERT(v4);
     QV4::Scope scope(v4);
     QV4::ScopedValue ipv(scope, initialPropertyValues.value());

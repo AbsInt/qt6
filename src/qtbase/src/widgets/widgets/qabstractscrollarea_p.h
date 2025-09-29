@@ -73,6 +73,8 @@ public:
     inline bool viewportEvent(QEvent *event)
     { return q_func()->viewportEvent(event); }
     QScopedPointer<QObject> viewportFilter;
+
+    int defaultSingleStep() const;
 };
 
 class QAbstractScrollAreaFilter : public QObject

@@ -32,7 +32,7 @@
 #endif
 
 #include <QtGui/private/qgenericunixfontdatabase_p.h>
-#include <QtGui/private/qgenericunixthemes_p.h>
+#include <QtGui/private/qgenericunixtheme_p.h>
 #include <QtGui/private/qgenericunixeventdispatcher_p.h>
 #include <QtFbSupport/private/qfbvthandler_p.h>
 #ifndef QT_NO_OPENGL

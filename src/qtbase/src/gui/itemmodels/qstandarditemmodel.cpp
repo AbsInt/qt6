@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qstandarditemmodel.h"
 
@@ -17,11 +18,6 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
-
-// Used internally to store the flags
-namespace {
-constexpr auto DataFlagsRole = Qt::ItemDataRole(Qt::UserRole - 1);
-}
 
 static inline QString qStandardItemModelDataListMimeType()
 {
@@ -283,7 +279,7 @@ QMap<int, QVariant> QStandardItemPrivate::itemData() const
 {
     QMap<int, QVariant> result;
     for (const auto &data : values) {
-        if (data.role != DataFlagsRole)
+        if (data.role != Qt::StandardItemFlagsRole)
             result.insert(data.role, data.value);
     }
     return result;
@@ -996,7 +992,7 @@ void QStandardItem::emitDataChanged()
 */
 void QStandardItem::setFlags(Qt::ItemFlags flags)
 {
-    setData((int)flags, DataFlagsRole);
+    setData((int)flags, Qt::StandardItemFlagsRole);
 }
 
 /*!
@@ -1011,7 +1007,7 @@ void QStandardItem::setFlags(Qt::ItemFlags flags)
 */
 Qt::ItemFlags QStandardItem::flags() const
 {
-    QVariant v = data(DataFlagsRole);
+    QVariant v = data(Qt::StandardItemFlagsRole);
     if (!v.isValid())
         return (Qt::ItemIsSelectable|Qt::ItemIsEnabled|Qt::ItemIsEditable
                 |Qt::ItemIsDragEnabled|Qt::ItemIsDropEnabled);

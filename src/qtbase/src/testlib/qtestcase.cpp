@@ -11,6 +11,9 @@
 #include <QtCore/qdebug.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qdirlisting.h>
+#if QT_CONFIG(future)
+#include <QtCore/qexception.h>
+#endif
 #include <QtCore/qfile.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qfloat16.h>
@@ -37,7 +40,7 @@
 #if QT_CONFIG(batch_test_support)
 #include <QtTest/private/qtestregistry_p.h>
 #endif  // QT_CONFIG(batch_test_support)
-#include <QtTest/private/cycle_p.h>
+#include <QtTest/private/cycle_include_p.h>
 #include <QtTest/private/qtestblacklist_p.h>
 #include <QtTest/private/qtestcrashhandler_p.h>
 #if defined(HAVE_XCTEST)
@@ -163,22 +166,36 @@ namespace QTestPrivate
 
 namespace {
 
-class TestFailedException : public std::exception // clazy:exclude=copyable-polymorphic
+#if !QT_CONFIG(future)
+using QException = std::exception;
+#endif
+
+class TestFailedException : public QException // clazy:exclude=copyable-polymorphic
 {
 public:
     TestFailedException() = default;
     ~TestFailedException() override = default;
 
     const char *what() const noexcept override { return "QtTest: test failed"; }
+
+#if QT_CONFIG(future)
+    TestFailedException *clone() const override { return new TestFailedException(); }
+    void raise() const override { throw TestFailedException(); }
+#endif
 };
 
-class TestSkippedException : public std::exception // clazy:exclude=copyable-polymorphic
+class TestSkippedException : public QException // clazy:exclude=copyable-polymorphic
 {
 public:
     TestSkippedException() = default;
     ~TestSkippedException() override = default;
 
     const char *what() const noexcept override { return "QtTest: test was skipped"; }
+
+#if QT_CONFIG(future)
+    TestSkippedException *clone() const override { return new TestSkippedException(); }
+    void raise() const override { throw TestSkippedException(); }
+#endif
 };
 
 } // unnamed namespace
@@ -204,22 +221,38 @@ void Internal::maybeThrowOnSkip()
         Internal::throwOnSkip();
 }
 
+/*
+//! [return-void]
+    Defining this macro is useful if you wish to use \1 in functions that have
+    a non-\c{void} return type. Without this macro defined, \2, for example,
+    expands to a statement including \c{return;}, so it cannot be used in
+    functions (or lambdas) that return something else than \c{void}, e.g.
+    \l{QString}. This includes the case where throwing exceptions is enabled
+    only at runtime (using \3). With this macro defined, \2 instead expands to
+    a statement without a \c{return;}, which is usable from any function.
+//! [return-void]
+*/
+
 /*!
     \since 6.8
     \macro QTEST_THROW_ON_FAIL
-    \relates <QTest>
+    \relates QTest
 
     When defined, QCOMPARE()/QVERIFY() etc always throw on failure.
-    QTest::throwOnFail() then no longer has any effect.
+    QTest::setThrowOnFail() then no longer has any effect.
+
+    \include qtestcase.cpp {return-void} {QCOMPARE() or QVERIFY()} {QCOMPARE()} {QTest::setThrowOnFail(true)}
 */
 
 /*!
     \since 6.8
     \macro QTEST_THROW_ON_SKIP
-    \relates <QTest>
+    \relates QTest
 
-    When defined, QSKIP() always throws. QTest::throwOnSkip() then no longer
+    When defined, QSKIP() always throws. QTest::setThrowOnSkip() then no longer
     has any effect.
+
+    \include qtestcase.cpp {return-void} {QSKIP()} {QSKIP()} {QTest::setThrowOnSkip(true)}
 */
 
 /*!
@@ -2772,7 +2805,7 @@ void QTest::setMainSourcePath(const char *file, const char *builddir)
 
     If the caller creates a custom failure message showing the compared values,
     or if those values cannot be stringified, use the overload of the function
-    that takes no \a actualVal and \a expecetedVal parameters.
+    that takes no \a actualVal and \a expectedVal parameters.
 */
 bool QTest::compare_helper(bool success, const char *failureMsg,
                            char *actualVal, char *expectedVal,
@@ -3074,57 +3107,34 @@ TO_STRING_IMPL(bool, %d)
 TO_STRING_IMPL(signed char, %hhd)
 TO_STRING_IMPL(unsigned char, %hhu)
 
-/*!
-  \internal
-
-  Be consistent about leading 0 in exponent.
-
-  POSIX specifies that %e (hence %g when using it) uses at least two digits in
-  the exponent, requiring a leading 0 on single-digit exponents; (at least)
-  MinGW includes a leading zero also on an already-two-digit exponent,
-  e.g. 9e-040, which differs from more usual platforms.  So massage that away.
-*/
-static void massageExponent(char *text)
-{
-    char *p = strchr(text, 'e');
-    if (!p)
-        return;
-    const char *const end = p + strlen(p); // *end is '\0'
-    p += (p[1] == '-' || p[1] == '+') ? 2 : 1;
-    if (p[0] != '0' || end - 2 <= p)
-        return;
-    // We have a leading 0 on an exponent of at least two more digits
-    const char *n = p + 1;
-    while (end - 2 > n && n[0] == '0')
-        ++n;
-    memmove(p, n, end + 1 - n);
-}
-
 // Be consistent about display of infinities and NaNs (snprintf()'s varies,
 // notably on MinGW, despite POSIX documenting "[-]inf" or "[-]infinity" for %f,
 // %e and %g, uppercasing for their capital versions; similar for "nan"):
-#define TO_STRING_FLOAT(TYPE, FORMAT) \
-template <> Q_TESTLIB_EXPORT char *QTest::toString<TYPE>(const TYPE &t) \
-{ \
-    char *msg = new char[128]; \
-    switch (qFpClassify(t)) { \
-    case FP_INFINITE: \
-        qstrncpy(msg, (t < 0 ? "-inf" : "inf"), 128); \
-        break; \
-    case FP_NAN: \
-        qstrncpy(msg, "nan", 128); \
-        break; \
-    default: \
-        std::snprintf(msg, 128, #FORMAT, double(t));    \
-        massageExponent(msg); \
-        break; \
-    } \
-    return msg; \
+static char *toStringFp(double t, int digits10)
+{
+    char *msg = new char[128];
+    switch (qFpClassify(t)) {
+    case FP_INFINITE:
+        qstrncpy(msg, (t < 0 ? "-inf" : "inf"), 128);
+        break;
+    case FP_NAN:
+        qstrncpy(msg, "nan", 128);
+        break;
+    default:
+        std::snprintf(msg, 128, "%.*g (%a)", digits10, t, t);
+        break;
+    }
+    return msg;
 }
 
-TO_STRING_FLOAT(qfloat16, %.3g)
-TO_STRING_FLOAT(float, %g)
-TO_STRING_FLOAT(double, %.12g)
+#define TO_STRING_FLOAT(TYPE) \
+template <> Q_TESTLIB_EXPORT char *QTest::toString<TYPE>(const TYPE &t) \
+{ \
+    return toStringFp(t, std::numeric_limits<TYPE>::digits10 + 1); \
+}
+TO_STRING_FLOAT(qfloat16)
+TO_STRING_FLOAT(float)
+TO_STRING_FLOAT(double)
 
 template <> Q_TESTLIB_EXPORT char *QTest::toString<char>(const char &t)
 {

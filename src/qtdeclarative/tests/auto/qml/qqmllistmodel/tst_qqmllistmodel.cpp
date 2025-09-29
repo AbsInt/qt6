@@ -904,11 +904,11 @@ void tst_qqmllistmodel::get_nested()
     //  get(1).listRoleB
     //  get(1).listRoleC
 
-    QList<QPair<int, QString> > testData;
-    testData << qMakePair(0, QString("listRoleA"));
-    testData << qMakePair(1, QString("listRoleA"));
-    testData << qMakePair(1, QString("listRoleB"));
-    testData << qMakePair(1, QString("listRoleC"));
+    QList<std::pair<int, QString> > testData;
+    testData << std::make_pair(0, QString("listRoleA"));
+    testData << std::make_pair(1, QString("listRoleA"));
+    testData << std::make_pair(1, QString("listRoleB"));
+    testData << std::make_pair(1, QString("listRoleC"));
 
     for (int i=0; i<testData.size(); i++) {
         int outerListIndex = testData[i].first;

@@ -47,8 +47,6 @@ using namespace Qt::StringLiterals;
 
 #if QT_CONFIG(multiprocess)
 
-enum { debug = 0 };
-
 static inline QByteArray detectDesktopEnvironment()
 {
     const QByteArray xdgCurrentDesktop = qgetenv("XDG_CURRENT_DESKTOP");
@@ -137,8 +135,7 @@ static inline bool launch(const QString &launcher, const QUrl &url,
 {
 
     const QString command = launcher + u' ' + QLatin1StringView(url.toEncoded());
-    if (debug)
-        qDebug("Launching %s", qPrintable(command));
+    qCDebug(lcQpaServices, "Launching %s", qPrintable(command));
 #if !QT_CONFIG(process)
     if (!xdgActivationToken.isEmpty())
         qputenv("XDG_ACTIVATION_TOKEN", xdgActivationToken.toUtf8());
@@ -163,8 +160,7 @@ static inline bool launch(const QString &launcher, const QUrl &url,
     }
 #  endif
     if (!ok)
-        qWarning("Launch failed (%s)", qPrintable(command));
-
+        qCWarning(lcQpaServices, "Launch failed (%s)", qPrintable(command));
 
     return ok;
 }
@@ -502,7 +498,7 @@ bool QDesktopUnixServices::openUrl(const QUrl &url)
 
         if (m_webBrowser.isEmpty()
             && !detectWebBrowser(desktopEnvironment(), true, &m_webBrowser)) {
-            qWarning("Unable to detect a web browser to launch '%s'", qPrintable(url.toString()));
+            qCWarning(lcQpaServices, "Unable to detect a web browser to launch '%s'", qPrintable(url.toString()));
             return false;
         }
         return launch(m_webBrowser, url, xdgActivationToken);
@@ -536,7 +532,7 @@ bool QDesktopUnixServices::openDocument(const QUrl &url)
 
         if (m_documentLauncher.isEmpty()
             && !detectWebBrowser(desktopEnvironment(), false, &m_documentLauncher)) {
-            qWarning("Unable to detect a launcher for '%s'", qPrintable(url.toString()));
+            qCWarning(lcQpaServices, "Unable to detect a launcher for '%s'", qPrintable(url.toString()));
             return false;
         }
         return launch(m_documentLauncher, url, xdgActivationToken);
@@ -617,7 +613,7 @@ void QDesktopUnixServices::setApplicationBadge(qint64 number)
 {
 #if QT_CONFIG(dbus)
     if (qGuiApp->desktopFileName().isEmpty()) {
-        qWarning("QGuiApplication::desktopFileName() is empty");
+        qCWarning(lcQpaServices, "Cannot set badge number - QGuiApplication::desktopFileName() is empty");
         return;
     }
 

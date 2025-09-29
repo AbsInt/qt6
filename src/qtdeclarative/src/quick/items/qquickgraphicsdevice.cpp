@@ -230,6 +230,30 @@ QQuickGraphicsDevice QQuickGraphicsDevice::fromRhi(QRhi *rhi)
     return dev;
 }
 
+/*!
+    \return a new QQuickGraphicsDevice referencing an existing \a adapter QRhiAdapter object.
+
+    Not applicable to QRhi backends and graphics APIs where QRhiAdapter does not
+    have a real implementation.
+
+    Equivalent to fromAdapter() for Direct 3D, and fromPhysicalDevice() for Vulkan.
+
+    \note Ownership is not taken for \a adapter, and it must stay valid at
+    minimum until the scene graph intializes, which most likely happens when the
+    associated QQuickWindow becomes exposed.
+
+    \since 6.10
+    \sa QRhi::enumerateAdapters()
+*/
+QQuickGraphicsDevice QQuickGraphicsDevice::fromRhiAdapter(QRhiAdapter *adapter)
+{
+    QQuickGraphicsDevice dev;
+    QQuickGraphicsDevicePrivate *d = QQuickGraphicsDevicePrivate::get(&dev);
+    d->type = QQuickGraphicsDevicePrivate::Type::RhiAdapter;
+    d->u.rhiAdapter = adapter;
+    return dev;
+}
+
 QQuickGraphicsDevicePrivate::QQuickGraphicsDevicePrivate()
     : ref(1)
 {

@@ -101,13 +101,8 @@ QT_BEGIN_NAMESPACE
     \sa setWidget()
 */
 QScrollArea::QScrollArea(QWidget *parent)
-    : QAbstractScrollArea(*new QScrollAreaPrivate,parent)
+    : QScrollArea(*new QScrollAreaPrivate, parent)
 {
-    Q_D(QScrollArea);
-    d->viewport->setBackgroundRole(QPalette::NoRole);
-    d->vbar->setSingleStep(20);
-    d->hbar->setSingleStep(20);
-    d->layoutChildren();
 }
 
 /*!
@@ -118,8 +113,9 @@ QScrollArea::QScrollArea(QScrollAreaPrivate &dd, QWidget *parent)
 {
     Q_D(QScrollArea);
     d->viewport->setBackgroundRole(QPalette::NoRole);
-    d->vbar->setSingleStep(20);
-    d->hbar->setSingleStep(20);
+    const auto singleStep = d->defaultSingleStep();
+    d->vbar->setSingleStep(singleStep);
+    d->hbar->setSingleStep(singleStep);
     d->layoutChildren();
 }
 

@@ -371,6 +371,7 @@ private slots:
     void check_QDataStream();
     void fromRawData();
     void setRawData();
+    void nullTerminated();
     void setUnicode();
     void endsWith();
     void startsWith();
@@ -6019,6 +6020,42 @@ void tst_QString::setRawData()
     QVERIFY(cstr.data_ptr() != csd);
 }
 
+void tst_QString::nullTerminated()
+{
+    const QChar ptr[] = { u'ሴ', u'ʎ', u'\0' };
+
+    QTest::ThrowOnFailEnabler thrower;
+
+    auto check = [ptr] (const QString &r) {
+        QVERIFY(r.constData() != ptr);
+        QCOMPARE(r.constData()[0], ptr[0]);
+        QCOMPARE(r.constData()[1], ptr[1]);
+        QCOMPARE(r.constData()[2], u'\0');
+        QCOMPARE(r.size(), 2);
+    };
+
+    {
+        QString str = QString::fromRawData(ptr, 2);
+        QCOMPARE(str.constData(), ptr);
+        QCOMPARE(str.constData()[0], ptr[0]);
+        QCOMPARE(str.constData()[1], ptr[1]);
+        QCOMPARE(str.size(), 2);
+
+        check(str.nullTerminated());
+        check(QString::fromRawData(ptr, 2).nullTerminated()); // rvalue
+    }
+
+    {
+        QString str = QString::fromRawData(ptr, 2);
+        QCOMPARE(str.constData(), ptr);
+        QCOMPARE(str.constData()[0], ptr[0]);
+        QCOMPARE(str.constData()[1], ptr[1]);
+        QCOMPARE(str.size(), 2);
+
+        check(str.nullTerminate());
+    }
+}
+
 void tst_QString::setUnicode()
 {
     const QChar ptr[] = { u'ሴ', QChar(0x0000) };
@@ -6774,7 +6811,7 @@ void tst_QString::arg()
     QTest::ignoreMessage(QtWarningMsg, nonAsciiArgWarning);
     QCOMPARE( QString("%2²%1").arg("a").arg("b"), QString("ba") );
 #else
-    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: %¹, foo");
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"%¹\", \"foo\"");
     QCOMPARE(u"%¹"_s.arg(foo), u"%¹");
     QCOMPARE(u"%¹%1"_s.arg(foo), u"%¹foo");
     QCOMPARE(u"%1²"_s.arg(u"E=mc"_s), u"E=mc²");
@@ -6816,10 +6853,7 @@ void tst_QString::arg()
     // char-ish overloads
     QCOMPARE(s4.arg('\xE4'), QStringView(u"[ä]"));
     QCOMPARE(s4.arg(u'ø'), QStringView(u"[ø]"));
-#ifdef Q_OS_WIN
     QCOMPARE(QLatin1String("[%1]").arg(L'ø'), QStringView(u"[ø]"));
-#endif
-    QEXPECT_FAIL("", "QTBUG-126054", Continue);
     QCOMPARE(s4.arg(L'ø'), QStringView(u"[ø]"));
 #ifndef __cpp_char8_t
 #ifndef QT_NO_CAST_FROM_ASCII
@@ -6828,19 +6862,23 @@ void tst_QString::arg()
 #endif
     QCOMPARE(s4.arg(u8'a'), QLatin1String("[a]"));
 
-    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: , foo");
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"\", \"foo\"");
     QCOMPARE(QString().arg(foo), QString());
-    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"\" , 0");
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"\", 0");
     QCOMPARE( QString().arg(0), QString() );
-    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"\" , 0");
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"\", 0");
+    QCOMPARE( QString().arg(0U), QString() );
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"\", 0");
+    QCOMPARE( QString().arg(0.0), QString() );
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"\", 0");
     QCOMPARE(QString(u""_s).arg(0), u""_s);
-    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \" \" , 0");
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \" \", 0");
     QCOMPARE(QString(u" "_s).arg(0), " "_L1);
-    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"%\" , 0");
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"%\", 0");
     QCOMPARE(QString(u"%"_s).arg(0), "%"_L1);
-    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"%%\" , 0");
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"%%\", 0");
     QCOMPARE(QString(u"%%"_s).arg(0), "%%"_L1);
-    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"%%%\" , 0");
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"%%%\", 0");
     QCOMPARE(QString(u"%%%"_s).arg(0), "%%%"_L1);
     QCOMPARE(QString(u"%%%1%%%2"_s).arg(foo).arg(bar), "%%foo%%bar"_L1);
 

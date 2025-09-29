@@ -25,7 +25,7 @@ class QWasmCompositor;
 class QWasmDeadKeySupport;
 class QOpenGLContext;
 
-class QWasmScreen : public QObject, public QPlatformScreen, public QWasmWindowTreeNode
+class QWasmScreen : public QObject, public QPlatformScreen, public QWasmWindowTreeNode<>
 {
     Q_OBJECT
 public:

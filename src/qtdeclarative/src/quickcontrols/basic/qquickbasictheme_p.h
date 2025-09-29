@@ -25,6 +25,7 @@ class Q_QUICKCONTROLS2BASIC_EXPORT QQuickBasicTheme
 {
 public:
     static void initialize(QQuickTheme *theme);
+    static void updateTheme();
 };
 
 QT_END_NAMESPACE

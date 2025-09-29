@@ -23,7 +23,7 @@ QT_BEGIN_NAMESPACE
 Q_STATIC_LOGGING_CATEGORY(lcPopupWindow, "qt.quick.controls.popup.window")
 
 static bool s_popupGrabOk = false;
-static QWindow *s_grabbedWindow = nullptr;
+static QPointer<QWindow> s_grabbedWindow;
 
 class QQuickPopupWindowPrivate : public QQuickWindowQmlImplPrivate
 {
@@ -132,7 +132,10 @@ void QQuickPopupWindow::resizeEvent(QResizeEvent *e)
 
 void QQuickPopupWindowPrivate::setVisible(bool visible)
 {
-    if (m_inHideEvent)
+    Q_Q(QQuickPopupWindow);
+    const bool isTransientParentDestroyed = !q->transientParent() ? true :
+          QQuickWindowPrivate::get(qobject_cast<QQuickWindow *>(q->transientParent()))->inDestructor;
+    if (m_inHideEvent || isTransientParentDestroyed)
         return;
 
     const bool visibleChanged = QWindowPrivate::visible != visible;

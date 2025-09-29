@@ -287,7 +287,7 @@ QSGNode *QQuickFramebufferObject::updatePaintNode(QSGNode *node, UpdatePaintNode
     QSize desiredFboSize(qMax<int>(minFboSize.width(), width()),
                          qMax<int>(minFboSize.height(), height()));
 
-    n->devicePixelRatio = window()->effectiveDevicePixelRatio();
+    n->devicePixelRatio = d->effectiveDevicePixelRatio();
     desiredFboSize *= n->devicePixelRatio;
 
     if (n->fbo && ((d->followsItemSize && n->fbo->size() != desiredFboSize) || n->invalidatePending)) {

@@ -68,6 +68,8 @@ private slots:
     void passwordTest();
     void announceTest();
     void eventTest();
+    void relations_data();
+    void relations();
 };
 
 tst_QQuickAccessible::tst_QQuickAccessible()
@@ -207,6 +209,39 @@ void tst_QQuickAccessible::quickAttachedProperties()
             QVERIFY2(p.value<QString>().isEmpty(), QTest::toString(p));
             QCOMPARE(attachedObject->wasNameExplicitlySet(), false);
         }
+    }
+
+    // Attached property: QTBUG-133564
+    {
+        QQmlEngine engine;
+
+        QQmlComponent component(&engine);
+        component.setData("import QtQuick\n"
+                          "Item {\n"
+                          "    Accessible.role: Accessible.Button\n"
+                          "    property int value: 0\n"
+                          "    property int cursorPosition: 0\n"
+                          "}",
+                          QUrl());
+
+        auto object = std::unique_ptr<QObject>(component.create());
+        QVERIFY(object != nullptr);
+
+        const auto attachedObject = qobject_cast<QQuickAccessibleAttached *>(
+                QQuickAccessibleAttached::attachedProperties(object.get()));
+        QVERIFY(attachedObject);
+
+        const auto events = QTestAccessibility::events();
+
+        // If the value interface is not implemented then
+        // the valueChanged() signal should not be connected.
+        object->setProperty("value", 1);
+        QCOMPARE(QTestAccessibility::events(), events);
+
+        // If the text interface is not implemented then
+        // the cursorPositionChanged() signal should not be connected.
+        object->setProperty("cursorPosition", 1);
+        QCOMPARE(QTestAccessibility::events(), events);
     }
 
     // Attached property
@@ -840,6 +875,52 @@ void tst_QQuickAccessible::eventTest()
     QCOMPARE(QTestAccessibility::events().size(), 1);
     QAccessibleEvent ev(buttonItem, QAccessible::LocationChanged);
     QTestAccessibility::verifyEvent(&ev);
+}
+
+void tst_QQuickAccessible::relations_data()
+{
+    QTest::addColumn<QString>("item");
+    QTest::addColumn<QString>("other");
+    QTest::addColumn<QAccessible::Relation>("relation");
+
+    QTest::addRow("label labels textInput")
+        << "label" << "textInput"
+        << QAccessible::Relation(QAccessible::Labelled);
+    QTest::addRow("textInput labelled by label")
+        << "textInput" << "label"
+        << QAccessible::Relation(QAccessible::Label);
+}
+
+void tst_QQuickAccessible::relations()
+{
+    auto clearEvents = qScopeGuard([]{ QTestAccessibility::clearEvents(); });
+
+    QFETCH(const QString, item);
+    QFETCH(const QString, other);
+    QFETCH(const QAccessible::Relation, relation);
+
+    auto window = std::make_unique<QQuickView>();
+    window->setSource(testFileUrl("relations.qml"));
+    window->show();
+
+    QObject *itemObject = window->findChild<QQuickItem *>(item);
+    QVERIFY(itemObject);
+    QAccessibleInterface *itemIface = QAccessible::queryAccessibleInterface(itemObject);
+    QVERIFY(itemIface);
+    QObject *otherObject = window->findChild<QQuickItem *>(other);
+    QVERIFY(otherObject);
+    QAccessibleInterface *otherIface = QAccessible::queryAccessibleInterface(otherObject);
+    QVERIFY(otherIface);
+
+    const QList<std::pair<QAccessibleInterface *, QAccessible::Relation>> expected{
+        {otherIface, relation}
+    };
+
+    const auto itemRelations = itemIface->relations();
+    QCOMPARE(itemRelations, expected);
+
+    const auto otherRelations = otherIface->relations();
+    QVERIFY(!otherRelations.isEmpty());
 }
 
 QTEST_MAIN(tst_QQuickAccessible)

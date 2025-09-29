@@ -1030,7 +1030,7 @@ private:
     QByteArray m_data;
     int m_redirectCount;
 
-    typedef QPair<QByteArray, QByteArray> HeaderPair;
+    typedef std::pair<QByteArray, QByteArray> HeaderPair;
     typedef QList<HeaderPair> HeadersList;
     HeadersList m_headersList;
     void fillHeadersList();
@@ -1232,6 +1232,13 @@ void QQmlXMLHttpRequest::requestFromUrl(const QUrl &url)
             qWarning().nospace() << "                "
                                  << qPrintable(QString::fromUtf8(m_data));
         }
+    }
+
+    if (!m_nam) {
+        qWarning() << "XMLHttpRequest:" << qPrintable(m_method)
+                   << "No network accessmanager available.";
+        m_state = Done;
+        return;
     }
 
     if (m_method == QLatin1String("GET")) {

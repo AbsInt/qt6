@@ -16,7 +16,13 @@ T.SplitView {
     handle: Rectangle {
         implicitWidth: control.orientation === Qt.Horizontal ? 2 : control.width
         implicitHeight: control.orientation === Qt.Horizontal ? control.height : 2
-        color: T.SplitHandle.pressed ? control.palette.dark
-            : (enabled && T.SplitHandle.hovered ? control.palette.midlight : control.palette.mid)
+        color: {
+            if (Fusion.highContrast)
+                return T.SplitHandle.pressed ? Fusion.highlightedOutline(control.palette)
+                                             : (enabled && T.SplitHandle.hovered ? control.palette.button : Fusion.outline(control.palette));
+            else
+                return T.SplitHandle.pressed ? control.palette.dark
+                                             : (enabled && T.SplitHandle.hovered ? control.palette.midlight : control.palette.mid)
+        }
     }
 }

@@ -164,8 +164,6 @@ public:
     void ensureDoc();
     void updateDocumentText();
 
-    qreal devicePixelRatio() const;
-
     QRectF setupTextLayout(qreal * const baseline);
     void setupCustomLineGeometry(QTextLine &line, qreal &height, int fullLayoutTextLength, int lineOffset = 0);
     bool isLinkActivatedConnected();

@@ -1,5 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// Qt-Security score:significant
 
 #include "qqmljstyperesolver_p.h"
 
@@ -108,6 +109,9 @@ QQmlJSTypeResolver::QQmlJSTypeResolver(QQmlJSImporter *importer)
     Q_ASSERT(m_variantMapType);
     m_varType = builtinTypes.type(u"QVariant"_s).scope;
     Q_ASSERT(m_varType);
+
+    m_qmlPropertyMapType = builtinTypes.type(u"QQmlPropertyMap"_s).scope;
+    Q_ASSERT(m_qmlPropertyMapType);
 
     m_jsValueType = builtinTypes.type(u"QJSValue"_s).scope;
     Q_ASSERT(m_jsValueType);
@@ -360,12 +364,49 @@ bool QQmlJSTypeResolver::isPrimitive(const QQmlJSScope::ConstPtr &type) const
 
 bool QQmlJSTypeResolver::isNumeric(const QQmlJSScope::ConstPtr &type) const
 {
-    return QQmlJSUtils::searchBaseAndExtensionTypes(
-            type, [&](const QQmlJSScope::ConstPtr &scope, QQmlJSScope::ExtensionKind mode) {
-                if (mode == QQmlJSScope::ExtensionNamespace)
-                    return false;
-                return scope == m_numberPrototype;
-    });
+    if (!type) // should this be a precondition instead?
+        return false;
+
+    if (type->scopeType() == QQmlJSScope::ScopeType::EnumScope)
+        return true;
+
+    if (type == m_realType)
+        return true;
+    if (type == m_floatType)
+        return true;
+    if (type == m_int8Type)
+        return true;
+    if (type == m_uint8Type)
+        return true;
+    if (type == m_int16Type)
+        return true;
+    if (type == m_uint16Type)
+        return true;
+    if (type == m_int32Type)
+        return true;
+    if (type == m_uint32Type)
+        return true;
+    if (type == m_int64Type)
+        return true;
+    if (type == m_uint64Type)
+        return true;
+    // sizetype is covered by one of the above cases (int32 or int64)
+    // booleans are not numeric
+
+    // the number prototype is numeric
+    if (type == m_numberPrototype)
+        return true;
+
+    // and types directly inheriting from it, notably number, are also
+    // numeric
+    if (type->baseType() == m_numberPrototype)
+        return true;
+
+    // it isn't possible (for users) to derive from m_numberPrototpye,
+    // so we know the list above is exhaustive / we don't need to go up
+    // further in the inheritance chain
+
+    return false;
 }
 
 bool QQmlJSTypeResolver::isSignedInteger(const QQmlJSScope::ConstPtr &type) const
@@ -1009,22 +1050,6 @@ QQmlJSScope::ConstPtr QQmlJSTypeResolver::resolveParentProperty(
 
 /*!
  * \internal
- * We can generally determine the relevant component boundaries for each scope. However,
- * if the scope or any of its parents is assigned to a property of which we cannot see the
- * type, we don't know whether the type of that property happens to be Component. In that
- * case, we can't say.
- */
-bool QQmlJSTypeResolver::canFindComponentBoundaries(const QQmlJSScope::ConstPtr &scope) const
-{
-    for (QQmlJSScope::ConstPtr parent = scope; parent; parent = parent->parentScope()) {
-        if (parent->isAssignedToUnknownProperty())
-            return false;
-    }
-    return true;
-}
-
-/*!
- * \internal
  *
  * Retrieves the type of whatever \a name signifies in the given \a scope.
  * \a name can be an ID, a property of the scope, a singleton, an attachment,
@@ -1057,11 +1082,17 @@ QQmlJSScope::ConstPtr QQmlJSTypeResolver::scopedType(
         const QQmlJSScope::ConstPtr &scope, const QString &name,
         QQmlJSScopesByIdOptions options) const
 {
-    if (!canFindComponentBoundaries(scope))
+    QQmlJSScopesById::CertainCallback<QQmlJSScope::ConstPtr> identified;
+    if (m_objectsById.possibleScopes(name, scope, options, identified)
+            != QQmlJSScopesById::Success::Yes) {
+        // Could not determine component boundaries
         return {};
+    }
 
-    if (QQmlJSScope::ConstPtr identified = m_objectsById.scope(name, scope, options))
-        return identified;
+    if (identified.result) {
+        // Found a definite match
+        return identified.result;
+    }
 
     if (QQmlJSScope::ConstPtr base = QQmlJSScope::findCurrentQMLScope(scope)) {
         QQmlJSScope::ConstPtr result;
@@ -1119,12 +1150,18 @@ QQmlJSRegisterContent QQmlJSTypeResolver::scopedType(QQmlJSRegisterContent scope
                                                      QQmlJSScopesByIdOptions options) const
 {
     const QQmlJSScope::ConstPtr contained = scope.containedType();
-    if (!canFindComponentBoundaries(contained))
-        return {};
 
-    if (QQmlJSScope::ConstPtr identified = m_objectsById.scope(name, contained, options)) {
+    QQmlJSScopesById::CertainCallback<QQmlJSScope::ConstPtr> identified;
+    if (m_objectsById.possibleScopes(name, contained, options, identified)
+            != QQmlJSScopesById::Success::Yes) {
+        // Could not determine component boundaries
+        return {};
+    }
+
+    if (identified.result) {
+        // Found a definite match
         return m_pool->createType(
-                identified, lookupIndex, QQmlJSRegisterContent::ObjectById, scope);
+                identified.result, lookupIndex, QQmlJSRegisterContent::ObjectById, scope);
     }
 
     if (QQmlJSScope::ConstPtr base = QQmlJSScope::findCurrentQMLScope(contained)) {
@@ -1486,6 +1523,12 @@ bool QQmlJSTypeResolver::canPrimitivelyConvertFromTo(
         return true;
     }
 
+    // it is possible to assing a singlar object to a list property if it could be stored in the list
+    if (to->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence
+        && from->accessSemantics()  == QQmlJSScope::AccessSemantics::Reference
+        &&  from->inherits(to->valueType()))
+        return true;
+
     if (to == m_stringType && from->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence)
         return canConvertFromTo(from->valueType(), m_stringType);
 
@@ -1516,7 +1559,7 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberType(
     if (contained == metaObjectType())
         return {};
 
-    if (contained == variantMapType()) {
+    if (contained == variantMapType() || contained->inherits(qmlPropertyMapType())) {
         QQmlJSMetaProperty prop;
         prop.setPropertyName(name);
         prop.setTypeName(u"QVariant"_s);

@@ -2709,7 +2709,7 @@ void QQuickAnimationPropertyUpdater::setValue(qreal v)
     for (int ii = 0; ii < actions.size(); ++ii) {
         QQuickStateAction &action = actions[ii];
 
-        if (v == 1.) {
+        if (v == qreal(1.0) && extendedInterpolator == nullptr) {
             QQmlPropertyPrivate::write(action.property, action.toValue, QQmlPropertyData::BypassInterceptor | QQmlPropertyData::DontRemoveBinding);
         } else {
             if (!fromIsSourced && !fromIsDefined) {
@@ -2725,8 +2725,21 @@ void QQuickAnimationPropertyUpdater::setValue(qreal v)
                     interpolator = QVariantAnimationPrivate::getInterpolator(prevInterpolatorType);
                 }
             }
-            if (interpolator)
-                QQmlPropertyPrivate::write(action.property, interpolator(action.fromValue.constData(), action.toValue.constData(), v), QQmlPropertyData::BypassInterceptor | QQmlPropertyData::DontRemoveBinding);
+
+            QVariant interpolated;
+            if (extendedInterpolator) {
+                QVariant current = action.property.read();
+                interpolated = extendedInterpolator(action.fromValue.constData(),
+                                                    action.toValue.constData(),
+                                                    current,
+                                                    v);
+
+            } else if (interpolator) {
+                interpolated = interpolator(action.fromValue.constData(), action.toValue.constData(), v);
+            }
+            QQmlPropertyPrivate::write(action.property,
+                                       interpolated,
+                                       QQmlPropertyData::BypassInterceptor | QQmlPropertyData::DontRemoveBinding);
         }
         if (deleted)
             return;
@@ -2880,6 +2893,7 @@ QAbstractAnimationJob* QQuickPropertyAnimation::transition(QQuickStateActions &a
         QQuickAnimationPropertyUpdater *data = new QQuickAnimationPropertyUpdater;
         data->interpolatorType = d->interpolatorType;
         data->interpolator = d->interpolator;
+        data->extendedInterpolator = d->extendedInterpolator;
         data->reverse = direction == Backward ? true : false;
         data->fromIsSourced = false;
         data->fromIsDefined = d->fromIsDefined;

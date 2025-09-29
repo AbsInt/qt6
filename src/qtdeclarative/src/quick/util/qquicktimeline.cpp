@@ -96,7 +96,7 @@ struct QQuickTimeLinePrivate
 
     QQuickTimeLine::SyncMode syncMode;
     int syncAdj;
-    QList<QPair<int, Update> > *updateQueue;
+    QList<std::pair<int, Update> > *updateQueue;
 };
 
 QQuickTimeLinePrivate::QQuickTimeLinePrivate(QQuickTimeLine *parent)
@@ -696,8 +696,8 @@ void QQuickTimeLine::debugAnimation(QDebug d) const
     d << "QuickTimeLine(" << Qt::hex << (const void *) this << Qt::dec << ")";
 }
 
-bool operator<(const QPair<int, Update> &lhs,
-               const QPair<int, Update> &rhs)
+bool operator<(const std::pair<int, Update> &lhs,
+               const std::pair<int, Update> &rhs)
 {
     return lhs.first < rhs.first;
 }
@@ -726,7 +726,7 @@ int QQuickTimeLinePrivate::advance(int t)
 
         // Process until then.  A zero length advance time will only process
         // sets.
-        QList<QPair<int, Update> > updates;
+        QList<std::pair<int, Update> > updates;
 
         for (Ops::Iterator iter = ops.begin(); iter != ops.end(); ) {
             QQuickTimeLineValue *v = static_cast<QQuickTimeLineValue *>(iter.key());
@@ -746,12 +746,12 @@ int QQuickTimeLinePrivate::advance(int t)
                 if ((tl.consumedOpLength + advanceTime) == op.length) {
                     // Finishing operation, the timeline value will be the operation's target value.
                     if (op.type == Op::Execute) {
-                        updates << qMakePair(op.order, Update(op.event));
+                        updates << std::make_pair(op.order, Update(op.event));
                     } else {
                         bool changed = false;
                         qreal val = value(op, op.length, tl.base, &changed);
                         if (changed)
-                            updates << qMakePair(op.order, Update(v, val));
+                            updates << std::make_pair(op.order, Update(v, val));
                     }
                     tl.length -= qMin(advanceTime, tl.length);
                     tl.consumedOpLength = 0;
@@ -763,7 +763,7 @@ int QQuickTimeLinePrivate::advance(int t)
                     bool changed = false;
                     qreal val = value(op, tl.consumedOpLength, tl.base, &changed);
                     if (changed)
-                        updates << qMakePair(op.order, Update(v, val));
+                        updates << std::make_pair(op.order, Update(v, val));
                     tl.length -= qMin(advanceTime, tl.length);
                     break;
                 }

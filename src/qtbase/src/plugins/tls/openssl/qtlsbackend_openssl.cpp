@@ -412,7 +412,7 @@ QList<QSslCertificate> systemCaCertificates()
             }
         }
         for (const QString& file : std::as_const(certFiles))
-            systemCerts.append(QSslCertificate::fromPath(file, QSsl::Pem));
+            systemCerts.append(QSslCertificate::fromFile(file, QSsl::Pem));
     }
 #endif // platform
 #ifdef QSSLSOCKET_DEBUG

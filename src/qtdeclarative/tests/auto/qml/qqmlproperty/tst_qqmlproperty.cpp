@@ -231,6 +231,8 @@ private slots:
 
     void propertyStartsWithOn();
 
+    void connectAliasPropertySignalWithCppSlot();
+
 private:
     QQmlEngine engine;
 };
@@ -2654,6 +2656,49 @@ void tst_qqmlproperty::propertyStartsWithOn()
     QScopedPointer<QObject> root(component.create());
     QVERIFY(!root.isNull());
     QCOMPARE(root->property("onlineStatus").toInt(), 12);
+}
+
+class SignalHandler : public QObject
+{
+    Q_OBJECT
+public:
+    SignalHandler() {}
+    bool triggered() const { return m_triggered; }
+public slots:
+    void handle() { m_triggered = true; }
+private:
+    bool m_triggered = false;
+};
+
+void tst_qqmlproperty::connectAliasPropertySignalWithCppSlot()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData(R"(
+        import QtQuick
+        Item {
+            id: root
+            property bool a: true
+            property alias b: root.a
+        }
+    )", QUrl());
+    QScopedPointer<QObject> root(c.create());
+    QVERIFY(root);
+
+    auto metaObject = root->metaObject();
+    auto idx = metaObject->indexOfMethod("bChanged()");
+    QVERIFY(idx >= 0);
+    auto signal = metaObject->method(idx);
+
+    SignalHandler signalHandler;
+    metaObject = signalHandler.metaObject();
+    idx = metaObject->indexOfMethod("handle()");
+    QVERIFY(idx >= 0);
+    auto slot = metaObject->method(idx);
+
+    QObject::connect(root.data(), signal, &signalHandler, slot);
+    root->setProperty("a", false);
+    QVERIFY(signalHandler.triggered());
 }
 
 QTEST_MAIN(tst_qqmlproperty)

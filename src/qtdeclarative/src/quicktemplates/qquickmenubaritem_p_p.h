@@ -40,6 +40,8 @@ public:
 
     QPalette defaultPalette() const override;
 
+    void accessiblePressAction() override;
+
     bool highlighted = false;
     QQuickMenu *menu = nullptr;
     QQuickMenuBar *menuBar = nullptr;

@@ -484,6 +484,9 @@ hb_set_unicode_props (hb_buffer_t *buffer)
   {
     _hb_glyph_info_set_unicode_props (&info[i], buffer);
 
+    if (info[i].codepoint < 0x80)
+      continue;
+
     unsigned gen_cat = _hb_glyph_info_get_general_category (&info[i]);
     if (FLAG_UNSAFE (gen_cat) &
 	(FLAG (HB_UNICODE_GENERAL_CATEGORY_LOWERCASE_LETTER) |
@@ -788,7 +791,13 @@ hb_ot_zero_width_default_ignorables (const hb_buffer_t *buffer)
   unsigned int i = 0;
   for (i = 0; i < count; i++)
     if (unlikely (_hb_glyph_info_is_default_ignorable (&info[i])))
-      pos[i].x_advance = pos[i].y_advance = pos[i].x_offset = pos[i].y_offset = 0;
+    {
+      pos[i].x_advance = pos[i].y_advance = 0;
+      if (HB_DIRECTION_IS_HORIZONTAL (buffer->props.direction))
+	pos[i].x_offset = 0;
+      else
+        pos[i].y_offset = 0;
+    }
 }
 
 static void
@@ -1171,8 +1180,6 @@ hb_ot_shape_internal (hb_ot_shape_context_t *c)
   _hb_buffer_deallocate_unicode_vars (c->buffer);
 
   c->buffer->props.direction = c->target_direction;
-
-  c->buffer->leave ();
 }
 
 

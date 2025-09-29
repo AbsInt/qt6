@@ -187,7 +187,7 @@ static void ensureInitialized()
 
     Once a QNetworkAccessManager object has been created, the application can
     use it to send requests over the network. A group of standard functions
-    are supplied that take a request and optional data, and each return a
+    is supplied that take a request and optional data, and each returns a
     QNetworkReply object. The returned object is used to obtain any data
     returned in response to the corresponding request.
 
@@ -1261,7 +1261,7 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
     auto h = request.headers();
 #ifndef Q_OS_WASM // Content-length header is not allowed to be set by user in wasm
     if (!h.contains(QHttpHeaders::WellKnownHeader::ContentLength) &&
-        outgoingData && !outgoingData->isSequential()) {
+        outgoingData && !outgoingData->isSequential() && outgoingData->size()) {
         // request has no Content-Length
         // but the data that is outgoing is random-access
         h.append(QHttpHeaders::WellKnownHeader::ContentLength,
@@ -1719,7 +1719,6 @@ void QNetworkAccessManagerPrivate::clearAuthenticationCache(QNetworkAccessManage
 
 void QNetworkAccessManagerPrivate::clearConnectionCache(QNetworkAccessManager *manager)
 {
-    manager->d_func()->objectCache.clear();
     manager->d_func()->destroyThread();
 }
 

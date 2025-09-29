@@ -42,6 +42,7 @@ class QQmlTypeLoaderThread : public QQmlThread
 
 public:
     QQmlTypeLoaderThread(QQmlTypeLoader *loader);
+    ~QQmlTypeLoaderThread();
 #if QT_CONFIG(qml_network)
     QNetworkAccessManager *networkAccessManager() const;
     QQmlTypeLoaderNetworkReplyProxy *networkReplyProxy() const;

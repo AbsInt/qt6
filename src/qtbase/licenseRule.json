@@ -12,7 +12,7 @@
         "file_pattern_ending": ["CMakeLists.txt", ".cmake", ".pro", ".pri", ".prf",
                      "configure", "configure.bat", "cmake.in", "plist.in", "CMakeLists.txt.in",
                      "Makefile", ".conf", ".yml", ".cfg", ".yaml",
-                     ".tag", ".dynlist", ".qrc"],
+                     ".tag", ".dynlist.in", ".qrc"],
         "location": {
             "": {
                 "comment": "Default",
@@ -556,10 +556,20 @@
                 "file type": "build system",
                 "spdx": ["BSD-3-Clause"]
             },
-            "src/corelib/Qt6CoreConfigureFileTemplate.in": {
+            "src/corelib/global/qexpected_p.h": {
                 "comment": "See REUSE.toml file",
-                "file type": "build system",
-                "spdx": ["BSD-3-Clause"]
+                "file type": "3rd party",
+                "spdx": ["CC0-1.0"]
+            },
+            "src/corelib/global/patches/tlexpected/": {
+                "comment": "See REUSE.toml file",
+                "file type": "3rd party",
+                "spdx": ["CC0-1.0"]
+            },
+            "src/corelib/Qt6CoreConfigureFileTemplate.in" : {
+                "comment" : "See REUSE.toml file",
+                "file type" : "build system",
+                "spdx" : ["BSD-3-Clause"]
             }
         }
     }

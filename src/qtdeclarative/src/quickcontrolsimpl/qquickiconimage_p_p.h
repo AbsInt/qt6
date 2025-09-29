@@ -28,7 +28,6 @@ public:
 
     ~QQuickIconImagePrivate() override;
     void updateFillMode();
-    qreal calculateDevicePixelRatio() const;
     bool updateDevicePixelRatio(qreal targetDevicePixelRatio) override;
 
     QUrl source;

@@ -32,17 +32,11 @@ public:
     QQmlThread();
     virtual ~QQmlThread();
 
-    void startup();
-    void shutdown();
-    bool isShutdown() const;
-
     void lock();
     void unlock();
     void wakeOne();
     void wait();
 
-    QThread *thread() const;
-    QObject *threadObject() const;
     bool isThisThread() const;
 
     // Synchronously invoke a method in the thread
@@ -65,6 +59,13 @@ public:
 
     void waitForNextMessage();
     void discardMessages();
+
+    void startup();
+    void shutdown();
+
+protected:
+    QThread *thread() const;
+    QObject *threadObject() const;
 
 private:
     friend class QQmlThreadPrivate;

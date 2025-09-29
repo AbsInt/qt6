@@ -9,7 +9,8 @@ source "${BASH_SOURCE%/*}/../unix/ffmpeg-installation-utils.sh"
 
 os="$1"
 # Optional parameter to set output installation directory. Useful for local builds.
-target_install_dir_param="$2"
+page_size="$2"
+target_install_dir_param="$3"
 build_type=$(get_ffmpeg_build_type)
 ffmpeg_source_dir=$(download_ffmpeg)
 
@@ -21,16 +22,16 @@ assert_envvar_is_populated_dir() {
         exit 1
     fi
 }
-assert_envvar_is_populated_dir "OPENSSL_ANDROID_HOME_DEFAULT"
-assert_envvar_is_populated_dir "ANDROID_NDK_ROOT_DEFAULT"
 
 build_ffmpeg_android() {
     local target_arch=$1
     local target_dir=$2
+    local ndk_root=$3
+    local openssl_android_path=$4
 
     sudo mkdir -p "$target_dir"
 
-    local openssl_include="$OPENSSL_ANDROID_HOME_DEFAULT/include"
+    local openssl_include="$openssl_android_path/include"
     local openssl_libs
     local libs_prefix
     local target_cpu
@@ -40,19 +41,25 @@ build_ffmpeg_android() {
         target_toolchain_arch="x86_64-linux-android"
         target_arch=x86_64
         target_cpu=x86-64
-        openssl_libs="$OPENSSL_ANDROID_HOME_DEFAULT/x86_64"
+        openssl_libs="$openssl_android_path/x86_64"
         libs_prefix="_x86_64"
     elif [ "$target_arch" == "x86" ]; then
         target_toolchain_arch="i686-linux-android"
         target_arch=x86
         target_cpu=i686
-        openssl_libs="$OPENSSL_ANDROID_HOME_DEFAULT/x86"
+        openssl_libs="$openssl_android_path/x86"
         libs_prefix="_x86"
+    elif [ "$target_arch" == "arm32" ]; then
+        target_toolchain_arch="armv7a-linux-androideabi"
+        target_arch=arm
+        target_cpu=armv7-a
+        openssl_libs="$openssl_android_path/armeabi-v7a"
+        libs_prefix="_arm32-v7a"
     elif [ "$target_arch" == "arm64" ]; then
         target_toolchain_arch="aarch64-linux-android"
         target_arch=aarch64
         target_cpu=armv8-a
-        openssl_libs="$OPENSSL_ANDROID_HOME_DEFAULT/arm64-v8a"
+        openssl_libs="$openssl_android_path/arm64-v8a"
         libs_prefix="_arm64-v8a"
     fi
 
@@ -61,7 +68,6 @@ build_ffmpeg_android() {
 
     local api_version=24
 
-    local ndk_root=$ANDROID_NDK_ROOT_DEFAULT
     local ndk_host
     if uname -a |grep -q "Darwin"; then
         ndk_host=darwin-x86_64
@@ -83,7 +89,15 @@ build_ffmpeg_android() {
     ffmpeg_config_options+=" --arch=$target_arch --cpu=${target_cpu} --sysroot=${sysroot} --sysinclude=${sysroot}/usr/include/"
     ffmpeg_config_options+=" --cc=${cc} --cxx=${cxx} --ar=${ar} --ranlib=${ranlib}"
     ffmpeg_config_options+=" --extra-cflags=-I${openssl_include} --extra-ldflags=-L${openssl_libs}"
-
+    if [ $page_size == "use_16kb_page_size" ]; then
+        ffmpeg_config_options+=" --extra-ldflags=-Wl,-z,max-page-size=16384"
+        echo "FFmpeg Android using 16KB page sizes"
+    elif [ $page_size == "use_4kb_page_size" ]; then
+        echo "FFmpeg Android using 4KB page sizes"
+    else
+        echo "Error: FFmpeg Android page_size must be: use_16kb_page_size or: use_4kb_page_size got: $page_size" >&2
+        exit 1
+    fi
     local build_dir="$ffmpeg_source_dir/build_android/$target_arch"
     mkdir -p "$build_dir"
     pushd "$build_dir"
@@ -108,15 +122,27 @@ build_ffmpeg_android() {
 if  [ "$os" == "android-x86" ]; then
     target_arch=x86
     target_dir="/usr/local/android/ffmpeg-x86"
-    envvar="FFMPEG_DIR_ANDROID_X86"
+    envvar_latest="FFMPEG_DIR_ANDROID_X86_NDK_LATEST"
+    envvar_nightly1="FFMPEG_DIR_ANDROID_X86_NDK_NIGHTLY1"
+    envvar_nightly2="FFMPEG_DIR_ANDROID_X86_NDK_NIGHTLY2"
 elif  [ "$os" == "android-x86_64" ]; then
     target_arch=x86_64
     target_dir="/usr/local/android/ffmpeg-x86_64"
-    envvar="FFMPEG_DIR_ANDROID_X86_64"
+    envvar_latest="FFMPEG_DIR_ANDROID_X86_64_NDK_LATEST"
+    envvar_nightly1="FFMPEG_DIR_ANDROID_X86_64_NDK_NIGHTLY1"
+    envvar_nightly2="FFMPEG_DIR_ANDROID_X86_64_NDK_NIGHTLY2"
+elif  [ "$os" == "android-arm32" ]; then
+    target_arch=arm32
+    target_dir="/usr/local/android/ffmpeg-arm32"
+    envvar_latest="FFMPEG_DIR_ANDROID_ARM32_NDK_LATEST"
+    envvar_nightly1="FFMPEG_DIR_ANDROID_ARM32_NDK_NIGHTLY1"
+    envvar_nightly2="FFMPEG_DIR_ANDROID_ARM32_NDK_NIGHTLY2"
 elif  [ "$os" == "android-arm64" ]; then
     target_arch=arm64
     target_dir="/usr/local/android/ffmpeg-arm64"
-    envvar="FFMPEG_DIR_ANDROID_ARM64"
+    envvar_latest="FFMPEG_DIR_ANDROID_ARM64_NDK_LATEST"
+    envvar_nightly1="FFMPEG_DIR_ANDROID_ARM64_NDK_NIGHTLY1"
+    envvar_nightly2="FFMPEG_DIR_ANDROID_ARM64_NDK_NIGHTLY2"
 else
     >&2 echo "Unhandled android os param: $os"
     exit 1
@@ -124,8 +150,24 @@ fi
 
 # If parameter is set, use it as the target output directory.
 if [ ! -z $target_install_dir_param ]; then
-  target_dir=$target_install_dir_param
+    target_dir=$target_install_dir_param
 fi
 
-build_ffmpeg_android "$target_arch" "$target_dir"
-set_ffmpeg_dir_env_var "$envvar" "$target_dir"
+assert_envvar_is_populated_dir "ANDROID_NDK_ROOT_LATEST"
+assert_envvar_is_populated_dir "OPENSSL_ANDROID_HOME_LATEST"
+build_ffmpeg_android "$target_arch" "$target_dir/latest" "$ANDROID_NDK_ROOT_LATEST" "$OPENSSL_ANDROID_HOME_LATEST"
+set_ffmpeg_dir_env_var "$envvar_latest" "$target_dir/latest"
+
+if [ "${ANDROID_NDK_ROOT_NIGHTLY1}" ]; then
+    assert_envvar_is_populated_dir "ANDROID_NDK_ROOT_NIGHTLY1"
+    assert_envvar_is_populated_dir "OPENSSL_ANDROID_HOME_NIGHTLY1"
+    build_ffmpeg_android "$target_arch" "$target_dir/nightly1" "$ANDROID_NDK_ROOT_NIGHTLY1" "$OPENSSL_ANDROID_HOME_NIGHTLY1"
+    set_ffmpeg_dir_env_var "$envvar_nightly1" "$target_dir/nightly1"
+fi
+
+if [ "${ANDROID_NDK_ROOT_NIGHTLY2}" ]; then
+    assert_envvar_is_populated_dir "ANDROID_NDK_ROOT_NIGHTLY2"
+    assert_envvar_is_populated_dir "OPENSSL_ANDROID_HOME_NIGHTLY2"
+    build_ffmpeg_android "$target_arch" "$target_dir/nightly2" "$ANDROID_NDK_ROOT_NIGHTLY2" "$OPENSSL_ANDROID_HOME_NIGHTLY2"
+    set_ffmpeg_dir_env_var "$envvar_nightly2" "$target_dir/nightly2"
+fi

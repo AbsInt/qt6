@@ -47,9 +47,9 @@ struct UnexpectedDiagnostics : public QStringList
 };
 
 // Extra environment variables to be added to qmlls's environment.
-struct Environment : public QList<QPair<QString, QString>>
+struct Environment : public QList<std::pair<QString, QString>>
 {
-    using QList<QPair<QString, QString>>::QList;
+    using QList<std::pair<QString, QString>>::QList;
 };
 
 void tst_qmlls_cli::warnings_data()

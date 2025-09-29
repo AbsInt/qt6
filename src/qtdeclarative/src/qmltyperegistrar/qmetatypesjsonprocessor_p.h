@@ -84,6 +84,7 @@ struct Property
     QAnyStringView privateClass;
 
     int index = -1;
+    int lineNumber = 0;
 
     QTypeRevision revision;
 
@@ -117,6 +118,7 @@ struct Method
     QAnyStringView returnType;
 
     int index = InvalidIndex;
+    int lineNumber = 0;
 
     QTypeRevision revision;
 
@@ -141,6 +143,7 @@ struct Enum
 
     QList<QAnyStringView> values;
 
+    int lineNumber = 0;
     bool isFlag = false;
     bool isClass = false;
 };

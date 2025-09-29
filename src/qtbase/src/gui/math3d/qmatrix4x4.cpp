@@ -4,6 +4,8 @@
 #include "qmatrix4x4.h"
 #include <QtCore/qmath.h>
 #include <QtCore/qvariant.h>
+
+#include <QtGui/qquaternion.h>
 #include <QtGui/qtransform.h>
 
 #include <cmath>
@@ -1279,7 +1281,7 @@ void QMatrix4x4::projectedRotate(float angle, float x, float y, float z)
 */
 
 /*!
-    \enum QMatrix4x4::Flags
+    \enum QMatrix4x4::Flag
     \internal
     \omitvalue Identity
     \omitvalue Translation

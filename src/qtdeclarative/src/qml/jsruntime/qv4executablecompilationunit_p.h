@@ -1,5 +1,6 @@
 // Copyright (C) 2019 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
 
 #ifndef QV4EXECUTABLECOMPILATIONUNIT_P_H
 #define QV4EXECUTABLECOMPILATIONUNIT_P_H
@@ -98,10 +99,6 @@ public:
     // this is initialized on-demand by QQmlContextData
     QHash<int, IdentifierHash> namedObjectsPerComponentCache;
     inline IdentifierHash namedObjectsPerComponent(int componentObjectIndex);
-
-    int totalBindingsCount(const QString &inlineComponentRoot) const { return m_compilationUnit->totalBindingsCount(inlineComponentRoot); }
-    int totalParserStatusCount(const QString &inlineComponentRoot) const { return m_compilationUnit->totalParserStatusCount(inlineComponentRoot); }
-    int totalObjectCount(const QString &inlineComponentRoot) const { return m_compilationUnit->totalObjectCount(inlineComponentRoot); }
 
     ResolvedTypeReference *resolvedType(int id) const
     {

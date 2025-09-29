@@ -65,9 +65,7 @@ if(QT_BUILD_WASM_BATCHED_TESTS)
     add_subdirectory(corelib/io/qdataurl)
     add_subdirectory(corelib/io/qbuffer)
     add_subdirectory(corelib/io/qabstractfileengine)
-    if(NOT WASM) # QTBUG-121822
     add_subdirectory(corelib/io/qsettings)
-    endif()
     add_subdirectory(corelib/io/qstorageinfo)
     add_subdirectory(corelib/io/qstandardpaths)
     add_subdirectory(corelib/io/qfileselector)
@@ -134,3 +132,7 @@ if (TARGET Qt::Xml)
 endif()
 # add_subdirectory(installed_cmake) ## FIXME: Does this still make sense in this form?
 add_subdirectory(other)
+if(QT_FEATURE_wayland)
+    add_subdirectory(wayland)
+endif()
+

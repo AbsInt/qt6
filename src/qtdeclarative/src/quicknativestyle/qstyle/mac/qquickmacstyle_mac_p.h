@@ -32,9 +32,12 @@ class QMacStylePrivate;
 class QMacStyle : public QCommonStyle
 {
     Q_OBJECT
-public:
+protected:
     QMacStyle();
+public:
     ~QMacStyle();
+
+    static QMacStyle *create();
 
     void drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPainter *p) const override;
     void drawControl(ControlElement element, const QStyleOption *opt, QPainter *p) const override;

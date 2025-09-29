@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qxcbdrag.h"
 #include <xcb/xcb.h>
@@ -594,6 +595,9 @@ void QXcbDrag::setActionList(Qt::DropAction requestedAction, Qt::DropActions sup
                             XCB_ATOM_ATOM, 32, actions.size(), actions.constData());
         current_actions = actions;
     }
+#else
+    Q_UNUSED(requestedAction)
+    Q_UNUSED(supportedActions)
 #endif
 }
 

@@ -298,7 +298,7 @@ void QQuickImageBase::loadPixmap(const QUrl &url, LoadPixmapOptions loadOptions)
         loadUrl = context->resolvedUrl(url);
 
     if (loadOptions & HandleDPR) {
-        const qreal targetDevicePixelRatio = (window() ? window()->effectiveDevicePixelRatio() : qApp->devicePixelRatio());
+        const qreal targetDevicePixelRatio = d->effectiveDevicePixelRatio();
         d->devicePixelRatio = 1.0;
         bool updatedDevicePixelRatio = false;
         if (d->sourcesize.isValid()

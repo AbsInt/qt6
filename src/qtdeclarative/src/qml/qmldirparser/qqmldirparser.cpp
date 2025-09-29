@@ -62,9 +62,59 @@ inline static void scanToEnd(const QChar *&ch) {
         ++ch;
 }
 
-inline static void scanWord(const QChar *&ch) {
+inline static QString scanWord(const QChar *&ch) {
+    const QChar *begin = ch;
     while (!ch->isSpace() && !ch->isNull())
         ++ch;
+    return QString(begin, ch - begin);
+}
+
+QString QQmlDirParser::scanQuotedWord(const QChar *&ch, quint16 lineNumber, quint16 columnNumber)
+{
+    Q_ASSERT(*ch == QLatin1Char('"'));
+    ++ch;
+
+    QString result;
+
+    const QChar *begin = ch;
+    while (*ch != QLatin1Char('"')) {
+        if (ch->isNull()) {
+            reportError(lineNumber, columnNumber,
+                        QStringLiteral("file ends inside a quoted string"));
+            result.append(begin, ch - begin);
+            return result;
+        }
+
+        if (*ch == QLatin1Char('\n') || *ch == QLatin1Char('\r')) {
+            reportError(lineNumber, columnNumber,
+                        QStringLiteral("line breaks in quoted strings are not supported as they "
+                                       "are not portable between different operating systems"));
+            result.append(begin, ch - begin);
+            return result;
+        }
+
+        if (*ch == QLatin1Char('\\')) {
+            result.append(begin, ch - begin);
+            ++ch;
+            ++columnNumber;
+            if (*ch != QLatin1Char('"') && *ch != QLatin1Char('\\')) {
+                reportError(lineNumber, columnNumber,
+                            QStringLiteral("only '\"' and '\\' can be escaped"));
+                return result;
+            }
+            begin = ch;
+        }
+
+        ++ch;
+        ++columnNumber;
+    }
+
+    result.append(begin, ch - begin);
+
+    Q_ASSERT(*ch == QLatin1Char('"'));
+    ++ch;
+
+    return result;
 }
 
 /*!
@@ -142,16 +192,18 @@ bool QQmlDirParser::parse(const QString &source)
                 scanToEnd(ch);
                 break;
             }
-            const QChar *start = ch;
-            scanWord(ch);
-            if (sectionCount < 4) {
-                sections[sectionCount++] = source.mid(start-source.constData(), ch-start);
-            } else {
-                reportError(lineNumber, start-lineStart, QLatin1String("unexpected token"));
+
+            if (sectionCount >= 4) {
+                reportError(lineNumber, ch - lineStart, QLatin1String("unexpected token"));
                 scanToEnd(ch);
                 invalidLine = true;
                 break;
             }
+
+            sections[sectionCount++] = (*ch == QLatin1Char('"'))
+                    ? scanQuotedWord(ch, lineNumber, ch - lineStart)
+                    : scanWord(ch);
+
             scanSpace(ch);
         } while (*ch != QLatin1Char('\n') && !ch->isNull());
 

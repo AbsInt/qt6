@@ -314,13 +314,9 @@ void QQuickTreeViewPrivate::setModelImpl(const QVariant &newModel)
     Q_Q(QQuickTreeView);
 
     m_assignedModel = newModel;
-    QVariant effectiveModel = m_assignedModel;
-    if (effectiveModel.userType() == qMetaTypeId<QJSValue>())
-        effectiveModel = effectiveModel.value<QJSValue>().toVariant();
-
-    if (effectiveModel.isNull())
+    if (m_assignedModel.isNull())
         m_treeModelToTableModel.setModel(nullptr);
-    else if (const auto qaim = qvariant_cast<QAbstractItemModel*>(effectiveModel))
+    else if (const auto qaim = qvariant_cast<QAbstractItemModel *>(m_assignedModel))
         m_treeModelToTableModel.setModel(qaim);
     else
         qmlWarning(q) << "TreeView only accepts a model of type QAbstractItemModel";

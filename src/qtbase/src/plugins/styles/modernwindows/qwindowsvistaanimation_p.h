@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QWINDOWSVISTAANIMATION_P_H
 #define QWINDOWSVISTAANIMATION_P_H
@@ -17,6 +18,8 @@
 
 #include <private/qstyleanimation_p.h>
 #include <QtWidgets/private/qwindowsstyle_p.h>
+
+QT_BEGIN_NAMESPACE
 
 class QWindowsVistaAnimation : public QBlendStyleAnimation
 {
@@ -45,5 +48,7 @@ class QWindowsVistaPulse: public QWindowsVistaAnimation
 public:
     QWindowsVistaPulse(QObject *target) : QWindowsVistaAnimation(Pulse, target) {}
 };
+
+QT_END_NAMESPACE
 
 #endif // QWINDOWSVISTAANIMATION_P_H

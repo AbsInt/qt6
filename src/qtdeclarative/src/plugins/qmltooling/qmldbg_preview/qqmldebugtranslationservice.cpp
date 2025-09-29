@@ -46,6 +46,30 @@ QDebug operator<<(QDebug debug, const TranslationBindingInformation &translation
     return debug << qPrintable(error.toString());
 }
 
+static QString translationIdString(const QQmlTranslation::QsTrData &data)
+{
+    return QString::fromUtf8(data.text());
+}
+
+static QString translationIdString(const QQmlTranslation::QsTrIdData &data)
+{
+    return QString::fromUtf8(data.id());
+}
+
+static QString translationIdString(const QQmlTranslation &translation)
+{
+    return translation.visit(
+            [](auto &&arg) -> QString {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (!std::is_same_v<T, std::nullptr_t>)
+                    return translationIdString(arg);
+                else {
+                    Q_ASSERT_X(false, "QQmlTranslation", "Uninitialized Translation");
+                    return {};
+                }
+            });
+}
+
 class QQmlDebugTranslationServicePrivate : public QObject
 {
     Q_OBJECT
@@ -159,7 +183,7 @@ public:
 
                 auto textProperty = scopeObject->metaObject()->property(textIndex);
                 qmlElement.propertyName = textProperty.name();
-                qmlElement.translationId = information.translation.idForQmlDebug();
+                qmlElement.translationId = translationIdString(information.translation);
                 qmlElement.translatedText = textProperty.read(scopeObject).toString();
                 qmlElement.elementId = qmlContext(scopeObject)->nameForObject(scopeObject);
 

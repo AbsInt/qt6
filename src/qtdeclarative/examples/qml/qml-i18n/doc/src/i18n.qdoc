@@ -4,7 +4,6 @@
     \title Qt Quick I18N
     \examplecategory {User Interface Components}
     \example qml-i18n
-    \image qml-i18n-example.png
     \ingroup examples-linguist
     \brief Generating translation files (TS and QM) for a Qt Quick application.
 

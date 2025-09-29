@@ -51,7 +51,7 @@ public:
 
     bool generate();
 
-    virtual void generateNodeBase(const NodeInfo &info) = 0;
+    virtual QString generateNodeBase(const NodeInfo &info) = 0;
     virtual bool generateDefsNode(const NodeInfo &info) = 0;
     virtual void generateImageNode(const ImageNodeInfo &info) = 0;
     virtual void generatePath(const PathNodeInfo &info, const QRectF &overrideBoundingRect = QRectF{}) = 0;

@@ -1,5 +1,6 @@
 // Copyright (C) 2023 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
 
 #ifndef QQMLFORMATSETTINGS_P_H
 #define QQMLFORMATSETTINGS_P_H
@@ -30,6 +31,8 @@ public:
     static const inline QLatin1StringView s_newlineSetting = QLatin1String("NewlineType");
     static const inline QLatin1StringView s_objectsSpacingSetting = QLatin1String("ObjectsSpacing");
     static const inline QLatin1StringView s_functionsSpacingSetting = QLatin1String("FunctionsSpacing");
+    static const inline QLatin1StringView s_sortImportsSetting = QLatin1String("SortImports");
+    static const inline QLatin1StringView s_semiColonRuleSetting = QLatin1String("SemicolonRule");
 };
 
 QT_END_NAMESPACE

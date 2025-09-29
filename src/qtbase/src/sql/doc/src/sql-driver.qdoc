@@ -94,6 +94,9 @@
     A typical \c qt-cmake run (in this case to configure for MySQL) looks like this:
 
     \snippet code/doc_src_sql-driver.qdoc 41
+
+    After configuring with \c qt-cmake, build the driver by running \c ninja.
+
     \note As mentioned in \l{#DriverWithQt}{Compile Qt with a specific driver},
     if the driver could not be found or is not enabled, start over by removing
     \e{CMakeCache.txt}.

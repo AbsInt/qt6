@@ -43,24 +43,13 @@ public:
     QQmlThread *q = nullptr;
 
     bool m_processing = false; // Set when processing messages
-    bool m_shutdown = false;   // Set to signal a shutdown
 };
 
 QQmlThread::QQmlThread() : d(new QQmlThreadPrivate(this)) {}
 QQmlThread::~QQmlThread() { delete d; }
 
 void QQmlThread::startup() {}
-void QQmlThread::shutdown()
-{
-    Q_ASSERT(!d->m_shutdown);
-    d->m_shutdown = true;
-    discardMessages();
-}
-
-bool QQmlThread::isShutdown() const
-{
-    return d->m_shutdown;
-}
+void QQmlThread::shutdown() {}
 
 void QQmlThread::lock() {}
 void QQmlThread::unlock() {}

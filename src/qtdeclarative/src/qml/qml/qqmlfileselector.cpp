@@ -167,7 +167,8 @@ QQmlFileSelector* QQmlFileSelector::get(QQmlEngine* engine)
     }
 
     const QUrl nonEmptyInvalid(QLatin1String(":"));
-    for (QQmlAbstractUrlInterceptor *interceptor : enginePrivate->urlInterceptors) {
+    const auto interceptors = enginePrivate->typeLoader.urlInterceptors();
+    for (QQmlAbstractUrlInterceptor *interceptor : interceptors) {
         const QUrl result = interceptor->intercept(
                     nonEmptyInvalid, QQmlAbstractUrlInterceptor::UrlString);
         if (result.scheme() == QLatin1String("type")

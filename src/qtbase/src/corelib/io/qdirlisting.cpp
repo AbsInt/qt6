@@ -77,15 +77,17 @@
         Don't list directories. When combined with ResolveSymlinks, symbolic
         links to directories will be excluded too.
 
-    \value ExcludeSpecial
+    \omitvalue ExcludeSpecial
+    \value ExcludeOther [since 6.10]
         Don't list file system entries that are \e not directories, regular files,
-        nor symbolic links.
+        or symbolic links.
         \list
-            \li On Unix, an example of a special file system entry is a FIFO, socket,
-                character device, or block device. For more details on Linux, see the
-                \l{https://www.man7.org/linux/man-pages/man2/mknod.2.html}{mknod manual page}.
-            \li On Windows (for historical reasons) \c .lnk files are considered special
-                file system entries.
+            \li On Unix, a special (other) file system entry is a FIFO, socket,
+                character device, or block device. For more details see the
+                \l{https://pubs.opengroup.org/onlinepubs/9699919799/functions/mknod.html}{\c mknod}
+                manual page.
+            \li On Windows (for historical reasons) \c .lnk files are considered
+                special (other) file system entries.
         \endlist
 
     \value ResolveSymlinks
@@ -520,7 +522,7 @@ bool QDirListingPrivate::matchesFilters(QDirEntryInfo &entryInfo) const
         return false; // symlink is not a file or dir
     }
 
-    if (iteratorFlags.testAnyFlag(F::ExcludeSpecial)
+    if (iteratorFlags.testAnyFlag(F::ExcludeOther)
         && !entryInfo.isFile() && !entryInfo.isDir() && !entryInfo.isSymLink()) {
         return false;
     }

@@ -39,8 +39,8 @@ class Q_QUICKDIALOGS2_EXPORT QQuickFileDialog : public QQuickAbstractDialog
     Q_PROPERTY(QString defaultSuffix READ defaultSuffix WRITE setDefaultSuffix RESET resetDefaultSuffix NOTIFY defaultSuffixChanged FINAL)
     Q_PROPERTY(QString acceptLabel READ acceptLabel WRITE setAcceptLabel RESET resetAcceptLabel NOTIFY acceptLabelChanged FINAL)
     Q_PROPERTY(QString rejectLabel READ rejectLabel WRITE setRejectLabel RESET resetRejectLabel NOTIFY rejectLabelChanged FINAL)
-    Q_FLAGS(QFileDialogOptions::FileDialogOptions)
     QML_NAMED_ELEMENT(FileDialog)
+    QML_EXTENDED_NAMESPACE(QFileDialogOptions)
     QML_ADDED_IN_VERSION(6, 2)
     Q_MOC_INCLUDE(<QtQuickDialogs2Utils/private/qquickfilenamefilter_p.h>)
 

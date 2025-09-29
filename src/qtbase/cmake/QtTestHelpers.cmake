@@ -100,6 +100,10 @@ function(qt_internal_add_manual_test target)
     qt_internal_add_test(${ARGV} MANUAL)
 endfunction()
 
+macro(qt_internal_skip_docker_compose)
+    set(QT_SKIP_DOCKER_COMPOSE ON CACHE BOOL "Skip setting docker on Linux." FORCE)
+endmacro()
+
 # This function will configure the fixture for the network tests that require docker network services
 # qmake counterpart: qtbase/mkspecs/features/unsupported/testserver.prf
 function(qt_internal_setup_docker_test_fixture name)
@@ -119,6 +123,7 @@ function(qt_internal_setup_docker_test_fixture name)
     find_program(QT_DOCKER_COMPOSE docker-compose)
     if (NOT QT_DOCKER_COMPOSE)
         message(WARNING "docker-compose was not found. Docker network tests will not be run.")
+        qt_internal_skip_docker_compose()
         return()
     endif()
     if (NOT DEFINED QT_DOCKER_COMPOSE_VERSION)
@@ -130,6 +135,7 @@ function(qt_internal_setup_docker_test_fixture name)
     find_program(QT_DOCKER docker)
     if (NOT QT_DOCKER)
         message(WARNING "docker was not found. Docker network tests will not be run.")
+        qt_internal_skip_docker_compose()
         return()
     endif()
     if (NOT DEFINED QT_DOCKER_TEST_SERVER)
@@ -139,6 +145,7 @@ function(qt_internal_setup_docker_test_fixture name)
                 "Docker image qt-test-server-* not found.\n"
                 "Run the provisioning script (coin/provisioning/.../testserver/docker_testserver.sh) in advance\n"
                 "Docker network tests will not be run.")
+            qt_internal_skip_docker_compose()
             return()
         endif()
         set(QT_DOCKER_TEST_SERVER "ON" CACHE BOOL "docker qt-test-server-* present")
@@ -569,13 +576,17 @@ function(qt_internal_add_test name)
 
         # Manual tests can be bundle apps
         if(NOT arg_MANUAL)
-            # Tests should not be bundles on macOS even if arg_GUI is true, because some tests make
-            # assumptions about the location of helper processes, and those paths would be different
-            # if a test is built as a bundle.
-            set_property(TARGET "${name}" PROPERTY MACOSX_BUNDLE FALSE)
-            # The same goes for WIN32_EXECUTABLE, but because it will detach from the console window
-            # and not print anything.
-            set_property(TARGET "${name}" PROPERTY WIN32_EXECUTABLE FALSE)
+            if(NOT DEFINED CMAKE_MACOSX_BUNDLE)
+                # Tests should not be bundles on macOS even if arg_GUI is true, because some tests make
+                # assumptions about the location of helper processes, and those paths would be different
+                # if a test is built as a bundle.
+                set_property(TARGET "${name}" PROPERTY MACOSX_BUNDLE FALSE)
+            endif()
+            if(NOT DEFINED CMAKE_WIN32_EXECUTABLE)
+                # The same goes for WIN32_EXECUTABLE, but because it will detach from the console window
+                # and not print anything.
+                set_property(TARGET "${name}" PROPERTY WIN32_EXECUTABLE FALSE)
+            endif()
         endif()
 
         # Tests on iOS must be app bundles.
@@ -686,6 +697,10 @@ function(qt_internal_add_test name)
 
         if(QT_ENABLE_VERBOSE_DEPLOYMENT OR build_environment STREQUAL "ci")
             list(APPEND extra_test_args "--verbose")
+        endif()
+
+        if(build_environment STREQUAL "ci")
+            list(APPEND extra_test_args "--show-logcat")
         endif()
 
         if(arg_ANDROID_TESTRUNNER_PRE_TEST_ADB_COMMANDS)

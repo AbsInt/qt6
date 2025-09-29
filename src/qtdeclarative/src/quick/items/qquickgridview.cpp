@@ -1358,6 +1358,12 @@ void QQuickGridView::setHighlightFollowsCurrentItem(bool autoHighlight)
 */
 
 /*!
+    \qmlproperty enumeration QtQuick::GridView::delegateModelAccess
+
+    \include delegatemodelaccess.qdocinc
+*/
+
+/*!
   \qmlproperty int QtQuick::GridView::currentIndex
   \qmlproperty Item QtQuick::GridView::currentItem
 

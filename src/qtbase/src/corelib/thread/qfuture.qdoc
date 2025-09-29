@@ -180,6 +180,8 @@
     Be aware that not all running asynchronous computations can be canceled.
     For example, the future returned by QtConcurrent::run() cannot be canceled;
     but the future returned by QtConcurrent::mappedReduced() can.
+
+    \sa cancelChain()
 */
 
 /*! \fn template <typename T> bool QFuture<T>::isCanceled() const
@@ -191,6 +193,30 @@
     function returns \c true. See cancel() for more details.
 */
 
+/*!
+    \fn template <typename T> void QFuture<T>::cancelChain()
+    \since 6.10
+
+    Cancels the entire continuation chain. All already-finished futures are
+    unchanged and their results are still available. Every pending continuation
+    is canceled, and its \l {onCanceled()} handler is called, if it exists in
+    the continuation chain.
+
+    \snippet code/src_corelib_thread_qfuture.cpp 38
+
+    In the example, if the chain is canceled before the \c {Then 2} continuation
+    is executed, both \c {OnCanceled 1} and \c {OnCanceled 2} cancellation
+    handlers will be invoked.
+
+    If the chain is canceled after \c {Then 2}, but before \c {Then 4}, then
+    only \c {OnCanceled 2} will be invoked.
+
+    \note When called on an already finished future, this method has no effect.
+    It's recommended to use it on the QFuture object that represents the entire
+    continuation chain, like it's shown in the example above.
+
+    \sa cancel()
+*/
 
 #if QT_DEPRECATED_SINCE(6, 0)
 /*! \fn template <typename T> void QFuture<T>::setPaused(bool paused)

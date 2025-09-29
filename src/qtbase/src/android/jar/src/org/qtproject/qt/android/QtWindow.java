@@ -4,9 +4,10 @@
 package org.qtproject.qt.android;
 
 import android.annotation.SuppressLint;
+import android.app.ActionBar;
 import android.app.Activity;
 import android.content.Context;
-
+import android.content.res.TypedArray;
 import android.graphics.Insets;
 
 import android.view.DisplayCutout;
@@ -15,12 +16,11 @@ import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.WindowInsets;
-
 import android.os.Build;
 
 import java.util.HashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @SuppressLint("ViewConstructor")
 class QtWindow extends QtLayout implements QtSurfaceInterface {
@@ -31,7 +31,8 @@ class QtWindow extends QtLayout implements QtSurfaceInterface {
     private GestureDetector m_gestureDetector;
     private final QtEditText m_editText;
     private final QtInputConnection.QtInputConnectionListener m_inputConnectionListener;
-    private final AtomicBoolean m_canBeDestroyed = new AtomicBoolean(true);
+    private boolean m_firstSafeMarginsDelivered = false;
+    private int m_actionBarHeight = -1;
 
     private static native void setSurface(int windowId, Surface surface);
     private static native void safeAreaMarginsChanged(Insets insets, int id);
@@ -77,46 +78,70 @@ class QtWindow extends QtLayout implements QtSurfaceInterface {
                 });
             m_gestureDetector.setIsLongpressEnabled(true);
         });
+
+        registerSafeAreaMarginsListener();
     }
 
-    @UsedFromNativeCode
-    void registerSafeAreaMarginsListner(boolean isTopLevel, boolean isSameWindowAndScreenSize)
+    void registerSafeAreaMarginsListener()
     {
         if (!(getContext() instanceof QtActivityBase))
             return;
 
         setOnApplyWindowInsetsListener((view, insets) -> {
-            Insets safeInsets = getSafeInsets(view, insets);
-            safeAreaMarginsChanged(safeInsets, getId());
-            return getConsumedInsets(insets);
+            WindowInsets windowInsets = view.onApplyWindowInsets(insets);
+            reportSafeAreaMargins(windowInsets, getId());
+
+            return windowInsets;
         });
 
-        // NOTE: if the window size fits the screen geometry (i.e. edge-to-edge case),
-        // assume this window is the main window and initialize its safe margins with
-        // the insets of the decor view.
-        if (isTopLevel && isSameWindowAndScreenSize) {
-            QtNative.runAction(() -> {
-                // NOTE: The callback onApplyWindowInsetsListener() is not being triggered during
-                // startup, so this is a Workaround to get the safe area margins at startup.
-                // Initially, set the root view insets to the current window, then if the insets
-                // change later, we can rely on setOnApplyWindowInsetsListener() being called.
-                View decorView = ((Activity) getContext()).getWindow().getDecorView();
-                WindowInsets rootInsets = decorView.getRootWindowInsets();
-                Insets rootSafeInsets = getSafeInsets(decorView, rootInsets);
-                safeAreaMarginsChanged(rootSafeInsets, getId());
+        // If the window is attached, try to directly deliver root insets
+        if (isAttachedToWindow()) {
+            WindowInsets insets = getRootWindowInsets();
+            if (insets != null) {
+                getRootView().post(() -> reportSafeAreaMargins(insets, getId()));
+                m_firstSafeMarginsDelivered = true;
+            }
+        } else { // Otherwise request it upon attachement
+            addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override
+                public void onViewAttachedToWindow(View view) {
+                    view.removeOnAttachStateChangeListener(this);
+                    view.requestApplyInsets();
+                }
+
+                @Override
+                public void onViewDetachedFromWindow(View view) {}
             });
         }
 
-        QtNative.runAction(() -> requestApplyInsets());
-    }
+        // Further, tag into pre draw to deliver safe area margins early on
+        if (!m_firstSafeMarginsDelivered) {
+            ViewTreeObserver.OnPreDrawListener listener = new ViewTreeObserver.OnPreDrawListener() {
+                @Override
+                public boolean onPreDraw() {
+                    if (isAttachedToWindow()) {
+                        WindowInsets insets = getRootWindowInsets();
+                        if (insets != null) {
+                            getViewTreeObserver().removeOnPreDrawListener(this);
+                            getRootView().post(() -> reportSafeAreaMargins(insets, getId()));
+                            m_firstSafeMarginsDelivered = true;
+                            return true;
+                        }
+                    }
 
-    @SuppressWarnings("deprecation")
-    WindowInsets getConsumedInsets(WindowInsets insets)
-    {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-            return WindowInsets.CONSUMED;
-        else
-            return insets.consumeSystemWindowInsets();
+                    requestApplyInsets();
+
+                    return true;
+                }
+            };
+            getViewTreeObserver().addOnPreDrawListener(listener);
+        }
+
+        addOnLayoutChangeListener((view, l, t, r, b, oldl, oldt, oldr, oldb) -> {
+            WindowInsets insets = getRootWindowInsets();
+            if (insets != null)
+                getRootView().post(() -> reportSafeAreaMargins(insets, getId()));
+        });
     }
 
     @SuppressWarnings("deprecation")
@@ -128,18 +153,10 @@ class QtWindow extends QtLayout implements QtSurfaceInterface {
         }
 
         // Android R and older
-        int left = 0;
-        int top = 0;
-        int right = 0;
-        int bottom = 0;
-
-        int visibility = view.getSystemUiVisibility();
-        if ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
-            left = insets.getSystemWindowInsetLeft();
-            top = insets.getSystemWindowInsetTop();
-            right = insets.getSystemWindowInsetRight();
-            bottom = insets.getSystemWindowInsetBottom();
-        }
+        int left = insets.getSystemWindowInsetLeft();
+        int top = insets.getSystemWindowInsetTop();
+        int right = insets.getSystemWindowInsetRight();
+        int bottom = insets.getSystemWindowInsetBottom();
 
         // Android 9 and 10 emulators don't seem to be able
         // to handle this, but let's have the logic here anyway
@@ -151,63 +168,67 @@ class QtWindow extends QtLayout implements QtSurfaceInterface {
             bottom = Math.max(bottom, cutout.getSafeInsetBottom());
         }
 
+        // If a theme supports an action bar, sometimes it even if it's hidden
+        // the insets might report values including the bar's height, not entirely
+        // sure whether it's due to a delay or a bug, either way ensure the top
+        // margin doesn't include the action bar's height.
+        ActionBar actionBar = ((Activity) getContext()).getActionBar();
+        if (actionBar == null || !actionBar.isShowing()) {
+            int topWithoutActionBar = top - actionBarHeight();
+            if (topWithoutActionBar > 0)
+                top = topWithoutActionBar;
+        }
+
         return Insets.of(left, top, right, bottom);
+    }
+
+    private void reportSafeAreaMargins(WindowInsets insets, int id)
+    {
+        View rootView = getRootView();
+
+        int[] rootLocation = new int[2];
+        rootView.getLocationOnScreen(rootLocation);
+        int rootX = rootLocation[0];
+        int rootY = rootLocation[1];
+
+        int[] windowLocation = new int[2];
+        getLocationOnScreen(windowLocation);
+        int windowX = windowLocation[0];
+        int windowY = windowLocation[1];
+
+        // Offset values of window from root
+        int leftOffset = windowX - rootX;
+        int topOffset = windowY - rootY;
+        int rightOffset = (rootX + rootView.getWidth()) - (windowX + getWidth());
+        int bottomOffset = (rootY + rootView.getHeight()) - (windowY + getHeight());
+
+        // Find the remaining minimum safe margins
+        Insets safeInsets = getSafeInsets(rootView, insets);
+        int left = Math.max(0, Math.min(safeInsets.left, safeInsets.left - leftOffset));
+        int top = Math.max(0, Math.min(safeInsets.top, safeInsets.top - topOffset));
+        int right = Math.max(0, Math.min(safeInsets.right, safeInsets.right - rightOffset));
+        int bottom = Math.max(0, Math.min(safeInsets.bottom, safeInsets.bottom - bottomOffset));
+
+        safeAreaMarginsChanged(Insets.of(left, top, right, bottom), id);
+    }
+
+    private int actionBarHeight()
+    {
+        if (m_actionBarHeight == -1) {
+            TypedArray ta = getContext().getTheme().obtainStyledAttributes(
+                new int[] { android.R.attr.actionBarSize });
+            try {
+                m_actionBarHeight = ta.getDimensionPixelSize(0, 0);
+            } finally {
+                ta.recycle();
+            }
+        }
+        return m_actionBarHeight;
     }
 
     @UsedFromNativeCode
     void setVisible(boolean visible) {
-        QtNative.runAction(() -> {
-            if (visible)
-                setVisibility(View.VISIBLE);
-            else
-                setVisibility(View.INVISIBLE);
-        });
-    }
-
-    // Use only for Qt for Android and not Qt Quick for Android
-    @UsedFromNativeCode
-    public void setToDestroy(boolean destroy)
-    {
-        m_canBeDestroyed.set(destroy);
-    }
-    // Use only for Qt for Android and not Qt Quick for Android
-    private QtLayout getParentContainer()
-    {
-        if (!(getParent() instanceof QtLayout))
-            return null;
-        return (QtLayout) getParent();
-    }
-    // Use only for Qt for Android and not Qt Quick for Android
-    public boolean isFrontmostVisibleWindow()
-    {
-        QtLayout parent = getParentContainer();
-        if (getVisibility() != View.VISIBLE || parent == null)
-            return false;
-        for (int index = parent.indexOfChild(this) + 1; index < parent.getChildCount(); index ++) {
-            View child = parent.getChildAt(index);
-            if (child instanceof QtWindow && child.isShown())
-                return false;
-        }
-        return true;
-    }
-    // Use only for Qt for Android and not Qt Quick for Android
-    @UsedFromNativeCode
-    public boolean isLastVisibleTopLevelWindow()
-    {
-        QtLayout parent = getParentContainer();
-        if (getVisibility() != View.VISIBLE || parent == null)
-            return false;
-        for (int index = parent.indexOfChild(this) - 1; index >= 0; index--) {
-            View child = parent.getChildAt(index);
-            if (child instanceof QtWindow) {
-                QtWindow childWindow = (QtWindow) child;
-                if (child.getVisibility() == View.VISIBLE && !childWindow.m_canBeDestroyed.get())
-                    return false;
-            }
-        }
-        if (parent.getChildCount() > 1 && !isFrontmostVisibleWindow())
-            return false;
-        return true;
+        QtNative.runAction(() -> setVisibility(visible ? View.VISIBLE : View.INVISIBLE));
     }
 
     @Override
@@ -276,7 +297,7 @@ class QtWindow extends QtLayout implements QtSurfaceInterface {
     void destroySurface()
     {
         QtNative.runAction(()-> {
-            if (m_surfaceContainer != null && m_canBeDestroyed.get()) {
+            if (m_surfaceContainer != null) {
                 removeView(m_surfaceContainer);
                 m_surfaceContainer = null;
                 }

@@ -247,11 +247,7 @@ bool QPainterPrivate::attachPainterPrivate(QPainter *q, QPaintDevice *pdev)
     // the current d_ptr to the shared painter's d_ptr.
     sp->save();
     ++sp->d_ptr->refcount;
-    {
-        // ensure realloc happens before the unique_ptr::release():
-        auto &p = sp->d_ptr->d_ptrs.emplace_back();
-        p = q->d_ptr.release();
-    }
+    sp->d_ptr->d_ptrs.push_back(std::move(q->d_ptr));
     q->d_ptr.reset(sp->d_ptr.get());
 
     Q_ASSERT(q->d_ptr->state);
@@ -296,19 +292,19 @@ void QPainterPrivate::detachPainterPrivate(QPainter *q)
     Q_ASSERT(q);
 
     --refcount;
-    QPainterPrivate *original = d_ptrs.back();
+    auto original = std::move(d_ptrs.back());
     d_ptrs.pop_back();
     if (inDestructor) {
         inDestructor = false;
         if (original)
             original->inDestructor = true;
     } else if (!original) {
-        original = new QPainterPrivate(q);
+        original = std::make_unique<QPainterPrivate>(q);
     }
 
     q->restore();
     Q_UNUSED(q->d_ptr.release());
-    q->d_ptr.reset(original);
+    q->d_ptr = std::move(original);
 
     if (emulationEngine) {
         extended = emulationEngine->real_engine;
@@ -1488,6 +1484,7 @@ QPainter::~QPainter()
         Q_ASSERT(d_ptr->inDestructor);
         d_ptr->inDestructor = false;
         Q_ASSERT(d_ptr->refcount == 1);
+        Q_ASSERT(d_ptr->d_ptrs.empty());
     }
 }
 
@@ -2572,7 +2569,7 @@ QRegion QPainter::clipRegion() const
     return region;
 }
 
-extern QPainterPath qt_regionToPath(const QRegion &region);
+Q_GUI_EXPORT extern QPainterPath qt_regionToPath(const QRegion &region);
 
 /*!
     Returns the current clip path in logical coordinates.

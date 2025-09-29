@@ -38,10 +38,10 @@ FileDialogImpl {
         dim: true
         modal: true
         title: qsTr("Overwrite file?")
+        width: contentItem.implicitWidth + leftPadding + rightPadding
 
         contentItem: Label {
             text: qsTr("“%1” already exists.\nDo you want to replace it?").arg(control.fileName)
-            wrapMode: Text.WordWrap
         }
 
         footer: DialogButtonBox {
@@ -117,26 +117,27 @@ FileDialogImpl {
             Layout.fillWidth: true
             Layout.leftMargin: 12
             Layout.rightMargin: 12
+            Layout.maximumWidth: parent.width - 24
 
             KeyNavigation.tab: fileDialogListView
         }
     }
 
-    contentItem: RowLayout {
+    contentItem: SplitView {
         id: contentLayout
 
+        contentHeight: sideBar.implicitHeight
         DialogsImpl.SideBar {
             id: sideBar
             dialog: control
-            Layout.fillHeight: true
-            implicitWidth: 150
+            SplitView.minimumWidth: 50
+            SplitView.maximumWidth: contentLayout.width / 2
         }
 
         Frame {
             padding: 0
             verticalPadding: 1
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            SplitView.fillWidth: true
 
             ListView {
                 id: fileDialogListView
@@ -165,6 +166,10 @@ FileDialogImpl {
                     KeyNavigation.backtab: breadcrumbBar
                     KeyNavigation.tab: fileNameTextField.visible ? fileNameTextField : nameFiltersComboBox
                 }
+            }
+
+            background: Rectangle {
+                color: control.palette.base
             }
         }
     }

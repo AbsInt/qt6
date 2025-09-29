@@ -98,7 +98,7 @@ void QtQuickControls2NativeStylePlugin::initializeEngine(QQmlEngine *engine, con
                 style = new QCommonStyle;
 #if defined(Q_OS_MACOS)
             else if (envStyle == QLatin1String("mac"))
-                style = new QMacStyle;
+                style = QMacStyle::create();
 #endif
 #if defined(Q_OS_WINDOWS)
             else if (envStyle == QLatin1String("windows"))
@@ -109,7 +109,7 @@ void QtQuickControls2NativeStylePlugin::initializeEngine(QQmlEngine *engine, con
         }
         if (!style) {
 #if defined(Q_OS_MACOS)
-            style = new QMacStyle;
+            style = QMacStyle::create();
 #elif defined(Q_OS_WINDOWS)
             style = new QWindowsXPStyle;
             if (QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark)

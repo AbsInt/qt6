@@ -12,8 +12,8 @@
 #include <CoreGraphics/CoreGraphics.h>
 #include <CoreVideo/CoreVideo.h>
 
-Q_FORWARD_DECLARE_OBJC_CLASS(NSScreen);
-Q_FORWARD_DECLARE_OBJC_CLASS(NSArray);
+#import <AppKit/NSScreen.h>
+#import <Foundation/NSArray.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -65,6 +65,8 @@ private:
     static void initializeScreens();
     static void updateScreens();
     static void cleanupScreens();
+
+    static void updateHdrWindows();
 
     static QMacNotificationObserver s_screenParameterObserver;
     static CGDisplayReconfigurationCallBack s_displayReconfigurationCallBack;

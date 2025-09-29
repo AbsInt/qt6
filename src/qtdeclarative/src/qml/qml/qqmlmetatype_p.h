@@ -143,7 +143,7 @@ public:
     static QQmlType qmlType(QMetaType metaType);
     static QQmlType qmlListType(QMetaType metaType);
 
-    static QQmlType qmlType(const QUrl &unNormalizedUrl, bool includeNonFileImports = false);
+    static QQmlType qmlType(const QUrl &unNormalizedUrl);
 
     static QQmlPropertyCache::ConstPtr propertyCache(
             QObject *object, QTypeRevision version = QTypeRevision());

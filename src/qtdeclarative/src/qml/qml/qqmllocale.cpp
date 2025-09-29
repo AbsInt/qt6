@@ -938,6 +938,16 @@ ReturnedValue QQmlLocale::method_localeCompare(const QV4::FunctionObject *b, con
 */
 
 /*!
+    \qmlmethod string QtQml::Locale::createSeparatedList(list<string> list)
+    \since 6.10
+
+    Returns a string that represents a join of a given \a list of strings with a
+    separator defined by the locale.
+
+    \sa QLocale::createSeparatedList()
+*/
+
+/*!
     \qmlproperty Array<string> QtQml::Locale::uiLanguages
 
     Returns an ordered list of locale names for translation purposes in

@@ -583,11 +583,11 @@ void tst_qqmlmetatype::normalizeUrls()
     const QUrl url("qrc:///tstqqmlmetatype/data/CompositeType.qml");
     QVERIFY(!QQmlMetaType::qmlType(url).isValid());
     const auto registrationId = qmlRegisterType(url, "Test", 1, 0, "ResourceCompositeType");
-    QVERIFY(QQmlMetaType::qmlType(url, /*includeNonFileImports=*/true).isValid());
+    QVERIFY(QQmlMetaType::qmlType(url).isValid());
     QUrl normalizedURL("qrc:/tstqqmlmetatype/data/CompositeType.qml");
-    QVERIFY(QQmlMetaType::qmlType(normalizedURL, /*includeNonFileImports=*/true).isValid());
+    QVERIFY(QQmlMetaType::qmlType(normalizedURL).isValid());
     QQmlMetaType::unregisterType(registrationId);
-    QVERIFY(!QQmlMetaType::qmlType(url, /*includeNonFileImports=*/true).isValid());
+    QVERIFY(!QQmlMetaType::qmlType(url).isValid());
 }
 
 void tst_qqmlmetatype::unregisterAttachedProperties()

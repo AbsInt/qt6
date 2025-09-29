@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Templates as T
 import QtQuick.Controls.impl
 import QtQuick.Controls.macOS.impl
+import QtQuick.NativeStyle as NativeStyle
 
 T.RangeSlider {
     id: control
@@ -16,30 +17,41 @@ T.RangeSlider {
 
     readonly property bool __notCustomizable: true
 
-    first.handle: SwitchHandle {
-        x: control.leftPadding + Math.round(control.horizontal
-            ? control.first.visualPosition * (control.availableWidth - width)
-            : (control.availableWidth - width) / 2)
-        y: control.topPadding + Math.round(control.horizontal
-            ? (control.availableHeight - height) / 2
-            : control.first.visualPosition * (control.availableHeight - height))
+    first.handle: SliderHandle {
+        x: Math.round(control.horizontal
+            ? control.leftPadding + (control.first.position * (control.availableWidth - width))
+            : (control.width - width) / 2)
+        y: Math.round(control.horizontal
+            ? (control.height - height) / 2
+            : control.leftPadding + (control.availableHeight - height - (control.first.position * (control.availableHeight - height + 4)) + 2))
+        width: NativeStyle.StyleConstants.runningWithLiquidGlass ? (control.horizontal ? 20 : 16) : implicitWidth
+        height: NativeStyle.StyleConstants.runningWithLiquidGlass ? (control.horizontal ? 16 : 20) : implicitHeight
 
         palette: control.palette
-        down: control.first.pressed
-
+        pressed: control.first.pressed
+        progress: control.first.position
+        orientation: control.orientation
+        isRangeSlider: true
+        isLeftHandle: true
         readonly property bool __ignoreNotCustomizable: true
     }
 
-    second.handle: SwitchHandle {
-        x: control.leftPadding + Math.round(control.horizontal
-            ? control.second.visualPosition * (control.availableWidth - width)
-            : (control.availableWidth - width) / 2)
-        y: control.topPadding + Math.round(control.horizontal
-            ? (control.availableHeight - height) / 2
-            : control.second.visualPosition * (control.availableHeight - height))
+    second.handle: SliderHandle {
+        x: Math.round(control.horizontal
+            ? control.leftPadding + (control.second.position * (control.availableWidth - width))
+            : (control.width - width) / 2)
+        y: Math.round(control.horizontal
+            ? (control.height - height) / 2
+            : control.leftPadding + (control.availableHeight - height - (control.second.position * (control.availableHeight - height + 4)) + 2))
+        width: NativeStyle.StyleConstants.runningWithLiquidGlass ? (control.horizontal ? 20 : 16) : implicitWidth
+        height: NativeStyle.StyleConstants.runningWithLiquidGlass ? (control.horizontal ? 16 : 20) : implicitHeight
 
         palette: control.palette
-        down: control.second.pressed
+        pressed: control.second.pressed
+        progress: control.second.position
+        orientation: control.orientation
+        isRangeSlider: true
+        isLeftHandle: false
 
         readonly property bool __ignoreNotCustomizable: true
     }
@@ -86,15 +98,23 @@ T.RangeSlider {
 
         // Progress bar.
         Rectangle {
-            x: control.horizontal ? control.first.position * parent.width + 3 : (parent.width - width) / 2
-            y: control.horizontal ? (parent.height - height) / 2 : control.second.visualPosition * parent.height + 3
+            x: control.horizontal ? control.first.position * parent.width : (parent.width - width) / 2
+            y: control.horizontal ? (parent.height - height) / 2 : control.second.visualPosition * parent.height
             width: control.horizontal
-                ? control.second.position * parent.width - control.first.position * parent.width - parent.barThickness
+                ? control.second.position * parent.width - control.first.position * parent.width
                 : parent.barThickness
             height: control.horizontal
                 ? parent.barThickness
-                : control.second.position * parent.height - control.first.position * parent.height - parent.barThickness
-            color: control.palette.accent
-        }
+                : control.second.position * parent.height - control.first.position * parent.height
+            radius: height / 2
+            color: {
+                const light = Application.styleHints.colorScheme === Qt.Light
+                if (!control.enabled)
+                    return light ? "transparent" : Qt.lighter(control.palette.window, 1.4)
+                if (Application.state !== Qt.ApplicationActive)
+                    return Qt.lighter(control.palette.window, light ? 0.9 : 1.8)
+                return control.palette.accent
+            }
+       }
     }
 }

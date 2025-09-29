@@ -5,6 +5,7 @@
 #include "qwasmwindow.h"
 
 #include <private/qeventdispatcher_wasm_p.h>
+#include <private/qwasmsuspendresumecontrol_p.h>
 
 #include <qpa/qwindowsysteminterface.h>
 
@@ -14,7 +15,13 @@ using namespace emscripten;
 
 bool QWasmCompositor::m_requestUpdateHoldEnabled = false;
 
-QWasmCompositor::QWasmCompositor(QWasmScreen *screen) : QObject(screen)
+QWasmCompositor::QWasmCompositor(QWasmScreen *screen)
+: QObject(screen)
+, m_animationFrameHandler(QWasmAnimationFrameHandler([this](double frametime){
+       Q_UNUSED(frametime);
+       this->m_requestAnimationFrameId = -1;
+       this->deliverUpdateRequests();
+   }))
 {
     QWindowSystemInterface::setSynchronousWindowSystemEvents(true);
 }
@@ -22,7 +29,7 @@ QWasmCompositor::QWasmCompositor(QWasmScreen *screen) : QObject(screen)
 QWasmCompositor::~QWasmCompositor()
 {
     if (m_requestAnimationFrameId != -1)
-        emscripten_cancel_animation_frame(m_requestAnimationFrameId);
+        m_animationFrameHandler.cancelAnimationFrame(m_requestAnimationFrameId);
 
     // TODO(mikolaj.boc): Investigate if m_isEnabled is needed at all. It seems like a frame should
     // not be generated after this instead.
@@ -86,17 +93,7 @@ void QWasmCompositor::requestUpdate()
     if (m_requestUpdateHoldEnabled)
         return;
 
-    static auto frame = [](double frameTime, void *context) -> EM_BOOL {
-        Q_UNUSED(frameTime);
-
-        QWasmCompositor *compositor = reinterpret_cast<QWasmCompositor *>(context);
-
-        compositor->m_requestAnimationFrameId = -1;
-        compositor->deliverUpdateRequests();
-
-        return EM_FALSE;
-    };
-    m_requestAnimationFrameId = emscripten_request_animation_frame(frame, this);
+    m_requestAnimationFrameId = m_animationFrameHandler.requestAnimationFrame();
 }
 
 void QWasmCompositor::deliverUpdateRequests()
@@ -168,3 +165,28 @@ QWasmScreen *QWasmCompositor::screen()
 {
     return static_cast<QWasmScreen *>(parent());
 }
+
+QWasmAnimationFrameHandler::QWasmAnimationFrameHandler(std::function<void(double)> handler)
+{
+    auto argCastWrapper = [handler](val arg){ handler(arg.as<double>()); };
+    m_handlerIndex = QWasmSuspendResumeControl::get()->registerEventHandler(argCastWrapper);
+}
+
+QWasmAnimationFrameHandler::~QWasmAnimationFrameHandler()
+{
+    QWasmSuspendResumeControl::get()->removeEventHandler(m_handlerIndex);
+}
+
+int64_t QWasmAnimationFrameHandler::requestAnimationFrame()
+{
+    using ReturnType = double; // FIXME emscripten::val::call() does not support int64_t
+    val handler = QWasmSuspendResumeControl::get()->jsEventHandlerAt(m_handlerIndex);
+    return int64_t(val::global("window").call<ReturnType>("requestAnimationFrame", handler));
+}
+
+void QWasmAnimationFrameHandler::cancelAnimationFrame(int64_t id)
+{
+    val::global("window").call<void>("cancelAnimationFrame", double(id));
+}
+
+

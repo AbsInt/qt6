@@ -115,4 +115,6 @@ private slots:
 
     void attachedComponentProperty();
     void attachedNamespacedProperty();
+
+    void newLineTranslation();
 };

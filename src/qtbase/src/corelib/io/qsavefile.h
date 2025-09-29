@@ -59,6 +59,7 @@ private:
 
 private:
     Q_DISABLE_COPY(QSaveFile)
+    friend class QFilePrivate;
 };
 
 QT_END_NAMESPACE

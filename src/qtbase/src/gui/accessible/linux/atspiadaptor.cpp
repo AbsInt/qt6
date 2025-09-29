@@ -45,6 +45,7 @@
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
+using namespace QtGuiPrivate; // for D-Bus accessibility wrappers
 
 Q_STATIC_LOGGING_CATEGORY(lcAccessibilityAtspi, "qt.accessibility.atspi")
 Q_STATIC_LOGGING_CATEGORY(lcAccessibilityAtspiCreation, "qt.accessibility.atspi.creation")
@@ -1536,7 +1537,8 @@ bool AtSpiAdaptor::applicationInterface(QAccessibleInterface *interface, const Q
         QDBusMessage reply = message.createReply(QVariant::fromValue(QLocale().name()));
         return connection.send(reply);
     }
-    qCDebug(lcAccessibilityAtspi) << "AtSpiAdaptor::applicationInterface " << message.path() << interface << function;
+    qCWarning(lcAccessibilityAtspi) << "AtSpiAdaptor::applicationInterface does not implement"
+                                    << function << message.path();
     return false;
 }
 
@@ -1545,13 +1547,12 @@ bool AtSpiAdaptor::applicationInterface(QAccessibleInterface *interface, const Q
   */
 void AtSpiAdaptor::registerApplication()
 {
-    OrgA11yAtspiSocketInterface *registry;
-    registry = new OrgA11yAtspiSocketInterface(ATSPI_DBUS_NAME_REGISTRY ""_L1,
-                                               ATSPI_DBUS_PATH_ROOT ""_L1, m_dbus->connection());
+    OrgA11yAtspiSocketInterface registry(ATSPI_DBUS_NAME_REGISTRY ""_L1, ATSPI_DBUS_PATH_ROOT ""_L1,
+                                         m_dbus->connection());
 
     QDBusPendingReply<QSpiObjectReference> reply;
     QSpiObjectReference ref = QSpiObjectReference(m_dbus->connection(), QDBusObjectPath(ATSPI_DBUS_PATH_ROOT));
-    reply = registry->Embed(ref);
+    reply = registry.Embed(ref);
     reply.waitForFinished(); // TODO: make this async
     if (reply.isValid ()) {
         const QSpiObjectReference &socket = reply.value();
@@ -1561,7 +1562,6 @@ void AtSpiAdaptor::registerApplication()
                    << reply.error().name()
                    << reply.error().message();
     }
-    delete registry;
 }
 
 // Accessible
@@ -1648,6 +1648,16 @@ bool AtSpiAdaptor::accessibleInterface(QAccessibleInterface *interface, const QS
     } else if (function == "GetApplication"_L1) {
         sendReply(connection, message, QVariant::fromValue(
                       QSpiObjectReference(connection, QDBusObjectPath(ATSPI_DBUS_PATH_ROOT))));
+    } else if (function == "GetLocale"_L1) {
+        QLocale locale;
+        if (QAccessibleAttributesInterface *attributesIface = interface->attributesInterface()) {
+            const QVariant localeVariant = attributesIface->attributeValue(QAccessible::Attribute::Locale);
+            if (localeVariant.isValid()) {
+                Q_ASSERT(localeVariant.canConvert<QLocale>());
+                locale = localeVariant.toLocale();
+            }
+        }
+        sendReply(connection, message, QVariant::fromValue(QDBusVariant(locale.name())));
     } else if (function == "GetChildren"_L1) {
         QSpiObjectReferenceArray children;
         const int numChildren = interface->childCount();

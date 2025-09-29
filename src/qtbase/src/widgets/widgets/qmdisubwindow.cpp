@@ -479,7 +479,7 @@ void ControlLabel::updateWindowIcon()
     if (menuIcon.isNull())
         menuIcon = style()->standardIcon(QStyle::SP_TitleBarMenuButton, nullptr, parentWidget());
     const int iconSize = style()->pixelMetric(QStyle::PM_TitleBarButtonIconSize, nullptr, parentWidget());
-    label = menuIcon.pixmap(iconSize);
+    label = menuIcon.pixmap(QSize(iconSize, iconSize), devicePixelRatio());
     update();
 }
 

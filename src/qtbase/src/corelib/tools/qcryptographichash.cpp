@@ -18,16 +18,10 @@
 
 #include "../../3rdparty/sha1/sha1.cpp"
 
-#if defined(QT_BOOTSTRAPPED) && !defined(QT_CRYPTOGRAPHICHASH_ONLY_SHA1)
-#  error "Are you sure you need the other hashing algorithms besides SHA-1?"
-#endif
-
 // Header from rfc6234
 #include "../../3rdparty/rfc6234/sha.h"
 
-#ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
 #if !QT_CONFIG(openssl_hash)
-// qdoc and qmake only need SHA-1
 #include "../../3rdparty/md5/md5.h"
 #include "../../3rdparty/md5/md5.cpp"
 #include "../../3rdparty/md4/md4.h"
@@ -120,7 +114,6 @@ QT_WARNING_DISABLE_MSVC(4505)
 #include "../../3rdparty/blake2/src/blake2s-ref.c"
 QT_WARNING_POP
 #endif
-#endif // QT_CRYPTOGRAPHICHASH_ONLY_SHA1
 
 #if !defined(QT_BOOTSTRAPPED) && QT_CONFIG(openssl_hash)
 #define USING_OPENSSL30
@@ -138,7 +131,6 @@ static constexpr int hashLengthInternal(QCryptographicHash::Algorithm method) no
         return Size \
     /*end*/
     CASE(Sha1, 20);
-#ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
     CASE(Md4, 16);
     CASE(Md5, 16);
     CASE(Sha224, SHA224HashSize);
@@ -166,7 +158,6 @@ static constexpr int hashLengthInternal(QCryptographicHash::Algorithm method) no
     case QCryptographicHash::Keccak_512:
     case QCryptographicHash::Blake2b_512:
         return 512 / 8;
-#endif
 #undef CASE
     case QCryptographicHash::NumAlgorithms: ;
         // fall through
@@ -293,7 +284,6 @@ public:
         void finalizeUnchecked(QCryptographicHash::Algorithm method, HashResult &result) noexcept;
 
         Sha1State sha1Context;
-#ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
 #ifdef USING_OPENSSL30
         EVP evp;
 #else
@@ -310,7 +300,6 @@ public:
         static void sha3Finish(SHA3Context &ctx, HashResult &result, Sha3Variant sha3Variant);
         blake2b_state blake2bContext;
         blake2s_state blake2sContext;
-#endif
     } state;
     // protects result in finalize()
     QBasicMutex finalizeMutex;
@@ -319,7 +308,6 @@ public:
     const QCryptographicHash::Algorithm method;
 };
 
-#ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
 void QCryptographicHashPrivate::State::sha3Finish(SHA3Context &ctx, HashResult &result,
                                                   Sha3Variant sha3Variant)
 {
@@ -355,7 +343,6 @@ void QCryptographicHashPrivate::State::sha3Finish(SHA3Context &ctx, HashResult &
 
     sha3Final(&ctx, result.data());
 }
-#endif
 
 /*!
   \class QCryptographicHash
@@ -600,12 +587,6 @@ QCryptographicHashPrivate::State::State(QCryptographicHash::Algorithm method)
     case QCryptographicHash::Sha1:
         new (&sha1Context) Sha1State;
         break;
-#ifdef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
-    default:
-        Q_ASSERT_X(false, "QCryptographicHash", "Method not compiled in");
-        Q_UNREACHABLE();
-        break;
-#else
     case QCryptographicHash::Md4:
         new (&md4Context) md4_context;
         break;
@@ -646,7 +627,6 @@ QCryptographicHashPrivate::State::State(QCryptographicHash::Algorithm method)
     case QCryptographicHash::Blake2s_256:
         new (&blake2sContext) blake2s_state;
         break;
-#endif
     case QCryptographicHash::NumAlgorithms:
         Q_UNREACHABLE();
     }
@@ -726,12 +706,6 @@ void QCryptographicHashPrivate::State::reset(QCryptographicHash::Algorithm metho
     case QCryptographicHash::Sha1:
         sha1InitState(&sha1Context);
         break;
-#ifdef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
-    default:
-        Q_ASSERT_X(false, "QCryptographicHash", "Method not compiled in");
-        Q_UNREACHABLE();
-        break;
-#else
     case QCryptographicHash::Md4:
         md4_init(&md4Context);
         break;
@@ -772,7 +746,6 @@ void QCryptographicHashPrivate::State::reset(QCryptographicHash::Algorithm metho
     case QCryptographicHash::Blake2s_256:
         blake2s_init(&blake2sContext, hashLengthInternal(method));
         break;
-#endif
     case QCryptographicHash::NumAlgorithms:
         Q_UNREACHABLE();
     }
@@ -879,12 +852,6 @@ void QCryptographicHashPrivate::State::addData(QCryptographicHash::Algorithm met
         case QCryptographicHash::Sha1:
             sha1Update(&sha1Context, (const unsigned char *)data, length);
             break;
-#ifdef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
-        default:
-            Q_ASSERT_X(false, "QCryptographicHash", "Method not compiled in");
-            Q_UNREACHABLE();
-            break;
-#else
         case QCryptographicHash::Md4:
             md4_update(&md4Context, (const unsigned char *)data, length);
             break;
@@ -925,7 +892,6 @@ void QCryptographicHashPrivate::State::addData(QCryptographicHash::Algorithm met
         case QCryptographicHash::Blake2s_256:
             blake2s_update(&blake2sContext, reinterpret_cast<const uint8_t *>(data), length);
             break;
-#endif
         case QCryptographicHash::NumAlgorithms:
             Q_UNREACHABLE();
         }
@@ -1086,12 +1052,6 @@ void QCryptographicHashPrivate::State::finalizeUnchecked(QCryptographicHash::Alg
         sha1ToHash(&copy, result.data());
         break;
     }
-#ifdef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
-    default:
-        Q_ASSERT_X(false, "QCryptographicHash", "Method not compiled in");
-        Q_UNREACHABLE();
-        break;
-#else
     case QCryptographicHash::Md4: {
         md4_context copy = md4Context;
         md4_final(&copy, result.data());
@@ -1156,7 +1116,6 @@ void QCryptographicHashPrivate::State::finalizeUnchecked(QCryptographicHash::Alg
         blake2s_final(&copy, result.data(), length);
         break;
     }
-#endif
     case QCryptographicHash::NumAlgorithms:
         Q_UNREACHABLE();
     }
@@ -1294,7 +1253,6 @@ bool QCryptographicHashPrivate::supportsAlgorithm(QCryptographicHash::Algorithm 
 {
     switch (method) {
     case QCryptographicHash::Sha1:
-#ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
     case QCryptographicHash::Md4:
     case QCryptographicHash::Md5:
     case QCryptographicHash::Sha224:
@@ -1317,7 +1275,6 @@ bool QCryptographicHashPrivate::supportsAlgorithm(QCryptographicHash::Algorithm 
     case QCryptographicHash::Blake2s_160:
     case QCryptographicHash::Blake2s_224:
     case QCryptographicHash::Blake2s_256:
-#endif
         return true;
     case QCryptographicHash::NumAlgorithms: ;
     };
@@ -1330,7 +1287,6 @@ static constexpr int qt_hash_block_size(QCryptographicHash::Algorithm method)
     switch (method) {
     case QCryptographicHash::Sha1:
         return SHA1_Message_Block_Size;
-#ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
     case QCryptographicHash::Md4:
         return 64;
     case QCryptographicHash::Md5:
@@ -1365,7 +1321,6 @@ static constexpr int qt_hash_block_size(QCryptographicHash::Algorithm method)
     case QCryptographicHash::Blake2s_224:
     case QCryptographicHash::Blake2s_256:
         return BLAKE2S_BLOCKBYTES;
-#endif // QT_CRYPTOGRAPHICHASH_ONLY_SHA1
     case QCryptographicHash::NumAlgorithms:
 #if !defined(Q_CC_GNU_ONLY) || Q_CC_GNU >= 900
         // GCC 8 has trouble with Q_UNREACHABLE() in constexpr functions

@@ -7,8 +7,10 @@ add_subdirectory(WithSubDir)
 set(cpp_sources
     ambiguous.h
     birthdayparty.cpp birthdayparty.h
+    collector.h
     convertQJSPrimitiveValueToIntegral.h
     cppbaseclass.h
+    cppobj.h
     detachedreferences.h
     druggeljug.h
     dummyobjekt.h
@@ -50,6 +52,7 @@ set(qml_files
     BaseConstraint.qml
     BaseMember.qml
     BindingExpression.qml
+    BindingToScriptStringProperty.qml
     Categorizer.qml
     CxxTypeFromDir.qml
     CxxTypeFromImplicit.qml
@@ -62,11 +65,13 @@ set(qml_files
     Dummy2.qml
     EditConstraint.qml
     Enums.qml
+    FinalProperty.qml
     Foozle.qml
     GetOptionalLookupNonVoidableBase.qml
     GetOptionalLookupOnQJSValueNonStrict.qml
     GetOptionalLookupShadowed.qml
     Loopy.qml
+    MyObject.qml
     NotificationItem.qml
     NotificationsUtils.js
     OkType.qml
@@ -90,6 +95,7 @@ set(qml_files
     Variable.qml
     WindowDerived.qml
     aliasLookup.qml
+    aliasToAliasResolutionSkipCorruption.qml
     ambiguous1/Ambiguous.qml
     ambiguous2/Ambiguous.qml
     ambiguousAs.qml
@@ -112,9 +118,11 @@ set(qml_files
     brokenAs.qml
     boundComponents.qml
     callContextPropertyLookupResult.qml
+    callFactory.qml
     callObjectLookupOnNull.qml
     callWithSpread.qml
     childobject.qml
+    collector.qml
     colorAsVariant.qml
     colorString.qml
     compareOriginals.qml
@@ -144,6 +152,7 @@ set(qml_files
     detachedreferences.qml
     dialog.qml
     dialogButtonBox.qml
+    disappearingArrowFunction.qml
     dynamicscene.qml
     enforceSignature.qml
     enumConversion.qml
@@ -169,6 +178,7 @@ set(qml_files
     fallbacklookups.qml
     fallbackresettable.qml
     fileDialog.qml
+    finalUser.qml
     flagEnum.qml
     fromBoolValue.qml
     funcWithParams.qml
@@ -179,6 +189,7 @@ set(qml_files
     getOptionalLookup.qml
     globals.qml
     idAccess.qml
+    idVsMember.qml
     ignoredFunctionReturn.qml
     immediateQuit.qml
     imports/QmlBench/Globals.qml
@@ -230,6 +241,7 @@ set(qml_files
     methods.qml
     modulePrefix.qml
     moveRegVoid.qml
+    multiAdjust.qml
     multiRedirect.qml
     multiforeign.qml
     multipleCtors.qml
@@ -277,6 +289,7 @@ set(qml_files
     script.js
     script.mjs
     sequenceToIterable.qml
+    sequenceToIterable2.qml
     setLookupConversion.qml
     setLookupOriginalScope.qml
     shadowedAsCasts.qml

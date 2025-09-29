@@ -85,7 +85,7 @@ QV4::ReturnedValue QQmlDelayedCallQueue::addUniquelyAndExecuteLater(QV4::Executi
     if (!func)
         THROW_GENERIC_ERROR("Qt.callLater: first argument not a function or signal");
 
-    QPair<QObject *, int> functionData = QV4::QObjectMethod::extractQtMethod(func);
+    std::pair<QObject *, int> functionData = QV4::QObjectMethod::extractQtMethod(func);
 
     QVector<DelayedFunctionCall>::Iterator iter;
     if (functionData.second != -1) {
@@ -93,7 +93,7 @@ QV4::ReturnedValue QQmlDelayedCallQueue::addUniquelyAndExecuteLater(QV4::Executi
         iter = self->m_delayedFunctionCalls.begin();
         while (iter != self->m_delayedFunctionCalls.end()) {
             DelayedFunctionCall& dfc = *iter;
-            QPair<QObject *, int> storedFunctionData = QV4::QObjectMethod::extractQtMethod(dfc.m_function.as<QV4::FunctionObject>());
+            std::pair<QObject *, int> storedFunctionData = QV4::QObjectMethod::extractQtMethod(dfc.m_function.as<QV4::FunctionObject>());
             if (storedFunctionData == functionData) {
                 break; // Already stored!
             }

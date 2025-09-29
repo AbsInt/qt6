@@ -7,7 +7,6 @@
 #include <QtCore/qurl.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qlist.h>
-#include <QtCore/qpair.h>
 #include <QtQml/qjsvalue.h>
 #include <QtCore/qmetatype.h>
 #include <QtCore/qvariant.h>

@@ -805,7 +805,7 @@ QSplitterLayoutStruct *QSplitterPrivate::findWidget(QWidget *w) const
 void QSplitterPrivate::insertWidget_helper(int index, QWidget *widget, bool show)
 {
     Q_Q(QSplitter);
-    QBoolBlocker b(blockChildAdd);
+    QScopedValueRollback b(blockChildAdd, true);
     const bool needShow = show && shouldShowWidget(widget);
     if (widget->parentWidget() != q)
         widget->setParent(q);
@@ -1145,7 +1145,7 @@ QWidget *QSplitter::replaceWidget(int index, QWidget *widget)
         return nullptr;
     }
 
-    QBoolBlocker b(d->blockChildAdd);
+    QScopedValueRollback b(d->blockChildAdd, true);
 
     const QRect geom = current->geometry();
     const bool wasHidden = current->isHidden();
@@ -1310,7 +1310,7 @@ void QSplitter::setRubberBand(int pos)
     const int rBord = 3; // customizable?
     int hw = handleWidth();
     if (!d->rubberBand) {
-        QBoolBlocker b(d->blockChildAdd);
+        QScopedValueRollback b(d->blockChildAdd, true);
         d->rubberBand = new QRubberBand(QRubberBand::Line, this);
         // For accessibility to identify this special widget.
         d->rubberBand->setObjectName("qt_rubberband"_L1);

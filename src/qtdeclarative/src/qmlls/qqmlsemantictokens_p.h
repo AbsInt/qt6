@@ -1,5 +1,6 @@
 // Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QQMLSEMANTICTOKENS_P_H
 #define QQMLSEMANTICTOKENS_P_H
@@ -68,8 +69,9 @@ enum class QmlHighlightModifier {
     None = 0,
     QmlPropertyDefinition = 1 << 0,
     QmlDefaultProperty = 1 << 1,
-    QmlRequiredProperty = 1 << 2,
-    QmlReadonlyProperty = 1 << 3,
+    QmlFinalProperty = 1 << 2,
+    QmlRequiredProperty = 1 << 3,
+    QmlReadonlyProperty = 1 << 4,
 };
 Q_DECLARE_FLAGS(QmlHighlightModifiers, QmlHighlightModifier)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QmlHighlightModifiers)

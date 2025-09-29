@@ -166,6 +166,7 @@ your editor should invoke \c{qmlls} as follows:
 \endcode
     \li The \c{QMLLS_NO_CMAKE_CALLS} environment variable.
     \li The \c{.qmlls.ini} settings file, see \l {Configuration File}.
+    \li The \l{QT_QML_GENERATE_QMLLS_INI_NO_CMAKE_CALLS} CMake variable.
 \endlist
 
 \section1 Configuration File

@@ -43,7 +43,6 @@ namespace QtAndroid
     QWindow *windowFromId(int windowId);
     int availableWidthPixels();
     int availableHeightPixels();
-    double scaledDensity();
     double pixelDensity();
     jobject assets();
     AAssetManager *assetManager();
@@ -54,7 +53,6 @@ namespace QtAndroid
     jobject createBitmapDrawable(jobject bitmap, JNIEnv *env = nullptr);
 
 #if QT_CONFIG(accessibility)
-    void initializeAccessibility();
     void notifyAccessibilityLocationChange(uint accessibilityObjectId);
     void notifyObjectHide(uint accessibilityObjectId, uint parentObjectId);
     void notifyObjectShow(uint parentObjectId);

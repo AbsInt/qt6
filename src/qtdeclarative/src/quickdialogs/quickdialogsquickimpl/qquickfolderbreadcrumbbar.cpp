@@ -98,7 +98,7 @@ void QQuickFolderBreadcrumbBarPrivate::repopulate()
         return;
     }
 
-    QBoolBlocker repopulateGuard(repopulating);
+    QScopedValueRollback repopulateGuard(repopulating, true);
 
     auto failureCleanup = [this, q](){
         folderPaths.clear();

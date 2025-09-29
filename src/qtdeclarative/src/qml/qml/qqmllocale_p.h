@@ -212,6 +212,11 @@ public:
         return locale.toString(dateTime, format);
     }
 
+    Q_INVOKABLE QString createSeparatedList(const QStringList &list) const
+    {
+        return locale.createSeparatedList(list);
+    }
+
     QQmlLocale::DayOfWeek firstDayOfWeek() const;
     QLocale::MeasurementSystem measurementSystem() const { return locale.measurementSystem(); }
     Qt::LayoutDirection textDirection() const { return locale.textDirection(); }

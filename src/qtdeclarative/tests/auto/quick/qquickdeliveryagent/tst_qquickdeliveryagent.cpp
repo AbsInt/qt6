@@ -1,9 +1,11 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
+#include <QtCore/qpointer.h>
 #include <qtest.h>
 #include <QSignalSpy>
 #include <QDebug>
+#include <QtGui/private/qeventpoint_p.h>
 #include <QtQml/QQmlEngine>
 #include <QtQml/QQmlComponent>
 #include <QtQuick/QQuickItem>
@@ -12,18 +14,15 @@
 #include <QtQuick/private/qquickrectangle_p.h>
 #include <QtQuick/private/qquickflickable_p.h>
 #include <QtQuick/private/qquicklistview_p.h>
+#include <QtQuick/private/qquickmousearea_p.h>
 #include <QtQuick/private/qquickpointhandler_p.h>
 #include <QtQuick/private/qquickshadereffectsource_p.h>
 #include <QtQuick/private/qquicktaphandler_p.h>
 #include <QtQuick/private/qquickwindow_p.h>
+#include <QtQuickTest/quicktest.h>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <QtQuickTestUtils/private/visualtestutils_p.h>
 #include <QtQuickTestUtils/private/viewtestutils_p.h>
-#include <QtQuick/private/qquickmousearea_p.h>
-
-#include <QtGui/private/qeventpoint_p.h>
-
-#include <QtCore/qpointer.h>
 
 Q_LOGGING_CATEGORY(lcTests, "qt.quick.tests")
 
@@ -669,17 +668,17 @@ void tst_qquickdeliveryagent::compoundControlsFocusInSubscene()
     auto clickPos = spinboxFocusScope->boundingRect().translated(0, spinboxFocusScope->height() + 20).center().toPoint();
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, clickPos);
 
-    QVERIFY(textField->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(textField);
     QVERIFY(textField->hasFocus());
-    QTRY_VERIFY(spinbox->hasActiveFocus());
+    QTRY_VERIFY_ACTIVE_FOCUS(spinbox);
     QVERIFY(spinbox->hasFocus());
     QCOMPARE(spinbox->scopedFocusItem(), textField);
-    QVERIFY(spinboxFocusScope->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(spinboxFocusScope);
     QVERIFY(spinboxFocusScope->hasFocus());
     QCOMPARE(spinboxFocusScope->scopedFocusItem(), spinbox);
 
     QQuickDeliveryAgentPrivate *daPriv = static_cast<QQuickDeliveryAgentPrivate *>(QQuickDeliveryAgentPrivate::get(subscene.deliveryAgent));
-    QVERIFY(daPriv->rootItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(daPriv->rootItem);
     QCOMPARE(daPriv->activeFocusItem, textField);
     QCOMPARE(QQuickWindowPrivate::get(&window)->deliveryAgentPrivate()->activeFocusItem, textField);
     QCOMPARE(QQuickWindowPrivate::get(&window)->deliveryAgentPrivate()->rootItem->scopedFocusItem(), spinboxFocusScope);

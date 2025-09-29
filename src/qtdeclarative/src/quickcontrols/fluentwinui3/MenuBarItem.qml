@@ -29,9 +29,12 @@ T.MenuBarItem {
 
     icon.width: __config.icon.width
     icon.height: __config.icon.height
-    icon.color: !control.down ? control.palette.buttonText : Application.styleHints.colorScheme === Qt.Light
-                    ? Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.62)
-                    : Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.7725)
+    icon.color: Application.styleHints.accessibility.contrastPreference === Qt.HighContrast
+                ? control.hovered || control.highlighted ? control.palette.highlight : control.palette.buttonText
+                : !control.down
+                ? control.palette.buttonText : Application.styleHints.colorScheme === Qt.Light
+                ? Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.62)
+                : Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.7725)
 
     readonly property string __currentState: [
         !control.enabled && "disabled",
@@ -59,7 +62,7 @@ T.MenuBarItem {
         implicitHeight: 30
         implicitWidth: 30
         radius: control.__config.background.topOffset
-        subtle: !control.checked || control.flat
+        subtle: (!control.checked || control.flat) && Application.styleHints.accessibility.contrastPreference !== Qt.HighContrast
         accented: control.checked
     }
 }

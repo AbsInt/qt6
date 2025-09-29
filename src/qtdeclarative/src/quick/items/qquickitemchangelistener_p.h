@@ -17,6 +17,7 @@
 
 #include <QtCore/qxptype_traits.h>
 #include <QtQml/private/qqmldata_p.h>
+#include <QtQuick/qquickitem.h>
 #include <QtQuick/private/qtquickglobal_p.h>
 
 QT_BEGIN_NAMESPACE

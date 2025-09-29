@@ -57,7 +57,7 @@ static QDebug operator<<(QDebug d, const QMimeData *mimeData)
         if (mimeData->hasUrls())
              d << ", urls=" << mimeData->urls();
     } else {
-        d << '0';
+        d << "0x0";
     }
     d << ')';
     return d;
@@ -100,7 +100,7 @@ void QWindowsClipboardRetrievalMimeData::releaseDataObject(IDataObject *dataObje
     dataObject->Release();
 }
 
-extern "C" LRESULT QT_WIN_CALLBACK qClipboardViewerWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+LRESULT QT_WIN_CALLBACK qClipboardViewerWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = 0;
     if (QWindowsClipboard::instance()

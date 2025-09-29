@@ -33,7 +33,7 @@ class QAbstractSocketPrivate : public QIODevicePrivate, public QAbstractSocketEn
 {
     Q_DECLARE_PUBLIC(QAbstractSocket)
 public:
-    QAbstractSocketPrivate();
+    QAbstractSocketPrivate(decltype(QObjectPrivateVersion) version = QObjectPrivateVersion);
     virtual ~QAbstractSocketPrivate();
 
     // from QAbstractSocketEngineReceiver

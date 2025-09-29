@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qapplication.h"
 #include "qboxlayout.h"
@@ -817,6 +818,8 @@ void QBoxLayout::addItem(QLayoutItem *item)
     inclusive. If \a index is negative or count(), the item is
     added at the end.
 
+    The ownership of \a item is passed to this layout.
+
     \sa addItem(), insertWidget(), insertLayout(), insertStretch(),
         insertSpacing()
 */
@@ -884,6 +887,8 @@ void QBoxLayout::insertStretch(int index, int stretch)
     size and stretch factor. If \a index is negative the
     space is added at the end.
 
+    The ownership of \a spacerItem is passed to this layout.
+
     \sa addSpacerItem(), insertStretch(), insertSpacing()
 */
 void QBoxLayout::insertSpacerItem(int index, QSpacerItem *spacerItem)
@@ -935,6 +940,8 @@ void QBoxLayout::insertLayout(int index, QLayout *layout, int stretch)
     The alignment is specified by \a alignment. The default alignment
     is 0, which means that the widget fills the entire cell.
 
+    \a widget becomes a child of the QLayout::parentWidget().
+
     \sa addWidget(), insertItem()
 */
 void QBoxLayout::insertWidget(int index, QWidget *widget, int stretch,
@@ -981,6 +988,8 @@ void QBoxLayout::addStretch(int stretch)
 
     Adds \a spacerItem to the end of this box layout.
 
+    The ownership of \a spacerItem is passed to this layout.
+
     \sa addSpacing(), addStretch()
 */
 void QBoxLayout::addSpacerItem(QSpacerItem *spacerItem)
@@ -1005,6 +1014,8 @@ void QBoxLayout::addSpacerItem(QSpacerItem *spacerItem)
     The alignment is specified by \a alignment. The default
     alignment is 0, which means that the widget fills the entire cell.
 
+    \a widget becomes a child of the QLayout::parentWidget().
+
     \sa insertWidget(), addItem(), addLayout(), addStretch(),
         addSpacing(), addStrut()
 */
@@ -1016,6 +1027,8 @@ void QBoxLayout::addWidget(QWidget *widget, int stretch, Qt::Alignment alignment
 /*!
     Adds \a layout to the end of the box, with serial stretch factor
     \a stretch.
+
+    \a layout becomes a child of the box layout.
 
     \sa insertLayout(), addItem(), addWidget()
 */

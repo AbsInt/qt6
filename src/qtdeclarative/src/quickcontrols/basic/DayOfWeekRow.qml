@@ -21,6 +21,7 @@ T.AbstractDayOfWeekRow {
     delegate: Text {
         text: shortName
         font: control.font
+        color: control.palette.text
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
 

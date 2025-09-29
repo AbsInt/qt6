@@ -177,6 +177,7 @@ public:
         return QByteArrayLiteral("UTC");
     }
 
+    [[nodiscard]] static QTimeZone utcQTimeZone();
 
 #ifdef QT_BUILD_INTERNAL // For the benefit of a test
     [[nodiscard]] static inline const QTimeZonePrivate *extractPrivate(const QTimeZone &zone)

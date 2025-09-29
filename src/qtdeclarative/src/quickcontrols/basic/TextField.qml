@@ -44,6 +44,14 @@ T.TextField {
         implicitHeight: 40
         border.width: control.activeFocus ? 2 : 1
         color: control.palette.base
-        border.color: control.activeFocus ? control.palette.highlight : control.palette.mid
+        border.color: {
+            if (control.activeFocus)
+                return control.palette.highlight
+            else if (Qt.styleHints.accessibility.contrastPreference !== Qt.HighContrast)
+                return control.palette.mid
+            else
+                return Color.blend(control.palette.text, control.palette.base,
+                                   control.enabled ? 0.0 : 0.5)
+        }
     }
 }

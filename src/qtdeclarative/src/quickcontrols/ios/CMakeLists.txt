@@ -46,17 +46,26 @@ set(qml_files
     "BusyIndicator.qml"
     "ComboBox.qml"
     "HorizontalHeaderView.qml"
+    "HorizontalHeaderViewDelegate.qml"
     "VerticalHeaderView.qml"
+    "VerticalHeaderViewDelegate.qml"
     "Dialog.qml"
     "DialogButtonBox.qml"
     "DelayButton.qml"
     "SelectionRectangle.qml"
     "ToolTip.qml"
     "ToolSeparator.qml"
+    "ApplicationWindow.qml"
 )
 
 set_source_files_properties(Slider.qml PROPERTIES
     QT_QML_SOURCE_VERSIONS "2.2;6.0"
+)
+set_source_files_properties(HorizontalHeaderViewDelegate.qml PROPERTIES
+    QT_QML_SOURCE_VERSIONS "6.10"
+)
+set_source_files_properties(VerticalHeaderViewDelegate.qml PROPERTIES
+    QT_QML_SOURCE_VERSIONS "6.10"
 )
 
 qt_internal_add_qml_module(qtquickcontrols2iosstyleplugin

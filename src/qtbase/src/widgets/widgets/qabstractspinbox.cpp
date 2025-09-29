@@ -113,6 +113,13 @@ using namespace std::chrono_literals;
 */
 
 /*!
+  \fn void QAbstractSpinBox::returnPressed()
+  \since 6.10
+
+  This signal is emitted when the Return or Enter key is used.
+*/
+
+/*!
     Constructs an abstract spinbox with the given \a parent with default
     \l wrapping, and \l alignment properties.
 */
@@ -1053,6 +1060,7 @@ void QAbstractSpinBox::keyPressEvent(QKeyEvent *event)
         selectAll();
         event->ignore();
         emit editingFinished();
+        emit returnPressed();
         emit d->edit->returnPressed();
         return;
 

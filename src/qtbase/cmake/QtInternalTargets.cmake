@@ -94,6 +94,18 @@ function(qt_internal_set_warnings_are_errors_flags target target_scope)
             ${language_args}
         )
     endif()
+    if(APPLE)
+        qt_internal_add_compiler_dependent_flags("${target}" ${target_scope}
+            COMPILERS CLANG AppleClang
+                CONDITIONS $<BOOL:$<TARGET_PROPERTY:UNITY_BUILD>>
+                    OPTIONS
+                        -Wno-error=nullability-completeness
+            COMMON_CONDITIONS
+                ${common_conditions}
+            LANGUAGES
+                OBJCXX
+        )
+    endif()
     # Other options are gated at compile time that are not likely to change between different build
     # environments of other modules.
     if(ANDROID)
@@ -291,6 +303,13 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
         "$<$<AND:${not_disabled},${is_xcode15}>:LINKER:-no_warn_duplicate_libraries>")
 endif()
 
+if(CYGWIN)
+    # CYGWIN doesn't define _GNU_SOURCE by default for better support with W32API
+    target_compile_definitions(PlatformCommonInternal INTERFACE
+        "_GNU_SOURCE"
+    )
+endif()
+
 if(MSVC)
     target_compile_definitions(PlatformCommonInternal INTERFACE
         "_CRT_SECURE_NO_WARNINGS"
@@ -353,6 +372,13 @@ if (MSVC AND NOT CLANG)
     )
 endif()
 
+if (WIN32 AND (CLANG OR MINGW) AND (TEST_architecture_arch STREQUAL x86_64))
+    # windows 10 requires cmpxchg16b
+    target_compile_options(PlatformCommonInternal INTERFACE
+        -mcx16
+    )
+endif()
+
 set(_qt_internal_clang_msvc_frontend False)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND
     CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
@@ -369,6 +395,22 @@ endif()
 
 if (GCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "9.2")
     target_compile_options(PlatformCommonInternal INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wsuggest-override>)
+endif()
+
+if(QT_FEATURE_stdlib_libcpp)
+    # Disable transitive C++ inclusions when using libc++, on all
+    # language versions. See
+    # https://libcxx.llvm.org/DesignDocs/HeaderRemovalPolicy.html
+    target_compile_definitions(PlatformCommonInternal INTERFACE _LIBCPP_REMOVE_TRANSITIVE_INCLUDES)
+endif()
+
+if(QT_USE_CCACHE AND CLANG AND BUILD_WITH_PCH)
+    # The ccache man page says we must compile with -fno-pch-timestamp when using clang and pch.
+    foreach(language IN ITEMS C CXX OBJC OBJCXX)
+        target_compile_options(PlatformCommonInternal INTERFACE
+            "$<$<COMPILE_LANGUAGE:${language}>:SHELL:-Xclang -fno-pch-timestamp>"
+        )
+    endforeach()
 endif()
 
 # Hardening options

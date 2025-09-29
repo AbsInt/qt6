@@ -7,6 +7,8 @@
 #include "qquickabstractbutton_p.h"
 #include "qquickpopupitem_p_p.h"
 #include "qquickpopupwindow_p_p.h"
+#include <qpa/qplatformintegration.h>
+#include <private/qguiapplication_p.h>
 
 QT_BEGIN_NAMESPACE
 

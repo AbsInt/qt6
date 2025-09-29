@@ -309,12 +309,9 @@ QList<PositionMarkerPair> markersForNode(const QSvgNode *node)
     }
     case QSvgNode::Polyline:
     case QSvgNode::Polygon: {
-        const QSvgPolyline *polyline = static_cast<const QSvgPolyline*>(node);
-        const QSvgPolygon *polygon = static_cast<const QSvgPolygon*>(node);
-
         const QPolygonF &polyData = (node->type() == QSvgNode::Polyline)
-                ? polyline->polygon()
-                : polygon->polygon();
+                ? static_cast<const QSvgPolyline*>(node)->polygon()
+                : static_cast<const QSvgPolygon*>(node)->polygon();
 
         if (node->hasMarkerStart() && polyData.size() > 1) {
             QLineF line(polyData.at(0), polyData.at(1));

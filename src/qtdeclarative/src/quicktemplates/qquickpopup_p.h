@@ -314,6 +314,8 @@ public:
     void setBottomInset(qreal inset);
     void resetBottomInset();
 
+    void setWindowModality(const Qt::WindowModality modality);
+
     enum PopupType {
         Item,
         Window,

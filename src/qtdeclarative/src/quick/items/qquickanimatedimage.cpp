@@ -319,7 +319,7 @@ void QQuickAnimatedImage::load()
         if (isPlaying() != d->oldPlaying)
             emit playingChanged();
     } else {
-        const qreal targetDevicePixelRatio = (window() ? window()->effectiveDevicePixelRatio() : qApp->devicePixelRatio());
+        const qreal targetDevicePixelRatio = d->effectiveDevicePixelRatio();
         d->devicePixelRatio = 1.0;
 
         const auto context = qmlContext(this);

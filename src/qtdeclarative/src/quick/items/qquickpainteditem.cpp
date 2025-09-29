@@ -542,7 +542,7 @@ QSGNode *QQuickPaintedItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDat
         QSize itemSize(qRound(width()), qRound(height()));
         node->setSize(itemSize);
         QSize textureSize = (hasTextureSize ? d->textureSize : itemSize)
-                            * window()->effectiveDevicePixelRatio();
+                            * d->effectiveDevicePixelRatio();
         node->setTextureSize(textureSize);
     }
 

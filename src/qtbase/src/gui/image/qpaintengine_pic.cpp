@@ -317,19 +317,25 @@ void QPicturePaintEngine::writeCmdLength(int pos, const QRectF &r, bool corr)
         }
 
         if (br.width() > 0.0 || br.height() > 0.0) {
-            int minx = qFloor(br.left());
-            int miny = qFloor(br.top());
-            int maxx = qCeil(br.right());
-            int maxy = qCeil(br.bottom());
+            const auto clampToIntRange = [](qreal v)
+            {
+                return qBound(qreal((std::numeric_limits<int>::min)()),
+                              v,
+                              qreal((std::numeric_limits<int>::max)()));
+            };
+            int minx = qFloor(clampToIntRange(br.left()));
+            int miny = qFloor(clampToIntRange(br.top()));
+            int maxx = qCeil(clampToIntRange(br.right()));
+            int maxy = qCeil(clampToIntRange(br.bottom()));
 
             if (d->pic_d->brect.width() > 0 || d->pic_d->brect.height() > 0) {
                 minx = qMin(minx, d->pic_d->brect.left());
                 miny = qMin(miny, d->pic_d->brect.top());
                 maxx = qMax(maxx, d->pic_d->brect.x() + d->pic_d->brect.width());
                 maxy = qMax(maxy, d->pic_d->brect.y() + d->pic_d->brect.height());
-                d->pic_d->brect = QRect(minx, miny, maxx - minx, maxy - miny);
+                d->pic_d->brect.setCoords(minx, miny, maxx - 1, maxy - 1);
             } else {
-                d->pic_d->brect = QRect(minx, miny, maxx - minx, maxy - miny);
+                d->pic_d->brect.setCoords(minx, miny, maxx - 1, maxy - 1);
             }
         }
     }

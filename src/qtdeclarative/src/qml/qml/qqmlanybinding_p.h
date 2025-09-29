@@ -179,7 +179,7 @@ public:
         if (prop.isBindable())
             prop.property().bindable(prop.object()).takeBinding();
         else
-            QQmlPropertyPrivate::removeBinding(prop);
+            QQmlPropertyPrivate::removeBinding(prop, QQmlPropertyPrivate::OverrideSticky);
     }
 
     /*!
@@ -246,7 +246,7 @@ public:
         if (isAbstractPropertyBinding()) {
             auto abstractBinding = asAbstractBinding();
             Q_ASSERT(abstractBinding->targetObject() == target.object() || QQmlPropertyPrivate::get(target)->core.isAlias());
-            Q_ASSERT(!target.isBindable());
+            Q_ASSERT(!target.isBindable() || QQmlPropertyPrivate::get(target)->isValueType());
             if (mode == IgnoreInterceptors)
                 QQmlPropertyPrivate::setBinding(abstractBinding, QQmlPropertyPrivate::None, QQmlPropertyData::DontRemoveBinding | QQmlPropertyData::BypassInterceptor);
             else
@@ -279,6 +279,25 @@ public:
         } else {
             return asUntypedPropertyBinding().error().hasError();
         }
+    }
+
+    bool isSticky() const
+    {
+        if (d.isNull())
+            return false;
+        if (d.isT1())
+            return d.asT1()->isSticky();
+        return d.asT2()->isSticky();
+    }
+
+    void setSticky(bool sticky = true)
+    {
+        if (d.isNull())
+            return;
+        if (d.isT1())
+            d.asT1()->setSticky(sticky);
+        else
+            d.asT2()->setSticky(sticky);
     }
 
     /*!

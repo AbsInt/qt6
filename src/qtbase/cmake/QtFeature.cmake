@@ -614,7 +614,7 @@ function(_qt_feature_check_feature_alias feature)
         return()
     endif()
     # Check if all values are consistent
-    list(TRANSFORM REMOVE_DUPLICATES expected_value)
+    list(REMOVE_DUPLICATES expected_value)
     list(LENGTH expected_value expected_value_length)
     if(expected_value_length GREATER 1)
         string(CONCAT msg
@@ -1137,13 +1137,20 @@ function(qt_internal_generate_feature_line line feature)
     endif()
 endfunction()
 
-function(qt_internal_feature_write_file file features extra)
+function(qt_internal_feature_write_file target file features extra)
+    file(RELATIVE_PATH relative_path "${CMAKE_BINARY_DIR}" "${file}")
+
+    string(MAKE_C_IDENTIFIER "${target}_${relative_path}" inclusion_guard_suffix)
+
     set(contents "")
+    string(APPEND contents "#ifndef QT_FEATURES_${inclusion_guard_suffix}_H\n")
+    string(APPEND contents "#define QT_FEATURES_${inclusion_guard_suffix}_H\n\n")
     foreach(it ${features})
         qt_internal_generate_feature_line(line "${it}")
         string(APPEND contents "${line}")
     endforeach()
-    string(APPEND contents "${extra}")
+    string(APPEND contents "${extra}\n")
+    string(APPEND contents "#endif // QT_FEATURES_${inclusion_guard_suffix}_H\n")
 
     file(GENERATE OUTPUT "${file}" CONTENT "${contents}")
 endfunction()
@@ -1237,23 +1244,49 @@ function(qt_feature_module_end)
     endforeach()
 
     if(NOT arg_ONLY_EVALUATE_FEATURES)
-        qt_internal_feature_write_file("${CMAKE_CURRENT_BINARY_DIR}/${__QtFeature_private_file}"
+        qt_internal_feature_write_file(${target}
+            "${CMAKE_CURRENT_BINARY_DIR}/${__QtFeature_private_file}"
             "${__QtFeature_private_features}" "${__QtFeature_private_extra}"
         )
 
-        qt_internal_feature_write_file("${CMAKE_CURRENT_BINARY_DIR}/${__QtFeature_public_file}"
+        qt_internal_feature_write_file(${target}
+            "${CMAKE_CURRENT_BINARY_DIR}/${__QtFeature_public_file}"
             "${__QtFeature_public_features}" "${__QtFeature_public_extra}"
         )
     endif()
 
     if (NOT ("${target}" STREQUAL "NO_MODULE") AND NOT arg_ONLY_EVALUATE_FEATURES)
         get_target_property(targetType "${target}" TYPE)
+
+        set(properties_to_export
+            QT_ENABLED_PUBLIC_FEATURES
+            QT_DISABLED_PUBLIC_FEATURES
+            QT_ENABLED_PRIVATE_FEATURES
+            QT_DISABLED_PRIVATE_FEATURES
+            QT_QMAKE_PUBLIC_CONFIG
+            QT_QMAKE_PRIVATE_CONFIG
+            QT_QMAKE_PUBLIC_QT_CONFIG
+
+        )
         if("${targetType}" STREQUAL "INTERFACE_LIBRARY")
             set(propertyPrefix "INTERFACE_")
+            list(TRANSFORM properties_to_export PREPEND "${propertyPrefix}")
+            # CMake doesn't allow us to export INTERFACE_* properties via EXPORT_PROPERTIES, it
+            # says INTERFACE_* properties are reserved.
+            # Instead, use our own property export infrastructure that places the values in the
+            # module-specific Qt6<Foo>ExtraProperties.cmake file.
+            # qt_internal_add_genex_properties_export was originally intended for properties with
+            # genexes, but we can use it for this use case as well.
+            # Before, we didn't use to export the properties at all for INTERFACE_ libraries,
+            # but we need to, because certain GlobalPrivate modules have features which are used
+            # in configure-time conditions for tests.
+            qt_internal_add_genex_properties_export("${target}" ${properties_to_export})
         else()
             set(propertyPrefix "")
-            set_property(TARGET "${target}" APPEND PROPERTY EXPORT_PROPERTIES "QT_ENABLED_PUBLIC_FEATURES;QT_DISABLED_PUBLIC_FEATURES;QT_ENABLED_PRIVATE_FEATURES;QT_DISABLED_PRIVATE_FEATURES;QT_QMAKE_PUBLIC_CONFIG;QT_QMAKE_PRIVATE_CONFIG;QT_QMAKE_PUBLIC_QT_CONFIG")
+            set_property(TARGET "${target}"
+                APPEND PROPERTY EXPORT_PROPERTIES ${properties_to_export})
         endif()
+
         foreach(visibility public private)
             string(TOUPPER "${visibility}" capitalVisibility)
             foreach(state enabled disabled)

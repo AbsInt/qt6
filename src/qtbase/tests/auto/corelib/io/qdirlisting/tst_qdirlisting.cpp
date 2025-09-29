@@ -618,7 +618,7 @@ void tst_QDirListing::recurseWithFilters() const
     expectedEntries.insert(QString::fromLatin1("recursiveDirs/dir1/textFileB.txt"));
     expectedEntries.insert(QString::fromLatin1("recursiveDirs/textFileA.txt"));
 
-    constexpr auto flags = ItFlag::ExcludeDirs | ItFlag::ExcludeSpecial| ItFlag::Recursive;
+    constexpr auto flags = ItFlag::ExcludeDirs | ItFlag::ExcludeOther| ItFlag::Recursive;
     for (const auto &dirEntry : QDirListing(u"recursiveDirs/"_s, QStringList{u"*.txt"_s}, flags))
         actualEntries.insert(dirEntry.filePath());
 
@@ -638,7 +638,7 @@ void tst_QDirListing::longPath()
         dirName.append('x');
     }
 
-    constexpr auto flags = ItFlag::ExcludeFiles | ItFlag::ExcludeSpecial| ItFlag::Recursive;
+    constexpr auto flags = ItFlag::ExcludeFiles | ItFlag::ExcludeOther| ItFlag::Recursive;
     QDirListing dirList(dir.absolutePath(), flags);
     qsizetype m = 0;
     for (auto it = dirList.begin(); it != dirList.end(); ++it)

@@ -41,6 +41,7 @@ Q_DECLARE_METATYPE(Qt::Key)
 
 Q_LOGGING_CATEGORY(lcTests, "qt.quick.tests")
 
+using namespace Qt::StringLiterals;
 using namespace QQuickViewTestUtils;
 using namespace QQuickVisualTestUtils;
 
@@ -122,6 +123,7 @@ private slots:
     void sectionPropertyChange();
     void sectionDelegateChange();
     void sectionsItemInsertion();
+    void removeSectionsOnNonvisibleItems();
     void cacheBuffer();
     void positionViewAtBeginningEnd();
     void positionViewAtIndex();
@@ -677,9 +679,9 @@ void tst_QQuickListView::inserted_more(QQuickItemView::VerticalLayoutDirection v
 
     QQuickItemViewPrivate::get(listview)->layout();
 
-    QList<QPair<QString, QString> > newData;
+    QList<std::pair<QString, QString> > newData;
     for (int i=0; i<insertCount; i++)
-        newData << qMakePair(QString("value %1").arg(i), QString::number(i));
+        newData << std::make_pair(QString("value %1").arg(i), QString::number(i));
     model.insertItems(insertIndex, newData);
 
     //Wait for polish (updates list to the model changes)
@@ -881,9 +883,9 @@ void tst_QQuickListView::insertBeforeVisible()
         model.removeItems(removeIndex, removeCount);
 
     if (insertCount > 0) {
-        QList<QPair<QString, QString> > newData;
+        QList<std::pair<QString, QString> > newData;
         for (int i=0; i<insertCount; i++)
-            newData << qMakePair(QString("value %1").arg(i), QString::number(i));
+            newData << std::make_pair(QString("value %1").arg(i), QString::number(i));
         model.insertItems(insertIndex, newData);
         QTRY_COMPARE(listview->property("count").toInt(), model.count());
     }
@@ -1627,9 +1629,9 @@ void tst_QQuickListView::multipleChanges(bool condensed)
         switch (changes[i].type) {
             case ListChange::Inserted:
             {
-                QList<QPair<QString, QString> > items;
+                QList<std::pair<QString, QString> > items;
                 for (int j=changes[i].index; j<changes[i].index + changes[i].count; ++j)
-                    items << qMakePair(QString("new item %1").arg(j), QString::number(j));
+                    items << std::make_pair(QString("new item %1").arg(j), QString::number(j));
                 model.insertItems(changes[i].index, items);
                 break;
             }
@@ -2781,6 +2783,52 @@ void tst_QQuickListView::sectionsSnap()
     QQuickTest::pointerFlick(device, window.data(), 0, point, QPoint(100, 100), duration);
     QTRY_VERIFY(!listview->isMovingVertically());
     QCOMPARE(listview->contentY(), qreal(-50));
+}
+
+void tst_QQuickListView::removeSectionsOnNonvisibleItems()
+{
+    QScopedPointer<QQuickView> window(createView());
+    window->setSource(testFileUrl("removeSectionsOnNonVisibleItems.qml"));
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window.data()));
+
+    auto verifySectionData = [](QObject *object, int sectionId) {
+        auto sectionList = object->property("sectionItems").value<QQmlListProperty<QQuickItem>>();
+        const int length = sectionList.count(&sectionList);
+        for (int index = 0; index < length; index++) {
+            QQuickItem *currentItem = sectionList.at(&sectionList, index);
+            QString sectionData = currentItem->property("sectionData").value<QString>();
+            QStringList sectionDataList = sectionData.split(":");
+            QVERIFY(sectionDataList.at(0).toInt() == sectionId);
+        }
+    };
+
+    auto *listView = qobject_cast<QQuickListView*>(window->rootObject());
+    QTRY_VERIFY(listView != nullptr);
+    QVERIFY(listView->contentItem());
+
+    auto device = QPointingDevice::primaryPointingDevice();
+    const int stopFlickCount = 15;
+    int flickIndex = 0;
+    // The issue is more apparent when the list view used in this test case
+    // been flicked to the contentY: 965.
+    const float contentYThreadhold = 965.;
+    do {
+        QQuickTest::pointerFlick(device, window.data(), 0, QPoint(100, 100), QPoint(100, 50), 125);
+        QTRY_VERIFY(listView->isMovingVertically());
+        QVERIFY(listView->contentY() != qreal(0));
+        if (listView->contentY() >= contentYThreadhold) {
+            listView->cancelFlick();
+            break;
+        }
+    } while (++flickIndex <= stopFlickCount);
+
+    int verifySectionId = 0;
+    verifySectionData(listView, ++verifySectionId);
+    // Refresh the section item with the new model data
+    QMetaObject::invokeMethod(listView, "reloadModel");
+    QVERIFY(QQuickTest::qWaitForPolish(listView));
+    verifySectionData(listView, ++verifySectionId);
 }
 
 void tst_QQuickListView::currentIndex_delayedItemCreation()
@@ -4916,9 +4964,9 @@ void tst_QQuickListView::onAdd()
     listview->setProperty("height", window->height());
     qApp->processEvents();
 
-    QList<QPair<QString, QString> > items;
+    QList<std::pair<QString, QString> > items;
     for (int i=0; i<itemsToAdd; i++)
-        items << qMakePair(QString("value %1").arg(i), QString::number(i));
+        items << std::make_pair(QString("value %1").arg(i), QString::number(i));
     model.addItems(items);
     listview->forceLayout();
     QTRY_COMPARE(listview->property("count").toInt(), model.count());
@@ -5063,22 +5111,25 @@ void tst_QQuickListView::test_mirroring()
     QTRY_VERIFY(listviewA != nullptr);
     qApp->processEvents();
 
-    QList<QString> objectNames;
-    objectNames << "item1" << "item2"; // << "item3"
+    const QString objectNames[] = {
+        u"item1"_s,
+        u"item2"_s,
+        // "item3"
+    };
 
     listviewA->setProperty("layoutDirection", Qt::LeftToRight);
     listviewB->setProperty("layoutDirection", Qt::RightToLeft);
     QCOMPARE(listviewA->layoutDirection(), listviewA->effectiveLayoutDirection());
 
     // LTR != RTL
-    for (const QString &objectName : std::as_const(objectNames))
+    for (const QString &objectName : objectNames)
         QVERIFY(findItem<QQuickItem>(listviewA, objectName)->x() != findItem<QQuickItem>(listviewB, objectName)->x());
 
     listviewA->setProperty("layoutDirection", Qt::LeftToRight);
     listviewB->setProperty("layoutDirection", Qt::LeftToRight);
 
     // LTR == LTR
-    for (const QString &objectName : std::as_const(objectNames))
+    for (const QString &objectName : objectNames)
         QCOMPARE(findItem<QQuickItem>(listviewA, objectName)->x(), findItem<QQuickItem>(listviewB, objectName)->x());
 
     QCOMPARE(listviewB->layoutDirection(), listviewB->effectiveLayoutDirection());
@@ -5086,25 +5137,25 @@ void tst_QQuickListView::test_mirroring()
     QVERIFY(listviewB->layoutDirection() != listviewB->effectiveLayoutDirection());
 
     // LTR != LTR+mirror
-    for (const QString &objectName : std::as_const(objectNames))
+    for (const QString &objectName : objectNames)
         QVERIFY(findItem<QQuickItem>(listviewA, objectName)->x() != findItem<QQuickItem>(listviewB, objectName)->x());
 
     listviewA->setProperty("layoutDirection", Qt::RightToLeft);
 
     // RTL == LTR+mirror
-    for (const QString &objectName : std::as_const(objectNames))
+    for (const QString &objectName : objectNames)
         QCOMPARE(findItem<QQuickItem>(listviewA, objectName)->x(), findItem<QQuickItem>(listviewB, objectName)->x());
 
     listviewB->setProperty("layoutDirection", Qt::RightToLeft);
 
     // RTL != RTL+mirror
-    for (const QString &objectName : std::as_const(objectNames))
+    for (const QString &objectName : objectNames)
         QVERIFY(findItem<QQuickItem>(listviewA, objectName)->x() != findItem<QQuickItem>(listviewB, objectName)->x());
 
     listviewA->setProperty("layoutDirection", Qt::LeftToRight);
 
     // LTR == RTL+mirror
-    for (const QString &objectName : std::as_const(objectNames))
+    for (const QString &objectName : objectNames)
         QCOMPARE(findItem<QQuickItem>(listviewA, objectName)->x(), findItem<QQuickItem>(listviewB, objectName)->x());
 }
 
@@ -6962,15 +7013,15 @@ void tst_QQuickListView::addTransitions()
         QVERIFY(QQuickTest::qWaitForPolish(listview));
     }
 
-    QList<QPair<QString,QString> > expectedDisplacedValues = expectedDisplacedIndexes.getModelDataValues(model);
+    QList<std::pair<QString,QString> > expectedDisplacedValues = expectedDisplacedIndexes.getModelDataValues(model);
 
     // only target items that will become visible should be animated
-    QList<QPair<QString, QString> > newData;
-    QList<QPair<QString, QString> > expectedTargetData;
+    QList<std::pair<QString, QString> > newData;
+    QList<std::pair<QString, QString> > expectedTargetData;
     QList<int> targetIndexes;
     if (shouldAnimateTargets) {
         for (int i=insertionIndex; i<insertionIndex+insertionCount; i++) {
-            newData << qMakePair(QString("New item %1").arg(i), QString(""));
+            newData << std::make_pair(QString("New item %1").arg(i), QString(""));
 
             if (i >= contentY / 20 && i < (contentY + listview->height()) / 20) {  // only grab visible items
                 expectedTargetData << newData.last();
@@ -7157,17 +7208,17 @@ void tst_QQuickListView::moveTransitions()
         QVERIFY(QQuickTest::qWaitForPolish(listview));
     }
 
-    QList<QPair<QString,QString> > expectedDisplacedValues = expectedDisplacedIndexes.getModelDataValues(model);
+    QList<std::pair<QString,QString> > expectedDisplacedValues = expectedDisplacedIndexes.getModelDataValues(model);
 
     // Items moving to *or* from visible positions should be animated.
     // Otherwise, they should not be animated.
-    QList<QPair<QString, QString> > expectedTargetData;
+    QList<std::pair<QString, QString> > expectedTargetData;
     QList<int> targetIndexes;
     for (int i=moveFrom; i<moveFrom+moveCount; i++) {
         int toIndex = moveTo + (i - moveFrom);
         if (i <= (contentY + listview->height()) / 20
                 || toIndex < (contentY + listview->height()) / 20) {
-            expectedTargetData << qMakePair(model.name(i), model.number(i));
+            expectedTargetData << std::make_pair(model.name(i), model.number(i));
             targetIndexes << i;
         }
     }
@@ -7359,15 +7410,15 @@ void tst_QQuickListView::removeTransitions()
         QVERIFY(QQuickTest::qWaitForPolish(listview));
     }
 
-    QList<QPair<QString,QString> > expectedDisplacedValues = expectedDisplacedIndexes.getModelDataValues(model);
+    QList<std::pair<QString,QString> > expectedDisplacedValues = expectedDisplacedIndexes.getModelDataValues(model);
 
     // only target items that are visible should be animated
-    QList<QPair<QString, QString> > expectedTargetData;
+    QList<std::pair<QString, QString> > expectedTargetData;
     QList<int> targetIndexes;
     if (shouldAnimateTargets) {
         for (int i=removalIndex; i<removalIndex+removalCount; i++) {
             if (i >= contentY / 20 && i < (contentY + listview->height()) / 20) {
-                expectedTargetData << qMakePair(model.name(i), model.number(i));
+                expectedTargetData << std::make_pair(model.name(i), model.number(i));
                 targetIndexes << i;
             }
         }
@@ -7564,15 +7615,15 @@ void tst_QQuickListView::displacedTransitions()
     QVERIFY(contentItem != nullptr);
     QVERIFY(QQuickTest::qWaitForPolish(listview));
 
-    QList<QPair<QString,QString> > expectedDisplacedValues = expectedDisplacedIndexes.getModelDataValues(model);
+    QList<std::pair<QString,QString> > expectedDisplacedValues = expectedDisplacedIndexes.getModelDataValues(model);
     listview->setProperty("displaceTransitionsDone", false);
 
     switch (change.type) {
         case ListChange::Inserted:
         {
-            QList<QPair<QString, QString> > targetItemData;
+            QList<std::pair<QString, QString> > targetItemData;
             for (int i=change.index; i<change.index + change.count; ++i)
-                targetItemData << qMakePair(QString("new item %1").arg(i), QString::number(i));
+                targetItemData << std::make_pair(QString("new item %1").arg(i), QString::number(i));
             model.insertItems(change.index, targetItemData);
             QTRY_COMPARE(model.count(), listview->count());
             break;
@@ -7795,9 +7846,9 @@ void tst_QQuickListView::multipleTransitions()
         switch (changes[i].type) {
             case ListChange::Inserted:
             {
-                QList<QPair<QString, QString> > targetItems;
+                QList<std::pair<QString, QString> > targetItems;
                 for (int j=changes[i].index; j<changes[i].index + changes[i].count; ++j)
-                    targetItems << qMakePair(QString("new item %1").arg(j), QString::number(j));
+                    targetItems << std::make_pair(QString("new item %1").arg(j), QString::number(j));
                 model.insertItems(changes[i].index, targetItems);
                 QTRY_COMPARE(model.count(), listview->count());
                 if (i == changes.size() - 1) {
@@ -8454,7 +8505,7 @@ void tst_QQuickListView::stickyPositioning()
 
     QFETCH(int, positionIndex);
     QFETCH(QQuickItemView::PositionMode, positionMode);
-    QFETCH(QList<QPointF>, movement);
+    QFETCH(const QList<QPointF>, movement);
 
     QFETCH(QPointF, headerPos);
     QFETCH(QPointF, footerPos);
@@ -8483,7 +8534,7 @@ void tst_QQuickListView::stickyPositioning()
 
     listview->positionViewAtIndex(positionIndex, positionMode);
 
-    for (const QPointF &offset : std::as_const(movement)) {
+    for (QPointF offset : movement) {
         listview->setContentX(listview->contentX() + offset.x());
         listview->setContentY(listview->contentY() + offset.y());
     }
@@ -9331,7 +9382,7 @@ void tst_QQuickListView::keyNavigationEnabled()
     QCOMPARE(listView->isKeyNavigationEnabled(), true);
 
     listView->setFocus(true);
-    QVERIFY(listView->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(listView);
 
     listView->setHighlightMoveDuration(0);
 
@@ -9411,7 +9462,7 @@ void tst_QQuickListView::QTBUG_61269_appendDuringScrollDown() // AKA QTBUG-62864
     listView->setHighlightMoveVelocity(400);
     listView->setHighlightMoveDuration(-1); // let it animate
     listView->setFocus(true);
-    QVERIFY(listView->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(listView);
     qreal highlightYLimit = listView->height() - highlightItem->height(); // should be 200
 
     for (int i = 1; i < 15; ++i) {

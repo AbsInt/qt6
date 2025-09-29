@@ -106,7 +106,7 @@ struct HashSeedStorage
     }
 
 private:
-    Q_DECL_COLD_FUNCTION Q_NEVER_INLINE StateResult initialize(int which) noexcept;
+    Q_NEVER_INLINE Q_DECL_COLD_FUNCTION StateResult initialize(int which) noexcept;
 };
 
 [[maybe_unused]] HashSeedStorage::StateResult HashSeedStorage::initialize(int which) noexcept
@@ -413,7 +413,7 @@ namespace {
     }
 
     // hash 16 bytes, running 3 scramble rounds of AES on itself (like label "final1")
-    static void Q_ALWAYS_INLINE QT_FUNCTION_TARGET(AES) QT_VECTORCALL
+    Q_ALWAYS_INLINE static void QT_FUNCTION_TARGET(AES) QT_VECTORCALL
     hash16bytes(__m128i &state0, __m128i data)
     {
         state0 = _mm_xor_si128(state0, data);
@@ -1529,18 +1529,23 @@ size_t qHash(long double key, size_t seed) noexcept
     QHash will not shrink automatically if items are removed from the
     table. To minimize the memory used by the hash, call squeeze().
 
-    If you want to navigate through all the (key, value) pairs stored
-    in a QHash, you can use an iterator. QHash provides both
-    \l{Java-style iterators} (QHashIterator and QMutableHashIterator)
-    and \l{STL-style iterators} (QHash::const_iterator and
-    QHash::iterator). Here's how to iterate over a QHash<QString,
-    int> using a Java-style iterator:
-
-    \snippet code/src_corelib_tools_qhash.cpp 7
-
-    Here's the same code, but using an STL-style iterator:
+    To iterate through all the (key, value) pairs stored in a
+    QHash, use \l {asKeyValueRange}():
 
     \snippet code/src_corelib_tools_qhash.cpp 8
+
+    This function returns a range object that can be used with structured
+    bindings. For manual iterator control, you can also use traditional
+    \l{STL-style iterators} (QHash::const_iterator and QHash::iterator):
+
+    \snippet code/src_corelib_tools_qhash.cpp qhash-iterator-stl-style
+
+    To modify values, use iterators:
+
+    \snippet code/src_corelib_tools_qhash.cpp qhash-iterator-modify-values
+
+    QHash also provides \l{Java-style iterators} (QHashIterator and
+    QMutableHashIterator) for compatibility.
 
     QHash is unordered, so an iterator's sequence cannot be assumed
     to be predictable. If ordering by key is required, use a QMap.
@@ -3311,7 +3316,7 @@ size_t qHash(long double key, size_t seed) noexcept
     Returns \c true if the hash contains an item with the \a key and
     \a value; otherwise returns \c false.
 
-    \sa contains()
+    \sa count()
 */
 
 /*!
@@ -3321,7 +3326,7 @@ size_t qHash(long double key, size_t seed) noexcept
     Removes all the items that have the \a key from the hash.
     Returns the number of items removed.
 
-    \sa remove()
+    \sa remove(const Key &key, const T &value)
 */
 
 /*!
@@ -3424,7 +3429,7 @@ size_t qHash(long double key, size_t seed) noexcept
 
     Returns the number of items with the \a key and \a value.
 
-    \sa count()
+    \sa contains()
 */
 
 /*!

@@ -24,6 +24,9 @@
 #include "qscrollbar_p.h"
 #include <qwidget.h>
 
+#include <private/qguiapplication_p.h>
+#include <qpa/qplatformtheme.h>
+
 #include <private/qapplication_p.h>
 
 #ifdef Q_OS_WIN
@@ -1498,6 +1501,12 @@ void QAbstractScrollArea::setSizeAdjustPolicy(SizeAdjustPolicy policy)
 void QAbstractScrollArea::setupViewport(QWidget *viewport)
 {
     Q_UNUSED(viewport);
+}
+
+int QAbstractScrollAreaPrivate::defaultSingleStep() const
+{
+    auto *platformTheme = QGuiApplicationPrivate::platformTheme();
+    return platformTheme->themeHint(QPlatformTheme::ScrollSingleStepDistance).value<int>();
 }
 
 QT_END_NAMESPACE

@@ -1,5 +1,6 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
 
 #include "qqmldomstringdumper_p.h"
 #include <QtCore/QDebug>
@@ -11,7 +12,7 @@ namespace Dom {
 
 /*!
  * \internal
- * \tn QQmlJS::Dom::Sink
+ * \fn QQmlJS::Dom::Sink
  * \brief A Sink is a function that accepts a QStringView as input
  *
  * A Sink it the core element of a text based stream oriented output.
@@ -20,7 +21,7 @@ namespace Dom {
 
 /*!
  * \internal
- * \tn QQmlJS::Dom::sinkInt
+ * \fn QQmlJS::Dom::sinkInt
  * \brief writes an integer to a sink without any axtra heap allocation
  * \param sink where to write
  * \param i the integer to write out

@@ -149,7 +149,7 @@ public:
     Q_INVOKABLE void positionAt(QQmlV4FunctionPtr args) const;
     Q_INVOKABLE QRectF positionToRectangle(int pos) const;
     Q_INVOKABLE void moveCursorSelection(int pos);
-    Q_INVOKABLE void moveCursorSelection(int pos, SelectionMode mode);
+    Q_INVOKABLE void moveCursorSelection(int pos, QQuickTextInput::SelectionMode mode);
 
     RenderType renderType() const;
     void setRenderType(RenderType renderType);

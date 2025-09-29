@@ -1,8 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
-#undef QT_NO_FOREACH // this file contains unported legacy Q_FOREACH uses
-
 #include <QTest>
 #include <QtCore/QString>
 #include <QtCore/qarraydata.h>
@@ -75,22 +73,22 @@ void tst_QArrayData::referenceCounting()
         // Reference counting initialized to 1 (owned)
         QArrayData array = { Q_BASIC_ATOMIC_INITIALIZER(1), {}, 0 };
 
-        QCOMPARE(array.m_ref.loadRelaxed(), 1);
+        QCOMPARE(array.ref_.loadRelaxed(), 1);
 
         QVERIFY(array.ref());
-        QCOMPARE(array.m_ref.loadRelaxed(), 2);
+        QCOMPARE(array.ref_.loadRelaxed(), 2);
 
         QVERIFY(array.deref());
-        QCOMPARE(array.m_ref.loadRelaxed(), 1);
+        QCOMPARE(array.ref_.loadRelaxed(), 1);
 
         QVERIFY(array.ref());
-        QCOMPARE(array.m_ref.loadRelaxed(), 2);
+        QCOMPARE(array.ref_.loadRelaxed(), 2);
 
         QVERIFY(array.deref());
-        QCOMPARE(array.m_ref.loadRelaxed(), 1);
+        QCOMPARE(array.ref_.loadRelaxed(), 1);
 
         QVERIFY(!array.deref());
-        QCOMPARE(array.m_ref.loadRelaxed(), 0);
+        QCOMPARE(array.ref_.loadRelaxed(), 0);
 
         // Now would be a good time to free/release allocated data
     }
@@ -418,7 +416,7 @@ struct Deallocator
 
     ~Deallocator()
     {
-        Q_FOREACH (QArrayData *data, headers)
+        for (QArrayData *data : std::as_const(headers))
             QArrayData::deallocate(data, objectSize, alignment);
     }
 

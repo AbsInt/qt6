@@ -401,9 +401,9 @@ void tst_QQuickPathView::insertModel()
     else
         pathview->setOffset(4);
 
-    QList<QPair<QString, QString> > items;
+    QList<std::pair<QString, QString> > items;
     for (int i = 0; i < count; ++i)
-        items.append(qMakePair(QString("New"), QString::number(i)));
+        items.append(std::make_pair(QString("New"), QString::number(i)));
 
     model.insertItems(idx, items);
     QTRY_COMPARE(pathview->offset(), offset);
@@ -690,9 +690,9 @@ void tst_QQuickPathView::consecutiveModelChanges()
         switch (changes[i].type) {
             case ListChange::Inserted:
             {
-                QList<QPair<QString, QString> > items;
+                QList<std::pair<QString, QString> > items;
                 for (int j=changes[i].index; j<changes[i].index + changes[i].count; ++j)
-                    items << qMakePair(QString("new item %1").arg(j), QString::number(j));
+                    items << std::make_pair(QString("new item %1").arg(j), QString::number(j));
                 model.insertItems(changes[i].index, items);
                 break;
             }

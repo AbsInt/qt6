@@ -4,6 +4,7 @@
 #include <QtQml/qqmlcomponent.h>
 #include "qquickplatformmessagedialog_p.h"
 
+#include <QtQuickTemplates2/private/qquickdialog_p_p.h>
 #include <QtQuickTemplates2/private/qquickpopup_p_p.h>
 #include <QtQuickTemplates2/private/qquickpopupanchors_p.h>
 
@@ -87,7 +88,7 @@ bool QQuickPlatformMessageDialog::show(Qt::WindowFlags flags, Qt::WindowModality
     QSharedPointer<QMessageDialogOptions> options = QPlatformMessageDialogHelper::options();
     m_dialog->setTitle(options->windowTitle());
     m_dialog->setOptions(options);
-
+    m_dialog->setWindowModality(modality);
     m_dialog->open();
     return true;
 }

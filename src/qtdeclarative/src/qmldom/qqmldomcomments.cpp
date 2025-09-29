@@ -1,5 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
 
 #include "qqmldomcomments_p.h"
 #include "qqmldomoutwriter_p.h"
@@ -204,20 +205,18 @@ bool Comment::iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) 
     return cont;
 }
 
-void Comment::write(OutWriter &lw, SourceLocation *commentLocation) const
+void Comment::write(OutWriter &lw) const
 {
     if (newlinesBefore())
         lw.ensureNewline(newlinesBefore());
     CommentInfo cInfo = info();
     lw.ensureSpace(cInfo.preWhitespace());
     QStringView cBody = cInfo.comment();
-    PendingSourceLocationId cLoc = lw.lineWriter.startSourceLocation(commentLocation);
     lw.write(cBody.mid(0, 1));
     bool indentOn = lw.indentNextlines;
     lw.indentNextlines = false;
     lw.write(cBody.mid(1));
     lw.indentNextlines = indentOn;
-    lw.lineWriter.endSourceLocation(cLoc);
     lw.write(cInfo.postWhitespace());
 }
 
@@ -249,22 +248,21 @@ bool CommentedElement::iterateDirectSubpaths(const DomItem &self, DirectVisitor 
     return cont;
 }
 
-void CommentedElement::writePre(OutWriter &lw, QList<SourceLocation> *locs) const
+static inline void writeComments(OutWriter &lw, const QList<Comment> &comments)
 {
-    if (locs)
-        locs->resize(m_preComments.size());
-    int i = 0;
-    for (const Comment &c : m_preComments)
-        c.write(lw, (locs ? &((*locs)[i++]) : nullptr));
+    for (const auto &comment : comments) {
+        comment.write(lw);
+    }
 }
 
-void CommentedElement::writePost(OutWriter &lw, QList<SourceLocation> *locs) const
+void CommentedElement::writePre(OutWriter &lw) const
 {
-    if (locs)
-        locs->resize(m_postComments.size());
-    int i = 0;
-    for (const Comment &c : m_postComments)
-        c.write(lw, (locs ? &((*locs)[i++]) : nullptr));
+    return writeComments(lw, m_preComments);
+}
+
+void CommentedElement::writePost(OutWriter &lw) const
+{
+    return writeComments(lw, m_postComments);
 }
 
 using namespace QQmlJS::AST;
@@ -386,6 +384,15 @@ public:
     }
 
     using VisitAll::visit;
+    bool visit(Block *block) override
+    {
+        // blocks can have comments after their `{` and before their `}`. preVisit already handles
+        // comments before `{` and after `}`.
+        addSourceLocations(block, block->lbraceToken);
+        addSourceLocations(block, block->rbraceToken);
+        return true;
+    }
+
     bool visit(CaseClause *caseClause) override
     {
         // special case: case clauses can have comments attached to their `:` token
@@ -402,6 +409,15 @@ public:
         return true;
     }
 
+    bool visit(DoWhileStatement *doWhileStatement) override
+    {
+        // do while statements can have comments attached to their `()` token. preVisit already
+        // handles comments before `do` and after the doWhile statement.
+        addSourceLocations(doWhileStatement, doWhileStatement->lparenToken);
+        addSourceLocations(doWhileStatement, doWhileStatement->rparenToken);
+        return true;
+    }
+
     bool visit(FormalParameterList *list) override
     {
         if (!list->commaToken.isValid())
@@ -411,6 +427,15 @@ public:
         // comments in FormalParameterList to comments so that they don't "jump over commas" during
         // formatting.
         addSourceLocations(list, list->commaToken);
+        return true;
+    }
+
+    bool visit(ForStatement *forStatement) override
+    {
+        // for statements can have comments attached to their `()` token. preVisit already
+        // handles comments before `for` and after the doWhile statement.
+        addSourceLocations(forStatement, forStatement->lparenToken);
+        addSourceLocations(forStatement, forStatement->rparenToken);
         return true;
     }
 
@@ -427,6 +452,15 @@ public:
     bool visit(FunctionDeclaration *fExpr) override
     {
         return visit(static_cast<FunctionExpression *>(fExpr));
+    }
+
+    bool visit(WhileStatement *whileStatement) override
+    {
+        // while statements can have comments attached to their `()` token. preVisit already
+        // handles comments before `while` and after the doWhile statement.
+        addSourceLocations(whileStatement, whileStatement->lparenToken);
+        addSourceLocations(whileStatement, whileStatement->rparenToken);
+        return true;
     }
 
     QMap<qsizetype, ElementRef> starts;
@@ -464,7 +498,7 @@ void AstRangesVisitor::addItemRanges(
     {
         auto subMaps = itemLocations->subItems();
         for (auto it = subMaps.begin(), end = subMaps.end(); it != end; ++it) {
-            addItemRanges(item.path(it.key()), it.value(), currentP.path(it.key()));
+            addItemRanges(item.path(it.key()), it.value(), currentP.withPath(it.key()));
         }
     }
 }
@@ -806,7 +840,7 @@ void CommentCollector::collectComments(
                 // update file locations with the comment region
                 const auto base = FileLocations::treeOf(currentItem);
                 const auto fileLocations = FileLocations::ensure(
-                        base, Path::Field(Fields::comments).path(commentPath));
+                        base, Path::fromField(Fields::comments).withPath(commentPath));
 
                 FileLocations::addRegion(fileLocations, MainRegion,
                                          comment.info().sourceLocation());
@@ -826,7 +860,7 @@ bool RegionComments::iterateDirectSubpaths(const DomItem &self, DirectVisitor vi
         cont = cont
                 && self.dvItemField(visitor, Fields::regionComments, [this, &self]() -> DomItem {
                        const Path pathFromOwner =
-                               self.pathFromOwner().field(Fields::regionComments);
+                               self.pathFromOwner().withField(Fields::regionComments);
                        auto map = Map::fromFileRegionMap(pathFromOwner, m_regionComments);
                        return self.subMapItem(map);
                    });

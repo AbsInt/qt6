@@ -457,7 +457,7 @@ auto associative_erase_if(Container &c, Predicate &pred)
                 ++it;
             }
         } else {
-            static_assert(sizeof(Container) == 0, "Predicate has an incompatible signature");
+            static_assert(type_dependent_false<Container>(), "Predicate has an incompatible signature");
         }
     }
 

@@ -171,7 +171,7 @@
     The QComboBox::itemData() function returns the data as a QVariant,
     so we need to cast the data to \c RenderArea::Shape. If there is
     no data for the given role, the function returns
-    QVariant::Invalid.
+    QMetaType::UnknownType.
 
     In the end we call the \c RenderArea::setShape() slot to update
     the \c RenderArea widget.

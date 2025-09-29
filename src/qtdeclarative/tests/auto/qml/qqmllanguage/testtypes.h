@@ -1398,8 +1398,8 @@ public:
     enum  ui8 : quint8 {};
     enum si16 : qint16 {};
     enum ui16 : quint16 {};
-    enum ui64 : qint64 {};
-    enum si64 : quint64 {};
+    enum si64 : qint64 {};
+    enum ui64 : quint64 {};
     Q_ENUM(si8)
     Q_ENUM(ui8)
     Q_ENUM(si16)
@@ -3079,11 +3079,13 @@ class VariantAssociationProvider : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantMap variantMap READ getMap WRITE setMap)
     Q_PROPERTY(QVariantHash variantHash READ getHash WRITE setHash)
+    Q_PROPERTY(QVariantList variantList READ getList WRITE setList)
 
     QML_ELEMENT
 
     QVariantMap m_variantMap;
     QVariantHash m_variantHash;
+    QVariantList m_variantList;
 
 public:
     VariantAssociationProvider(QObject* parent = nullptr) : QObject(parent)
@@ -3094,6 +3096,9 @@ public:
 
     QVariantHash getHash() { return m_variantHash; }
     void setHash(const QVariantHash& hash) { m_variantHash = hash; }
+
+    QVariantList getList() { return m_variantList; }
+    void setList(const QVariantList &list) { m_variantList = list; }
 
     Q_INVOKABLE QVariantList getListOfMap() const {
         return QVariantList{
@@ -3149,6 +3154,118 @@ public:
     Q_INVOKABLE QString s() const { return QStringLiteral("StaticTest"); }
 };
 } // namespace YepNamespaceA
+
+class ReadCounterInner {
+    Q_GADGET
+    QML_ELEMENT
+
+    Q_PROPERTY(QDateTime firstDate READ getFirstDate WRITE setFirstDate)
+    Q_PROPERTY(QDateTime secondDate READ getSecondDate WRITE setSecondDate)
+
+public:
+    ReadCounterInner() {}
+
+    inline static std::size_t timesRead = 0;
+
+    QDateTime getFirstDate() {
+        ++timesRead;
+        return m_firstDate;
+    }
+    void setFirstDate(const QDateTime& l) { m_firstDate = l; }
+
+    QDateTime getSecondDate() {
+        ++timesRead;
+        return m_secondDate;
+    }
+    void setSecondDate(const QDateTime& l) { m_secondDate = l; }
+
+
+    QDateTime m_firstDate{};
+    QDateTime m_secondDate{};
+};
+
+class ReadCounter : public QObject {
+    Q_OBJECT
+    QML_ELEMENT
+
+    Q_PROPERTY(QStringList stringList READ getStringList WRITE setStringList NOTIFY stringListChanged)
+    Q_PROPERTY(QDateTime dateTime READ getDateTime WRITE setDateTime NOTIFY dateTimeChanged)
+    Q_PROPERTY(ValueTypeWithEnum1 valueType READ getValueType WRITE setValueType NOTIFY valueTypeChanged)
+    Q_PROPERTY(QStringList bindable READ getBindable WRITE default BINDABLE bindableProperty FINAL)
+    Q_PROPERTY(ReadCounterInner inner READ getInner WRITE setInner NOTIFY innerChanged)
+    Q_PROPERTY(QStringList notifyBindable READ default WRITE default BINDABLE notifyBindableProperty NOTIFY notifyBindableChanged)
+
+public:
+    ReadCounter(QObject* parent = nullptr)
+        : QObject(parent)
+    {}
+
+    std::size_t timesRead = 0;
+
+    QStringList getStringList() {
+        ++timesRead;
+        return m_stringList;
+    }
+    void setStringList(const QStringList& l) { m_stringList = l; }
+
+    QDateTime getDateTime() {
+        ++timesRead;
+        return m_dateTime;
+    }
+    void setDateTime(const QDateTime& d) { m_dateTime = d; }
+
+    ValueTypeWithEnum1 getValueType() {
+        ++timesRead;
+        return m_valueType;
+    }
+    void setValueType(const ValueTypeWithEnum1& v) { m_valueType = v; emit valueTypeChanged(); }
+
+    QBindable<QStringList> bindableProperty() { return QBindable<QStringList>(&m_bindable); }
+    QStringList getBindable() {
+        ++timesRead;
+        return m_bindable;
+    }
+
+    ReadCounterInner getInner() {
+        ++timesRead;
+        return m_inner;
+    }
+    void setInner(const ReadCounterInner& l) { m_inner = l; emit innerChanged(); }
+
+    QBindable<QStringList> notifyBindableProperty() { return QBindable<QStringList>(&m_notifyBindable); }
+
+    std::size_t destroyedConnections = 0;
+    std::size_t notifyBindableSignalConnections = 0;
+
+    void connectNotify(const QMetaMethod& signal) override {
+        if (signal == QMetaMethod::fromSignal(&ReadCounter::destroyed))
+            ++destroyedConnections;
+        if (signal == QMetaMethod::fromSignal(&ReadCounter::notifyBindableChanged))
+            ++notifyBindableSignalConnections;
+    }
+
+    void disconnectNotify(const QMetaMethod& signal) override {
+        if (signal == QMetaMethod::fromSignal(&ReadCounter::destroyed))
+            --destroyedConnections;
+        if (signal == QMetaMethod::fromSignal(&ReadCounter::notifyBindableChanged))
+            --notifyBindableSignalConnections;
+    }
+
+signals:
+    void stringListChanged();
+    void dateTimeChanged();
+    void valueTypeChanged();
+    void innerChanged();
+    void notifyBindableChanged();
+
+private:
+    QStringList m_stringList;
+    QDateTime m_dateTime;
+    ValueTypeWithEnum1 m_valueType;
+    QProperty<QStringList> m_bindable;
+    ReadCounterInner m_inner{};
+    QProperty<QStringList> m_notifyBindable;
+};
 
 class BindablePoint : public QObject
 {

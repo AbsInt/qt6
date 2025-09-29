@@ -28,7 +28,7 @@ class QMenu;
 class QMenuBar;
 class QAction;
 
-class QAccessibleMenu : public QAccessibleWidget
+class QAccessibleMenu : public QAccessibleWidgetV2
 {
 public:
     explicit QAccessibleMenu(QWidget *w);
@@ -47,7 +47,7 @@ protected:
 };
 
 #if QT_CONFIG(menubar)
-class QAccessibleMenuBar : public QAccessibleWidget
+class QAccessibleMenuBar : public QAccessibleWidgetV2
 {
 public:
     explicit QAccessibleMenuBar(QWidget *w);

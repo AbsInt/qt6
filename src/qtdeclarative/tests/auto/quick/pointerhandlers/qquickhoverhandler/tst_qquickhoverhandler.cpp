@@ -51,6 +51,7 @@ private slots:
     void ensureHoverHandlerWorksWhenItemHasHoverDisabled();
     void changeCursor();
     void touchDrag();
+    void asProperty();
 
 private:
     void createView(QScopedPointer<QQuickView> &window, const char *fileName);
@@ -767,6 +768,21 @@ void tst_HoverHandler::touchDrag()
     QCOMPARE(handler->isHovered(), false);
 
     QTest::touchEvent(&window, touchscreen.get()).release(0, out, &window);
+}
+
+void tst_HoverHandler::asProperty()
+{
+    QQuickView window;
+    window.setFlag(Qt::FramelessWindowHint, true);
+    QVERIFY(QQuickTest::showView(window, testFileUrl("asProperty.qml")));
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    const QQuickItem *root = window.rootObject();
+    QQuickHoverHandler *handler = root->property("handler").value<QQuickHoverHandler *>();
+    QVERIFY(handler);
+    QCOMPARE(handler->isHovered(), false);
+    QTest::mouseMove(&window, root->boundingRect().center().toPoint());
+    QTRY_COMPARE(handler->isHovered(), true);
 }
 
 QTEST_MAIN(tst_HoverHandler)

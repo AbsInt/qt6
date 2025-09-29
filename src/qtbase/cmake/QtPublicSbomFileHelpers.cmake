@@ -9,7 +9,7 @@ function(_qt_internal_sbom_handle_target_binary_files target)
         FRAMEWORK
     )
     set(single_args
-        TYPE
+        SBOM_ENTITY_TYPE
         SPDX_ID
         LICENSE_EXPRESSION
         INSTALL_PREFIX
@@ -60,8 +60,10 @@ function(_qt_internal_sbom_handle_target_binary_files target)
         CUSTOM_NO_INFIX
     )
 
-    if(NOT arg_TYPE IN_LIST supported_types)
-        message(FATAL_ERROR "Unsupported target TYPE for SBOM creation: ${arg_TYPE}")
+    if(NOT arg_SBOM_ENTITY_TYPE IN_LIST supported_types)
+        message(FATAL_ERROR
+            "Unsupported target TYPE '${arg_SBOM_ENTITY_TYPE}' for target '${target}' during "
+            "SBOM creation.")
     endif()
 
     set(types_without_binary_files
@@ -81,9 +83,9 @@ function(_qt_internal_sbom_handle_target_binary_files target)
 
     get_target_property(target_type ${target} TYPE)
 
-    if(arg_TYPE IN_LIST types_without_binary_files)
+    if(arg_SBOM_ENTITY_TYPE IN_LIST types_without_binary_files)
         message(DEBUG "Target ${target} has no binary files to reference in the SBOM "
-            "because it has the ${arg_TYPE} type.")
+            "because it has the ${arg_SBOM_ENTITY_TYPE} type.")
         return()
     endif()
 
@@ -108,7 +110,7 @@ function(_qt_internal_sbom_handle_target_binary_files target)
     set(file_common_options "")
 
     list(APPEND file_common_options PACKAGE_SPDX_ID "${package_spdx_id}")
-    list(APPEND file_common_options PACKAGE_TYPE "${arg_TYPE}")
+    list(APPEND file_common_options PACKAGE_TYPE "${arg_SBOM_ENTITY_TYPE}")
 
     if(arg_COPYRIGHTS)
         list(APPEND file_common_options COPYRIGHTS "${arg_COPYRIGHTS}")
@@ -130,9 +132,9 @@ function(_qt_internal_sbom_handle_target_binary_files target)
         set(library_path_kind LIBRARY_PATH)
     endif()
 
-    if(arg_TYPE STREQUAL "QT_TOOL"
-            OR arg_TYPE STREQUAL "QT_APP"
-            OR arg_TYPE STREQUAL "EXECUTABLE")
+    if(arg_SBOM_ENTITY_TYPE STREQUAL "QT_TOOL"
+            OR arg_SBOM_ENTITY_TYPE STREQUAL "QT_APP"
+            OR arg_SBOM_ENTITY_TYPE STREQUAL "EXECUTABLE")
 
         set(valid_executable_types
             "EXECUTABLE"
@@ -155,7 +157,7 @@ function(_qt_internal_sbom_handle_target_binary_files target)
             PATH_SUFFIX "${path_suffix}"
             OPTIONS ${file_common_options}
         )
-    elseif(arg_TYPE STREQUAL "QT_PLUGIN")
+    elseif(arg_SBOM_ENTITY_TYPE STREQUAL "QT_PLUGIN")
         if(NOT (target_type STREQUAL "SHARED_LIBRARY"
                 OR target_type STREQUAL "STATIC_LIBRARY"
                 OR target_type STREQUAL "MODULE_LIBRARY"))
@@ -167,10 +169,10 @@ function(_qt_internal_sbom_handle_target_binary_files target)
             PATH_SUFFIX "${path_suffix}"
             OPTIONS ${file_common_options}
         )
-    elseif(arg_TYPE STREQUAL "QT_MODULE"
-            OR arg_TYPE STREQUAL "QT_THIRD_PARTY_MODULE"
-            OR arg_TYPE STREQUAL "LIBRARY"
-            OR arg_TYPE STREQUAL "THIRD_PARTY_LIBRARY_WITH_FILES"
+    elseif(arg_SBOM_ENTITY_TYPE STREQUAL "QT_MODULE"
+            OR arg_SBOM_ENTITY_TYPE STREQUAL "QT_THIRD_PARTY_MODULE"
+            OR arg_SBOM_ENTITY_TYPE STREQUAL "LIBRARY"
+            OR arg_SBOM_ENTITY_TYPE STREQUAL "THIRD_PARTY_LIBRARY_WITH_FILES"
         )
         if(WIN32 AND target_type STREQUAL "SHARED_LIBRARY")
             _qt_internal_sbom_handle_multi_config_target_binary_file(${target}
@@ -603,8 +605,10 @@ function(_qt_internal_sbom_handle_multi_config_custom_file target)
     get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
     if(is_multi_config)
         set(configs ${CMAKE_CONFIGURATION_TYPES})
-    else()
+    elseif(CMAKE_BUILD_TYPE)
         set(configs "${CMAKE_BUILD_TYPE}")
+    else()
+        set(configs "<EMPTY_CONFIG>")
     endif()
 
     foreach(config IN LISTS configs)
@@ -816,13 +820,9 @@ function(_qt_internal_sbom_map_path_to_reproducible_relative_path out_var)
         if(IS_ABSOLUTE "${path}")
             set(path_in "${path}")
 
-            string(FIND "${path}" "${PROJECT_SOURCE_DIR}/" src_idx)
-            string(FIND "${path}" "${PROJECT_BINARY_DIR}/" dest_idx)
-
-            if(src_idx EQUAL "0")
-                set(is_in_source_dir TRUE)
-            elseif(dest_idx EQUAL "0")
-                set(is_in_build_dir TRUE)
+            _qt_internal_path_is_prefix(PROJECT_SOURCE_DIR "${path}" is_in_source_dir)
+            if(NOT is_in_source_dir)
+                _qt_internal_path_is_prefix(PROJECT_BINARY_DIR "${path}" is_in_build_dir)
             endif()
             if(NOT is_in_source_dir AND NOT is_in_build_dir)
                 _qt_internal_path_is_prefix(CMAKE_INSTALL_PREFIX "${path}" is_in_prefix_dir)
@@ -1008,8 +1008,10 @@ function(_qt_internal_sbom_handle_multi_config_target_binary_file target)
     get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
     if(is_multi_config)
         set(configs ${CMAKE_CONFIGURATION_TYPES})
-    else()
+    elseif(CMAKE_BUILD_TYPE)
         set(configs "${CMAKE_BUILD_TYPE}")
+    else()
+        set(configs "<EMPTY_CONFIG>")
     endif()
 
     foreach(config IN LISTS configs)

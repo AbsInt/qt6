@@ -44,17 +44,25 @@ public:
 
     struct ExtraData {
         ExtraData()
-            : topLeftRadius(-1.),
-              topRightRadius(-1.),
-              bottomLeftRadius(-1.),
-              bottomRightRadius(-1.)
+            : topLeftRadius(0),
+              topRightRadius(0),
+              bottomLeftRadius(0),
+              bottomRightRadius(0),
+              isTopLeftRadiusSet(false),
+              isTopRightRadiusSet(false),
+              isBottomLeftRadiusSet(false),
+              isBottomRightRadiusSet(false)
         {
         }
-
         qreal topLeftRadius;
         qreal topRightRadius;
         qreal bottomLeftRadius;
         qreal bottomRightRadius;
+
+        unsigned isTopLeftRadiusSet : 1;
+        unsigned isTopRightRadiusSet : 1;
+        unsigned isBottomLeftRadiusSet : 1;
+        unsigned isBottomRightRadiusSet : 1;
     };
     QLazilyAllocated<ExtraData> extraRectangle;
 

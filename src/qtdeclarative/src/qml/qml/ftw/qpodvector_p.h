@@ -16,13 +16,20 @@
 //
 
 #include <QtCore/private/qglobal_p.h>
-#include <QDebug>
+#include <QtCore/qtclasshelpermacros.h>
+
+#include <type_traits>
 
 QT_BEGIN_NAMESPACE
 
 template<class T, int Increment>
 class QPODVector
 {
+    static_assert(std::is_trivially_constructible_v<T>);
+    static_assert(std::is_trivially_move_constructible_v<T>);
+    static_assert(std::is_trivially_move_assignable_v<T>);
+    static_assert(std::is_trivially_destructible_v<T>);
+
 public:
     QPODVector()
     : m_count(0), m_capacity(0), m_data(nullptr) {}
@@ -123,8 +130,7 @@ public:
 
     QPODVector<T,Increment> &operator<<(const T &v) { append(v); return *this; }
 private:
-    QPODVector(const QPODVector &);
-    QPODVector &operator=(const QPODVector &);
+    Q_DISABLE_COPY(QPODVector)
     int m_count;
     int m_capacity;
     T *m_data;

@@ -198,7 +198,7 @@ qintptr QLocalServer::socketDescriptor() const
     return d->tcpServer.socketDescriptor();
 #elif defined(Q_OS_WIN)
     const auto handle = d->connectionEventNotifier->handle();
-    return handle != INVALID_HANDLE_VALUE ? qintptr(handle) : -1;
+    return handle ? qintptr(handle) : -1;
 #else
     return d->socketNotifier->socket();
 #endif

@@ -2,6 +2,14 @@
 <!DOCTYPE TS>
 <TS version="2.1">
 <context>
+    <name>A1::A2::Cl</name>
+    <message>
+        <location filename="main.cpp" line="237"/>
+        <source>using namespace in parent</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>A1::B::Test</name>
     <message>
         <location filename="main.cpp" line="178"/>
@@ -14,6 +22,14 @@
     <message>
         <location filename="main.cpp" line="161"/>
         <source>howdy?</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>Cl2</name>
+    <message>
+        <location filename="main.cpp" line="261"/>
+        <source>context after variable template</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

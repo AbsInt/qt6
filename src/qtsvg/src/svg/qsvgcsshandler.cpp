@@ -59,8 +59,6 @@ QSvgCssAnimation *QSvgCssHandler::createAnimation(const QString &name)
 {
     if (!m_animations.contains(name))
         return nullptr;
-    if (m_cachedAnimations.contains(name))
-        return m_cachedAnimations[name];
 
     QCss::AnimationRule animationRule = m_animations[name];
     QHash<QString, QSvgAbstractAnimatedProperty*> animatedProperies;
@@ -82,13 +80,22 @@ QSvgCssAnimation *QSvgCssHandler::createAnimation(const QString &name)
                 prop = static_cast<QSvgAnimatedPropertyTransform *>(animatedProperies[decl.d->property]);
                 prop->appendKeyFrame(ruleSet.keyFrame);
                 updateTransformProperty(decl, prop);
+            } else if (decl.d->property == QStringLiteral("fill-opacity") || decl.d->property == QStringLiteral("stroke-opacity")
+                       || decl.d->property == QStringLiteral("opacity")) {
+                QSvgAnimatedPropertyFloat *prop = nullptr;
+                if (!animatedProperies.contains(decl.d->property))
+                    animatedProperies[decl.d->property] = QSvgAbstractAnimatedProperty::createAnimatedProperty(decl.d->property);
+                prop = static_cast<QSvgAnimatedPropertyFloat *>(animatedProperies[decl.d->property]);
+                prop->appendKeyFrame(ruleSet.keyFrame);
+                QString opacity = decl.d->values.first().toString();
+                prop->appendValue(opacity.toDouble());
             }
         }
     }
 
     for (auto it = animatedProperies.begin(); it != animatedProperies.end(); it++)
         animation->appendProperty(it.value());
-    m_cachedAnimations[name] = animation;
+
     return animation;
 }
 

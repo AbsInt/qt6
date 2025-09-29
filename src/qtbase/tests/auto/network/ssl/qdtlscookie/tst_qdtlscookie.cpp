@@ -85,11 +85,7 @@ private:
     HandshakePtr dtls;
 
     const QCryptographicHash::Algorithm defaultHash =
-#ifdef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
-        QCryptographicHash::Sha1;
-#else
         QCryptographicHash::Sha256;
-#endif
 
     using CookieParams = QDtlsClientVerifier::GeneratorParameters;
 

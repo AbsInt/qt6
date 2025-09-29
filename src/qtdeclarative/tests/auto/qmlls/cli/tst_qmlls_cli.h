@@ -24,7 +24,7 @@ public:
     void stopServerImpl();
 
 private slots:
-    void initTestCase();
+    void initTestCase() final;
     void cleanup();
     void warnings_data();
     void warnings();

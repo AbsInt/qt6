@@ -788,7 +788,7 @@ QRect QRect::normalized() const noexcept
 
 bool QRect::contains(const QPoint &p, bool proper) const noexcept
 {
-    int l, r;
+    Representation l, r;
     if (x2 < x1 - 1) {
         l = x2 + 1;
         r = x1 - 1;
@@ -803,7 +803,7 @@ bool QRect::contains(const QPoint &p, bool proper) const noexcept
         if (p.x() < l || p.x() > r)
             return false;
     }
-    int t, b;
+    Representation t, b;
     if (y2 < y1 - 1) {
         t = y2 + 1;
         b = y1 - 1;
@@ -855,15 +855,15 @@ bool QRect::contains(const QRect &r, bool proper) const noexcept
     if (isNull() || r.isNull())
         return false;
 
-    int l1 = x1;
-    int r1 = x1 - 1;
+    Representation l1 = x1;
+    Representation r1 = x1 - 1;
     if (x2 < x1 - 1)
         l1 = x2 + 1;
     else
         r1 = x2;
 
-    int l2 = r.x1;
-    int r2 = r.x1 - 1;
+    Representation l2 = r.x1;
+    Representation r2 = r.x1 - 1;
     if (r.x2 < r.x1 - 1)
         l2 = r.x2 + 1;
     else
@@ -877,15 +877,15 @@ bool QRect::contains(const QRect &r, bool proper) const noexcept
             return false;
     }
 
-    int t1 = y1;
-    int b1 = y1 - 1;
+    Representation t1 = y1;
+    Representation b1 = y1 - 1;
     if (y2 < y1 - 1)
         t1 = y2 + 1;
     else
         b1 = y2;
 
-    int t2 = r.y1;
-    int b2 = r.y1 - 1;
+    Representation t2 = r.y1;
+    Representation b2 = r.y1 - 1;
     if (r.y2 < r.y1 - 1)
         t2 = r.y2 + 1;
     else
@@ -935,29 +935,29 @@ QRect QRect::operator|(const QRect &r) const noexcept
     if (r.isNull())
         return *this;
 
-    int l1 = x1;
-    int r1 = x1 - 1;
+    Representation l1 = x1;
+    Representation r1 = x1 - 1;
     if (x2 < x1 - 1)
         l1 = x2 + 1;
     else
         r1 = x2;
 
-    int l2 = r.x1;
-    int r2 = r.x1 - 1;
+    Representation l2 = r.x1;
+    Representation r2 = r.x1 - 1;
     if (r.x2 < r.x1 - 1)
         l2 = r.x2 + 1;
     else
         r2 = r.x2;
 
-    int t1 = y1;
-    int b1 = y1 - 1;
+    Representation t1 = y1;
+    Representation b1 = y1 - 1;
     if (y2 < y1 - 1)
         t1 = y2 + 1;
     else
         b1 = y2;
 
-    int t2 = r.y1;
-    int b2 = r.y1 - 1;
+    Representation t2 = r.y1;
+    Representation b2 = r.y1 - 1;
     if (r.y2 < r.y1 - 1)
         t2 = r.y2 + 1;
     else
@@ -997,15 +997,15 @@ QRect QRect::operator&(const QRect &r) const noexcept
     if (isNull() || r.isNull())
         return QRect();
 
-    int l1 = x1;
-    int r1 = x2;
+    Representation l1 = x1;
+    Representation r1 = x2;
     if (x2 < x1 - 1) {
         l1 = x2 + 1;
         r1 = x1 - 1;
     }
 
-    int l2 = r.x1;
-    int r2 = r.x2;
+    Representation l2 = r.x1;
+    Representation r2 = r.x2;
     if (r.x2 < r.x1 - 1) {
         l2 = r.x2 + 1;
         r2 = r.x1 - 1;
@@ -1014,15 +1014,15 @@ QRect QRect::operator&(const QRect &r) const noexcept
     if (l1 > r2 || l2 > r1)
         return QRect();
 
-    int t1 = y1;
-    int b1 = y2;
+    Representation t1 = y1;
+    Representation b1 = y2;
     if (y2 < y1 - 1) {
         t1 = y2 + 1;
         b1 = y1 - 1;
     }
 
-    int t2 = r.y1;
-    int b2 = r.y2;
+    Representation t2 = r.y1;
+    Representation b2 = r.y2;
     if (r.y2 < r.y1 - 1) {
         t2 = r.y2 + 1;
         b2 = r.y1 - 1;
@@ -1069,15 +1069,15 @@ bool QRect::intersects(const QRect &r) const noexcept
     if (isNull() || r.isNull())
         return false;
 
-    int l1 = x1;
-    int r1 = x2;
+    Representation l1 = x1;
+    Representation r1 = x2;
     if (x2 < x1 - 1) {
         l1 = x2 + 1;
         r1 = x1 - 1;
     }
 
-    int l2 = r.x1;
-    int r2 = r.x2;
+    Representation l2 = r.x1;
+    Representation r2 = r.x2;
     if (r.x2 < r.x1 - 1) {
         l2 = r.x2 + 1;
         r2 = r.x1 - 1;
@@ -1086,15 +1086,15 @@ bool QRect::intersects(const QRect &r) const noexcept
     if (l1 > r2 || l2 > r1)
         return false;
 
-    int t1 = y1;
-    int b1 = y2;
+    Representation t1 = y1;
+    Representation b1 = y2;
     if (y2 < y1 - 1) {
         t1 = y2 + 1;
         b1 = y1 - 1;
     }
 
-    int t2 = r.y1;
-    int b2 = r.y2;
+    Representation t2 = r.y1;
+    Representation b2 = r.y2;
     if (r.y2 < r.y1 - 1) {
         t2 = r.y2 + 1;
         b2 = r.y1 - 1;
@@ -2333,10 +2333,10 @@ bool QRectF::intersects(const QRectF &r) const noexcept
 
 QRect QRectF::toAlignedRect() const noexcept
 {
-    int xmin = int(qFloor(xp));
-    int xmax = int(qCeil(xp + w));
-    int ymin = int(qFloor(yp));
-    int ymax = int(qCeil(yp + h));
+    int xmin = qFloor(xp);
+    int xmax = qCeil(xp + w);
+    int ymin = qFloor(yp);
+    int ymax = qCeil(yp + h);
     return QRect(xmin, ymin, xmax - xmin, ymax - ymin);
 }
 

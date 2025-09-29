@@ -29,6 +29,8 @@ T.Switch {
         rightPadding: 0
         padding: (height - 16) / 2
         color: control.checked ? control.palette.dark : control.palette.midlight
+        border.width: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ? 1 : 0
+        border.color: Color.blend(control.palette.dark, control.palette.base, enabled ? 0.0 : 0.5)
 
         Rectangle {
             x: Math.max(0, Math.min(parent.width - width, control.visualPosition * parent.width - (width / 2)))
@@ -38,7 +40,15 @@ T.Switch {
             radius: 16
             color: control.down ? control.palette.light : control.palette.window
             border.width: control.visualFocus ? 2 : 1
-            border.color: control.visualFocus ? control.palette.highlight : control.enabled ? control.palette.mid : control.palette.midlight
+            border.color: {
+                if (control.visualFocus)
+                    return control.palette.highlight;
+                else if (Qt.styleHints.accessibility.contrastPreference !== Qt.HighContrast)
+                    return control.enabled ? control.palette.mid : control.palette.midlight
+                else
+                    return Color.blend(control.palette.dark, control.palette.base,
+                                       control.enabled ? 0.0 : 0.5)
+            }
 
             Behavior on x {
                 enabled: !control.down

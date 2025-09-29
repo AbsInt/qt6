@@ -43,7 +43,6 @@ void QQuickFontDialogImplPrivate::handleClick(QQuickAbstractButton *button)
 QQuickFontDialogImpl::QQuickFontDialogImpl(QObject *parent)
     : QQuickDialog(*(new QQuickFontDialogImplPrivate), parent)
 {
-    setPopupType(QQuickPopup::Window);
 }
 
 QQuickFontDialogImplAttached *QQuickFontDialogImpl::qmlAttachedProperties(QObject *object)

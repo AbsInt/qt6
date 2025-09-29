@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
 #ifndef QV4LOOKUP_H
 #define QV4LOOKUP_H
 
@@ -63,6 +64,7 @@ struct Q_QML_EXPORT Lookup {
         Getter0MemberDataGetter0MemberData,
         GetterAccessor,
         GetterAccessorPrimitive,
+        GetterEnum,
         GetterEnumValue,
         GetterGeneric,
         GetterIndexed,
@@ -76,7 +78,6 @@ struct Q_QML_EXPORT Lookup {
         GetterQObjectMethodFallback,
         GetterQObjectProperty,
         GetterQObjectPropertyFallback,
-        GetterScopedEnum,
         GetterSingletonMethod,
         GetterSingletonProperty,
         GetterStringLength,
@@ -205,8 +206,8 @@ struct Q_QML_EXPORT Lookup {
         } qmlEnumValueLookup;
         struct {
             HeapObjectWrapper<Heap::InternalClass, 13> ic;
-            HeapObjectWrapper<Heap::Object, 14> qmlScopedEnumWrapper;
-        } qmlScopedEnumWrapperLookup;
+            HeapObjectWrapper<Heap::Object, 14> qmlEnumWrapper;
+        } qmlEnumWrapperLookup;
     };
 
     Call call;
@@ -378,8 +379,8 @@ struct Q_QML_EXPORT Lookup {
             return stringLengthGetter(this, engine, object);
         case Call::GetterValueTypeProperty:
             return getterValueType(this, engine, object);
-        case Call::GetterScopedEnum:
-            return QQmlTypeWrapper::lookupScopedEnum(this, engine, object);
+        case Call::GetterEnum:
+            return QQmlTypeWrapper::lookupEnum(this, engine, object);
         default:
             break;
         }

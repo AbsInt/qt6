@@ -27,18 +27,6 @@ QT_BEGIN_NAMESPACE
 #define Q_EGLFS_EXPORT Q_DECL_IMPORT
 #endif
 
-#undef Status
-#undef None
-#undef Bool
-#undef CursorShape
-#undef KeyPress
-#undef KeyRelease
-#undef FocusIn
-#undef FocusOut
-#undef FontChange
-#undef Expose
-#undef Unsorted
-
 QT_END_NAMESPACE
 
 #endif

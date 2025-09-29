@@ -373,6 +373,11 @@ void QQuickAbstractButtonPrivate::click()
         emit q->clicked();
 }
 
+void QQuickAbstractButtonPrivate::accessiblePressAction()
+{
+    trigger();
+}
+
 void QQuickAbstractButtonPrivate::trigger(bool doubleClick)
 {
     Q_Q(QQuickAbstractButton);
@@ -1349,7 +1354,7 @@ QAccessible::Role QQuickAbstractButton::accessibleRole() const
 void QQuickAbstractButton::accessiblePressAction()
 {
     Q_D(QQuickAbstractButton);
-    d->trigger();
+    d->accessiblePressAction();
 }
 #endif
 

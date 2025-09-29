@@ -279,8 +279,13 @@ namespace QtAndroidInput
             break;
         }
 
-        const int dw = availableWidthPixels();
-        const int dh = availableHeightPixels();
+
+        QSize availableSize;
+        if (auto *platformIntegration = QtAndroid::androidPlatformIntegration())
+            availableSize = platformIntegration->screen()->availableGeometry().size();
+        else
+            availableSize = QAndroidPlatformScreen::defaultAvailableGeometry().size();
+
         QWindow *window = QtAndroid::windowFromId(winId);
         if (!window) {
             qCWarning(lcQpaInputMethods, "Touch event received for non-existing window %d", winId);
@@ -298,8 +303,8 @@ namespace QtAndroidInput
         touchPoint.id = id + 1;
         touchPoint.pressure = pressure;
         touchPoint.rotation = qRadiansToDegrees(rotation);
-        touchPoint.normalPosition = QPointF((mappedTouchPoint.x() / dw),
-                                            (mappedTouchPoint.y() / dh));
+        touchPoint.normalPosition = QPointF((mappedTouchPoint.x() / availableSize.width()),
+                                            (mappedTouchPoint.y() / availableSize.height()));
         touchPoint.state = state;
         touchPoint.area = QRectF(mappedTouchPoint.x() - double(minor * 0.5f),
                                  mappedTouchPoint.y() - double(major * 0.5f),

@@ -1306,7 +1306,7 @@ void QQuickTextPrivate::setLineGeometry(QTextLine &line, qreal lineWidth, qreal 
                 if (!image->pix) {
                     const QQmlContext *context = qmlContext(q);
                     const QUrl url = context->resolvedUrl(q->baseUrl()).resolved(image->url);
-                    image->pix.reset(new QQuickPixmap(context->engine(), url, QRect(), image->size * devicePixelRatio()));
+                    image->pix.reset(new QQuickPixmap(context->engine(), url, QRect(), image->size * effectiveDevicePixelRatio()));
 
                     if (image->pix->isLoading()) {
                         image->pix->connectFinished(q, SLOT(imageDownloadFinished()));
@@ -1392,11 +1392,6 @@ void QQuickTextPrivate::updateDocumentText()
         extra->doc->setPlainText(text);
 #endif
     rightToLeftText = extra->doc->toPlainText().isRightToLeft();
-}
-
-qreal QQuickTextPrivate::devicePixelRatio() const
-{
-    return (window ? window->effectiveDevicePixelRatio() : qApp->devicePixelRatio());
 }
 
 /*!
@@ -2815,7 +2810,7 @@ QSGNode *QQuickText::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data
     node->setStyleColor(QColor::fromRgba(d->styleColor));
     node->setLinkColor(QColor::fromRgba(d->linkColor));
 
-    node->setDevicePixelRatio(d->devicePixelRatio());
+    node->setDevicePixelRatio(d->effectiveDevicePixelRatio());
 
     if (d->richText) {
         node->setViewport(clipRect());

@@ -20,6 +20,7 @@ ScrollablePage {
         }
 
         Dial {
+            enabled: !GalleryConfig.disabled
             value: 0.5
             anchors.horizontalCenter: parent.horizontalCenter
         }

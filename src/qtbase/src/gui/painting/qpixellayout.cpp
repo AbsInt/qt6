@@ -368,7 +368,7 @@ static const QRgba64 *QT_FASTCALL fetchRGBToRGB64(QRgba64 *buffer, const uchar *
 }
 
 template<QImage::Format Format>
-static Q_ALWAYS_INLINE QRgbaFloat32 convertPixelToRGB32F(uint s)
+Q_ALWAYS_INLINE static QRgbaFloat32 convertPixelToRGB32F(uint s)
 {
     return QRgbaFloat32::fromArgb32(convertPixelToRGB32<Format>(s));
 }
@@ -481,7 +481,7 @@ static const QRgba64 *QT_FASTCALL fetchARGBPMToRGBA64PM(QRgba64 *buffer, const u
 }
 
 template<QImage::Format Format>
-static Q_ALWAYS_INLINE QRgbaFloat32 convertPixelToRGBA32F(uint s)
+Q_ALWAYS_INLINE static QRgbaFloat32 convertPixelToRGBA32F(uint s)
 {
     return QRgbaFloat32::fromArgb32(convertPixelToARGB32PM<Format>(s));
 }

@@ -6,6 +6,8 @@
 
 #include "qquickstyle.h"
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 namespace QQC2 {
@@ -13,20 +15,11 @@ namespace QQC2 {
 class QQuickNativeStyle
 {
 public:
-    static void setStyle(QStyle *style)
-    {
-        if (s_style)
-            delete s_style;
-        s_style = style;
-    }
-
-    inline static QStyle *style()
-    {
-        return s_style;
-    }
+    static void setStyle(QStyle *style) { s_style.reset(style); }
+    static QStyle *style() { return s_style.get(); }
 
 private:
-    static QStyle *s_style;
+    static inline std::unique_ptr<QStyle> s_style;
 };
 
 } // namespace QQC2

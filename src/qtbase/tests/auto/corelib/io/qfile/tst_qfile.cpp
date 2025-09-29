@@ -2277,6 +2277,7 @@ void tst_QFile::longFileName_data()
     QTest::newRow( "148 chars" ) << QString::fromLatin1("longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName.txt");
+#ifndef Q_OS_VXWORKS
     QTest::newRow( "244 chars" ) << QString::fromLatin1("longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
@@ -2293,6 +2294,7 @@ void tst_QFile::longFileName_data()
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName.txt");*/
+#endif
 }
 
 void tst_QFile::longFileName()
@@ -3057,6 +3059,11 @@ void tst_QFile::renameFallback()
     QFile::remove("file-rename-destination.txt");
 
     QVERIFY(!file.rename("file-rename-destination.txt"));
+#ifdef Q_OS_WIN
+    // wait for the file to disappear
+    QTRY_VERIFY_WITH_TIMEOUT(!QFile::exists("file-rename-destination.txt"),
+                             std::chrono::seconds(1));
+#endif
     QVERIFY(!QFile::exists("file-rename-destination.txt"));
     QVERIFY(!file.isOpen());
 }
@@ -4034,6 +4041,10 @@ void tst_QFile::supportsMoveToTrash()
     QVERIFY(!QFile::supportsMoveToTrash());
 #elif !defined(AT_FDCWD)
     // Unix platforms without the POSIX atfile support: not supported
+    QVERIFY(!QFile::supportsMoveToTrash());
+#elif defined(Q_OS_VXWORKS)
+    // AT_FDCWD exists in VxWorks 25.03,
+    // but required POSIX APIs for trash support are missing
     QVERIFY(!QFile::supportsMoveToTrash());
 #else
     QVERIFY(QFile::supportsMoveToTrash());

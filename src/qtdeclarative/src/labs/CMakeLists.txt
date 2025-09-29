@@ -1,6 +1,8 @@
 # Copyright (C) 2022 The Qt Company Ltd.
 # SPDX-License-Identifier: BSD-3-Clause
 
+add_subdirectory(synchronizer)
+
 if(QT_FEATURE_settings)
     add_subdirectory(settings)
 endif()
@@ -27,3 +29,6 @@ if(QT_FEATURE_systemsemaphore AND TARGET Qt::Quick)
     add_subdirectory(sharedimage)
 endif()
 
+if(TARGET Qt::ExamplesAssetDownloaderPrivate)
+    add_subdirectory(assetdownloader)
+endif()

@@ -207,7 +207,7 @@ public:
         int column;
     };
 
-    QList<QPair<QString, QVariant> > properties;
+    QList<std::pair<QString, QVariant> > properties;
     QList<ExpressionChange> expressions;
     QList<QQuickReplaceSignalHandler*> signalReplacements;
 
@@ -332,7 +332,7 @@ void QQuickPropertyChangesPrivate::decodeBinding(const QString &propertyPrefix, 
         break;
     }
 
-    properties << qMakePair(propertyName, var);
+    properties << std::make_pair(propertyName, var);
 }
 
 void QQuickPropertyChangesParser::verifyBindings(
@@ -515,8 +515,9 @@ QQuickPropertyChanges::ActionList QQuickPropertyChanges::actions()
 /*!
     \qmlproperty bool QtQuick::PropertyChanges::explicit
 
-    If explicit is set to true, any potential bindings will be interpreted as
-    once-off assignments that occur when the state is entered.
+    If explicit is set to true, bindings will be interpreted as assignments.
+    The expression will only be evaluated once, and no updates happen, even if
+    dependencies change.
 
     In the following example, the addition of explicit prevents \c myItem.width from
     being bound to \c parent.width. Instead, it is assigned the value of \c parent.width
@@ -549,7 +550,7 @@ void QQuickPropertyChanges::setIsExplicit(bool e)
 bool QQuickPropertyChanges::containsValue(const QString &name) const
 {
     Q_D(const QQuickPropertyChanges);
-    typedef QPair<QString, QVariant> PropertyEntry;
+    typedef std::pair<QString, QVariant> PropertyEntry;
 
     for (const PropertyEntry &entry : d->properties) {
         if (entry.first == name) {
@@ -582,7 +583,7 @@ bool QQuickPropertyChanges::containsProperty(const QString &name) const
 void QQuickPropertyChanges::changeValue(const QString &name, const QVariant &value)
 {
     Q_D(QQuickPropertyChanges);
-    typedef QPair<QString, QVariant> PropertyEntry;
+    typedef std::pair<QString, QVariant> PropertyEntry;
 
     for (auto it = d->expressions.begin(), end = d->expressions.end(); it != end; ++it) {
         if (it->name == name) {
@@ -705,7 +706,7 @@ void QQuickPropertyChanges::changeExpression(const QString &name, const QString 
 QVariant QQuickPropertyChanges::property(const QString &name) const
 {
     Q_D(const QQuickPropertyChanges);
-    typedef QPair<QString, QVariant> PropertyEntry;
+    typedef std::pair<QString, QVariant> PropertyEntry;
     typedef QQuickPropertyChangesPrivate::ExpressionChange ExpressionEntry;
 
     for (const PropertyEntry &entry : d->properties) {
@@ -747,7 +748,7 @@ void QQuickPropertyChanges::removeProperty(const QString &name)
 QVariant QQuickPropertyChanges::value(const QString &name) const
 {
     Q_D(const QQuickPropertyChanges);
-    typedef QPair<QString, QVariant> PropertyEntry;
+    typedef std::pair<QString, QVariant> PropertyEntry;
 
     for (const PropertyEntry &entry : d->properties) {
         if (entry.first == name) {

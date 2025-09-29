@@ -218,4 +218,47 @@ void ::cl::func() {
     tr("text");
 }
 
+// using namespace in parent
+namespace A1 {
+namespace A2 {
+class Cl : public QObject
+{
+    Q_OBJECT
+    void func();
+};
+} // namespace A2
+} // namespace A1
+
+using namespace A1::A2;
+
+namespace A1 {
+void Cl::func()
+{
+    tr("using namespace in parent");
+}
+} // namespace A1
+
+// variable template
+
+namespace NS1 {
+namespace NS2 {
+
+template <class T>
+struct Cl1
+{
+    static constexpr bool value = true;
+};
+
+template <class T>
+constexpr bool varTemplate = NS2::Cl1<T>::value;
+
+} // namespace NS2
+} // namespace NS1
+
+class Cl2 : public QObject
+{
+    Q_OBJECT
+    void func() { tr("context after variable template"); }
+};
+
 //#include "main.moc"

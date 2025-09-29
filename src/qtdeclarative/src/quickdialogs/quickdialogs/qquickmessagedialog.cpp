@@ -3,6 +3,9 @@
 
 #include "qquickmessagedialog_p.h"
 
+#include <QtQuickDialogs2QuickImpl/private/qquickplatformmessagedialog_p.h>
+#include <QtQuickDialogs2QuickImpl/private/qquickmessagedialogimpl_p.h>
+
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -240,6 +243,11 @@ void QQuickMessageDialog::onShow(QPlatformDialogHelper *dialog)
     if (QPlatformMessageDialogHelper *messageDialog =
                 qobject_cast<QPlatformMessageDialogHelper *>(dialog))
         messageDialog->setOptions(m_options); // setOptions only assigns a member and isn't virtual
+
+    if (QQuickPlatformMessageDialog *messageDialog = qobject_cast<QQuickPlatformMessageDialog *>(dialog))
+        messageDialog->dialog()->setPopupType(m_popupType);
+
+    QQuickAbstractDialog::onShow(dialog);
 }
 
 int QQuickMessageDialog::dialogCode() const

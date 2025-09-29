@@ -234,6 +234,8 @@ private slots:
     void messageBoxTest_data();
     void messageBoxTest();
 
+    void widgetLocaleTest();
+
 protected slots:
     void onClicked();
 private:
@@ -4021,8 +4023,21 @@ void tst_QAccessibility::labelTest()
     QTestAccessibility::clearEvents();
 }
 
+#if defined(Q_OS_MACOS)
+QT_BEGIN_NAMESPACE
+    extern void qt_set_sequence_auto_mnemonic(bool);
+QT_END_NAMESPACE
+#endif
+
 void tst_QAccessibility::accelerators()
 {
+#if defined(Q_OS_MACOS)
+    qt_set_sequence_auto_mnemonic(true);
+    const auto resetAutoMnemonic = qScopeGuard([] {
+        qt_set_sequence_auto_mnemonic(false);
+    });
+#endif
+
     auto windowHolder = std::make_unique<QWidget>();
     auto window = windowHolder.get();
     QHBoxLayout *lay = new QHBoxLayout(window);
@@ -4035,8 +4050,8 @@ void tst_QAccessibility::accelerators()
     window->show();
 
     QAccessibleInterface *accLineEdit = QAccessible::queryAccessibleInterface(le);
-    QCOMPARE(accLineEdit->text(QAccessible::Accelerator), QKeySequence(Qt::ALT).toString(QKeySequence::NativeText) + QLatin1String("L"));
-    QCOMPARE(accLineEdit->text(QAccessible::Accelerator), QKeySequence(Qt::ALT).toString(QKeySequence::NativeText) + QLatin1String("L"));
+    QCOMPARE(accLineEdit->text(QAccessible::Accelerator), QKeySequence(Qt::ALT | Qt::Key_L).toString(QKeySequence::NativeText));
+    QCOMPARE(accLineEdit->text(QAccessible::Accelerator), QKeySequence(Qt::ALT | Qt::Key_L).toString(QKeySequence::NativeText));
     label->setText(tr("Q &"));
     QCOMPARE(accLineEdit->text(QAccessible::Accelerator), QString());
     label->setText(tr("Q &&"));
@@ -4044,15 +4059,15 @@ void tst_QAccessibility::accelerators()
     label->setText(tr("Q && A"));
     QCOMPARE(accLineEdit->text(QAccessible::Accelerator), QString());
     label->setText(tr("Q &&&A"));
-    QCOMPARE(accLineEdit->text(QAccessible::Accelerator), QKeySequence(Qt::ALT).toString(QKeySequence::NativeText) + QLatin1String("A"));
+    QCOMPARE(accLineEdit->text(QAccessible::Accelerator), QKeySequence(Qt::ALT | Qt::Key_A).toString(QKeySequence::NativeText));
     label->setText(tr("Q &&A"));
     QCOMPARE(accLineEdit->text(QAccessible::Accelerator), QString());
 
-#if !defined(QT_NO_DEBUG) && !defined(Q_OS_MAC)
+#if !defined(QT_NO_DEBUG)
     QTest::ignoreMessage(QtWarningMsg, "QKeySequence::mnemonic: \"Q &A&B\" contains multiple occurrences of '&'");
 #endif
     label->setText(tr("Q &A&B"));
-    QCOMPARE(accLineEdit->text(QAccessible::Accelerator), QKeySequence(Qt::ALT).toString(QKeySequence::NativeText) + QLatin1String("A"));
+    QCOMPARE(accLineEdit->text(QAccessible::Accelerator), QKeySequence(Qt::ALT | Qt::Key_A).toString(QKeySequence::NativeText));
 
 #if defined(Q_OS_UNIX)
     QCoreApplication::processEvents();
@@ -4384,7 +4399,7 @@ private:
     bool m_focus;
 };
 
-class FocusChildTestAccessibleWidget : public QAccessibleWidget
+class FocusChildTestAccessibleWidget : public QAccessibleWidgetV2
 {
 public:
     static QAccessibleInterface *ifaceFactory(const QString &key, QObject *o)
@@ -4395,7 +4410,7 @@ public:
     }
 
     FocusChildTestAccessibleWidget(QtTestAccessibleWidget *w)
-        : QAccessibleWidget(w)
+        : QAccessibleWidgetV2(w)
     {
         m_children.push_back(new FocusChildTestAccessibleInterface(0, false, this));
         m_children.push_back(new FocusChildTestAccessibleInterface(1, true, this));
@@ -4404,7 +4419,7 @@ public:
 
     QAccessible::State state() const override
     {
-        QAccessible::State s = QAccessibleWidget::state();
+        QAccessible::State s = QAccessibleWidgetV2::state();
         s.focused = false;
         return s;
     }
@@ -4754,6 +4769,49 @@ void tst_QAccessibility::messageBoxTest()
     box.hide();
     QAccessibleEvent hideEvent(&box, QAccessible::DialogEnd);
     QVERIFY(QTestAccessibility::containsEvent(&hideEvent));
+
+    QTestAccessibility::clearEvents();
+}
+
+void tst_QAccessibility::widgetLocaleTest()
+{
+    QMainWindow mainWindow;
+    QWidget w(&mainWindow);
+    QHBoxLayout *box = new QHBoxLayout(&w);
+
+    QLabel *label = new QLabel("Hello world");
+    box->addWidget(label);
+
+    // "你好世界" is "Hello world" in Chinese
+    QLabel *chineseLabel = new QLabel(QString::fromUtf16(u"你好世界"));
+    const QLocale chinese(QLocale::Chinese, QLocale::China);
+    chineseLabel->setLocale(chinese);
+    box->addWidget(chineseLabel);
+
+    mainWindow.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+
+    // verify that locale is the default locale if none was set explicitly
+    QAccessibleInterface *labelAcc = QAccessible::queryAccessibleInterface(label);
+    QVERIFY(labelAcc);
+    QVERIFY(labelAcc->attributesInterface());
+    QVERIFY(labelAcc->attributesInterface()->attributeKeys().contains(
+            QAccessible::Attribute::Locale));
+    const QVariant localeVariant =
+            labelAcc->attributesInterface()->attributeValue(QAccessible::Attribute::Locale);
+    QVERIFY(localeVariant.isValid() && localeVariant.canConvert<QLocale>());
+    QCOMPARE(localeVariant.toLocale(), QLocale());
+
+    // verify that locale matches the one explicitly set for the widget
+    QAccessibleInterface *chineseLabelAcc = QAccessible::queryAccessibleInterface(chineseLabel);
+    QVERIFY(chineseLabelAcc);
+    QVERIFY(chineseLabelAcc->attributesInterface());
+    QVERIFY(chineseLabelAcc->attributesInterface()->attributeKeys().contains(
+            QAccessible::Attribute::Locale));
+    const QVariant chineseLocaleVariant =
+            chineseLabelAcc->attributesInterface()->attributeValue(QAccessible::Attribute::Locale);
+    QVERIFY(chineseLocaleVariant.isValid() && chineseLocaleVariant.canConvert<QLocale>());
+    QCOMPARE(chineseLocaleVariant.toLocale(), chinese);
 
     QTestAccessibility::clearEvents();
 }

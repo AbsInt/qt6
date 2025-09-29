@@ -550,6 +550,7 @@ void QDataStream::setByteOrder(ByteOrder bo)
     \value Qt_6_7 Version 22 (Qt 6.7)
     \value Qt_6_8 Same as Qt_6_7
     \value Qt_6_9 Same as Qt_6_7
+    \value Qt_6_10 Same as Qt_6_7
     \omitvalue Qt_DefaultCompiledVersion
 
     \sa setVersion(), version()
@@ -1030,6 +1031,21 @@ QDataStream &QDataStream::operator>>(char32_t &c)
     return *this;
 }
 
+/*!
+    \relates QChar
+
+    Reads a char from the stream \a in into char \a chr.
+
+    \sa {Serializing Qt Data Types}
+*/
+QDataStream &operator>>(QDataStream &in, QChar &chr)
+{
+    quint16 u;
+    in >> u;
+    chr.unicode() = char16_t(u);
+    return in;
+}
+
 #if QT_DEPRECATED_SINCE(6, 11)
 
 /*!
@@ -1381,6 +1397,26 @@ QDataStream &QDataStream::operator<<(char32_t c)
 {
     return *this << qint32(c);
 }
+
+/*!
+    \relates QChar
+
+    Writes the char \a chr to the stream \a out.
+
+    \sa {Serializing Qt Data Types}
+*/
+QDataStream &operator<<(QDataStream &out, QChar chr)
+{
+    out << quint16(chr.unicode());
+    return out;
+}
+
+/*!
+    \fn QDataStream::operator bool() const
+    \since 6.10
+
+    Returns whether this stream has no errors (\l status() returns \l{Ok}).
+*/
 
 /*!
     Writes the length specifier \a len and the buffer \a s to the

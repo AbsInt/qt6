@@ -101,7 +101,18 @@ Event::Event(EventType type, emscripten::val webEvent)
 {
 }
 
-KeyEvent::KeyEvent(EventType type, emscripten::val event) : Event(type, event)
+bool Event::isTargetedForQtElement() const
+{
+    // Check event target via composedPath, which returns the true path even
+    // if the browser retargets the event for Qt's shadow DOM container. This
+    // is needed to avoid capturing the pointer in cases where foreign html
+    // elements are embedded inside Qt's shadow DOM.
+    emscripten::val path = webEvent.call<emscripten::val>("composedPath");
+    QString topElementClassName = QString::fromEcmaString(path[0]["className"]);
+    return topElementClassName.startsWith("qt-"); // .e.g. qt-window-canvas
+}
+
+KeyEvent::KeyEvent(EventType type, emscripten::val event, QWasmDeadKeySupport *deadKeySupport) : Event(type, event)
 {
     const auto code = event["code"].as<std::string>();
     const auto webKey = event["key"].as<std::string>();
@@ -124,27 +135,8 @@ KeyEvent::KeyEvent(EventType type, emscripten::val event) : Event(type, event)
 
     if (key == Qt::Key_Tab)
         text = "\t";
-}
 
-std::optional<KeyEvent> KeyEvent::fromWebWithDeadKeyTranslation(emscripten::val event,
-                                                                QWasmDeadKeySupport *deadKeySupport)
-{
-    const auto eventType = ([&event]() -> std::optional<EventType> {
-        const auto eventTypeString = event["type"].as<std::string>();
-
-        if (eventTypeString == "keydown")
-            return EventType::KeyDown;
-        else if (eventTypeString == "keyup")
-            return EventType::KeyUp;
-        return std::nullopt;
-    })();
-    if (!eventType)
-        return std::nullopt;
-
-    auto result = KeyEvent(*eventType, event);
-    deadKeySupport->applyDeadKeyTranslations(&result);
-
-    return result;
+    deadKeySupport->applyDeadKeyTranslations(this);
 }
 
 MouseEvent::MouseEvent(EventType type, emscripten::val event) : Event(type, event)

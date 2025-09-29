@@ -63,6 +63,8 @@ public:
     QQuickHeaderViewBasePrivate();
     ~QQuickHeaderViewBasePrivate();
 
+    static inline QQuickHeaderViewBasePrivate *get(QQuickHeaderViewBase *q) { return q->d_func(); }
+
     void init();
     Qt::Orientation orientation() const;
     void setOrientation(Qt::Orientation orientation);
@@ -72,6 +74,9 @@ public:
     void syncModel() override;
     void syncSyncView() override;
     QAbstractItemModel *selectionSourceModel() override;
+
+    // QQuickTableViewPrivate interface
+    virtual void initItemCallback(int modelIndex, QObject *item) override;
 
 protected:
     QHeaderDataProxyModel m_headerDataProxyModel;

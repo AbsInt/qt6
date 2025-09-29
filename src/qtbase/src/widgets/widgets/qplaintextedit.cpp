@@ -781,7 +781,7 @@ void QPlainTextEditPrivate::init(const QString &txt)
     if (!txt.isEmpty())
         control->setPlainText(txt);
 
-    hbar->setSingleStep(20);
+    hbar->setSingleStep(defaultSingleStep());
     vbar->setSingleStep(1);
 
     viewport->setBackgroundRole(QPalette::Base);

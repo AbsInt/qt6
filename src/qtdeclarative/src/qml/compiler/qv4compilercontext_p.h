@@ -212,13 +212,13 @@ struct Context {
     QString caughtVariable;
     QQmlJS::SourceLocation lastBlockInitializerLocation;
 
-    enum UsesArgumentsObject {
-        ArgumentsObjectUnknown,
-        ArgumentsObjectNotUsed,
-        ArgumentsObjectUsed
+    enum class UsesArgumentsObject: quint8 {
+        Unknown,
+        NotUsed,
+        Used
     };
 
-    UsesArgumentsObject usesArgumentsObject = ArgumentsObjectUnknown;
+    UsesArgumentsObject usesArgumentsObject = UsesArgumentsObject::Unknown;
 
     ContextType contextType;
 
@@ -337,6 +337,7 @@ struct Context {
             Import
         };
         Type type = Unresolved;
+        Context::MemberType memberType = UndefinedMember;
         bool isArgOrEval = false;
         bool isConst = false;
         bool requiresTDZCheck = false;

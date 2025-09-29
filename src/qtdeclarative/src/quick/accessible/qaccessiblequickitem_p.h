@@ -52,6 +52,9 @@ public:
 
     bool isAccessible() const;
 
+    QList<std::pair<QAccessibleInterface *, QAccessible::Relation>>
+    relations(QAccessible::Relation match = QAccessible::AllRelations) const override;
+
     // Action Interface
     QStringList actionNames() const override;
     void doAction(const QString &actionName) override;

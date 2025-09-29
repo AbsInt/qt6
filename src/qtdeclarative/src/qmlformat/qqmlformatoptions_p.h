@@ -1,5 +1,6 @@
 // Copyright (C) 2023 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
 
 #ifndef QQMLFORMATOPTIONS_P_H
 #define QQMLFORMATOPTIONS_P_H
@@ -73,12 +74,25 @@ public:
     bool functionsSpacing() const { return m_options.functionsSpacing; }
     void setFunctionsSpacing(bool spacing) { m_options.functionsSpacing = spacing; }
 
+    bool sortImports() const { return m_options.sortImports; }
+    void setSortImports(bool sort) { m_options.sortImports = sort; }
+
     int indentWidth() const { return m_options.formatOptions.indentSize; }
     void setIndentWidth(int width) { m_options.formatOptions.indentSize = width; }
 
     int maxColumnWidth() const { return m_options.maxLineLength; }
     void setMaxColumnWidth(int width) { m_options.maxLineLength = width; }
     bool isMaxColumnWidthSet() const { return m_options.maxLineLength > 0; }
+
+    void setSemicolonRule(QQmlJS::Dom::LineWriterOptions::SemicolonRule rule)
+    {
+        m_options.semicolonRule = rule;
+    }
+
+    QQmlJS::Dom::LineWriterOptions::SemicolonRule semicolonRule() const
+    {
+        return m_options.semicolonRule;
+    }
 
     QQmlJS::Dom::LineWriterOptions optionsForCode(const QString &code) const
     {
@@ -131,6 +145,7 @@ public:
         ObjectsSpacing,
         FunctionsSpacing,
         SortImports,
+        SemicolonRule,
         SettingsCount
     };
 

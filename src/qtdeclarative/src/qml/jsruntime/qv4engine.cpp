@@ -1,7 +1,12 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
 
 #include "qv4engine_p.h"
+
+#include <wtf/BumpPointerAllocator.h>
+#include <wtf/OSAllocator.h>
+#include <wtf/PageAllocation.h>
 
 #include <private/qjsvalue_p.h>
 #include <private/qqmlbuiltinfunctions_p.h>
@@ -340,18 +345,11 @@ ExecutionEngine::ExecutionEngine(QJSEngine *jsEngine)
     , bumperPointerAllocator(new WTF::BumpPointerAllocator)
     , jsStack(new WTF::PageAllocation)
     , gcStack(new WTF::PageAllocation)
-    , globalCode(nullptr)
     , publicEngine(jsEngine)
     , m_engineId(engineSerial.fetchAndAddOrdered(2))
-    , regExpCache(nullptr)
-    , m_multiplyWrappedQObjects(nullptr)
 #if QT_CONFIG(qml_jit)
     , m_canAllocateExecutableMemory(OSAllocator::canAllocateExecutableMemory())
 #endif
-#if QT_CONFIG(qml_xml_http_request)
-    , m_xmlHttpRequestData(nullptr)
-#endif
-    , m_qmlEngine(nullptr)
 {
     if (m_engineId == 1) {
         initializeStaticMembers();
@@ -2323,6 +2321,33 @@ void ExecutionEngine::initQmlGlobalObject()
     lockObject(*globalObject);
 }
 
+static bool globalNamesAreStaticallyKnown(QV4::Object *globalObject)
+{
+    const Heap::InternalClass *ic = globalObject->internalClass();
+    const SharedInternalClassData<PropertyKey> &nameMap = ic->nameMap;
+    bool clean = true;
+    for (uint i = 0, end = ic->size; i < end; ++i) {
+        const QV4::PropertyKey id = nameMap.at(i);
+        if (id.isString()) {
+            if (!Compiler::Codegen::isNameGlobal(id.toQString())) {
+                qCritical() << id.toQString()
+                            << "is part of the JavaScript global object "
+                               "but not statically known to be global";
+                clean = false;
+            }
+        }
+    }
+    return clean;
+}
+
+#if QT_CONFIG(qml_xml_http_request)
+void ExecutionEngine::setupXmlHttpRequestExtension()
+{
+    qt_add_domexceptions(this);
+    m_xmlHttpRequestData = qt_add_qmlxmlhttprequest(this);
+}
+#endif
+
 void ExecutionEngine::initializeGlobal()
 {
     createQtObject();
@@ -2336,20 +2361,12 @@ void ExecutionEngine::initializeGlobal()
 #endif
 
 #if QT_CONFIG(qml_xml_http_request)
-    qt_add_domexceptions(this);
-    m_xmlHttpRequestData = qt_add_qmlxmlhttprequest(this);
+    setupXmlHttpRequestExtension();
 #endif
 
     qt_add_sqlexceptions(this);
 
-    {
-        for (uint i = 0; i < globalObject->internalClass()->size; ++i) {
-            if (globalObject->internalClass()->nameMap.at(i).isString()) {
-                QV4::PropertyKey id = globalObject->internalClass()->nameMap.at(i);
-                m_illegalNames.insert(id.toQString());
-            }
-        }
-    }
+    Q_ASSERT(globalNamesAreStaticallyKnown(globalObject));
 }
 
 void ExecutionEngine::createQtObject()
@@ -2369,11 +2386,6 @@ void ExecutionEngine::createQtObject()
     qtObjectWrapper->setPrototypeOf(qtNamespaceWrapper);
 
     globalObject->defineDefaultProperty(QStringLiteral("Qt"), qtObjectWrapper);
-}
-
-const QSet<QString> &ExecutionEngine::illegalNames() const
-{
-    return m_illegalNames;
 }
 
 void ExecutionEngine::setQmlEngine(QQmlEngine *engine)
@@ -2521,15 +2533,29 @@ bool convertToIterable(QMetaType metaType, void *data, Source *sequence)
     if (!QMetaType::view(metaType, data, QMetaType::fromType<QSequentialIterable>(), &iterable))
         return false;
 
-    const QMetaType elementMetaType = iterable.valueMetaType();
+    // Clear the sequence before appending. There may be stale data in there.
+    metaType.destruct(data);
+    metaType.construct(data);
+
     QV4::Scope scope(sequence->engine());
     QV4::ScopedValue v(scope);
+
+    const QMetaType elementMetaType = iterable.valueMetaType();
+    QVariant element;
+    void *elementData = nullptr;
+    if (elementMetaType == QMetaType::fromType<QVariant>()) {
+        elementData = &element;
+    } else {
+        element = QVariant(elementMetaType);
+        elementData = element.data();
+    }
+
     for (qsizetype i = 0, end = sequence->getLength(); i < end; ++i) {
-        QVariant element(elementMetaType);
         v = sequence->get(i);
-        ExecutionEngine::metaTypeFromJS(v, elementMetaType, element.data());
+        ExecutionEngine::metaTypeFromJS(v, elementMetaType, elementData);
         iterable.addValue(element, QSequentialIterable::AtEnd);
     }
+
     return true;
 }
 
@@ -2965,7 +2991,9 @@ int ExecutionEngine::registerExtension()
 #if QT_CONFIG(qml_network)
 QNetworkAccessManager *QV4::detail::getNetworkAccessManager(ExecutionEngine *engine)
 {
-    return engine->qmlEngine()->networkAccessManager();
+    if (QQmlEngine *qmlEngine = engine->qmlEngine())
+        return qmlEngine->networkAccessManager();
+    return nullptr;
 }
 #endif // qml_network
 

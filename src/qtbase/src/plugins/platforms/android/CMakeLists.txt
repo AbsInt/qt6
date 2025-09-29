@@ -4,7 +4,7 @@
 #####################################################################
 ## QAndroidIntegrationPlugin Plugin:
 #####################################################################
-qt_find_package(EGL)
+qt_find_package(EGL MODULE)
 
 qt_internal_add_plugin(QAndroidIntegrationPlugin
     OUTPUT_NAME qtforandroid
@@ -13,7 +13,6 @@ qt_internal_add_plugin(QAndroidIntegrationPlugin
     SOURCES
         androidcontentfileengine.cpp androidcontentfileengine.h
         qandroidapkfileengine.h qandroidapkfileengine.cpp
-        androiddeadlockprotector.h
         androidjniinput.cpp androidjniinput.h
         androidjnimain.cpp androidjnimain.h
         androidjnimenu.cpp androidjnimenu.h
@@ -50,7 +49,12 @@ qt_internal_add_plugin(QAndroidIntegrationPlugin
         qandroidplatformdialoghelpers.cpp
         # Conflicting JNI classes, and types
         androidcontentfileengine.cpp
+        qandroidplatformforeignwindow.cpp
         qandroidplatformintegration.cpp
+        qandroidplatformscreen.cpp
+        qandroidplatformservices.cpp
+        qandroidplatformwindow.cpp
+        qandroidsystemlocale.cpp
     INCLUDE_DIRECTORIES
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${QtBase_SOURCE_DIR}/src/3rdparty/android

@@ -195,6 +195,8 @@ Configurations:
         'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY',
         'NON_QTBASE_CMAKE_ARGS=
          -DFEATURE_qdoc=off
+         -DFEATURE_quick3d_assimp=off
+         -DFEATURE_quick3dxr_openxr=off
          -DFEATURE_qml_animation=off
          -DFEATURE_qml_debug=off
          -DFEATURE_qml_jit=off

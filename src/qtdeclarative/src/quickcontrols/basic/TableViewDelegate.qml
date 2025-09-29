@@ -22,8 +22,8 @@ T.TableViewDelegate {
     required property var model
 
     background: Rectangle {
-        border.width: control.current ? 2 : 0
-        border.color: control.palette.highlight
+        border.width: control.current ? 2 : Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ? 1 : 0
+        border.color: control.current ? control.palette.highlight : control.palette.windowText
         color: control.highlighted
                ? control.palette.highlight
                : (control.tableView.alternatingRows && control.row % 2 !== 0

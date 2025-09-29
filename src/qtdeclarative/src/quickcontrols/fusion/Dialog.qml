@@ -23,14 +23,14 @@ T.Dialog {
 
     background: Rectangle {
         color: control.palette.window
-        border.color: control.palette.mid
+        border.color: Fusion.highContrast ? control.palette.windowText : control.palette.mid
         radius: 2
 
         Rectangle {
             z: -1
             x: 1; y: 1
-            width: parent.width
-            height: parent.height
+            width: parent.width - 2
+            height: parent.height - 2
             color: control.palette.shadow
             opacity: 0.2
             radius: 2
@@ -44,11 +44,20 @@ T.Dialog {
         font.bold: true
         padding: 6
         background: Rectangle {
-            x: 1; y: 1
-            width: parent.width - 2
-            height: parent.height - 1
-            color: control.palette.window
-            radius: 2
+            border.color: Fusion.highContrast ? control.palette.windowText : "transparent"
+            color: "transparent"
+            width: parent.width
+            height: parent.height
+            topLeftRadius: 2
+            topRightRadius: 2
+            Rectangle {
+                x: 1; y: 1
+                width: parent.width - 2
+                height: parent.height - 2
+                color: control.palette.window
+                topLeftRadius: 2
+                topRightRadius: 2
+            }
         }
     }
 

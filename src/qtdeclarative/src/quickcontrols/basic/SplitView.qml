@@ -17,5 +17,7 @@ T.SplitView {
         implicitHeight: control.orientation === Qt.Horizontal ? control.height : 6
         color: T.SplitHandle.pressed ? control.palette.mid
             : (T.SplitHandle.hovered ? control.palette.midlight : control.palette.button)
+        border.color: control.palette.dark
+        border.width: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ? 1 : 0
     }
 }

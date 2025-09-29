@@ -18,6 +18,8 @@
 
 #include <QtCore/QtGlobal>
 
+QT_BEGIN_NAMESPACE
+
 std::pair<qreal, qreal> getSaturationAndValue(qreal saturation, qreal lightness);
 
 std::pair<qreal, qreal> getSaturationAndLightness(qreal saturation, qreal value);
@@ -32,5 +34,7 @@ struct HSVA
     };
     qreal a = 1.0;
 };
+
+QT_END_NAMESPACE
 
 #endif // QQUICKCOLORDIALOGUTILS_P_H

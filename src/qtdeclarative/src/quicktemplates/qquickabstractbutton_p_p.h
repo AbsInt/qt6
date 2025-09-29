@@ -50,6 +50,7 @@ public:
     void handleUngrab() override;
 
     virtual bool acceptKeyClick(Qt::Key key) const;
+    virtual void accessiblePressAction();
 
     bool isPressAndHoldConnected();
     bool isDoubleClickConnected();

@@ -43,7 +43,7 @@ struct QQmlTypeCompiler
 {
     Q_DECLARE_TR_FUNCTIONS(QQmlTypeCompiler)
 public:
-    QQmlTypeCompiler(QQmlEnginePrivate *engine,
+    QQmlTypeCompiler(QQmlTypeLoader *typeLoader,
                      QQmlTypeData *typeData,
                      QmlIR::Document *document,
                      QV4::CompiledData::ResolvedTypeReferenceMap *resolvedTypeCache,
@@ -87,8 +87,7 @@ public:
     const QV4::CompiledData::Unit *qmlUnit() const;
 
     QUrl url() const { return typeData->finalUrl(); }
-    QQmlEnginePrivate *enginePrivate() const { return engine; }
-    QQmlTypeLoader *typeLoader() const { return &engine->typeLoader; }
+    QQmlTypeLoader *typeLoader() const { return loader; }
     const QQmlImports *imports() const;
     QVector<QmlIR::Object *> *qmlObjects() const;
     QQmlPropertyCacheVector *propertyCaches();
@@ -121,7 +120,7 @@ public:
 
 private:
     QList<QQmlError> errors;
-    QQmlEnginePrivate *engine;
+    QQmlTypeLoader *loader;
     const QV4::CompiledData::DependentTypesHasher &dependencyHasher;
     QmlIR::Document *document;
     // index is string index of type name (use obj->inheritedTypeNameIndex)
@@ -166,11 +165,10 @@ private:
             QQmlPropertyResolver::RevisionCheck revisionCheck
                     = QQmlPropertyResolver::CheckRevision);
 
-    QQmlEnginePrivate *enginePrivate;
+    QQmlTypeLoader *typeLoader;
     const QVector<QmlIR::Object*> &qmlObjects;
     const QQmlImports *imports;
     const QHash<int, QQmlCustomParser*> &customParsers;
-    const QSet<QString> &illegalNames;
     const QQmlPropertyCacheVector * const propertyCaches;
 };
 

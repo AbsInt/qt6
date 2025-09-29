@@ -1,5 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QQMLCODEMODEL_P_H
 #define QQMLCODEMODEL_P_H
@@ -71,6 +72,26 @@ struct RegisteredSemanticTokens
     QList<int> lastTokens;
 };
 
+struct ModuleSetting
+{
+    QString sourceFolder;
+    QStringList importPaths;
+};
+
+using ModuleSettings = QList<ModuleSetting>;
+class QQmllsBuildInformation
+{
+public:
+    QQmllsBuildInformation();
+    void loadSettingsFrom(const QStringList &buildPaths);
+    QStringList importPathsFor(const QString &filePath);
+
+private:
+    QString m_docDir;
+    ModuleSettings m_moduleSettings;
+    QSet<QString> m_seenSettings;
+};
+
 class QQmlCodeModel : public QObject
 {
     Q_OBJECT
@@ -99,7 +120,7 @@ public:
     QStringList buildPathsForRootUrl(const QByteArray &url);
     QStringList buildPathsForFileUrl(const QByteArray &url);
     void setBuildPathsForRootUrl(QByteArray url, const QStringList &paths);
-    QStringList importPathsForFile(const QString &fileName) const;
+    QStringList importPathsForFile(const QString &fileName);
     QStringList importPaths() const { return m_importPaths; };
     void setImportPaths(const QStringList &paths) { m_importPaths = paths; };
     void removeRootUrls(const QList<QByteArray> &urls);
@@ -146,6 +167,7 @@ private:
     QHash<QString, QByteArray> m_path2url;
     QHash<QByteArray, OpenDocument> m_openDocuments;
     QQmlToolingSettings *m_settings;
+    QQmllsBuildInformation m_buildInformation;
     QFileSystemWatcher m_cppFileWatcher;
     QFactoryLoader m_pluginLoader;
     bool m_rebuildRequired = true; // always trigger a rebuild on start

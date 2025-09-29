@@ -35,5 +35,7 @@ T.TabButton {
         implicitHeight: 40
         color: Color.blend(control.checked ? control.palette.window : control.palette.dark,
                                              control.palette.mid, control.down ? 0.5 : 0.0)
+        border.width: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ? 1 : 0
+        border.color: control.palette.windowText
     }
 }

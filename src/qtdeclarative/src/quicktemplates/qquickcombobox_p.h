@@ -63,7 +63,7 @@ class Q_QUICKTEMPLATES2_EXPORT QQuickComboBox : public QQuickControl
     Q_PROPERTY(qreal implicitIndicatorHeight READ implicitIndicatorHeight NOTIFY implicitIndicatorHeightChanged FINAL REVISION(2, 5))
     Q_CLASSINFO("DeferredPropertyNames", "background,contentItem,indicator,popup")
     // 2.14 (Qt 5.14)
-    Q_PROPERTY(QVariant currentValue READ currentValue NOTIFY currentValueChanged FINAL REVISION(2, 14))
+    Q_PROPERTY(QVariant currentValue READ currentValue WRITE setCurrentValue NOTIFY currentValueChanged FINAL REVISION(2, 14))
     Q_PROPERTY(QString valueRole READ valueRole WRITE setValueRole NOTIFY valueRoleChanged FINAL REVISION(2, 14))
     // 2.15 (Qt 5.15)
     Q_PROPERTY(bool selectTextByMouse READ selectTextByMouse WRITE setSelectTextByMouse NOTIFY selectTextByMouseChanged FINAL REVISION(2, 15))
@@ -148,6 +148,7 @@ public:
 
     // 2.14 (Qt 5.14)
     QVariant currentValue() const;
+    Q_REVISION(6, 10) void setCurrentValue(const QVariant &value);
     Q_REVISION(2, 14) Q_INVOKABLE QVariant valueAt(int index) const;
     Q_REVISION(2, 14) Q_INVOKABLE int indexOfValue(const QVariant &value) const;
 

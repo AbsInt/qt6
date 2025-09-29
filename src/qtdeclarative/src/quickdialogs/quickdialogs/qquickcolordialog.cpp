@@ -4,6 +4,8 @@
 #include "qquickcolordialog_p.h"
 
 #include <QtCore/qloggingcategory.h>
+#include <QtQuickDialogs2QuickImpl/private/qquickplatformcolordialog_p.h>
+#include <QtQuickDialogs2QuickImpl/private/qquickcolordialogimpl_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -147,6 +149,8 @@ void QQuickColorDialog::onShow(QPlatformDialogHelper *dialog)
         colorDialog->setOptions(m_options);
         colorDialog->setCurrentColor(m_selectedColor);
     }
+    if (QQuickPlatformColorDialog *colorDialog = qobject_cast<QQuickPlatformColorDialog *>(dialog))
+        colorDialog->dialog()->setPopupType(m_popupType);
 
     QQuickAbstractDialog::onShow(dialog);
 }

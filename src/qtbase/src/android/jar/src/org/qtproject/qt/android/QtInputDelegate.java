@@ -94,13 +94,11 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             View rootView = activity.getWindow().getDecorView();
-            rootView.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
-                @Override
-                public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
-                    if (m_keyboardIsVisible != insets.isVisible(WindowInsets.Type.ime()))
+            rootView.setOnApplyWindowInsetsListener((view, insets) -> {
+                    WindowInsets windowInsets = view.onApplyWindowInsets(insets);
+                    if (m_keyboardIsVisible != windowInsets.isVisible(WindowInsets.Type.ime()))
                         setKeyboardVisibility_internal(!m_keyboardIsVisible, System.nanoTime());
-                    return insets;
-                }
+                    return windowInsets;
             });
         }
     }
@@ -325,7 +323,7 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
             Rect r = new Rect();
             activity.getWindow().getDecorView().getWindowVisibleDisplayFrame(r);
             DisplayMetrics metrics = new DisplayMetrics();
-            activity.getWindowManager().getDefaultDisplay().getMetrics(metrics);
+            QtDisplayManager.getDisplay(activity).getMetrics(metrics);
             int screenHeight = metrics.heightPixels;
             final int kbHeight = screenHeight - r.bottom;
             return kbHeight < screenHeight * KEYBOARD_TO_SCREEN_RATIO;
@@ -414,7 +412,7 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
     private boolean updateSoftInputMode(Activity activity, int height)
     {
         DisplayMetrics metrics = new DisplayMetrics();
-        activity.getWindowManager().getDefaultDisplay().getMetrics(metrics);
+        QtDisplayManager.getDisplay(activity).getMetrics(metrics);
 
         // If the screen is in portrait mode than we estimate that keyboard height
         // will not be higher than 2/5 of the screen. Otherwise we estimate that keyboard height
@@ -456,7 +454,7 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
             if (!m_keyboardIsVisible)
                 return;
             DisplayMetrics metrics = new DisplayMetrics();
-            activity.getWindowManager().getDefaultDisplay().getMetrics(metrics);
+            QtDisplayManager.getDisplay(activity).getMetrics(metrics);
             Rect r = new Rect();
             activity.getWindow().getDecorView().getWindowVisibleDisplayFrame(r);
             if (metrics.heightPixels != r.bottom) {

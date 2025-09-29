@@ -896,6 +896,14 @@ void QmltcCompiler::compileProperty(QmltcType &current, const QQmlJSMetaProperty
     // 1. add setter and getter
     // If p.isList(), it's a QQmlListProperty. Then you can write the underlying list through
     // the QQmlListProperty object retrieved with the getter. Setting it would make no sense.
+    QmltcMethod getter{};
+    getter.returnType = underlyingType;
+    getter.name = compilationData.read;
+    getter.body << u"return " + variableName + u".value();";
+    getter.userVisible = true;
+    current.functions.emplaceBack(getter);
+    mocPieces << u"READ"_s << getter.name;
+
     if (p.isWritable() && !qIsReferenceTypeList(p)) {
         QmltcMethod setter {};
         setter.returnType = u"void"_s;
@@ -909,14 +917,6 @@ void QmltcCompiler::compileProperty(QmltcType &current, const QQmlJSMetaProperty
         current.functions.emplaceBack(setter);
         mocPieces << u"WRITE"_s << setter.name;
     }
-
-    QmltcMethod getter {};
-    getter.returnType = underlyingType;
-    getter.name = compilationData.read;
-    getter.body << u"return " + variableName + u".value();";
-    getter.userVisible = true;
-    current.functions.emplaceBack(getter);
-    mocPieces << u"READ"_s << getter.name;
 
     // 2. add bindable
     if (!qIsReferenceTypeList(p)) {

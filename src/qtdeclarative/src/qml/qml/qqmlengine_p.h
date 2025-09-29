@@ -38,7 +38,6 @@
 #include <QtCore/qlist.h>
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qmutex.h>
-#include <QtCore/qpair.h>
 #include <QtCore/qpointer.h>
 #include <QtCore/qproperty.h>
 #include <QtCore/qstack.h>
@@ -101,7 +100,7 @@ class Q_QML_EXPORT QQmlEnginePrivate : public QJSEnginePrivate
 {
     Q_DECLARE_PUBLIC(QQmlEngine)
 public:
-    explicit QQmlEnginePrivate(QQmlEngine *q) : importDatabase(q), typeLoader(q) {}
+    explicit QQmlEnginePrivate(QQmlEngine *q) : typeLoader(q) {}
     ~QQmlEnginePrivate() override;
 
     void init();
@@ -139,22 +138,17 @@ public:
 
     QQmlObjectCreator *activeObjectCreator = nullptr;
 #if QT_CONFIG(qml_network)
-    QNetworkAccessManager *createNetworkAccessManager(QObject *parent) const;
-    QNetworkAccessManager *getNetworkAccessManager() const;
-    mutable QNetworkAccessManager *networkAccessManager = nullptr;
-    mutable QQmlNetworkAccessManagerFactory *networkAccessManagerFactory = nullptr;
+    QNetworkAccessManager *getNetworkAccessManager();
+    QNetworkAccessManager *networkAccessManager = nullptr;
 #endif
     mutable QRecursiveMutex imageProviderMutex;
     QHash<QString,QSharedPointer<QQmlImageProviderBase> > imageProviders;
     QSharedPointer<QQmlImageProviderBase> imageProvider(const QString &providerId) const;
 
-    QList<QQmlAbstractUrlInterceptor *> urlInterceptors;
-
     int scarceResourcesRefCount = 0;
     void referenceScarceResources();
     void dereferenceScarceResources();
 
-    QQmlImportDatabase importDatabase;
     QQmlTypeLoader typeLoader;
 
     QString offlineStoragePath;
@@ -201,8 +195,6 @@ public:
     static void activateDesignerMode();
 
     static std::atomic<bool> qml_debugging_enabled;
-
-    mutable QMutex networkAccessManagerMutex;
 
     QQmlGadgetPtrWrapper *valueTypeInstance(QMetaType type)
     {

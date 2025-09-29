@@ -639,7 +639,7 @@ static QWindowGeometrySpecification windowGeometrySpecification = Q_WINDOW_GEOME
     For more information about the platform-specific arguments available for
     embedded Linux platforms, see \l{Qt for Embedded Linux}.
 
-    \sa arguments() QGuiApplication::platformName
+    \sa arguments(), QGuiApplication::platformName
 */
 #ifdef Q_QDOC
 QGuiApplication::QGuiApplication(int &argc, char **argv)
@@ -727,8 +727,7 @@ QGuiApplication::~QGuiApplication()
 QGuiApplicationPrivate::QGuiApplicationPrivate(int &argc, char **argv)
     : QCoreApplicationPrivate(argc, argv),
       inputMethod(nullptr),
-      lastTouchType(QEvent::TouchEnd),
-      ownGlobalShareContext(false)
+      lastTouchType(QEvent::TouchEnd)
 {
     self = this;
     application_type = QCoreApplicationPrivate::Gui;
@@ -1589,8 +1588,7 @@ void QGuiApplicationPrivate::createPlatformIntegration()
     Q_UNUSED(platformExplicitlySelected);
 
     init_platform(QLatin1StringView(platformName), platformPluginPath, platformThemeName, argc, argv);
-    if (const QPlatformTheme *theme = platformTheme())
-        QStyleHintsPrivate::get(QGuiApplication::styleHints())->updateColorScheme(theme->colorScheme());
+    QStyleHintsPrivate::get(QGuiApplication::styleHints())->update(platformTheme());
 
     if (!icon.isEmpty())
         forcedWindowIcon = QDir::isAbsolutePath(icon) ? QIcon(icon) : QIcon::fromTheme(icon);
@@ -1739,17 +1737,6 @@ void Q_TRACE_INSTRUMENT(qtgui) QGuiApplicationPrivate::init()
 #if QT_CONFIG(animation)
     // trigger registering of animation interpolators
     qRegisterGuiGetInterpolator();
-#endif
-
-    // set a global share context when enabled unless there is already one
-#ifndef QT_NO_OPENGL
-    if (qApp->testAttribute(Qt::AA_ShareOpenGLContexts) && !qt_gl_global_share_context()) {
-        QOpenGLContext *ctx = new QOpenGLContext;
-        ctx->setFormat(QSurfaceFormat::defaultFormat());
-        ctx->create();
-        qt_gl_set_global_share_context(ctx);
-        ownGlobalShareContext = true;
-    }
 #endif
 
     QWindowSystemInterfacePrivate::eventTime.start();
@@ -2113,13 +2100,17 @@ bool QGuiApplication::event(QEvent *e)
     return QCoreApplication::event(e);
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
 /*!
     \internal
 */
 bool QGuiApplication::compressEvent(QEvent *event, QObject *receiver, QPostEventList *postedEvents)
 {
+    QT_IGNORE_DEPRECATIONS(
     return QCoreApplication::compressEvent(event, receiver, postedEvents);
+    )
 }
+#endif
 
 bool QGuiApplicationPrivate::sendQWindowEventToQPlatformWindow(QWindow *window, QEvent *event)
 {
@@ -2393,13 +2384,16 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
             mousePressButton = Qt::NoButton;
     } else {
         static unsigned long lastPressTimestamp = 0;
+        static QPointer<QWindow> lastPressWindow = nullptr;
         mouse_buttons = e->buttons;
         if (mousePress) {
             ulong doubleClickInterval = static_cast<ulong>(QGuiApplication::styleHints()->mouseDoubleClickInterval());
             const auto timestampDelta = e->timestamp - lastPressTimestamp;
-            doubleClick = timestampDelta > 0 && timestampDelta < doubleClickInterval && button == mousePressButton;
+            doubleClick = timestampDelta > 0 && timestampDelta < doubleClickInterval
+                          && button == mousePressButton && lastPressWindow == e->window;
             mousePressButton = button;
             lastPressTimestamp = e ->timestamp;
+            lastPressWindow = e->window;
         }
     }
 
@@ -2802,7 +2796,7 @@ void QGuiApplicationPrivate::processSafeAreaMarginsChangedEvent(QWindowSystemInt
     QGuiApplication::sendSpontaneousEvent(wse->window, &event);
 }
 
-void QGuiApplicationPrivate::processThemeChanged(QWindowSystemInterfacePrivate::ThemeChangeEvent *tce)
+void QGuiApplicationPrivate::processThemeChanged(QWindowSystemInterfacePrivate::ThemeChangeEvent *)
 {
     if (self)
         self->handleThemeChanged();
@@ -2810,18 +2804,12 @@ void QGuiApplicationPrivate::processThemeChanged(QWindowSystemInterfacePrivate::
     QIconPrivate::clearIconCache();
 
     QEvent themeChangeEvent(QEvent::ThemeChange);
-    if (tce->window)
-        QGuiApplication::sendSpontaneousEvent(tce->window, &themeChangeEvent);
-    else
-        QGuiApplication::sendSpontaneousEvent(qGuiApp, &themeChangeEvent);
+    QGuiApplication::sendSpontaneousEvent(qGuiApp, &themeChangeEvent);
 }
 
 void QGuiApplicationPrivate::handleThemeChanged()
 {
-    const auto newColorScheme = platformTheme() ? platformTheme()->colorScheme()
-                                                : Qt::ColorScheme::Unknown;
-    QStyleHintsPrivate::get(QGuiApplication::styleHints())->updateColorScheme(newColorScheme);
-
+    QStyleHintsPrivate::get(QGuiApplication::styleHints())->update(platformTheme());
     updatePalette();
 
     QIconLoader::instance()->updateSystemTheme();

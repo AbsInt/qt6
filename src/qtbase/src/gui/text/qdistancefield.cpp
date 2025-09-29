@@ -3,6 +3,7 @@
 
 #include "qdistancefield_p.h"
 #include <qmath.h>
+#include <QtCore/qalloc.h>
 #include <private/qdatabuffer_p.h>
 #include <private/qimage_p.h>
 #include <private/qpathsimplifier_p.h>
@@ -826,7 +827,7 @@ QDistanceFieldData::QDistanceFieldData(const QDistanceFieldData &other)
 
 QDistanceFieldData::~QDistanceFieldData()
 {
-    free(data);
+    QtPrivate::sizedFree(data, nbytes);
 }
 
 QDistanceFieldData *QDistanceFieldData::create(const QSize &size)

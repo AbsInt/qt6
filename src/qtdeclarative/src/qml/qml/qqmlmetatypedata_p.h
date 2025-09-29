@@ -41,10 +41,7 @@ struct QQmlMetaTypeData
 
     typedef QHash<QUrl, const QQmlTypePrivate *> Files; //For file imported composite types only
     Files urlToType;
-    Files urlToNonFileImportType; // For non-file imported composite and composite
-            // singleton types. This way we can locate any
-            // of them by url, even if it was registered as
-            // a module via QQmlPrivate::RegisterCompositeType
+
     typedef QMultiHash<const QMetaObject *, QQmlTypePrivate *> MetaObjects;
     MetaObjects metaObjectToType;
     QVector<QHash<QTypeRevision, QQmlPropertyCache::ConstPtr>> typePropertyCaches;
@@ -53,7 +50,6 @@ struct QQmlMetaTypeData
     using CompositeTypes = QHash<const QtPrivate::QMetaTypeInterface *,
                                  QQmlRefPointer<QV4::CompiledData::CompilationUnit>>;
     CompositeTypes compositeTypes;
-    QHash<QUrl, QQmlType> inlineComponentTypes;
 
     struct VersionedUri {
         VersionedUri() = default;

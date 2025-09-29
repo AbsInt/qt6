@@ -25,6 +25,7 @@ qt_internal_add_test(tst_qmlls_modules
         QT_DEPRECATED_WARNINGS
         QT_QMLTEST_DATADIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
         QT_QMLFORMATTEST_DATADIR="${CMAKE_CURRENT_SOURCE_DIR}/../../qml/qmlformat/data"
+        BUILD_DIRECTORY_FOR_QMLLS_BUILD_INI=\"${CMAKE_BINARY_DIR}\"_L1
     LIBRARIES
         Qt::Core
         Qt::QmlDomPrivate
@@ -33,6 +34,7 @@ qt_internal_add_test(tst_qmlls_modules
         Qt::QuickTestUtilsPrivate
         Qt::QmlLSPrivate
     TESTDATA ${test_data}
+    DEPENDENCIES TARGET MyModule
 )
 
 qt_internal_extend_target(tst_qmlls_modules CONDITION ANDROID OR IOS

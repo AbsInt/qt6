@@ -456,6 +456,10 @@ void QQuadPath::addElement(const QVector2D &control, const QVector2D &endPoint, 
 
     isLine = isLine || isPointNearLine(control, m_currentPoint, endPoint); // Turn flat quad into line
 
+    if (!m_subPathToStart) {
+        Q_ASSERT(!m_elements.isEmpty());
+        m_elements.last().m_isSubpathEnd = false;
+    }
     m_elements.resize(m_elements.size() + 1);
     Element &elem = m_elements.last();
     elem.sp = m_currentPoint;
@@ -464,6 +468,7 @@ void QQuadPath::addElement(const QVector2D &control, const QVector2D &endPoint, 
     elem.m_isLine = isLine;
     elem.m_isSubpathStart = m_subPathToStart;
     m_subPathToStart = false;
+    elem.m_isSubpathEnd = true;
     m_currentPoint = endPoint;
 }
 

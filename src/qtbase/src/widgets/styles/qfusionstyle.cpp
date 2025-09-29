@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qfusionstyle_p.h"
 #include "qfusionstyle_p_p.h"
@@ -644,6 +645,8 @@ void QFusionStyle::drawPrimitive(PrimitiveElement elem,
         circle.addEllipse(circleCenter, outlineRadius, outlineRadius);
         if (option->state & State_HasFocus && option->state & State_KeyboardFocusChange)
             painter->setPen(highlightedOutline);
+        else if (isHighContrast())
+            painter->setPen(outline);
         else
             painter->setPen(option->palette.window().color().darker(150));
         painter->drawPath(circle);
@@ -1555,9 +1558,9 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                     font.setBold(true);
 
                 p->setFont(font);
-                const QFontMetrics fontMetrics(font);
+                const QFontMetricsF fontMetrics(font);
                 const QString textToDraw = fontMetrics.elidedText(s.left(tabIndex).toString(),
-                                                                  Qt::ElideMiddle, vTextRect.width(),
+                                                                  Qt::ElideMiddle, vTextRect.width() + 0.5f,
                                                                   text_flags);
                 if (dis && !act && proxy()->styleHint(SH_EtchDisabledText, option, widget)) {
                     p->setPen(menuitem->palette.light().color());
@@ -1674,15 +1677,6 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
             const QColor outline = d->outline(option->palette);
             if (selected) {
                 fillGradient.setColorAt(0, tabFrameColor.lighter(104));
-                //                QColor highlight = option->palette.highlight().color();
-                //                if (option->state & State_HasFocus && option->state & State_KeyboardFocusChange) {
-                //                    fillGradient.setColorAt(0, highlight.lighter(130));
-                //                    outlineGradient.setColorAt(0, highlight.darker(130));
-                //                    fillGradient.setColorAt(0.14, highlight);
-                //                    outlineGradient.setColorAt(0.14, highlight.darker(130));
-                //                    fillGradient.setColorAt(0.1401, tabFrameColor);
-                //                    outlineGradient.setColorAt(0.1401, highlight.darker(130));
-                //                }
                 fillGradient.setColorAt(1, tabFrameColor);
                 outlineGradient.setColorAt(1, outline);
                 painter->setPen(QPen(outlineGradient, 1));
@@ -1737,7 +1731,7 @@ void QFusionStyle::drawComplexControl(ComplexControl control, const QStyleOption
 {
 
     Q_D (const QFusionStyle);
-
+    const QColor outline = d->outline(option->palette);
     switch (control) {
     case CC_GroupBox:
         painter->save();
@@ -1768,7 +1762,13 @@ void QFusionStyle::drawComplexControl(ComplexControl control, const QStyleOption
                     region -= finalRect.adjusted(0, 0, 0, 3 - textRect.height() / 2);
                 }
                 painter->setClipRegion(region);
-                proxy()->drawPrimitive(PE_FrameGroupBox, &frame, painter, widget);
+                if (isHighContrast()) {
+                    painter->setPen(outline);
+                    QMargins margins(3, 3, 3, 3);
+                    painter->drawRoundedRect(frame.rect.marginsRemoved(margins), 2, 2);
+                } else {
+                    proxy()->drawPrimitive(PE_FrameGroupBox, &frame, painter, widget);
+                }
                 painter->restore();
             }
 
@@ -2907,11 +2907,11 @@ QSize QFusionStyle::sizeFromContents(ContentsType type, const QStyleOption *opti
             else if (menuItem->menuItemType == QStyleOptionMenuItem::SubMenu)
                 w += 2 * QStyleHelper::dpiScaled(QFusionStylePrivate::menuArrowHMargin, option);
             else if (menuItem->menuItemType == QStyleOptionMenuItem::DefaultItem) {
-                const QFontMetrics fm(menuItem->font);
+                const QFontMetricsF fm(menuItem->font);
                 QFont fontBold = menuItem->font;
                 fontBold.setBold(true);
-                const QFontMetrics fmBold(fontBold);
-                w += fmBold.horizontalAdvance(menuItem->text) - fm.horizontalAdvance(menuItem->text);
+                const QFontMetricsF fmBold(fontBold);
+                w += qCeil(fmBold.horizontalAdvance(menuItem->text) - fm.horizontalAdvance(menuItem->text));
             }
             const qreal dpi = QStyleHelper::dpi(option);
              // Windows always shows a check column
@@ -3552,6 +3552,12 @@ QPixmap QFusionStyle::standardPixmap(StandardPixmap standardPixmap, const QStyle
     if (!icon.availableSizes().isEmpty())
         return icon.pixmap(QSize(16, 16), QStyleHelper::getDpr(widget));
     return QCommonStyle::standardPixmap(standardPixmap, opt, widget);
+}
+
+bool QFusionStyle::isHighContrast() const
+{
+    return QGuiApplicationPrivate::platformTheme()->contrastPreference()
+            == Qt::ContrastPreference::HighContrast;
 }
 
 Qt::ColorScheme QFusionStyle::colorScheme() const

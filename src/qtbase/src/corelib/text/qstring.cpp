@@ -373,7 +373,7 @@ static constexpr bool UseAvx2 = UseSse4_1 &&
         (qCompilerCpuFeatures & CpuFeatureArchHaswell) == CpuFeatureArchHaswell;
 
 [[maybe_unused]]
-static Q_ALWAYS_INLINE __m128i mm_load8_zero_extend(const void *ptr)
+Q_ALWAYS_INLINE static __m128i mm_load8_zero_extend(const void *ptr)
 {
     const __m128i *dataptr = static_cast<const __m128i *>(ptr);
     if constexpr (UseSse4_1) {
@@ -2062,9 +2062,7 @@ static void qtWarnAboutInvalidRegularExpression(const QRegularExpression &re, co
     \c{QStringBuilder}. This class is marked
     internal and does not appear in the documentation, because you
     aren't meant to instantiate it in your code. Its use will be
-    automatic, as described below. The class is found in
-    \c {src/corelib/tools/qstringbuilder.cpp} if you want to have a
-    look at it.
+    automatic, as described below.
 
     \c{QStringBuilder} uses expression templates and reimplements the
     \c{'%'} operator so that when you use \c{'%'} for string
@@ -2127,7 +2125,8 @@ static void qtWarnAboutInvalidRegularExpression(const QRegularExpression &re, co
     Mitigating or controlling the behavior these limits cause is beyond the
     scope of the Qt API.
 
-    \sa fromRawData(), QChar, QStringView, QLatin1StringView, QByteArray
+    \sa {Which string class to use?}, fromRawData(), QChar, QStringView,
+        QLatin1StringView, QByteArray
 */
 
 /*! \typedef QString::ConstIterator
@@ -3802,9 +3801,13 @@ QString &QString::replace(qsizetype pos, qsizetype len, const QString &after)
   Replaces \a n characters beginning at index \a position with the
   first \a alen characters of the QChar array \a after and returns a
   reference to this string.
+
+  \a n must not be negative.
 */
 QString &QString::replace(qsizetype pos, qsizetype len, const QChar *after, qsizetype alen)
 {
+    Q_PRE(len >= 0);
+
     if (size_t(pos) > size_t(this->size()))
         return *this;
     if (len > this->size() - pos)
@@ -3873,7 +3876,7 @@ QString &QString::replace(const QChar *before, qsizetype blen,
                           const QChar *after, qsizetype alen,
                           Qt::CaseSensitivity cs)
 {
-    if (d.size == 0) {
+    if (isEmpty()) {
         if (blen)
             return *this;
     } else {
@@ -5568,7 +5571,7 @@ static bool checkCase(QStringView s, QUnicodeTables::Case c) noexcept
     QStringIterator it(s);
     while (it.hasNext()) {
         const char32_t uc = it.next();
-        if (qGetProp(uc)->cases[c].diff)
+        if (caseConversion(uc)[c].diff)
             return false;
     }
     return true;
@@ -7068,6 +7071,51 @@ const ushort *QString::utf16() const
 }
 
 /*!
+    \fn QString &QString::nullTerminate()
+    \since 6.10
+
+    If this string data isn't null-terminated, this method will make a deep
+    copy of the data and make it null-terminated.
+
+    A QString is null-terminated by default, however in some cases (e.g.
+    when using fromRawData()), the string data doesn't necessarily end
+    with a \c {\0} character, which could be a problem when calling methods
+    that expect a null-terminated string.
+
+    \sa nullTerminated(), fromRawData(), setRawData()
+*/
+QString &QString::nullTerminate()
+{
+    // ensure '\0'-termination for ::fromRawData strings
+    if (!d->isMutable())
+        *this = QString{constData(), size()};
+    return *this;
+}
+
+/*!
+    \fn QString QString::nullTerminated() const &
+    \fn QString QString::nullTerminated() &&
+    \since 6.10
+
+    Returns a copy of this string that is always null-terminated.
+
+    \sa nullTerminate(), fromRawData(), setRawData()
+*/
+QString QString::nullTerminated() const &
+{
+    // ensure '\0'-termination for ::fromRawData strings
+    if (!d->isMutable())
+        return QString{constData(), size()};
+    return *this;
+}
+
+QString QString::nullTerminated() &&
+{
+    nullTerminate();
+    return std::move(*this);
+}
+
+/*!
     Returns a string of size \a width that contains this string
     padded by the \a fill character.
 
@@ -7233,7 +7281,7 @@ static QString convertCase(T &str, QUnicodeTables::Case which)
     QStringIterator it(p, e);
     while (it.hasNext()) {
         const char32_t uc = it.next();
-        if (qGetProp(uc)->cases[which].diff) {
+        if (caseConversion(uc)[which].diff) {
             it.recede();
             return detachAndConvertCase(str, it, which);
         }
@@ -8783,7 +8831,7 @@ QString QString::arg_impl(QAnyStringView a, int fieldWidth, QChar fillChar) cons
     ArgEscapeData d = findArgEscapes(*this);
 
     if (Q_UNLIKELY(d.occurrences == 0)) {
-        qWarning("QString::arg: Argument missing: %ls, %ls", qUtf16Printable(*this),
+        qWarning("QString::arg: Argument missing: \"%ls\", \"%ls\"", qUtf16Printable(*this),
                   qUtf16Printable(a.toString()));
         return *this;
     }
@@ -8840,7 +8888,7 @@ QString QString::arg_impl(qlonglong a, int fieldWidth, int base, QChar fillChar)
     ArgEscapeData d = findArgEscapes(*this);
 
     if (d.occurrences == 0) {
-        qWarning() << "QString::arg: Argument missing:" << *this << ',' << a;
+        qWarning("QString::arg: Argument missing: \"%ls\", %llu", qUtf16Printable(*this), a);
         return *this;
     }
 
@@ -8872,7 +8920,7 @@ QString QString::arg_impl(qulonglong a, int fieldWidth, int base, QChar fillChar
     ArgEscapeData d = findArgEscapes(*this);
 
     if (d.occurrences == 0) {
-        qWarning() << "QString::arg: Argument missing:" << *this << ',' << a;
+        qWarning("QString::arg: Argument missing: \"%ls\", %lld", qUtf16Printable(*this), a);
         return *this;
     }
 
@@ -8926,7 +8974,7 @@ QString QString::arg_impl(double a, int fieldWidth, char format, int precision, 
     ArgEscapeData d = findArgEscapes(*this);
 
     if (d.occurrences == 0) {
-        qWarning("QString::arg: Argument missing: %s, %g", toLocal8Bit().data(), a);
+        qWarning("QString::arg: Argument missing: \"%ls\", %g", qUtf16Printable(*this), a);
         return *this;
     }
 
@@ -9358,8 +9406,31 @@ QString::iterator QString::erase(QString::const_iterator first, QString::const_i
 
     \sa toLatin1(), toUtf8(), toLocal8Bit(), QByteArray::toStdString()
 */
+std::string QString::toStdString() const
+{
+    std::string result;
+    if (isEmpty())
+        return result;
+
+    auto writeToBuffer = [this](char *out, size_t) {
+        char *last = QUtf8::convertFromUnicode(out, *this);
+        return last - out;
+    };
+    size_t maxSize = size() * 3;    // worst case for UTF-8
+#ifdef __cpp_lib_string_resize_and_overwrite
+    // C++23
+    result.resize_and_overwrite(maxSize, writeToBuffer);
+#else
+    result.resize(maxSize);
+    result.resize(writeToBuffer(result.data(), result.size()));
+#endif
+    return result;
+}
 
 /*!
+    \fn QString QString::fromRawData(const char16_t *unicode, qsizetype size)
+    \since 6.10
+
     Constructs a QString that uses the first \a size Unicode characters
     in the array \a unicode. The data in \a unicode is \e not
     copied. The caller must be able to guarantee that \a unicode will
@@ -9382,12 +9453,14 @@ QString::iterator QString::erase(QString::const_iterator first, QString::const_i
     '\\0'-terminated string (although utf16() does, at the cost of
     copying the raw data).
 
-    \sa fromUtf16(), setRawData()
+    \sa fromUtf16(), setRawData(), data(), constData(),
+    nullTerminate(), nullTerminated()
 */
-QString QString::fromRawData(const QChar *unicode, qsizetype size)
-{
-    return QString(DataPointer::fromRawData(const_cast<char16_t *>(reinterpret_cast<const char16_t *>(unicode)), size));
-}
+
+/*!
+    \fn QString QString::fromRawData(const QChar *unicode, qsizetype size)
+    \overload
+*/
 
 /*!
     \since 4.7
@@ -9401,7 +9474,7 @@ QString QString::fromRawData(const QChar *unicode, qsizetype size)
     This function can be used instead of fromRawData() to re-use
     existings QString objects to save memory re-allocations.
 
-    \sa fromRawData()
+    \sa fromRawData(), nullTerminate(), nullTerminated()
 */
 QString &QString::setRawData(const QChar *unicode, qsizetype size)
 {

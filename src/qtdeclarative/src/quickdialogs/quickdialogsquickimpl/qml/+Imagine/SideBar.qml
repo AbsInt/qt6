@@ -44,8 +44,8 @@ DialogsQuickImpl.SideBar {
     }
 
     separatorDelegate: Item {
-        width: control.width
-        height: 9
+        implicitWidth: control.width
+        implicitHeight: 9
         Rectangle {
             id: separatorDelegate
             color: Qt.lighter(Imagine.darkShade, 1.06)

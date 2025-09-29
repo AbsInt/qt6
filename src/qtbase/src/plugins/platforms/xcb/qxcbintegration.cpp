@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qxcbintegration.h"
 #include "qxcbconnection.h"
@@ -43,7 +44,10 @@
 #endif
 
 #include <qpa/qplatforminputcontextfactory_p.h>
-#include <private/qgenericunixthemes_p.h>
+#include <private/qgenericunixtheme_p.h>
+#if QT_CONFIG(dbus)
+#include <private/qkdetheme_p.h>
+#endif
 #include <qpa/qplatforminputcontext.h>
 
 #include <QtGui/QOpenGLContext>

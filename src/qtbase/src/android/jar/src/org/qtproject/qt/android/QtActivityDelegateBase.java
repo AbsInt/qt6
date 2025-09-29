@@ -14,8 +14,6 @@ import android.os.Build;
 import android.view.Window;
 import android.view.WindowInsetsController;
 
-import org.qtproject.qt.android.QtInputDelegate.KeyboardVisibilityListener;
-
 import java.util.HashMap;
 
 abstract class QtActivityDelegateBase

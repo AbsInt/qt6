@@ -214,7 +214,6 @@ QCocoaTheme::QCocoaTheme()
     : m_systemPalette(nullptr)
 {
     m_appearanceObserver = QMacKeyValueObserver(NSApp, @"effectiveAppearance", [this] {
-        NSAppearance.currentAppearance = NSApp.effectiveAppearance;
         handleSystemThemeChange();
     });
 
@@ -244,9 +243,6 @@ void QCocoaTheme::handleSystemThemeChange()
     reset();
 
     updateColorScheme();
-
-    m_systemPalette = qt_mac_createSystemPalette();
-    m_palettes = qt_mac_createRolePalettes();
 
     if (QCoreTextFontEngine::fontSmoothing() == QCoreTextFontEngine::FontSmoothing::Grayscale) {
         // Re-populate glyph caches based on the new appearance's assumed text fill color
@@ -294,13 +290,23 @@ QPlatformSystemTrayIcon *QCocoaTheme::createPlatformSystemTrayIcon() const
 
 const QPalette *QCocoaTheme::palette(Palette type) const
 {
+    // Note: NSColor resolves its RGB values based on the current
+    // drawing appearance, so we need to propagate the effective
+    // appearance when (re)creating the palettes.
+
     if (type == SystemPalette) {
-        if (!m_systemPalette)
-            m_systemPalette = qt_mac_createSystemPalette();
+        if (!m_systemPalette) {
+            [NSApp.effectiveAppearance performAsCurrentDrawingAppearance:^{
+                m_systemPalette = qt_mac_createSystemPalette();
+            }];
+        }
         return m_systemPalette;
     } else {
-        if (m_palettes.isEmpty())
-            m_palettes = qt_mac_createRolePalettes();
+        if (m_palettes.isEmpty()) {
+            [NSApp.effectiveAppearance performAsCurrentDrawingAppearance:^{
+                m_palettes = qt_mac_createRolePalettes();
+            }];
+        }
         return m_palettes.value(type, nullptr);
     }
     return nullptr;
@@ -465,6 +471,8 @@ QVariant QCocoaTheme::themeHint(ThemeHint hint) const
     case QPlatformTheme::KeyboardAutoRepeatRate:
         return 1.0 / NSEvent.keyRepeatInterval;
     case QPlatformTheme::ShowIconsInMenus:
+        return QOperatingSystemVersion::current() >= QOperatingSystemVersion::MacOSTahoe;
+    case QPlatformTheme::MenuSelectionWraps:
         return false;
     default:
         break;
@@ -506,7 +514,16 @@ void QCocoaTheme::requestColorScheme(Qt::ColorScheme scheme)
 */
 void QCocoaTheme::updateColorScheme()
 {
-    m_colorScheme = qt_mac_applicationIsInDarkMode() ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light;
+    auto appearance = [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:
+            @[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
+    m_colorScheme = [appearance isEqualToString:NSAppearanceNameDarkAqua] ?
+        Qt::ColorScheme::Dark : Qt::ColorScheme::Light;
+}
+
+Qt::ContrastPreference QCocoaTheme::contrastPreference() const
+{
+    return NSWorkspace.sharedWorkspace.accessibilityDisplayShouldIncreaseContrast ? Qt::ContrastPreference::HighContrast
+                                                                                  : Qt::ContrastPreference::NoPreference;
 }
 
 QString QCocoaTheme::standardButtonText(int button) const

@@ -44,7 +44,7 @@ void tst_QQmlTableModel::appendRemoveRow()
     QQuickView view;
     QVERIFY(QQuickTest::showView(view, testFileUrl("common.qml")));
 
-    auto *model = view.rootObject()->property("testModel") .value<QAbstractTableModel *>();
+    auto *model = view.rootObject()->property("testModel") .value<QAbstractItemModel *>();
     QVERIFY(model);
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -89,6 +89,7 @@ void tst_QQmlTableModel::appendRemoveRow()
 
     // Call remove() with a valid rowIndex but negative rows.
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*removeRow\\(\\): \"rows\" is less than or equal to zero"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*data\\(\\): invalid QModelIndex"));
     QVERIFY(QMetaObject::invokeMethod(model, "removeRow", Q_ARG(int, 0), Q_ARG(int, -1)));
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -99,6 +100,7 @@ void tst_QQmlTableModel::appendRemoveRow()
     // Call remove() with a valid rowIndex but excessive rows.
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(
         ".*removeRow\\(\\): \"rows\" 3 exceeds available rowCount\\(\\) of 2 when removing from \"rowIndex\" 0"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*data\\(\\): invalid QModelIndex"));
     QVERIFY(QMetaObject::invokeMethod(model, "removeRow", Q_ARG(int, 0), Q_ARG(int, 3)));
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -160,7 +162,7 @@ void tst_QQmlTableModel::appendRemoveRow()
 
     // Call append() with a row that is an array instead of a simple object.
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(
-        ".*appendRow\\(\\): row manipulation functions do not support complex rows \\(row index: -1\\)"));
+        ".*appendRow\\(\\): row manipulation functions do not support complex rows"));
     QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "appendRowInvalid3"));
     // Nothing should change.
     QCOMPARE(model->rowCount(), 2);
@@ -214,7 +216,7 @@ void tst_QQmlTableModel::appendRowToEmptyModel()
     QQuickView view;
     QVERIFY(QQuickTest::showView(view, testFileUrl("empty.qml")));
 
-    auto *model = view.rootObject()->property("testModel").value<QAbstractTableModel*>();
+    auto *model = view.rootObject()->property("testModel").value<QAbstractItemModel*>();
     QVERIFY(model);
     QCOMPARE(model->rowCount(), 0);
     QCOMPARE(model->columnCount(), 2);
@@ -251,7 +253,7 @@ void tst_QQmlTableModel::clear()
     QQuickView view;
     QVERIFY(QQuickTest::showView(view, testFileUrl("common.qml")));
 
-    auto *model = view.rootObject()->property("testModel").value<QAbstractTableModel*>();
+    auto *model = view.rootObject()->property("testModel").value<QAbstractItemModel*>();
     QVERIFY(model);
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -277,7 +279,9 @@ void tst_QQmlTableModel::clear()
     QVERIFY(QMetaObject::invokeMethod(model, "clear"));
     QCOMPARE(model->rowCount(), 0);
     QCOMPARE(model->columnCount(), 2);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*data\\(\\): invalid QModelIndex"));
     QCOMPARE(model->data(model->index(0, 0, QModelIndex()), roleNames.key("display")), QVariant());
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*data\\(\\): invalid QModelIndex"));
     QCOMPARE(model->data(model->index(0, 1, QModelIndex()), roleNames.key("display")), QVariant());
     QCOMPARE(columnCountSpy.size(), 0);
     QCOMPARE(rowCountSpy.size(), 1);
@@ -292,7 +296,7 @@ void tst_QQmlTableModel::getRow()
     QQuickView view;
     QVERIFY(QQuickTest::showView(view, testFileUrl("common.qml")));
 
-    auto *model = view.rootObject()->property("testModel").value<QAbstractTableModel*>();
+    auto *model = view.rootObject()->property("testModel").value<QAbstractItemModel*>();
     QVERIFY(model);
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -321,7 +325,7 @@ void tst_QQmlTableModel::insertRow()
     QQuickView view;
     QVERIFY(QQuickTest::showView(view, testFileUrl("common.qml")));
 
-    auto *model = view.rootObject()->property("testModel").value<QAbstractTableModel*>();
+    auto *model = view.rootObject()->property("testModel").value<QAbstractItemModel*>();
     QVERIFY(model);
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -411,7 +415,7 @@ void tst_QQmlTableModel::insertRow()
 
     // Try to insert a row that is an array instead of a simple object.
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(
-        ".*insertRow\\(\\): row manipulation functions do not support complex rows \\(row index: 0\\)"));
+        ".*insertRow\\(\\): row manipulation functions do not support complex rows"));
     QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "insertRowInvalid3"));
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -513,7 +517,7 @@ void tst_QQmlTableModel::moveRow()
     QQuickView view;
     QVERIFY(QQuickTest::showView(view, testFileUrl("common.qml")));
 
-    auto *model = view.rootObject()->property("testModel").value<QAbstractTableModel*>();
+    auto *model = view.rootObject()->property("testModel").value<QAbstractItemModel*>();
     QVERIFY(model);
     QCOMPARE(model->columnCount(), 2);
     QCOMPARE(model->rowCount(), 2);
@@ -651,7 +655,7 @@ void tst_QQmlTableModel::setRow()
     QQuickView view;
     QVERIFY(QQuickTest::showView(view, testFileUrl("common.qml")));
 
-    auto *model = view.rootObject()->property("testModel").value<QAbstractTableModel*>();
+    auto *model = view.rootObject()->property("testModel").value<QAbstractItemModel*>();
     QVERIFY(model);
     QCOMPARE(model->columnCount(), 2);
     QCOMPARE(model->rowCount(), 2);
@@ -755,7 +759,7 @@ void tst_QQmlTableModel::setRow()
 
     // Try to insert a row that is an array instead of a simple object.
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(
-        ".*setRow\\(\\): row manipulation functions do not support complex rows \\(row index: 0\\)"));
+        ".*setRow\\(\\): row manipulation functions do not support complex rows"));
     QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "setRowInvalid3"));
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -842,7 +846,7 @@ void tst_QQmlTableModel::setDataThroughDelegate()
     QVERIFY(QQuickTest::showView(view, testFileUrl("setDataThroughDelegate.qml")));
 
 
-    auto *model = view.rootObject()->property("testModel").value<QAbstractTableModel*>();
+    auto *model = view.rootObject()->property("testModel").value<QAbstractItemModel*>();
     QVERIFY(model);
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -912,7 +916,7 @@ void tst_QQmlTableModel::setRowsImperatively()
     QQuickView view;
     QVERIFY(QQuickTest::showView(view, testFileUrl("empty.qml")));
 
-    auto *model = view.rootObject()->property("testModel").value<QAbstractTableModel*>();
+    auto *model = view.rootObject()->property("testModel").value<QAbstractItemModel*>();
     QVERIFY(model);
     QCOMPARE(model->rowCount(), 0);
     QCOMPARE(model->columnCount(), 2);
@@ -951,7 +955,7 @@ void tst_QQmlTableModel::setRowsMultipleTimes()
     QQuickView view;
     QVERIFY(QQuickTest::showView(view, testFileUrl("setRowsMultipleTimes.qml")));
 
-    auto *model = view.rootObject()->property("testModel").value<QAbstractTableModel*>();
+    auto *model = view.rootObject()->property("testModel").value<QAbstractItemModel*>();
     QVERIFY(model);
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -989,7 +993,7 @@ void tst_QQmlTableModel::setRowsMultipleTimes()
 
     // Set invalid rows; we should get a warning and nothing should change.
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(
-        ".*setRows\\(\\): expected a property named \"name\" in row at index 0, but couldn't find one"));
+        ".*setRows\\(\\): expected a property named \"name\" in row"));
     QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "setRowsInvalid"));
     QCOMPARE(model->rowCount(), 3);
     QCOMPARE(model->columnCount(), 2);
@@ -1011,7 +1015,7 @@ void tst_QQmlTableModel::dataAndEditing()
     QQuickView view;
     QVERIFY(QQuickTest::showView(view, testFileUrl("dataAndSetData.qml")));
 
-    auto *model = view.rootObject()->property("model").value<QAbstractTableModel*>();
+    auto *model = view.rootObject()->property("model").value<QAbstractItemModel*>();
     QVERIFY(model);
 
     const QHash<int, QByteArray> roleNames = model->roleNames();
@@ -1031,7 +1035,7 @@ void tst_QQmlTableModel::omitTableModelColumnIndex()
     QQmlComponent component(&engine, testFileUrl("omitTableModelColumnIndex.qml"));
     QCOMPARE(component.status(), QQmlComponent::Ready);
 
-    QScopedPointer<QAbstractTableModel> model(qobject_cast<QAbstractTableModel*>(component.create()));
+    QScopedPointer<QAbstractItemModel> model(qobject_cast<QAbstractItemModel*>(component.create()));
     QVERIFY(model);
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -1053,7 +1057,7 @@ void tst_QQmlTableModel::complexRow()
     QCOMPARE(tableView->rows(), 2);
     QCOMPARE(tableView->columns(), 2);
 
-    auto *model = tableView->model().value<QAbstractTableModel*>();
+    auto *model = tableView->model().value<QAbstractItemModel*>();
     QVERIFY(model);
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -1070,7 +1074,7 @@ void tst_QQmlTableModel::appendRowWithDouble()
     QQuickView view;
     QVERIFY(QQuickTest::showView(view, testFileUrl("intAndDouble.qml")));
 
-    auto *model = view.rootObject()->property("testModel").value<QAbstractTableModel*>();
+    auto *model = view.rootObject()->property("testModel").value<QAbstractItemModel*>();
     QVERIFY(model);
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(model->columnCount(), 2);
@@ -1128,7 +1132,7 @@ void tst_QQmlTableModel::appendRowWithDouble()
     rowsChangedSpy.clear();
     QTest::ignoreMessage(QtWarningMsg,
                          QRegularExpression(".*appendRow\\(\\): failed converting value "
-                                            "QVariant\\(QString, \"Invalid\"\\) set at column 1 with "
+                                            "\"QVariant\\(QString, Invalid\\)\" set at column 1 with "
                                             "role \"QString\" to \"int\""));
     QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "appendInvalid"));
     // Nothing should change

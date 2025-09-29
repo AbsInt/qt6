@@ -59,7 +59,6 @@ public:
         fromIsSourced(false), fromIsDefined(false), toIsDefined(false),
         toX(0), toY(0), currentV(0), orientation(QQuickPathAnimation::Fixed),
         entryInterval(0), exitInterval(0) {}
-    ~QQuickPathAnimationUpdater() {}
 
     void setValue(qreal v) override;
 

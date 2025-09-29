@@ -266,7 +266,7 @@ Q_SIGNALS:
     void contentHeightChanged(qreal contentHeight);
 
     void lineHeightChanged(qreal lineHeight);
-    void lineHeightModeChanged(LineHeightMode mode);
+    void lineHeightModeChanged(QQuickText::LineHeightMode mode);
     void fontSizeModeChanged();
     void minimumPixelSizeChanged();
     void minimumPointSizeChanged();

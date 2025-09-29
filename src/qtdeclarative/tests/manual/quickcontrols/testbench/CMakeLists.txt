@@ -69,6 +69,7 @@ set(qml_resource_files
     "controls/RoundButton.qml"
     "controls/ScrollBar.qml"
     "controls/ScrollIndicator.qml"
+    "controls/SearchField.qml"
     "controls/Slider.qml"
     "controls/SpinBox.qml"
     "controls/SplitView.qml"

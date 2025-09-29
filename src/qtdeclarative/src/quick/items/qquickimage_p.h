@@ -78,8 +78,8 @@ public:
 Q_SIGNALS:
     void fillModeChanged();
     void paintedGeometryChanged();
-    void horizontalAlignmentChanged(HAlignment alignment);
-    void verticalAlignmentChanged(VAlignment alignment);
+    void horizontalAlignmentChanged(QQuickImage::HAlignment alignment);
+    void verticalAlignmentChanged(QQuickImage::VAlignment alignment);
     Q_REVISION(2, 3) void mipmapChanged(bool);
     Q_REVISION(2, 5) void autoTransformChanged();
 

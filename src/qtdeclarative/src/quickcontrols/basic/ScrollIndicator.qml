@@ -19,7 +19,8 @@ T.ScrollIndicator {
         implicitWidth: 2
         implicitHeight: 2
 
-        color: control.palette.mid
+        color: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast ?
+               control.palette.text : control.palette.mid
         visible: control.size < 1.0
         opacity: 0.0
 
@@ -38,5 +39,11 @@ T.ScrollIndicator {
                 }
             }
         ]
+    }
+
+    background: Rectangle {
+        visible: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast
+        opacity: control.contentItem.opacity
+        color: control.palette.mid
     }
 }

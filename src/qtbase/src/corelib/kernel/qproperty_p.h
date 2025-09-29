@@ -81,7 +81,7 @@ struct QPropertyBindingDataPointer
         d = reinterpret_cast<quintptr>(observer);
     }
     static void fixupAfterMove(QtPrivate::QPropertyBindingData *ptr);
-    void Q_ALWAYS_INLINE addObserver(QPropertyObserver *observer);
+    Q_ALWAYS_INLINE void addObserver(QPropertyObserver *observer);
     inline void setFirstObserver(QPropertyObserver *observer);
     inline QPropertyObserverPointer firstObserver() const;
     static QPropertyProxyBindingData *proxyData(QtPrivate::QPropertyBindingData *ptr);
@@ -399,7 +399,7 @@ public:
 
     bool evaluateRecursive(PendingBindingObserverList &bindingObservers, QBindingStatus *status = nullptr);
 
-    bool Q_ALWAYS_INLINE evaluateRecursive_inline(PendingBindingObserverList &bindingObservers, QBindingStatus *status);
+    Q_ALWAYS_INLINE bool evaluateRecursive_inline(PendingBindingObserverList &bindingObservers, QBindingStatus *status);
 
     void notifyNonRecursive(const PendingBindingObserverList &bindingObservers);
     enum NotificationState : bool { Delayed, Sent };

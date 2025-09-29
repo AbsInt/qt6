@@ -1341,11 +1341,11 @@ void QQuickWidget::continueExecute()
     if (d->source.isEmpty())
         d->source = d->component->url();
 
-    if (d->setRootObject(obj.get()))
+    d->setRootObject(obj.get());
+    if (d->root)
         Q_UNUSED(obj.release());
     emit statusChanged(status());
 }
-
 
 /*!
   \internal

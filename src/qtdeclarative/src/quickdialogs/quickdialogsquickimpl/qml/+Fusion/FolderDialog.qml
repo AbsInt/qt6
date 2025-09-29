@@ -79,6 +79,7 @@ FolderDialogImpl {
             Layout.fillWidth: true
             Layout.leftMargin: 12
             Layout.rightMargin: 12
+            Layout.maximumWidth: parent.width - 24
 
             KeyNavigation.tab: folderDialogListView
         }

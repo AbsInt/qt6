@@ -1,5 +1,6 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qfilesystemmodel_p.h"
 #include "qfilesystemmodel.h"
@@ -402,8 +403,6 @@ QFileSystemModelPrivate::QFileSystemNode *QFileSystemModelPrivate::node(const QS
             QString rootPath = QDir(longPath).rootPath();
             pathElements.prepend(rootPath);
         }
-        if (pathElements.at(0).endsWith(u'/'))
-            pathElements[0].chop(1);
     }
 #else
     // add the "/" item, since it is a valid path element on Unix

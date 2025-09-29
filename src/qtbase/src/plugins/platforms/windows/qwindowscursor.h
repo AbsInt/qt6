@@ -14,15 +14,26 @@ QT_BEGIN_NAMESPACE
 
 struct QWindowsPixmapCursorCacheKey
 {
-    explicit QWindowsPixmapCursorCacheKey(const QCursor &c);
+    explicit QWindowsPixmapCursorCacheKey(const QCursor &c, qreal scaleFactor);
 
     qint64 bitmapCacheKey;
     qint64 maskCacheKey;
+    union {
+        qint64 hashKey;
+        struct {
+            qint32 x;
+            qint32 y;
+        };
+    } hotspotCacheKey;
+    qreal scaleFactor;
 };
 
 inline bool operator==(const QWindowsPixmapCursorCacheKey &k1, const QWindowsPixmapCursorCacheKey &k2)
 {
-    return k1.bitmapCacheKey == k2.bitmapCacheKey && k1.maskCacheKey == k2.maskCacheKey;
+    return k1.bitmapCacheKey == k2.bitmapCacheKey &&
+           k1.maskCacheKey == k2.maskCacheKey &&
+           k1.hotspotCacheKey.hashKey == k2.hotspotCacheKey.hashKey &&
+           k1.scaleFactor == k2.scaleFactor;
 }
 
 inline size_t qHash(const QWindowsPixmapCursorCacheKey &k, size_t seed) noexcept

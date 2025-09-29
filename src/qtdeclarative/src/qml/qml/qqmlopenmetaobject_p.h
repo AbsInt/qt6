@@ -47,10 +47,9 @@ public:
 
     QQmlPropertyCache::Ptr cache() const;
 
-protected:
-    virtual void propertyCreated(int, QMetaPropertyBuilder &);
-
 private:
+    void propertyCreated(int, QMetaPropertyBuilder &);
+
     QQmlOpenMetaObjectTypePrivate *d;
     friend class QQmlOpenMetaObject;
     friend class QQmlOpenMetaObjectPrivate;

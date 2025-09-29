@@ -170,7 +170,7 @@ qt_internal_extend_target(Network CONDITION NOT QT_FEATURE_system_zlib
         ../3rdparty/zlib
 )
 
-qt_internal_extend_target(Network CONDITION NOT QT_FEATURE_system_zlib AND NOT no_core_dep
+qt_internal_extend_target(Network CONDITION NOT QT_FEATURE_system_zlib
     LIBRARIES
         Qt::Core
 )
@@ -255,7 +255,7 @@ qt_internal_extend_target(Network CONDITION APPLE
     SOURCES
         kernel/qnetconmonitor_darwin.mm
     LIBRARIES
-        ${FWSystemConfiguration}
+        ${FWNetwork}
 )
 
 qt_internal_extend_target(Network CONDITION QT_FEATURE_networklistmanager AND NOT IOS AND NOT MACOS
@@ -385,6 +385,7 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_ocsp AND QT_FEATURE_opens
 
 qt_internal_add_docs(Network
     doc/qtnetwork.qdocconf
+    SKIP_JAVADOC
 )
 
 # See mkspecs/common/msvc-desktop.conf
@@ -406,6 +407,7 @@ qt_internal_extend_target(Network CONDITION WIN32
         kernel/qnetworkinterface_win.cpp
         kernel/qnetworkproxy_win.cpp
         socket/qabstractsocket.cpp
+        socket/qabstractsocketengine.cpp
         socket/qlocalserver.cpp
         socket/qlocalserver_win.cpp
         socket/qlocalsocket_win.cpp
@@ -420,7 +422,7 @@ endif()
 qt_internal_extend_target(Network
     # Workaround for QTBUG-118229:
     # Function called by inline methods taking a pointer to a private class as a parameter
-    EXTRA_LINKER_SCRIPT_EXPORTS
+    EXTRA_ELF_LINKER_SCRIPT_EXPORTS
         # QNetworkDatagram::destroy(QNetworkDatagramPrivate *d)
         "_ZN*16QNetworkDatagram7destroyEP*23QNetworkDatagramPrivate*"
 )

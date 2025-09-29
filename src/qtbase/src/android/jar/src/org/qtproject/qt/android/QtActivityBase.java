@@ -57,9 +57,14 @@ public class QtActivityBase extends Activity
         }
     }
 
-    // Append any parameters to your application.
-    // Either a whitespace or a tab is accepted as a separator between parameters.
-    /** @noinspection unused*/
+    /**
+     * Adds parameters to the list of arguments that will be passed to the
+     * native Qt application's main() function.
+     *
+     * Either a whitespace or a tab is accepted as a separator.
+     */
+    /**unused*/
+    @SuppressWarnings("unused")
     public void appendApplicationParameters(String params)
     {
         if (params == null || params.isEmpty())

@@ -440,6 +440,9 @@ private slots:
 
     void jittedJavaScriptExpressionDoesNotCrashOnExceptionBeingThrown();
 
+    void anonymousFunctionReturnTypeAnnotationIsPreserved();
+    void namedFunctionExpressionReturnTypeIsPreserved();
+
 private:
 //    static void propertyVarWeakRefCallback(v8::Persistent<v8::Value> object, void* parameter);
     static void verifyContextLifetime(const QQmlRefPointer<QQmlContextData> &ctxt);
@@ -10752,6 +10755,36 @@ void tst_qqmlecmascript::jittedJavaScriptExpressionDoesNotCrashOnExceptionBeingT
     QVERIFY(timer);
 
     QTRY_VERIFY(!timer->isRunning());
+}
+
+void tst_qqmlecmascript::anonymousFunctionReturnTypeAnnotationIsPreserved() {
+    QQmlEngine engine;
+
+    QQmlComponent c(&engine, testFileUrl("anonymousFunctionReturnTypeAnnotationIsPreserved.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY2(o, qPrintable(c.errorString()));
+
+    QJSValue func = o->property("func").value<QJSValue>();
+    auto signature = QJSValuePrivate::asManagedType<QV4::JavaScriptFunctionObject>(&func)->d()->function->jsTypedFunction.types;
+
+    QVERIFY(!signature.empty());
+    QCOMPARE(signature.first(), QQmlMetaType::qmlType(QMetaType::fromType<int>()));
+}
+
+void tst_qqmlecmascript::namedFunctionExpressionReturnTypeIsPreserved() {
+    QQmlEngine engine;
+
+    QQmlComponent c(&engine, testFileUrl("namedFunctionExpressionReturnTypeIsPreserved.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY2(o, qPrintable(c.errorString()));
+
+    QJSValue func = o->property("func").value<QJSValue>();
+    auto signature = QJSValuePrivate::asManagedType<QV4::JavaScriptFunctionObject>(&func)->d()->function->jsTypedFunction.types;
+
+    QVERIFY(!signature.empty());
+    QCOMPARE(signature.first(), QQmlMetaType::qmlType(QMetaType::fromType<int>()));
 }
 
 QTEST_MAIN(tst_qqmlecmascript)

@@ -1400,7 +1400,7 @@ void QMenuPrivate::activateCausedStack(const QList<QPointer<QWidget>> &causedSta
                                        QAction::ActionEvent action_e, bool self)
 {
     Q_Q(QMenu);
-    // can't use QBoolBlocker here
+    // can't use QScopedValueRollback here
     const bool activationRecursionGuardReset = activationRecursionGuard;
     activationRecursionGuard = true;
     QPointer<QMenu> guard(q);

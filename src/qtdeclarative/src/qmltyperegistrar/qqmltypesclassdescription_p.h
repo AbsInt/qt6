@@ -80,6 +80,7 @@ struct QmlTypesClassDescription
     QList<QAnyStringView> implementsInterfaces;
     QList<QAnyStringView> deferredNames;
     QList<QAnyStringView> immediateNames;
+    int lineNumber = 0;
 
     enum CollectMode {
         TopLevel,

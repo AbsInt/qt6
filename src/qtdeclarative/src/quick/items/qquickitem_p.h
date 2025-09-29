@@ -63,6 +63,7 @@ class QQuickPointerHandler;
 
 class QQuickContents : public QSafeQuickItemChangeListener<QQuickContents>
 {
+    Q_DISABLE_COPY(QQuickContents)
 public:
     QQuickContents(QQuickItem *item);
     ~QQuickContents() override;
@@ -419,7 +420,7 @@ public:
     }
 
     struct ExtraData {
-        ExtraData();
+        Q_QUICK_EXPORT ExtraData();
 
         qreal z;
         qreal scale;
@@ -616,6 +617,8 @@ public:
 
     void refWindow(QQuickWindow *);
     void derefWindow();
+
+    qreal effectiveDevicePixelRatio() const;
 
     QPointer<QQuickItem> subFocusItem;
     void updateSubFocusItem(QQuickItem *scope, bool focus);

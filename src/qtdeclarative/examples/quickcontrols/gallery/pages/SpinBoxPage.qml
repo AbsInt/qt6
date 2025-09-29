@@ -20,7 +20,7 @@ ScrollablePage {
         }
 
         SpinBox {
-            id: box
+            enabled: !GalleryConfig.disabled
             value: 50
             anchors.horizontalCenter: parent.horizontalCenter
             editable: true

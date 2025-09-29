@@ -48,6 +48,7 @@ qt_internal_add_test(tst_qmltyperegistrar
     LIBRARIES
         # Remove: Lforeign
         Qt::Qml
+        Qt::QmlPrivate
         foreign
         tst_qmltyperegistrarPrivate
         Qt::QmlTypeRegistrarPrivate
@@ -116,6 +117,7 @@ qt_internal_add_resource(tst_qmltyperegistrar "resources"
         brokenEnums.json
         duplicatedExports.json
         missingTypes.json
+        processTwice.json
 )
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)

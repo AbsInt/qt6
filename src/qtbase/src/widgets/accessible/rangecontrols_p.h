@@ -33,7 +33,7 @@ class QAccessibleLineEdit;
 
 #if QT_CONFIG(spinbox)
 class QAccessibleAbstractSpinBox:
-        public QAccessibleWidget,
+        public QAccessibleWidgetV2,
         public QAccessibleValueInterface,
         public QAccessibleTextInterface,
         public QAccessibleEditableTextInterface
@@ -108,7 +108,7 @@ protected:
 #endif // QT_CONFIG(spinbox)
 
 #if QT_CONFIG(slider)
-class QAccessibleAbstractSlider: public QAccessibleWidget, public QAccessibleValueInterface
+class QAccessibleAbstractSlider: public QAccessibleWidgetV2, public QAccessibleValueInterface
 {
 public:
     explicit QAccessibleAbstractSlider(QWidget *w, QAccessible::Role r = QAccessible::Slider);

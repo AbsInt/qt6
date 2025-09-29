@@ -23,6 +23,7 @@ qt_internal_add_module(QmlCompiler
         qqmljsimportvisitor.cpp qqmljsimportvisitor_p.h
         qqmljslinter.cpp qqmljslinter_p.h
         qqmljslintercodegen.cpp qqmljslintercodegen_p.h
+        qqmljslintervisitor_p.h qqmljslintervisitor.cpp
         qqmljsliteralbindingcheck.cpp qqmljsliteralbindingcheck_p.h
         qqmljsloadergenerator.cpp qqmljsloadergenerator_p.h
         qqmljslogger.cpp qqmljslogger_p.h
@@ -46,6 +47,7 @@ qt_internal_add_module(QmlCompiler
         qqmlsaconstants.h
         qqmlsasourcelocation.cpp qqmlsasourcelocation.h qqmlsasourcelocation_p.h
         qresourcerelocater.cpp qresourcerelocater_p.h
+        qqmljscontextproperties_p.h qqmljscontextproperties.cpp
     NO_UNITY_BUILD_SOURCES
         qqmljsoptimizations.cpp
     PUBLIC_LIBRARIES

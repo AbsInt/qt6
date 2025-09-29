@@ -15,7 +15,6 @@
 // We mean it.
 //
 
-#include <private/qfinitestack_p.h>
 #include <private/qqmlbinding_p.h>
 #include <private/qqmlboundsignal_p.h>
 #include <private/qqmlglobal_p.h>
@@ -418,30 +417,30 @@ public:
 
     QQmlVmeProfiler() : profiler(nullptr) {}
 
-    void init(QQmlProfiler *p, int maxDepth)
+    void init(QQmlProfiler *p)
     {
         profiler = p;
-        ranges.allocate(maxDepth);
     }
 
     const QV4::CompiledData::Object *pop()
     {
-        if (ranges.count() > 0)
-            return ranges.pop();
-        else
-            return nullptr;
+        if (ranges.size() > 0) {
+            const auto *result = ranges.back();
+            ranges.pop_back();
+            return result;
+        }
+        return nullptr;
     }
 
     void push(const QV4::CompiledData::Object *object)
     {
-        if (ranges.capacity() > ranges.count())
-            ranges.push(object);
+        ranges.push_back(object);
     }
 
     QQmlProfiler *profiler;
 
 private:
-    QFiniteStack<const QV4::CompiledData::Object *> ranges;
+    std::vector<const QV4::CompiledData::Object *> ranges;
 };
 
 class QQmlObjectCreationProfiler {

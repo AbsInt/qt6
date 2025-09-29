@@ -108,7 +108,7 @@ Q_SIGNALS:
     void frameDurationChanged(int arg);
     void loopsChanged(int arg);
     void currentFrameChanged(int arg);
-    Q_REVISION(2, 15) void finishBehaviorChanged(FinishBehavior arg);
+    Q_REVISION(2, 15) void finishBehaviorChanged(QQuickAnimatedSprite::FinishBehavior arg);
 
     Q_REVISION(2, 12) void finished();
 

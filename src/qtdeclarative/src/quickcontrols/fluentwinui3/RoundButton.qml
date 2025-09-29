@@ -26,6 +26,14 @@ T.RoundButton {
     icon.color: __buttonText
 
     readonly property color __buttonText: {
+        if (Application.styleHints.accessibility.contrastPreference === Qt.HighContrast) {
+            return (control.enabled && ((control.flat && (control.down || control.hovered))
+                || ((control.highlighted || control.checked) && !control.down)))
+                ? control.palette.button
+                : control.enabled && (control.hovered || control.down)
+                ? control.palette.highlight
+                : control.palette.buttonText
+        }
         if (control.down) {
             return (control.checked || control.highlighted)
                 ? Application.styleHints.colorScheme == Qt.Light

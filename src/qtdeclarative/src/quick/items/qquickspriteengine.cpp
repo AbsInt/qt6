@@ -739,13 +739,13 @@ void QQuickStochasticEngine::addToUpdateList(uint t, int idx)
         } else if (m_stateUpdates.at(i).first > t) {
             QVector<int> tmpList;
             tmpList << idx;
-            m_stateUpdates.insert(i, qMakePair(t, tmpList));
+            m_stateUpdates.insert(i, std::make_pair(t, tmpList));
             return;
         }
     }
     QVector<int> tmpList;
     tmpList << idx;
-    m_stateUpdates << qMakePair(t, tmpList);
+    m_stateUpdates << std::make_pair(t, tmpList);
 }
 
 QT_END_NAMESPACE

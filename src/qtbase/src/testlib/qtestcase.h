@@ -210,7 +210,7 @@ do { \
     QVERIFY(expr); \
 } while (false)
 
-#define QTRY_VERIFY(expr) QTRY_VERIFY_WITH_TIMEOUT(expr, 5s)
+#define QTRY_VERIFY(expr) QTRY_VERIFY_WITH_TIMEOUT(expr, QTest::Internal::defaultTryTimeout)
 
 // Will try to wait for the expression to become true while allowing event processing
 #define QTRY_VERIFY2_WITH_TIMEOUT(expr, messageExpression, timeout) \
@@ -219,7 +219,8 @@ do { \
     QVERIFY2(expr, messageExpression); \
 } while (false)
 
-#define QTRY_VERIFY2(expr, messageExpression) QTRY_VERIFY2_WITH_TIMEOUT(expr, messageExpression, 5s)
+#define QTRY_VERIFY2(expr, messageExpression) \
+    QTRY_VERIFY2_WITH_TIMEOUT(expr, messageExpression, QTest::Internal::defaultTryTimeout)
 
 // Will try to wait for the comparison to become successful while allowing event processing
 #define QTRY_COMPARE_WITH_TIMEOUT(expr, expected, timeout) \
@@ -228,7 +229,8 @@ do { \
     QCOMPARE(expr, expected); \
 } while (false)
 
-#define QTRY_COMPARE(expr, expected) QTRY_COMPARE_WITH_TIMEOUT(expr, expected, 5s)
+#define QTRY_COMPARE(expr, expected) \
+    QTRY_COMPARE_WITH_TIMEOUT(expr, expected, QTest::Internal::defaultTryTimeout)
 
 #define QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, op, opId, timeout) \
 do { \
@@ -240,32 +242,38 @@ do { \
 #define QTRY_COMPARE_EQ_WITH_TIMEOUT(computed, baseline, timeout) \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, ==, Equal, timeout)
 
-#define QTRY_COMPARE_EQ(computed, baseline) QTRY_COMPARE_EQ_WITH_TIMEOUT(computed, baseline, 5s)
+#define QTRY_COMPARE_EQ(computed, baseline) \
+    QTRY_COMPARE_EQ_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
 
 #define QTRY_COMPARE_NE_WITH_TIMEOUT(computed, baseline, timeout) \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, !=, NotEqual, timeout)
 
-#define QTRY_COMPARE_NE(computed, baseline) QTRY_COMPARE_NE_WITH_TIMEOUT(computed, baseline, 5s)
+#define QTRY_COMPARE_NE(computed, baseline) \
+    QTRY_COMPARE_NE_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
 
 #define QTRY_COMPARE_LT_WITH_TIMEOUT(computed, baseline, timeout) \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, <, LessThan, timeout)
 
-#define QTRY_COMPARE_LT(computed, baseline) QTRY_COMPARE_LT_WITH_TIMEOUT(computed, baseline, 5s)
+#define QTRY_COMPARE_LT(computed, baseline) \
+    QTRY_COMPARE_LT_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
 
 #define QTRY_COMPARE_LE_WITH_TIMEOUT(computed, baseline, timeout) \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, <=, LessThanOrEqual, timeout)
 
-#define QTRY_COMPARE_LE(computed, baseline) QTRY_COMPARE_LE_WITH_TIMEOUT(computed, baseline, 5s)
+#define QTRY_COMPARE_LE(computed, baseline) \
+    QTRY_COMPARE_LE_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
 
 #define QTRY_COMPARE_GT_WITH_TIMEOUT(computed, baseline, timeout) \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, >, GreaterThan, timeout)
 
-#define QTRY_COMPARE_GT(computed, baseline) QTRY_COMPARE_GT_WITH_TIMEOUT(computed, baseline, 5s)
+#define QTRY_COMPARE_GT(computed, baseline) \
+    QTRY_COMPARE_GT_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
 
 #define QTRY_COMPARE_GE_WITH_TIMEOUT(computed, baseline, timeout) \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, >=, GreaterThanOrEqual, timeout)
 
-#define QTRY_COMPARE_GE(computed, baseline) QTRY_COMPARE_GE_WITH_TIMEOUT(computed, baseline, 5s)
+#define QTRY_COMPARE_GE(computed, baseline) \
+    QTRY_COMPARE_GE_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
 
 #define QSKIP_INTERNAL(statement) \
 do {\

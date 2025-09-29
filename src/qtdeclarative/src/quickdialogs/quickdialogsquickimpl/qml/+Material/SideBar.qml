@@ -14,6 +14,8 @@ DialogsQuickImpl.SideBar {
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
                              implicitContentHeight + topPadding + bottomPadding)
 
+    contentWidth: (contentItem as ListView)?.contentWidth
+
     background: Rectangle {
         color: control.Material.backgroundColor
     }
@@ -22,6 +24,7 @@ DialogsQuickImpl.SideBar {
         currentIndex: control.currentIndex
         model: control.contentModel
         clip: true
+        boundsBehavior: Flickable.StopAtBounds
     }
 
     buttonDelegate: Button {
@@ -46,8 +49,8 @@ DialogsQuickImpl.SideBar {
     }
 
     separatorDelegate: Item {
-        width: control.width
-        height: 9
+        implicitWidth: control.width
+        implicitHeight: 9
         Rectangle {
             id: separatorDelegate
             color: Qt.lighter(Material.darkShade, 1.06)

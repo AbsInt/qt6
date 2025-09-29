@@ -292,7 +292,7 @@ static void reloadLotsOfFileMethod()
 
 void tst_qmlls_qqmlcodemodel::reloadLotsOfFiles()
 {
-    QThread *thread = QThread::create([]() { reloadLotsOfFileMethod(); });
+    QScopedPointer<QThread> thread(QThread::create([]() { reloadLotsOfFileMethod(); }));
 
     // should not stack-overflow despite the small stack size to make sure QML files are loaded
     // correctly and not recursively

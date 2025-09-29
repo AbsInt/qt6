@@ -6,7 +6,7 @@ import QtQuick.Controls
 
 Flickable {
     id: flickable
-
+    enabled: !GalleryConfig.disabled
     contentHeight: pane.height
 
     Pane {

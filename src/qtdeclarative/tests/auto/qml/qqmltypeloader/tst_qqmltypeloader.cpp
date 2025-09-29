@@ -856,8 +856,6 @@ void tst_QQMLTypeLoader::loadTypeOnShutdown()
 
 void tst_QQMLTypeLoader::floodTypeLoaderEventQueue()
 {
-    QSKIP("Crashes in the CI. TODO: Why?");
-
     QQmlEngine engine;
 
     // Flood the typeloader with useless messages.
@@ -888,17 +886,17 @@ void tst_QQMLTypeLoader::retainQmlTypeAcrossEngines()
 
     QQmlComponentPrivate *p1 = QQmlComponentPrivate::get(&component1);
     QVERIFY(p1);
-    const auto cu1 = p1->compilationUnit;
+    const auto cu1 = p1->compilationUnit();
     QVERIFY(cu1);
 
     QQmlComponentPrivate *p2 = QQmlComponentPrivate::get(&component2);
     QVERIFY(p2);
-    const auto cu2 = p2->compilationUnit;
+    const auto cu2 = p2->compilationUnit();
     QVERIFY(cu2);
 
     QQmlComponentPrivate *p3 = QQmlComponentPrivate::get(&component3);
     QVERIFY(p3);
-    const auto cu3 = p3->compilationUnit;
+    const auto cu3 = p3->compilationUnit();
     QVERIFY(cu3);
 
     // The _executable_ CUs are all different

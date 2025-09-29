@@ -34,7 +34,7 @@ enum {
     CursorTypeBitMask = 0x0F06 // bitmask to find the specific cursor type (see Wacom FAQ)
 };
 
-extern "C" LRESULT QT_WIN_CALLBACK qWindowsTabletSupportWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+LRESULT QT_WIN_CALLBACK qWindowsTabletSupportWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message) {
     case WT_PROXIMITY:
@@ -656,8 +656,8 @@ bool QWindowsTabletSupport::translateTabletPacketEvent()
         const qreal tangentialPressure = m_currentDevice->type() == QInputDevice::DeviceType::Airbrush
             ? current.scaleTangentialPressure(packet.pkTangentPressure) : qreal(0);
 
-        int tiltX = 0;
-        int tiltY = 0;
+        qreal tiltX = 0;
+        qreal tiltY = 0;
         qreal rotation = 0;
         if (m_tiltSupport) {
             // Convert from azimuth and altitude to x tilt and y tilt. What
@@ -672,8 +672,8 @@ bool QWindowsTabletSupport::translateTabletPacketEvent()
 
             const double radX = std::atan(std::sin(radAzim) / tanAlt);
             const double radY = std::atan(std::cos(radAzim) / tanAlt);
-            tiltX = int(qRadiansToDegrees(radX));
-            tiltY = int(qRadiansToDegrees(-radY));
+            tiltX = qRadiansToDegrees(radX);
+            tiltY = qRadiansToDegrees(-radY);
             rotation = 360.0 - (packet.pkOrientation.orTwist / 10.0);
             if (rotation > 180.0)
                 rotation -= 360.0;

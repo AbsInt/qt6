@@ -120,6 +120,7 @@ public:
 private:
     friend class QJSValue;
     friend class QJSEngine;
+    friend class QJSManagedValuePrivate;
 
     QJSManagedValue(QV4::ExecutionEngine *engine);
     QV4::Value *d = nullptr;

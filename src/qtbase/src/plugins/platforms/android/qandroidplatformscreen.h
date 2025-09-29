@@ -17,7 +17,6 @@ QT_BEGIN_NAMESPACE
 
 class QAndroidPlatformWindow;
 
-
 class QAndroidPlatformScreen : public QObject,
                                public QPlatformScreen,
                                public QNativeInterface::QAndroidScreen
@@ -48,12 +47,14 @@ public:
     void topVisibleWindowChanged();
     int displayId() const override;
 
+    static QRect &defaultAvailableGeometry();
+    static QSize sizeForDisplayId(int displayId);
+
 public slots:
     void setPhysicalSize(const QSize &size);
+    void setPhysicalSizeFromPixels(const QSize &size);
     void setAvailableGeometry(const QRect &rect);
     void setSize(const QSize &size);
-    void setSizeParameters(const QSize &physicalSize, const QSize &size,
-                           const QRect &availableGeometry);
     void setRefreshRate(qreal refreshRate);
     void setOrientation(Qt::ScreenOrientation orientation);
 
@@ -69,6 +70,8 @@ protected:
     QList<Mode> m_modes;
     int m_currentMode = 0;
     int m_displayId = -1;
+    int m_xdpi;
+    int m_ydpi;
 
 private:
     QDpi logicalDpi() const override;

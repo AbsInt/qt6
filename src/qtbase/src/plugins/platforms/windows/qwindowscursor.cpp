@@ -39,8 +39,8 @@ using namespace Qt::Literals::StringLiterals;
     \internal
 */
 
-QWindowsPixmapCursorCacheKey::QWindowsPixmapCursorCacheKey(const QCursor &c)
-    : bitmapCacheKey(c.pixmap().cacheKey()), maskCacheKey(0)
+QWindowsPixmapCursorCacheKey::QWindowsPixmapCursorCacheKey(const QCursor &c, qreal scaleFactor)
+    : bitmapCacheKey(c.pixmap().cacheKey()), maskCacheKey(0), scaleFactor(scaleFactor)
 {
     if (!bitmapCacheKey) {
         Q_ASSERT(!c.bitmap().isNull());
@@ -48,6 +48,8 @@ QWindowsPixmapCursorCacheKey::QWindowsPixmapCursorCacheKey(const QCursor &c)
         bitmapCacheKey = c.bitmap().cacheKey();
         maskCacheKey = c.mask().cacheKey();
     }
+    hotspotCacheKey.x = c.hotSpot().x();
+    hotspotCacheKey.y = c.hotSpot().y();
 }
 
 /*!
@@ -531,7 +533,8 @@ POINT QWindowsCursor::m_cursorPositionCache = {0,0};
 
 CursorHandlePtr QWindowsCursor::pixmapWindowCursor(const QCursor &c)
 {
-    const QWindowsPixmapCursorCacheKey cacheKey(c);
+    const qreal scaleFactor = QHighDpiScaling::factor(m_screen);
+    const QWindowsPixmapCursorCacheKey cacheKey(c, scaleFactor);
     PixmapCursorCache::iterator it = m_pixmapCursorCache.find(cacheKey);
     if (it == m_pixmapCursorCache.end()) {
         if (m_pixmapCursorCache.size() > 50) {
@@ -546,7 +549,6 @@ CursorHandlePtr QWindowsCursor::pixmapWindowCursor(const QCursor &c)
                     ++it;
             }
         }
-        const qreal scaleFactor = QHighDpiScaling::factor(m_screen);
         const QPixmap pixmap = c.pixmap();
         const HCURSOR hc = pixmap.isNull()
             ? createBitmapCursor(c, scaleFactor)
@@ -780,7 +782,8 @@ HCURSOR QWindowsCursor::hCursor(const QCursor &c) const
 {
     const Qt::CursorShape shape = c.shape();
     if (shape == Qt::BitmapCursor) {
-        const auto pit = m_pixmapCursorCache.constFind(QWindowsPixmapCursorCacheKey(c));
+        const qreal scaleFactor = QHighDpiScaling::factor(m_screen);
+        const auto pit = m_pixmapCursorCache.constFind(QWindowsPixmapCursorCacheKey(c, scaleFactor));
         if (pit != m_pixmapCursorCache.constEnd())
             return pit.value()->handle();
     } else {

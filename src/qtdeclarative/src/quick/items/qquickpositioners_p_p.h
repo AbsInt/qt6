@@ -28,6 +28,8 @@ QT_REQUIRE_CONFIG(quick_positioners);
 #include <QtCore/qstring.h>
 #include <QtCore/qtimer.h>
 
+#include <algorithm>
+
 QT_BEGIN_NAMESPACE
 
 class QQuickItemViewTransitioner;
@@ -122,9 +124,9 @@ public:
     void itemDestroyed(QQuickItem *item) override
     {
         Q_Q(QQuickBasePositioner);
-        int index = q->positionedItems.find(QQuickBasePositioner::PositionedItem(item));
-        if (index >= 0)
-            q->removePositionedItem(&q->positionedItems, index);
+        auto it = std::find(q->positionedItems.begin(), q->positionedItems.end(), item);
+        if (it != q->positionedItems.end())
+            q->positionedItems.erase(it);
     }
 
     static Qt::LayoutDirection getLayoutDirection(const QQuickBasePositioner *positioner)

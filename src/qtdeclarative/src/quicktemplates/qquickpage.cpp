@@ -136,13 +136,12 @@ void QQuickPagePrivate::itemVisibilityChanged(QQuickItem *item)
 {
     Q_Q(QQuickPage);
     QQuickPanePrivate::itemVisibilityChanged(item);
+    QScopedValueRollback signalGuard(emittingImplicitSizeChangedSignals, true);
     if (item == header) {
-        QBoolBlocker signalGuard(emittingImplicitSizeChangedSignals);
         emit q->implicitHeaderWidthChanged();
         emit q->implicitHeaderHeightChanged();
         relayout();
     } else if (item == footer) {
-        QBoolBlocker signalGuard(emittingImplicitSizeChangedSignals);
         emit q->implicitFooterWidthChanged();
         emit q->implicitFooterHeightChanged();
         relayout();

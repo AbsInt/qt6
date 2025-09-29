@@ -41,7 +41,16 @@ T.RoundButton {
         visible: !control.flat || control.down || control.checked || control.highlighted
         color: Color.blend(control.checked || control.highlighted ? control.palette.dark : control.palette.button,
                                                                     control.palette.mid, control.down ? 0.5 : 0.0)
-        border.color: control.palette.highlight
-        border.width: control.visualFocus ? 2 : 0
+        border.color: {
+            if (control.visualFocus)
+                return control.palette.highlight
+            else if (Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast)
+                return Color.blend(control.palette.text, control.palette.dark,
+                                   control.enabled ? 0.0 : 0.3)
+            else
+                return control.palette.windowText
+        }
+        border.width: control.visualFocus ? 2 :
+                      (Qt.styleHints.accessibility.contrastPreference == Qt.HighContrast) ? 1 : 0
     }
 }

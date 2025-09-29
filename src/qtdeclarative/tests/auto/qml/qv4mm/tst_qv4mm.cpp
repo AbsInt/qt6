@@ -15,6 +15,7 @@
 #include <private/qqmlcomponentattached_p.h>
 #include <private/qv4mapobject_p.h>
 #include <private/qv4setobject_p.h>
+#include <private/qv4variantassociationobject_p.h>
 #if QT_CONFIG(qml_jit)
 #include <private/qv4baselinejit_p.h>
 #endif
@@ -50,6 +51,7 @@ private slots:
     void allocWithMemberDataMidwayDrain();
     void constObjectWrapperOnlyConstInSingleEngine();
     void markObjectWrappersAfterMarkWeakValues();
+    void variantAssociationObjectMarksMember();
 
     void trackObjectDoesNotAccessGarbageOnTheStackOnAllocation();
     void spreadArgumentDoesNotAccessGarbageOnTheStackOnAllocation();
@@ -57,6 +59,8 @@ private slots:
     void scopedConvertToObjectFromReturnedValueDoesNotAccessGarbageOnTheStackOnAllocation();
     void scopedConvertToStringFromValueDoesNotAccessGarbageOnTheStackOnAllocation();
     void scopedConvertToObjectFromValueDoesNotAccessGarbageOnTheStackOnAllocation();
+
+    void dontCrashOnScopedStackFrame();
 };
 
 tst_qv4mm::tst_qv4mm()
@@ -871,6 +875,30 @@ void tst_qv4mm::markObjectWrappersAfterMarkWeakValues()
     QCOMPARE(qvariant_cast<QObject *>(retrieved)->objectName(), "yep");
 }
 
+void tst_qv4mm::variantAssociationObjectMarksMember()
+{
+    QJSEngine jsEngine;
+    QV4::ExecutionEngine &engine = *jsEngine.handle();
+
+    QV4::Scope scope(&engine);
+    QVariantHash assoc;
+    assoc[QLatin1String("test")] = 2;
+    QV4::ScopedObject o(scope, engine.newObject());
+    QV4::Scoped<QV4::VariantAssociationObject> varAssocObject(
+            scope,
+            QV4::VariantAssociationPrototype::fromQVariantHash(&engine, assoc, o->d(), -1, QV4::Heap::ReferenceObject::NoFlag)
+    );
+    bool hasProperty = false;
+    // ensure that the propertyIndexMapping gets initialized
+    QV4::ScopedString test(scope, jsEngine.handle()->newString(QLatin1String("test")));
+    varAssocObject->virtualGet(varAssocObject, test->toPropertyKey(), nullptr, &hasProperty);
+    QVERIFY(hasProperty);
+    gc(engine);
+    auto mapping = varAssocObject->d()->propertyIndexMapping;
+    QVERIFY(mapping);
+    QVERIFY(mapping->inUse());
+}
+
 void tst_qv4mm::trackObjectDoesNotAccessGarbageOnTheStackOnAllocation()
 {
 #if defined(QT_NO_DEBUG) && !defined(QT_FORCE_ASSERTS)
@@ -890,7 +918,7 @@ void tst_qv4mm::trackObjectDoesNotAccessGarbageOnTheStackOnAllocation()
     jsengine.collectGarbage();
 
     QV4::Scope scope(engine);
-    ObjectInCreationGCAnchorList tracker(scope, 1);
+    ObjectInCreationGCAnchorList tracker(scope);
 
     QObject object{};
     tracker.trackObject(engine, &object);
@@ -1017,6 +1045,17 @@ void tst_qv4mm::scopedConvertToObjectFromValueDoesNotAccessGarbageOnTheStackOnAl
 
     QV4::Scope scope(engine);
     QV4::ScopedObject object(scope, QV4::StaticValue::fromBoolean(true).asValue<QV4::Value>(), QV4::ScopedObject::Convert);
+}
+
+void tst_qv4mm::dontCrashOnScopedStackFrame()
+{
+    QJSEngine jsengine;
+    QV4::ExecutionEngine *engine = jsengine.handle();
+
+    QV4::Scope scope(engine);
+    QV4::ScopedStackFrame frame(scope, engine->rootContext());
+
+    jsengine.collectGarbage();
 }
 
 QTEST_MAIN(tst_qv4mm)

@@ -288,14 +288,14 @@ void QQuickSafeArea::updateSafeArea()
             return;
         }
 
-        QBoolBlocker blocker(emittingMarginsUpdate, true);
+        QScopedValueRollback blocker(emittingMarginsUpdate, true);
         emit marginsChanged();
 
         if (m_safeAreaMargins != newMargins) {
             qCDebug(lcSafeArea) << "⚠️ Possible binding loop for" << this
                 << newMargins << "changed to" << m_safeAreaMargins;
 
-            QBoolBlocker blocker(detectedPossibleBindingLoop, true);
+            QScopedValueRollback blocker(detectedPossibleBindingLoop, true);
 
             for (int i = 0; i < 5; ++i) {
                 auto marginsBeforeEmit = m_safeAreaMargins;

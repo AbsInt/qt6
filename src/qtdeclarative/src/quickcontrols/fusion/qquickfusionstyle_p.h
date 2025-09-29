@@ -31,6 +31,7 @@ class Q_QUICKCONTROLS2FUSION_EXPORT QQuickFusionStyle : public QObject
     Q_PROPERTY(QColor darkShade READ darkShade CONSTANT FINAL)
     Q_PROPERTY(QColor topShadow READ topShadow CONSTANT FINAL)
     Q_PROPERTY(QColor innerContrastLine READ innerContrastLine CONSTANT FINAL)
+    Q_PROPERTY(bool highContrast READ isHighContrast NOTIFY highContrastChanged FINAL REVISION(6, 10))
     QML_NAMED_ELEMENT(Fusion)
     QML_SINGLETON
     QML_ADDED_IN_VERSION(2, 3)
@@ -42,6 +43,7 @@ public:
     static QColor darkShade();
     static QColor topShadow();
     static QColor innerContrastLine();
+    static bool isHighContrast();
 
     Q_INVOKABLE static QColor highlight(QQuickPalette *palette);
     Q_INVOKABLE static QColor highlightedText(QQuickPalette *palette);
@@ -54,6 +56,9 @@ public:
     Q_INVOKABLE static QColor gradientStop(const QColor &baseColor);
     Q_INVOKABLE static QColor mergedColors(const QColor &colorA, const QColor &colorB, int factor = 50);
     Q_INVOKABLE static QColor grooveColor(QQuickPalette *palette);
+
+Q_SIGNALS:
+    Q_REVISION(6, 10) void highContrastChanged();
 };
 
 QT_END_NAMESPACE

@@ -40,5 +40,11 @@ T.SwipeDelegate {
         implicitHeight: 40
         color: Color.blend(control.down ? control.palette.midlight : control.palette.light,
                                           control.palette.highlight, control.visualFocus ? 0.15 : 0.0)
+        // The condition of (control.down || control.highlighted || control.visualFocus)
+        // came from the ItemDelegate.qml
+        border.width: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast &&
+                      (control.down || control.highlighted || control.visualFocus) ? 1 : 0
+        border.color: control.down || control.highlighted || control.visualFocus ?
+                          control.palette.highlightedText : control.palette.text
     }
 }

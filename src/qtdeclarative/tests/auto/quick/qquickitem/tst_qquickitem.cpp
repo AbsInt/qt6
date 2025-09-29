@@ -5,6 +5,7 @@
 
 #include <QtQml/QQmlComponent>
 #include <QtQuick/qquickitem.h>
+#include <QtQuick/qquickitemgrabresult.h>
 #include <QtQuick/qquickwindow.h>
 #include <QtQuick/qquickview.h>
 #include "private/qquickfocusscope_p.h"
@@ -18,6 +19,7 @@
 #include <QDebug>
 #include <QTimer>
 #include <QQmlEngine>
+#include <QtQuickTest/quicktest.h>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <QtQuickTestUtils/private/viewtestutils_p.h>
 #include <QSignalSpy>
@@ -231,6 +233,8 @@ private slots:
     void listsAreNotLists();
 
     void transformChanged();
+
+    void grabImage();
 
 private:
 
@@ -811,13 +815,13 @@ void tst_qquickitem::focusSubItemInNonFocusScope()
 
     QVERIFY(dummyItem->hasFocus());
     QVERIFY(!textInput->hasFocus());
-    QVERIFY(dummyItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(dummyItem);
 
     QVERIFY(QMetaObject::invokeMethod(textInput, "forceActiveFocus"));
 
     QVERIFY(!dummyItem->hasFocus());
     QVERIFY(textInput->hasFocus());
-    QVERIFY(textInput->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(textInput);
 }
 
 void tst_qquickitem::parentItemWithFocus()
@@ -2312,7 +2316,7 @@ void tst_qquickitem::shortcutOverride()
 
     QQuickItem *escapeItem = view.rootObject()->property("escapeItem").value<QQuickItem*>();
     QVERIFY(escapeItem);
-    QVERIFY(escapeItem->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(escapeItem);
 
     // escapeItem's onEscapePressed handler should accept the first escape press event.
     QTest::keyPress(&view, Qt::Key_Escape);
@@ -2675,6 +2679,21 @@ void tst_qquickitem::transformChanged()
     QVERIFY2(transformItem.transformChanged,
         "Changing one of the new ancestors should result in transformChanged");
     QCOMPARE(transformItem.mapToScene(QPoint(0, 0)), parents[1][0]->position());
+}
+
+void tst_qquickitem::grabImage()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("grabImage.qml"));
+
+    QScopedPointer<QQuickWindow> window(qobject_cast<QQuickWindow*>(component.create()));
+    QVERIFY(window);
+
+    gc(engine);
+
+    QTRY_VERIFY(window->property("finishedSuccessfuly").toBool());
+    QQuickItemGrabResult *result = window->property("itemGrabResult").value<QQuickItemGrabResult*>();
+    QVERIFY(result);
 }
 
 QTEST_MAIN(tst_qquickitem)

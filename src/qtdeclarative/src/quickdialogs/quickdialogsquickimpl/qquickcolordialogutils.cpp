@@ -3,6 +3,8 @@
 
 #include "qquickcolordialogutils_p.h"
 
+QT_BEGIN_NAMESPACE
+
 std::pair<qreal, qreal> getSaturationAndValue(qreal saturation, qreal lightness)
 {
     const qreal v = lightness + saturation * qMin(lightness, 1 - lightness);
@@ -22,3 +24,5 @@ std::pair<qreal, qreal> getSaturationAndLightness(qreal saturation, qreal value)
     const qreal s = (value - l) / qMin(l, 1 - l);
     return { s, l };
 }
+
+QT_END_NAMESPACE

@@ -6,6 +6,7 @@ package org.qtproject.qt.android;
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.os.Build;
@@ -35,17 +36,14 @@ class QtDisplayManager
 {
     private static String QtTAG = "QtDisplayManager";
     // screen methods
-    static native void setDisplayMetrics(int screenWidthPixels, int screenHeightPixels,
-                                                int availableLeftPixels, int availableTopPixels,
-                                                int availableWidthPixels, int availableHeightPixels,
-                                                double XDpi, double YDpi, double scaledDensity,
-                                                double density, float refreshRate);
+    static native void handleLayoutSizeChanged(int availableWidth, int availableHeight);
     static native void handleOrientationChanged(int newRotation, int nativeOrientation);
     static native void handleRefreshRateChanged(float refreshRate);
     static native void handleUiDarkModeChanged(int newUiMode);
     static native void handleScreenAdded(int displayId);
     static native void handleScreenChanged(int displayId);
     static native void handleScreenRemoved(int displayId);
+    static native void handleScreenDensityChanged(double density);
     // screen methods
 
     private boolean m_isFullScreen = false;
@@ -67,11 +65,8 @@ class QtDisplayManager
 
             @Override
             public void onDisplayChanged(int displayId) {
-                Display display = (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
-                        ? m_activity.getWindowManager().getDefaultDisplay()
-                        : m_activity.getDisplay();
-                float refreshRate = getRefreshRate(display);
-                QtDisplayManager.handleRefreshRateChanged(refreshRate);
+                QtDisplayManager.updateRefreshRate(m_activity);
+                QtDisplayManager.updateScreenDensity(m_activity);
                 QtDisplayManager.handleScreenChanged(displayId);
             }
 
@@ -82,22 +77,29 @@ class QtDisplayManager
         };
     }
 
-    static void handleOrientationChanges(Activity activity)
+    static void updateRefreshRate(Context context)
     {
-        int currentRotation = getDisplayRotation(activity);
-        if (m_previousRotation == currentRotation)
-            return;
-        int nativeOrientation = getNativeOrientation(activity, currentRotation);
-        QtDisplayManager.handleOrientationChanged(currentRotation, nativeOrientation);
-        m_previousRotation = currentRotation;
+        Display display = getDisplay(context);
+        float refreshRate = display != null ? display.getRefreshRate() : 60.0f;
+        QtDisplayManager.handleRefreshRateChanged(refreshRate);
     }
 
-    static int getDisplayRotation(Activity activity) {
-        Display display = Build.VERSION.SDK_INT < Build.VERSION_CODES.R ?
-                activity.getWindowManager().getDefaultDisplay() :
-                activity.getDisplay();
+    static void handleOrientationChange(Activity activity)
+    {
+        Display display = QtDisplayManager.getDisplay(activity);
+        int rotation = display != null ? display.getRotation() : 0;
+        if (m_previousRotation == rotation)
+            return;
+        int nativeOrientation = getNativeOrientation(activity, rotation);
+        QtDisplayManager.handleOrientationChanged(rotation, nativeOrientation);
+        m_previousRotation = rotation;
+    }
 
-        return display != null ? display.getRotation() : 0;
+    static void updateScreenDensity(Activity activity)
+    {
+        Resources resources = activity == null ? Resources.getSystem() : activity.getResources();
+        double density = resources.getDisplayMetrics().density;
+        QtDisplayManager.handleScreenDensityChanged(density);
     }
 
     private static int getNativeOrientation(Activity activity, int rotation)
@@ -111,9 +113,11 @@ class QtDisplayManager
         return Configuration.ORIENTATION_PORTRAIT;
     }
 
-    static float getRefreshRate(Display display)
+    void initDisplayProperties()
     {
-        return display != null ? display.getRefreshRate() : 60.0f;
+        QtDisplayManager.handleOrientationChange(m_activity);
+        QtDisplayManager.updateRefreshRate(m_activity);
+        QtDisplayManager.updateScreenDensity(m_activity);
     }
 
     void registerDisplayListener()
@@ -130,6 +134,27 @@ class QtDisplayManager
         displayManager.unregisterDisplayListener(m_displayListener);
     }
 
+    @SuppressWarnings("deprecation")
+    void setSystemUiVisibilityPreAndroidR(View decorView)
+    {
+        int systemUiVisibility;
+
+        if (m_isFullScreen || m_expandedToCutout) {
+            systemUiVisibility =  View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+            if (m_isFullScreen) {
+                systemUiVisibility |=  View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+            }
+        } else {
+            systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE;
+        }
+
+        decorView.setSystemUiVisibility(systemUiVisibility);
+    }
+
     void setSystemUiVisibility(boolean isFullScreen, boolean expandedToCutout)
     {
         if (m_isFullScreen == isFullScreen && m_expandedToCutout == expandedToCutout)
@@ -137,6 +162,7 @@ class QtDisplayManager
 
         m_isFullScreen = isFullScreen;
         m_expandedToCutout = expandedToCutout;
+
         Window window = m_activity.getWindow();
         View decorView = window.getDecorView();
 
@@ -165,44 +191,31 @@ class QtDisplayManager
                 }
                 insetsControl.setSystemBarsBehavior(sysBarsBehavior);
             }
-
-
         } else {
-            int systemUiVisibility;
+            setSystemUiVisibilityPreAndroidR(decorView);
+        }
 
-            if (m_isFullScreen || m_expandedToCutout) {
-                systemUiVisibility =  View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
-                if (m_isFullScreen) {
-                    systemUiVisibility |=  View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                                        | View.SYSTEM_UI_FLAG_FULLSCREEN
-                                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
-                }
+        if (!isFullScreen) {
+            // Handle transparent status and navigation bars
+            if (m_expandedToCutout) {
+                window.setStatusBarColor(Color.TRANSPARENT);
+                window.setNavigationBarColor(Color.TRANSPARENT);
             } else {
-                systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE;
+                // Restore theme's system bars colors
+                Theme theme = m_activity.getTheme();
+                TypedValue typedValue = new TypedValue();
+
+                theme.resolveAttribute(android.R.attr.statusBarColor, typedValue, true);
+                int defaultStatusBarColor = typedValue.data;
+                window.setStatusBarColor(defaultStatusBarColor);
+
+                theme.resolveAttribute(android.R.attr.navigationBarColor, typedValue, true);
+                int defaultNavigationBarColor = typedValue.data;
+                window.setNavigationBarColor(defaultNavigationBarColor);
             }
-
-            decorView.setSystemUiVisibility(systemUiVisibility);
         }
 
-        // Handle transparent status and navigation bars
-        if (m_expandedToCutout) {
-            window.setStatusBarColor(Color.TRANSPARENT);
-            window.setNavigationBarColor(Color.TRANSPARENT);
-        } else {
-            // Restore theme's system bars colors
-            Theme theme = m_activity.getTheme();
-            TypedValue typedValue = new TypedValue();
-
-            theme.resolveAttribute(android.R.attr.statusBarColor, typedValue, true);
-            int defaultStatusBarColor = typedValue.data;
-            window.setStatusBarColor(defaultStatusBarColor);
-
-            theme.resolveAttribute(android.R.attr.navigationBarColor, typedValue, true);
-            int defaultNavigationBarColor = typedValue.data;
-            window.setNavigationBarColor(defaultNavigationBarColor);
-        }
+        decorView.post(() -> decorView.requestApplyInsets());
     }
 
     boolean isFullScreen()
@@ -221,6 +234,20 @@ class QtDisplayManager
             m_isFullScreen = false;
             setSystemUiVisibility(true, m_expandedToCutout);
         }
+    }
+
+    @SuppressWarnings("deprecation")
+    static Display getDisplay(Context context)
+    {
+        Activity activity = (Activity) context;
+        if (activity != null) {
+            return (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+                        ? activity.getWindowManager().getDefaultDisplay()
+                        : activity.getDisplay();
+        }
+
+        final DisplayManager dm = context.getSystemService(DisplayManager.class);
+        return dm.getDisplay(Display.DEFAULT_DISPLAY);
     }
 
     @UsedFromNativeCode
@@ -247,9 +274,10 @@ class QtDisplayManager
     }
 
     @UsedFromNativeCode
-    static Size getDisplaySize(Context displayContext, Display display)
+    @SuppressWarnings("deprecation")
+    static Size getDisplaySize(Context context, Display display)
     {
-        if (display == null || displayContext == null)
+        if (display == null || context == null)
             return new Size(0, 0);
 
         if (android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
@@ -258,6 +286,7 @@ class QtDisplayManager
             return new Size(metrics.widthPixels, metrics.heightPixels);
         } else {
             try {
+                Context displayContext = context.createDisplayContext(display);
                 WindowManager windowManager = displayContext.getSystemService(WindowManager.class);
                 if (windowManager != null) {
                     WindowMetrics metrics = windowManager.getCurrentWindowMetrics();
@@ -273,58 +302,14 @@ class QtDisplayManager
         }
     }
 
-    static void setApplicationDisplayMetrics(Activity activity, int width, int height)
-    {
-        if (activity == null)
-            return;
-
-        final WindowInsets rootInsets = activity.getWindow().getDecorView().getRootWindowInsets();
-        final WindowManager windowManager = activity.getWindowManager();
-        Display display;
-
-        int insetLeft;
-        int insetTop;
-
-        int maxWidth;
-        int maxHeight;
-
-        if (android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            display = windowManager.getDefaultDisplay();
-
-            final DisplayMetrics maxMetrics = new DisplayMetrics();
-            display.getRealMetrics(maxMetrics);
-            maxWidth = maxMetrics.widthPixels;
-            maxHeight = maxMetrics.heightPixels;
-
-            insetLeft = rootInsets.getStableInsetLeft();
-            insetTop = rootInsets.getStableInsetTop();
-        } else {
-            display = activity.getDisplay();
-
-            final WindowMetrics maxMetrics = windowManager.getMaximumWindowMetrics();
-            maxWidth = maxMetrics.getBounds().width();
-            maxHeight = maxMetrics.getBounds().height();
-
-            insetLeft = rootInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()).left;
-            insetTop = rootInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()).top;
-        }
-
-        final DisplayMetrics displayMetrics = activity.getResources().getDisplayMetrics();
-
-        double density = displayMetrics.density;
-        double scaledDensity = displayMetrics.scaledDensity;
-
-        setDisplayMetrics(maxWidth, maxHeight, insetLeft, insetTop,
-                width, height, getXDpi(displayMetrics), getYDpi(displayMetrics),
-                scaledDensity, density, getRefreshRate(display));
-    }
-
+    @UsedFromNativeCode
     static float getXDpi(final DisplayMetrics metrics) {
         if (metrics.xdpi < android.util.DisplayMetrics.DENSITY_LOW)
             return android.util.DisplayMetrics.DENSITY_LOW;
         return metrics.xdpi;
     }
 
+    @UsedFromNativeCode
     static float getYDpi(final DisplayMetrics metrics) {
         if (metrics.ydpi < android.util.DisplayMetrics.DENSITY_LOW)
             return android.util.DisplayMetrics.DENSITY_LOW;

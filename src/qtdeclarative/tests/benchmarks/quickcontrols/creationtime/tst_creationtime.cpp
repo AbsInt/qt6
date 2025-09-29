@@ -84,8 +84,16 @@ void tst_CreationTime::basic_data()
     // Calendar is excluded because it's a singleton and can't be created.
     // TreeViewDelegate is excluded since it's a delegate that can only be created by TreeView.
     // TableViewDelegate is excluded since it's a delegate that can only be created by TableView.
-    addTestRowForEachControl(styleHelper.engine.data(), QQC2_IMPORT_PATH, "basic", "QtQuick/Controls/Basic",
-        QStringList() << "ApplicationWindow" << "Calendar" << "TreeViewDelegate" << "TableViewDelegate");
+    // Horizontal/VerticalHeaderViewDelegate is excluded since it's a delegate
+    // that can only be created by Horizontal/VerticalHeaderView.
+    addTestRowForEachControl(styleHelper.engine.data(), QQC2_IMPORT_PATH, "basic",
+                             "QtQuick/Controls/Basic",
+                             QStringList() << "ApplicationWindow"
+                                           << "Calendar"
+                                           << "TreeViewDelegate"
+                                           << "TableViewDelegate"
+                                           << "HorizontalHeaderViewDelegate"
+                                           << "VerticalHeaderViewDelegate");
 }
 
 void tst_CreationTime::fusion()
@@ -97,9 +105,13 @@ void tst_CreationTime::fusion()
 void tst_CreationTime::fusion_data()
 {
     QTest::addColumn<QUrl>("url");
-    addTestRowForEachControl(styleHelper.engine.data(), QQC2_IMPORT_PATH, "fusion", "QtQuick/Controls/Fusion",
-        QStringList() << "ApplicationWindow" << "ButtonPanel" << "CheckIndicator"
-            << "RadioIndicator" << "SliderGroove" << "SliderHandle" << "SwitchIndicator" << "TreeViewDelegate");
+    addTestRowForEachControl(
+            styleHelper.engine.data(), QQC2_IMPORT_PATH, "fusion", "QtQuick/Controls/Fusion",
+            QStringList() << "ApplicationWindow" << "ButtonPanel" << "CheckIndicator"
+                          << "RadioIndicator" << "SliderGroove" << "SliderHandle"
+                          << "SwitchIndicator" << "TreeViewDelegate"
+                          << "HorizontalHeaderViewDelegate"
+                          << "VerticalHeaderViewDelegate");
 }
 
 void tst_CreationTime::imagine()
@@ -111,8 +123,11 @@ void tst_CreationTime::imagine()
 void tst_CreationTime::imagine_data()
 {
     QTest::addColumn<QUrl>("url");
-    addTestRowForEachControl(styleHelper.engine.data(), QQC2_IMPORT_PATH, "imagine", "QtQuick/Controls/Imagine",
-        QStringList() << "ApplicationWindow");
+    addTestRowForEachControl(styleHelper.engine.data(), QQC2_IMPORT_PATH, "imagine",
+                             "QtQuick/Controls/Imagine",
+                             QStringList() << "ApplicationWindow"
+                                           << "HorizontalHeaderViewDelegate"
+                                           << "VerticalHeaderViewDelegate");
 }
 
 void tst_CreationTime::material()
@@ -124,9 +139,14 @@ void tst_CreationTime::material()
 void tst_CreationTime::material_data()
 {
     QTest::addColumn<QUrl>("url");
-    addTestRowForEachControl(styleHelper.engine.data(), QQC2_IMPORT_PATH, "material", "QtQuick/Controls/Material",
-        QStringList() << "ApplicationWindow" << "Ripple" << "SliderHandle" << "CheckIndicator" << "RadioIndicator"
-            << "SwitchIndicator" << "BoxShadow" << "ElevationEffect" << "CursorDelegate" << "TreeViewDelegate");
+    addTestRowForEachControl(styleHelper.engine.data(), QQC2_IMPORT_PATH, "material",
+                             "QtQuick/Controls/Material",
+                             QStringList() << "ApplicationWindow" << "Ripple" << "SliderHandle"
+                                           << "CheckIndicator" << "RadioIndicator"
+                                           << "SwitchIndicator" << "BoxShadow" << "ElevationEffect"
+                                           << "CursorDelegate" << "TreeViewDelegate"
+                                           << "HorizontalHeaderViewDelegate"
+                                           << "VerticalHeaderViewDelegate");
 }
 
 void tst_CreationTime::universal()
@@ -138,8 +158,12 @@ void tst_CreationTime::universal()
 void tst_CreationTime::universal_data()
 {
     QTest::addColumn<QUrl>("url");
-    addTestRowForEachControl(styleHelper.engine.data(), QQC2_IMPORT_PATH, "universal", "QtQuick/Controls/Universal",
-        QStringList() << "ApplicationWindow" << "CheckIndicator" << "RadioIndicator" << "SwitchIndicator");
+    addTestRowForEachControl(styleHelper.engine.data(), QQC2_IMPORT_PATH, "universal",
+                             "QtQuick/Controls/Universal",
+                             QStringList() << "ApplicationWindow" << "CheckIndicator"
+                                           << "RadioIndicator" << "SwitchIndicator"
+                                           << "HorizontalHeaderViewDelegate"
+                                           << "VerticalHeaderViewDelegate");
 }
 
 QTEST_MAIN(tst_CreationTime)

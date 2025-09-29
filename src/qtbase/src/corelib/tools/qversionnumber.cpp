@@ -576,10 +576,7 @@ QDebug operator<<(QDebug debug, const QVersionNumber &version)
 */
 size_t qHash(const QVersionNumber &key, size_t seed)
 {
-    QtPrivate::QHashCombine hash;
-    for (int i = 0; i < key.segmentCount(); ++i)
-        seed = hash(seed, key.segmentAt(i));
-    return seed;
+    return qHashRange(key.begin(), key.end(), seed);
 }
 
 QT_END_NAMESPACE

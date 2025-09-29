@@ -326,7 +326,7 @@ QDebug operator<<(QDebug d, IDataObject *dataObj)
             }
         }
     } else {
-        d << '0';
+        d << "0x0";
     }
     d << ')';
     return d;

@@ -3169,6 +3169,10 @@ void QQuickItemPrivate::derefWindow()
     itemChange(QQuickItem::ItemSceneChange, (QQuickWindow *)nullptr);
 }
 
+qreal QQuickItemPrivate::effectiveDevicePixelRatio() const
+{
+    return (window ? window->effectiveDevicePixelRatio() : qApp->devicePixelRatio());
+}
 
 /*!
     Returns a transform that maps points from window space into item space.

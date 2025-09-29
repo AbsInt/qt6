@@ -9,7 +9,7 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qthread.h>
-#include <QtCore/private/qeventdispatcher_wasm_p.h>
+#include <QtCore/private/qwasmglobal_p.h>
 #include <QtCore/private/qoffsetstringarray_p.h>
 #include <QtCore/private/qtools_p.h>
 
@@ -281,7 +281,7 @@ void QNetworkReplyWasmImplPrivate::doSendRequest()
         }
     }
 
-    QEventDispatcherWasm::runOnMainThread([attr, fetchContext = m_fetchContext]() mutable {
+    qwasmglobal::runOnMainThread([attr, fetchContext = m_fetchContext]() mutable {
         std::unique_lock lock{ fetchContext->mutex };
         if (fetchContext->state == FetchContext::State::CANCELED) {
             fetchContext->state = FetchContext::State::FINISHED;

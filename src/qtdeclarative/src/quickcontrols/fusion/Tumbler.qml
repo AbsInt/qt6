@@ -43,4 +43,11 @@ T.Tumbler {
             }
         }
     }
+
+    background: Rectangle {
+        visible: Fusion.highContrast
+        border.color: control.visualFocus ? Fusion.highlight(control.palette) : Fusion.outline(control.palette)
+        color: "transparent"
+        radius: 2
+    }
 }

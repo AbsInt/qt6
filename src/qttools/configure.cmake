@@ -30,7 +30,7 @@ endif()
 qt_feature("assistant" PRIVATE
     LABEL "Qt Assistant"
     PURPOSE "Qt Assistant is a tool for viewing on-line documentation in Qt help file format."
-    CONDITION TARGET Qt::Widgets AND TARGET Qt::Network AND QT_FEATURE_png AND QT_FEATURE_pushbutton AND QT_FEATURE_toolbutton AND (sqlite_plugin_available OR QT_BUILD_SHARED_LIBS)
+    CONDITION sqlite_plugin_available OR QT_BUILD_SHARED_LIBS
 )
 qt_feature("clang" PRIVATE
     LABEL "libclang found"
@@ -44,10 +44,6 @@ qt_feature("qdoc" PRIVATE
     LABEL "QDoc"
     PURPOSE "QDoc is Qt's documentation generator for C++ and QML projects."
     CONDITION TARGET Qt::QmlPrivate AND QT_FEATURE_clang AND QT_FEATURE_commandlineparser AND QT_FEATURE_thread AND QT_LIB_CLANG_VERSION VERSION_GREATER_EQUAL QDOC_MINIMUM_CLANG_VERSION
-)
-qt_feature("clangcpp" PRIVATE
-    LABEL "Clang-based lupdate parser"
-    CONDITION QT_FEATURE_clang_rtti AND (NOT MSVC OR MSVC_VERSION LESS "1939" OR QT_LIB_CLANG_VERSION_MAJOR GREATER_EQUAL "16")
 )
 qt_feature("designer" PRIVATE
     LABEL "Qt Widgets Designer"
@@ -96,10 +92,15 @@ qt_feature("qtplugininfo" PRIVATE
     PURPOSE "qtplugininfo dumps metadata about Qt plugins in JSON format."
     CONDITION QT_FEATURE_commandlineparser AND QT_FEATURE_library AND (android_app OR NOT ANDROID)
 )
+qt_feature("fullqthelp" PUBLIC
+    LABEL "fullqthelp"
+    PURPOSE "Builds Help with Gui and Widget dependency."
+    CONDITION (TARGET Qt::Widgets) AND (TARGET Qt::Network) AND QT_FEATURE_png AND
+        QT_FEATURE_pushbutton AND QT_FEATURE_toolbutton
+)
 qt_configure_add_summary_section(NAME "Qt Tools")
 qt_configure_add_summary_entry(ARGS "assistant")
 qt_configure_add_summary_entry(ARGS "clang")
-qt_configure_add_summary_entry(ARGS "clangcpp")
 qt_configure_add_summary_entry(ARGS "designer")
 qt_configure_add_summary_entry(ARGS "distancefieldgenerator")
 #qt_configure_add_summary_entry(ARGS "kmap2qmap")
@@ -141,29 +142,6 @@ qt_configure_add_report_entry(
     TYPE WARNING
     MESSAGE "${QDOC_CLANG_VERSION_WARNING}"
     CONDITION QT_LIB_CLANG_VERSION VERSION_LESS QDOC_MINIMUM_CLANG_VERSION
-)
-
-set(clangcpp_warn_msg "")
-if(QT_FEATURE_clang AND NOT QT_FEATURE_clang_rtti)
-    string(APPEND clangcpp_warn_msg
-        "LLVM was found, but it was not built with RTTI support.
-Consider using a different prebuilt LLVM package or building LLVM with RTTI support to
-enable the Clang-based lupdate parser.
-Configuring LLVM with RTTI support can be done by setting the LLVM_ENABLE_RTTI CMake
-variable to ON. See https://llvm.org/docs/CMake.html#building-llvm-with-cmake
-and https://llvm.org/docs/CMake.html#llvm-related-variables for details.
-"
-    )
-endif()
-string(APPEND clangcpp_warn_msg
-    "The Clang-based lupdate parser will not be available. "
-    "Suitable LLVM and Clang C++ libraries have not been found. "
-    "You will need to set the FEATURE_clangcpp CMake variable to ON to re-evaluate this check."
-)
-qt_configure_add_report_entry(
-    TYPE WARNING
-    MESSAGE "${clangcpp_warn_msg}"
-    CONDITION NOT QT_FEATURE_clangcpp
 )
 
 qt_configure_add_report_entry(

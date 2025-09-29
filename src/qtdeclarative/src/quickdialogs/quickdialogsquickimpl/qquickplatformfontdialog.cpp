@@ -10,6 +10,7 @@
 #include <QtQml/qqmlcomponent.h>
 #include <QtQuick/qquickwindow.h>
 #include <QtQuickTemplates2/private/qquickdialog_p.h>
+#include <QtQuickTemplates2/private/qquickdialog_p_p.h>
 #include <QtQuickTemplates2/private/qquickpopup_p_p.h>
 #include <QtQuickTemplates2/private/qquickpopupanchors_p.h>
 
@@ -125,7 +126,7 @@ bool QQuickPlatformFontDialog::show(Qt::WindowFlags flags, Qt::WindowModality mo
     m_dialog->setOptions(options);
 
     m_dialog->init();
-
+    m_dialog->setWindowModality(modality);
     m_dialog->open();
     return true;
 }

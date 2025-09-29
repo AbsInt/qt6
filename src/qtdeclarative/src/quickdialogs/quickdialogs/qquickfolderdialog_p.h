@@ -32,7 +32,7 @@ class Q_QUICKDIALOGS2_EXPORT QQuickFolderDialog : public QQuickAbstractDialog
     Q_PROPERTY(QFileDialogOptions::FileDialogOptions options READ options WRITE setOptions RESET resetOptions NOTIFY optionsChanged FINAL)
     Q_PROPERTY(QString acceptLabel READ acceptLabel WRITE setAcceptLabel RESET resetAcceptLabel NOTIFY acceptLabelChanged FINAL)
     Q_PROPERTY(QString rejectLabel READ rejectLabel WRITE setRejectLabel RESET resetRejectLabel NOTIFY rejectLabelChanged FINAL)
-    Q_FLAGS(QFileDialogOptions::FileDialogOptions)
+    QML_EXTENDED_NAMESPACE(QFileDialogOptions)
     QML_NAMED_ELEMENT(FolderDialog)
     QML_ADDED_IN_VERSION(6, 3)
 

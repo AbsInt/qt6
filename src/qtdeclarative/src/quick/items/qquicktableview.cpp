@@ -971,7 +971,7 @@
 /*!
     \qmlmethod QtQuick::TableView::positionViewAtRow(int row, PositionMode mode, real offset, rect subRect)
 
-    Positions {Flickable::}{contentY} such that \a row is at the position specified
+    Positions \l {Flickable::}{contentY} such that \a row is at the position specified
     by \a mode, \a offset and \a subRect.
 
     Convenience method for calling
@@ -983,7 +983,7 @@
 /*!
     \qmlmethod QtQuick::TableView::positionViewAtColumn(int column, PositionMode mode, real offset, rect subRect)
 
-    Positions {Flickable::}{contentX} such that \a column is at the position specified
+    Positions \l {Flickable::}{contentX} such that \a column is at the position specified
     by \a mode, \a offset and \a subRect.
 
     Convenience method for calling
@@ -2395,7 +2395,7 @@ void QQuickTableViewPrivate::updateContentWidth()
     Q_Q(QQuickTableView);
 
     if (syncHorizontally) {
-        QBoolBlocker fixupGuard(inUpdateContentSize, true);
+        QScopedValueRollback fixupGuard(inUpdateContentSize, true);
         q->QQuickFlickable::setContentWidth(syncView->contentWidth());
         return;
     }
@@ -2407,7 +2407,7 @@ void QQuickTableViewPrivate::updateContentWidth()
     }
 
     if (loadedItems.isEmpty()) {
-        QBoolBlocker fixupGuard(inUpdateContentSize, true);
+        QScopedValueRollback fixupGuard(inUpdateContentSize, true);
         if (model && model->count() > 0 && tableModel && tableModel->delegate())
             q->QQuickFlickable::setContentWidth(kDefaultColumnWidth);
         else
@@ -2422,7 +2422,7 @@ void QQuickTableViewPrivate::updateContentWidth()
     const qreal estimatedRemainingWidth = remainingColumnWidths + remainingSpacing;
     const qreal estimatedWidth = loadedTableOuterRect.right() + estimatedRemainingWidth;
 
-    QBoolBlocker fixupGuard(inUpdateContentSize, true);
+    QScopedValueRollback fixupGuard(inUpdateContentSize, true);
     q->QQuickFlickable::setContentWidth(estimatedWidth);
 }
 
@@ -2431,7 +2431,7 @@ void QQuickTableViewPrivate::updateContentHeight()
     Q_Q(QQuickTableView);
 
     if (syncVertically) {
-        QBoolBlocker fixupGuard(inUpdateContentSize, true);
+        QScopedValueRollback fixupGuard(inUpdateContentSize, true);
         q->QQuickFlickable::setContentHeight(syncView->contentHeight());
         return;
     }
@@ -2443,7 +2443,7 @@ void QQuickTableViewPrivate::updateContentHeight()
     }
 
     if (loadedItems.isEmpty()) {
-        QBoolBlocker fixupGuard(inUpdateContentSize, true);
+        QScopedValueRollback fixupGuard(inUpdateContentSize, true);
         if (model && model->count() > 0 && tableModel && tableModel->delegate())
             q->QQuickFlickable::setContentHeight(kDefaultRowHeight);
         else
@@ -2458,7 +2458,7 @@ void QQuickTableViewPrivate::updateContentHeight()
     const qreal estimatedRemainingHeight = remainingRowHeights + remainingSpacing;
     const qreal estimatedHeight = loadedTableOuterRect.bottom() + estimatedRemainingHeight;
 
-    QBoolBlocker fixupGuard(inUpdateContentSize, true);
+    QScopedValueRollback fixupGuard(inUpdateContentSize, true);
     q->QQuickFlickable::setContentHeight(estimatedHeight);
 }
 
@@ -2874,7 +2874,7 @@ FxTableItem *QQuickTableViewPrivate::loadFxTableItem(const QPoint &cell, QQmlInc
 
     // Note that even if incubation mode is asynchronous, the item might
     // be ready immediately since the model has a cache of items.
-    QBoolBlocker guard(blockItemCreatedCallback);
+    QScopedValueRollback guard(blockItemCreatedCallback, true);
     auto item = createFxTableItem(cell, incubationMode);
     qCDebug(lcTableViewDelegateLifecycle) << cell << "ready?" << bool(item);
     return item;
@@ -4210,7 +4210,7 @@ bool QQuickTableViewPrivate::updateTable()
     // to load async), we return false.
 
     Q_TABLEVIEW_ASSERT(!polishing, "recursive updatePolish() calls are not allowed!");
-    QBoolBlocker polishGuard(polishing, true);
+    QScopedValueRollback polishGuard(polishing, true);
 
     if (loadRequest.isActive()) {
         // We're currently loading items async to build a new edge in the table. We see the loading
@@ -4510,6 +4510,7 @@ void QQuickTableViewPrivate::syncWithPendingChanges()
     syncViewportRect();
     syncModel();
     syncDelegate();
+    syncDelegateModelAccess();
     syncSyncView();
     syncPositionView();
 
@@ -4558,34 +4559,51 @@ void QQuickTableViewPrivate::syncDelegate()
         tableModel->setDelegate(assignedDelegate);
 }
 
+void QQuickTableViewPrivate::syncDelegateModelAccess()
+{
+    if (!tableModel) {
+        // Only the tableModel uses the delegateModelAccess assigned to a
+        // TableView. DelegateModel has its own delegateModelAccess, and
+        // ObjectModel doesn't use one.
+        return;
+    }
+
+    tableModel->setDelegateModelAccess(assignedDelegateModelAccess);
+}
+
 QVariant QQuickTableViewPrivate::modelImpl() const
 {
-    return assignedModel;
+    if (needsModelSynchronization)
+        return assignedModel;
+    if (tableModel)
+        return tableModel->model();
+    return QVariant::fromValue(model);
 }
 
 void QQuickTableViewPrivate::setModelImpl(const QVariant &newModel)
 {
     assignedModel = newModel;
+    needsModelSynchronization = true;
     scheduleRebuildTable(QQuickTableViewPrivate::RebuildOption::All);
     emit q_func()->modelChanged();
 }
 
 void QQuickTableViewPrivate::syncModel()
 {
-    if (compareModel(modelVariant, assignedModel))
+    if (tableModel) {
+        if (tableModel->model() == assignedModel)
+            return;
+    } else if (QVariant::fromValue(model) == assignedModel) {
         return;
+    }
 
     if (model) {
         disconnectFromModel();
         releaseLoadedItems(QQmlTableInstanceModel::NotReusable);
     }
 
-    modelVariant = assignedModel;
-    QVariant effectiveModelVariant = modelVariant;
-    if (effectiveModelVariant.userType() == qMetaTypeId<QJSValue>())
-        effectiveModelVariant = effectiveModelVariant.value<QJSValue>().toVariant();
-
-    const auto instanceModel = qobject_cast<QQmlInstanceModel *>(qvariant_cast<QObject*>(effectiveModelVariant));
+    const auto instanceModel = qobject_cast<QQmlInstanceModel *>(
+                qvariant_cast<QObject *>(assignedModel));
 
     if (instanceModel) {
         if (tableModel) {
@@ -4596,9 +4614,10 @@ void QQuickTableViewPrivate::syncModel()
     } else {
         if (!tableModel)
             createWrapperModel();
-        tableModel->setModel(effectiveModelVariant);
+        tableModel->setModel(assignedModel);
     }
 
+    needsModelSynchronization = false;
     connectToModel();
 }
 
@@ -4636,7 +4655,7 @@ void QQuickTableViewPrivate::syncSyncView()
     syncVertically = syncView && assignedSyncDirection & Qt::Vertical;
 
     if (syncHorizontally) {
-        QBoolBlocker fixupGuard(inUpdateContentSize, true);
+        QScopedValueRollback fixupGuard(inUpdateContentSize, true);
         q->setColumnSpacing(syncView->columnSpacing());
         q->setLeftMargin(syncView->leftMargin());
         q->setRightMargin(syncView->rightMargin());
@@ -4658,7 +4677,7 @@ void QQuickTableViewPrivate::syncSyncView()
     }
 
     if (syncVertically) {
-        QBoolBlocker fixupGuard(inUpdateContentSize, true);
+        QScopedValueRollback fixupGuard(inUpdateContentSize, true);
         q->setRowSpacing(syncView->rowSpacing());
         q->setTopMargin(syncView->topMargin());
         q->setBottomMargin(syncView->bottomMargin());
@@ -4735,6 +4754,11 @@ void QQuickTableViewPrivate::connectToModel()
     } else {
         QObjectPrivate::connect(model, &QQmlInstanceModel::modelUpdated, this, &QQuickTableViewPrivate::modelUpdated);
     }
+
+    if (tableModel) {
+        QObject::connect(tableModel, &QQmlTableInstanceModel::modelChanged,
+                         q, &QQuickTableView::modelChanged);
+    }
 }
 
 void QQuickTableViewPrivate::disconnectFromModel()
@@ -4760,6 +4784,11 @@ void QQuickTableViewPrivate::disconnectFromModel()
         disconnect(aim, &QAbstractItemModel::layoutChanged, this, &QQuickTableViewPrivate::layoutChangedCallback);
     } else {
         QObjectPrivate::disconnect(model, &QQmlInstanceModel::modelUpdated, this, &QQuickTableViewPrivate::modelUpdated);
+    }
+
+    if (tableModel) {
+        QObject::disconnect(tableModel, &QQmlTableInstanceModel::modelChanged,
+                            q, &QQuickTableView::modelChanged);
     }
 }
 
@@ -4860,13 +4889,6 @@ void QQuickTableViewPrivate::modelResetCallback()
     Q_Q(QQuickTableView);
     q->closeEditor();
     scheduleRebuildTable(RebuildOption::All);
-}
-
-bool QQuickTableViewPrivate::compareModel(const QVariant& model1, const QVariant& model2) const
-{
-    return (model1 == model2 ||
-            (model1.userType() == qMetaTypeId<QJSValue>() && model2.userType() == qMetaTypeId<QJSValue>() &&
-                                 model1.value<QJSValue>().strictlyEquals(model2.value<QJSValue>())));
 }
 
 void QQuickTableViewPrivate::positionViewAtRow(int row, Qt::Alignment alignment, qreal offset, const QRectF subRect)
@@ -5023,7 +5045,7 @@ void QQuickTableViewPrivate::setLocalViewportX(qreal contentX)
     // rebuilds or updates. We use this function internally to distinguish
     // external flicking from internal sync-ing of the content view.
     Q_Q(QQuickTableView);
-    QBoolBlocker blocker(inSetLocalViewportPos, true);
+    QScopedValueRollback blocker(inSetLocalViewportPos, true);
 
     if (qFuzzyCompare(contentX, q->contentX()))
         return;
@@ -5037,7 +5059,7 @@ void QQuickTableViewPrivate::setLocalViewportY(qreal contentY)
     // rebuilds or updates. We use this function internally to distinguish
     // external flicking from internal sync-ing of the content view.
     Q_Q(QQuickTableView);
-    QBoolBlocker blocker(inSetLocalViewportPos, true);
+    QScopedValueRollback blocker(inSetLocalViewportPos, true);
 
     if (qFuzzyCompare(contentY, q->contentY()))
         return;
@@ -5220,7 +5242,7 @@ bool QQuickTableViewPrivate::canEdit(const QModelIndex tappedIndex, bool warn)
 void QQuickTableViewPrivate::syncViewportPosRecursive()
 {
     Q_Q(QQuickTableView);
-    QBoolBlocker recursionGuard(inSyncViewportPosRecursive, true);
+    QScopedValueRollback recursionGuard(inSyncViewportPosRecursive, true);
 
     if (syncView) {
         auto syncView_d = syncView->d_func();
@@ -5785,11 +5807,16 @@ QVariant QQuickTableView::model() const
 void QQuickTableView::setModel(const QVariant &newModel)
 {
     Q_D(QQuickTableView);
-    if (d->compareModel(newModel, d->assignedModel))
+
+    QVariant model = newModel;
+    if (model.userType() == qMetaTypeId<QJSValue>())
+        model = model.value<QJSValue>().toVariant();
+
+    if (model == d->assignedModel)
         return;
 
     closeEditor();
-    d->setModelImpl(newModel);
+    d->setModelImpl(model);
     if (d->selectionModel)
         d->selectionModel->setModel(d->selectionSourceModel());
 }
@@ -5825,6 +5852,30 @@ void QQuickTableView::setEditTriggers(QQuickTableView::EditTriggers editTriggers
     d->editTriggers = editTriggers;
 
     emit editTriggersChanged();
+}
+
+/*!
+    \qmlproperty enumeration QtQuick::TableView::delegateModelAccess
+
+    \include delegatemodelaccess.qdocinc
+*/
+QQmlDelegateModel::DelegateModelAccess QQuickTableView::delegateModelAccess() const
+{
+    Q_D(const QQuickTableView);
+    return d->assignedDelegateModelAccess;
+}
+
+void QQuickTableView::setDelegateModelAccess(
+        QQmlDelegateModel::DelegateModelAccess delegateModelAccess)
+{
+    Q_D(QQuickTableView);
+    if (delegateModelAccess == d->assignedDelegateModelAccess)
+        return;
+
+    d->assignedDelegateModelAccess = delegateModelAccess;
+    d->scheduleRebuildTable(QQuickTableViewPrivate::RebuildOption::All);
+
+    emit delegateModelAccessChanged();
 }
 
 bool QQuickTableView::reuseItems() const

@@ -18,7 +18,7 @@
 
 #include "QtCore/qlibrary.h"
 
-#include "QtCore/private/qfactoryloader_p.h"
+#include "QtCore/private/qplugin_p.h"
 #include "QtCore/qloggingcategory.h"
 #include "QtCore/qmutex.h"
 #include "QtCore/qplugin.h"
@@ -83,6 +83,8 @@ public:
     {
 #ifdef Q_OS_WIN
         return {};
+#elif defined(Q_OS_CYGWIN)
+        return u"cyg";
 #else
         return u"lib";
 #endif

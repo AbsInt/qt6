@@ -44,7 +44,6 @@
 #include <QtCore/qoperatingsystemversion.h>
 
 #include <dwmapi.h>
-#include <gdiplus.h>
 
 #if QT_CONFIG(vulkan)
 #include "qwindowsvulkaninstance.h"
@@ -943,10 +942,6 @@ QWindowsWindowData
                                          0, 0, 0,
                                          context->frameWidth, titleBarHeight,
                                          nullptr, nullptr, appinst, nullptr);
-    if (w->flags().testFlags(Qt::ExpandedClientAreaHint)) {
-        SetParent(result.hwndTitlebar, result.hwnd);
-        ShowWindow(result.hwndTitlebar, SW_SHOW);
-    }
 
     qCDebug(lcQpaWindow).nospace()
         << "CreateWindowEx: returns " << w << ' ' << result.hwnd << " obtained geometry: "
@@ -1162,13 +1157,17 @@ QMargins QWindowsGeometryHint::frame(const QWindow *w, const QRect &geometry,
 
 bool QWindowsGeometryHint::handleCalculateSize(const QWindow *window, const QMargins &customMargins, const MSG &msg, LRESULT *result)
 {
+    // Prevent adding any border for frameless window
+    if (msg.wParam && window->flags() & Qt::FramelessWindowHint) {
+        *result = 0;
+        return true;
+    }
     const QWindowsWindow *platformWindow = QWindowsWindow::windowsWindowOf(window);
     // In case the platformwindow was not yet created, use the initial windowflags provided by the user.
     const bool clientAreaExpanded = platformWindow != nullptr ? platformWindow->isClientAreaExpanded() : window->flags() & Qt::ExpandedClientAreaHint;
     // Return 0 to remove the window's border
     if (msg.wParam && clientAreaExpanded) {
         // Prevent content from being cutoff by border for maximized, but not fullscreened windows.
-        //if (IsZoomed(msg.hwnd) && window->visibility() != QWindow::FullScreen) {
         const bool maximized = IsZoomed(msg.hwnd) && window->visibility() != QWindow::FullScreen;
         auto *ncp = reinterpret_cast<NCCALCSIZE_PARAMS *>(msg.lParam);
         RECT *clientArea = &ncp->rgrc[0];
@@ -1392,6 +1391,24 @@ void QWindowsBaseWindow::setCustomMargins(const QMargins &)
     Q_UNIMPLEMENTED();
 }
 
+bool QWindowsBaseWindow::windowEvent(QEvent *event)
+{
+    switch (event->type()) {
+    case QEvent::ChildWindowAdded:
+        if (!(GetWindowLongPtr(handle(), GWL_STYLE) & WS_CLIPCHILDREN)) {
+            auto *childWindowEvent = static_cast<QChildWindowEvent*>(event);
+            qWarning() << childWindowEvent->child() << "added as child to"
+                << window() << "which does not have WS_CLIPCHILDREN set."
+                << "This will result in drawing artifacts!";
+        }
+        break;
+    default:
+        break;
+    }
+
+    return QPlatformWindow::windowEvent(event);
+}
+
 /*!
     \class QWindowsDesktopWindow
     \brief Window wrapping GetDesktopWindow not allowing any manipulation.
@@ -1579,6 +1596,12 @@ QWindowsWindow::QWindowsWindow(QWindow *aWindow, const QWindowsWindowData &data)
 #endif
 {
     QWindowsContext::instance()->addWindow(m_data.hwnd, this);
+
+    if (aWindow->flags().testFlags(Qt::ExpandedClientAreaHint)) {
+        SetParent(m_data.hwndTitlebar, m_data.hwnd);
+        ShowWindow(m_data.hwndTitlebar, SW_SHOW);
+    }
+
     const Qt::WindowType type = aWindow->type();
     if (type == Qt::Desktop)
         return; // No further handling for Qt::Desktop
@@ -2229,7 +2252,7 @@ static QString msgUnableToSetGeometry(const QWindowsWindow *platformWindow,
 
 void QWindowsWindow::setGeometry(const QRect &rectIn)
 {
-    QBoolBlocker b(m_inSetgeometry);
+    QScopedValueRollback b(m_inSetgeometry, true);
 
     QRect rect = rectIn;
     // This means it is a call from QWindow::setFramePosition() and
@@ -2893,7 +2916,7 @@ bool QWindowsWindow::windowEvent(QEvent *event)
         break;
     }
 
-    return QPlatformWindow::windowEvent(event);
+    return QWindowsBaseWindow::windowEvent(event);
 }
 
 void QWindowsWindow::propagateSizeHints()
@@ -3266,6 +3289,7 @@ bool QWindowsWindow::handleNonClientHitTest(const QPoint &globalPos, LRESULT *re
     const QWindow *w = window();
     const QPoint localPos = w->mapFromGlobal(QHighDpi::fromNativePixels(globalPos, w));
     const QRect geom = geometry();
+    static auto oldMouseButtonState = Qt::NoButton;
 
     if (m_data.flags.testFlags(Qt::ExpandedClientAreaHint)) {
         bool isDefaultTitleBar = !w->flags().testFlag(Qt::CustomizeWindowHint);
@@ -3274,17 +3298,18 @@ bool QWindowsWindow::handleNonClientHitTest(const QPoint &globalPos, LRESULT *re
                                                                                                      Qt::WindowMaximizeButtonHint|
                                                                                                      Qt::WindowCloseButtonHint);
         const int border = (IsZoomed(m_data.hwnd) || isFullScreen_sys()) ? 0 : getResizeBorderThickness(savedDpi());
+        const int titleBarHeight = getTitleBarHeight_sys(savedDpi());
+        const int titleButtonWidth = titleBarHeight * 1.5;
+        const bool mouseButtonsSwapped = GetSystemMetrics(SM_SWAPBUTTON);
+        auto mouseButtons = Qt::NoButton;
+        if (mouseButtonsSwapped)
+            mouseButtons = GetAsyncKeyState(VK_LBUTTON) != 0 ? Qt::RightButton : (GetAsyncKeyState(VK_RBUTTON) ? Qt::LeftButton : Qt::NoButton);
+        else
+            mouseButtons = GetAsyncKeyState(VK_LBUTTON) != 0 ? Qt::LeftButton : (GetAsyncKeyState(VK_RBUTTON) ? Qt::RightButton : Qt::NoButton);
+
+        *result = HTCLIENT;
         if (isCustomized || isDefaultTitleBar) {
-            *result = HTCLIENT;
-            const int titleBarHeight = getTitleBarHeight_sys(savedDpi());
-            const int titleButtonWidth = titleBarHeight * 1.5;
             int buttons = 1;
-            const bool mouseButtonsSwapped = GetSystemMetrics(SM_SWAPBUTTON);
-            auto mouseButtons = Qt::NoButton;
-            if (mouseButtonsSwapped)
-                mouseButtons = GetAsyncKeyState(VK_LBUTTON) != 0 ? Qt::RightButton : (GetAsyncKeyState(VK_RBUTTON) ? Qt::LeftButton : Qt::NoButton);
-            else
-                mouseButtons = GetAsyncKeyState(VK_LBUTTON) != 0 ? Qt::LeftButton : (GetAsyncKeyState(VK_RBUTTON) ? Qt::RightButton : Qt::NoButton);
 
             if (globalPos.y() < geom.top() + titleBarHeight) {
                 if (m_data.flags.testFlags(Qt::WindowCloseButtonHint) || isDefaultTitleBar) {
@@ -3312,17 +3337,32 @@ bool QWindowsWindow::handleNonClientHitTest(const QPoint &globalPos, LRESULT *re
                 } if ((isCustomized || isDefaultTitleBar) &&
                       *result == HTCLIENT){
                     QWindow* wnd = window();
-                    if (mouseButtons != Qt::NoButton) {
-                        QMouseEvent event(QEvent::MouseButtonPress, localPos, globalPos, mouseButtons, mouseButtons, Qt::NoModifier);
-                        QGuiApplication::sendEvent(wnd, &event);
-                        if (!event.isAccepted() && mouseButtons == Qt::RightButton)
+                    if (mouseButtons != oldMouseButtonState) {
+                        auto mouseEventType = mouseButtons == Qt::NoButton ? QEvent::MouseButtonRelease : QEvent::MouseButtonPress;
+                        auto mouseEventButtons = mouseEventType == QEvent::MouseButtonPress ? mouseButtons : oldMouseButtonState;
+                        bool accepted = QWindowSystemInterface::handleMouseEvent<QWindowSystemInterface::SynchronousDelivery>(wnd, QHighDpi::toNativeLocalPosition(localPos, w), globalPos, mouseEventButtons, mouseEventButtons, mouseEventType);
+                        if (!accepted && mouseButtons == Qt::RightButton)
                             *result = HTSYSMENU;
-                        else if (!event.isAccepted())
+                        else if (!accepted && globalPos.y() < geom.top() + titleBarHeight)
                             *result = HTCAPTION;
                     }
                 }
             }
+        } else if (w->flags().testFlag(Qt::CustomizeWindowHint)) {
+
+            QWindow* wnd = window();
+            if (mouseButtons != oldMouseButtonState) {
+                auto mouseEventType = mouseButtons == Qt::NoButton ? QEvent::MouseButtonRelease : QEvent::MouseButtonPress;
+                auto mouseEventButtons = mouseEventType == QEvent::MouseButtonPress ? mouseButtons : oldMouseButtonState;
+                bool accepted = QWindowSystemInterface::handleMouseEvent<QWindowSystemInterface::SynchronousDelivery>(wnd, QHighDpi::toNativeLocalPosition(localPos, w), globalPos, mouseEventButtons, mouseEventButtons, mouseEventType);
+                if (!accepted && mouseButtons == Qt::RightButton)
+                    *result = HTSYSMENU;
+                else if (!accepted && globalPos.y() < geom.top() + titleBarHeight)
+                    *result = HTCAPTION;
+            }
         }
+        oldMouseButtonState = mouseButtons;
+
         if (border != 0) {
             const bool left   = (globalPos.x() >= geom.left()) && (globalPos.x() < geom.left() + border);
             const bool right  = (globalPos.x() >  geom.right() - border) && (globalPos.x() <= geom.right());
@@ -3421,6 +3461,18 @@ bool QWindowsWindow::handleNonClientHitTest(const QPoint &globalPos, LRESULT *re
     }
     if (fixedWidth && (localPos.x() < 0 || localPos.x() >= size.width())) {
         *result = HTBORDER; // Unspecified border, no resize cursor.
+        return true;
+    }
+    return false;
+}
+
+bool QWindowsWindow::handleNonClientActivate(LRESULT *result) const
+{
+    // If this window is frameless we choose to consume the event,
+    // since the default logic causes the window title to appear.
+    // QTBUG-127116
+    if (m_data.flags & Qt::FramelessWindowHint) {
+        *result = true;
         return true;
     }
     return false;

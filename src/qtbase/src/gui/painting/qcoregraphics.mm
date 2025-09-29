@@ -10,6 +10,13 @@
 #include <QtCore/qdebug.h>
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qoperatingsystemversion.h>
+#include <QtGui/qcolorspace.h>
+
+#if defined(Q_OS_MACOS)
+# include <AppKit/AppKit.h>
+#elif defined(QT_PLATFORM_UIKIT)
+# include <UIKit/UIKit.h>
+#endif
 
 QT_USE_NAMESPACE
 
@@ -74,6 +81,11 @@ QImage qt_mac_toQImage(CGImageRef image)
     CGRect rect = CGRectMake(0, 0, w, h);
     QMacCGContext ctx(&ret);
     qt_mac_drawCGImage(ctx, &rect, image);
+
+    CGColorSpaceRef colorSpace = CGImageGetColorSpace(image);
+    QCFType<CFDataRef> iccData = CGColorSpaceCopyICCData(colorSpace);
+    ret.setColorSpace(QColorSpace::fromIccProfile(QByteArray::fromRawCFData(iccData)));
+
     return ret;
 }
 

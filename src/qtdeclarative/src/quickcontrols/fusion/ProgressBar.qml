@@ -25,7 +25,7 @@ T.ProgressBar {
             width: (control.indeterminate ? 1.0 : control.position) * parent.width
 
             radius: 2
-            border.color: Qt.darker(Fusion.highlight(control.palette), 1.4)
+            border.color: Fusion.highContrast ? Fusion.outline(control.palette) : Qt.darker(Fusion.highlight(control.palette), 1.4)
             gradient: Gradient {
                 GradientStop {
                     position: 0

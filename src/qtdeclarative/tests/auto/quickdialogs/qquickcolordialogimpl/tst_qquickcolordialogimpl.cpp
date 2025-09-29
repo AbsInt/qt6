@@ -6,6 +6,7 @@
 #include <QtTest/qsignalspy.h>
 #include <QtQuick/qquickview.h>
 #include <QtQuick/private/qquicklistview_p.h>
+#include <QtQuick/private/qquickmousearea_p.h>
 #include <QtQuickControlsTestUtils/private/controlstestutils_p.h>
 #include <QtQuickControlsTestUtils/private/dialogstestutils_p.h>
 #include <QtQuickDialogs2/private/qquickcolordialog_p.h>
@@ -59,6 +60,8 @@ private slots:
     void workingInsideQQuickViewer_data();
     void workingInsideQQuickViewer();
     void dialogCanMoveBetweenWindows();
+    void checkModality_data();
+    void checkModality();
 
 private:
     bool closePopup(DialogTestHelper<QQuickColorDialog, QQuickColorDialogImpl> *dialogHelper,
@@ -460,7 +463,7 @@ void tst_QQuickColorDialogImpl::changeHex()
     // Modify the value in the TextField to something else.
     colorTextField->forceActiveFocus();
     colorTextField->select(1, colorTextField->text().size());
-    QVERIFY(colorTextField->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(colorTextField);
     QTest::keyClick(dialogHelper.popupWindow(), Qt::Key_Backspace);
     QTest::keyClick(dialogHelper.popupWindow(), '0');
     QTest::keyClick(dialogHelper.popupWindow(), '0');
@@ -550,7 +553,7 @@ void tst_QQuickColorDialogImpl::changeColorFromTextFields()
         dialogHelper.quickDialog->setHsl(false);
 
     textField->forceActiveFocus();
-    QVERIFY(textField->hasActiveFocus());
+    QVERIFY_ACTIVE_FOCUS(textField);
 
     // Simulate entering a new value.
     textField->setText(newValue);
@@ -657,6 +660,62 @@ void tst_QQuickColorDialogImpl::dialogCanMoveBetweenWindows()
 
     CLOSE_DIALOG("Ok");
 }
+
+void tst_QQuickColorDialogImpl::checkModality_data()
+{
+    QTest::addColumn<Qt::WindowModality>("modality");
+    QTest::addColumn<QColorDialogOptions::ColorDialogOption>("options");
+    QTest::addColumn<int>("expectedRootWindowClickCount");
+    QTest::addColumn<int>("expectedChildWindowClickCount");
+
+    QTest::newRow("nonModal") << Qt::NonModal << QColorDialogOptions::DontUseNativeDialog << 1 << 1;
+    QTest::newRow("windowModal") << Qt::WindowModal << QColorDialogOptions::DontUseNativeDialog << 0 << 1;
+    // Verify application modal case only for the platform which supports multiple windows
+    if (QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::MultipleWindows))
+        QTest::newRow("applicationModal") << Qt::ApplicationModal << QColorDialogOptions::DontUseNativeDialog << 0 << 0;
+}
+
+void tst_QQuickColorDialogImpl::checkModality()
+{
+    QFETCH(Qt::WindowModality, modality);
+    QFETCH(QColorDialogOptions::ColorDialogOption, options);
+    QFETCH(int, expectedRootWindowClickCount);
+    QFETCH(int, expectedChildWindowClickCount);
+
+    DialogTestHelper<QQuickColorDialog, QQuickColorDialogImpl> dialogHelper(this, "checkModality.qml");
+    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
+    QVERIFY(dialogHelper.waitForWindowActive());
+
+    dialogHelper.dialog->setModality(modality);
+    QCOMPARE(dialogHelper.dialog->modality(), modality);
+
+    dialogHelper.dialog->setOptions(options);
+    QCOMPARE(dialogHelper.dialog->options(), options);
+
+    OPEN_QUICK_DIALOG();
+    QVERIFY(dialogHelper.waitForPopupWindowActiveAndPolished());
+
+    auto *childWindow = dialogHelper.window()->property("childWindow").value<QQuickWindow *>();
+    QVERIFY(childWindow);
+
+    // Setting the child window transient parent as root window won't allow it to receive mouse
+    // events, causing WindowModal case not to be tested. Thus, resetting the transient parent.
+    if (modality == Qt::WindowModal)
+        childWindow->setTransientParent(nullptr);
+
+    const auto *rootMouseArea = dialogHelper.window()->property("rootMArea").value<QQuickMouseArea *>();
+    QVERIFY(rootMouseArea);
+    QSignalSpy rmaMouseSpy(rootMouseArea, &QQuickMouseArea::clicked);
+    QTest::mouseClick(dialogHelper.window(), Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
+    QCOMPARE(rmaMouseSpy.size(), expectedRootWindowClickCount);
+
+    const auto *childMouseArea = dialogHelper.window()->property("childMArea").value<QQuickMouseArea *>();
+    QVERIFY(childMouseArea);
+    QSignalSpy cmaMouseSpy(childMouseArea, &QQuickMouseArea::clicked);
+    QTest::mouseClick(childWindow, Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
+    QCOMPARE(cmaMouseSpy.size(), expectedChildWindowClickCount);
+}
+
 
 QTEST_MAIN(tst_QQuickColorDialogImpl)
 

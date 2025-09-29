@@ -8,13 +8,13 @@
 #if QT_CONFIG(shortcut)
 #include <QtQuickTemplates2/private/qquickshortcutcontext_p_p.h>
 
+QT_BEGIN_NAMESPACE
+
 // qtdeclarative/src/quick/util/qquickshortcut.cpp
 typedef bool (*ShortcutContextMatcher)(QObject *, Qt::ShortcutContext);
 extern ShortcutContextMatcher qt_quick_shortcut_context_matcher();
 extern void qt_quick_set_shortcut_context_matcher(ShortcutContextMatcher matcher);
 #endif
-
-QT_BEGIN_NAMESPACE
 
 Q_GHS_KEEP_REFERENCE(qml_register_types_QtQuick_Templates);
 Q_GHS_KEEP_REFERENCE(QQuickTemplates_initializeModule);

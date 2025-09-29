@@ -325,11 +325,14 @@ void QQmlMetaType::clearTypeRegistrations()
     data->nameToType.clear();
     data->urlToType.clear();
     data->typePropertyCaches.clear();
-    data->urlToNonFileImportType.clear();
     data->metaObjectToType.clear();
     data->undeletableTypes.clear();
     data->propertyCaches.clear();
-    data->inlineComponentTypes.clear();
+
+    qDeleteAll(data->metaTypeToValueType);
+    data->metaTypeToValueType.clear();
+
+    data->moduleImports.clear();
 
     // Avoid deletion recursion (via QQmlTypePrivate dtor) by moving them out of the way first.
     QQmlMetaTypeData::CompositeTypes emptyComposites;
@@ -545,19 +548,15 @@ QQmlType QQmlMetaType::registerCompositeSingletonType(
     QQmlMetaTypeDataPtr data;
 
     QString typeName = QString::fromUtf8(type.typeName);
-    bool fileImport = false;
-    if (*(type.uri) == '\0')
-        fileImport = true;
-    if (!checkRegistration(QQmlType::CompositeSingletonType, data, fileImport ? nullptr : type.uri,
-                           typeName, type.version, {})) {
+    if (!checkRegistration(
+                QQmlType::CompositeSingletonType, data, type.uri, typeName, type.version, {})) {
         return QQmlType();
     }
 
     QQmlTypePrivate *priv = createQQmlType(data, typeName, type, siinfo);
     addTypeToData(priv, data);
 
-    QQmlMetaTypeData::Files *files = fileImport ? &(data->urlToType) : &(data->urlToNonFileImportType);
-    files->insert(siinfo->url, priv);
+    data->urlToType.insert(siinfo->url, priv);
 
     return QQmlType(priv);
 }
@@ -571,19 +570,13 @@ QQmlType QQmlMetaType::registerCompositeType(const QQmlPrivate::RegisterComposit
     QQmlMetaTypeDataPtr data;
 
     QString typeName = QString::fromUtf8(type.typeName);
-    bool fileImport = false;
-    if (*(type.uri) == '\0')
-        fileImport = true;
-    if (!checkRegistration(QQmlType::CompositeType, data, fileImport?nullptr:type.uri, typeName,
-                           type.version, {})) {
+    if (!checkRegistration(QQmlType::CompositeType, data, type.uri, typeName, type.version, {}))
         return QQmlType();
-    }
 
     QQmlTypePrivate *priv = createQQmlType(data, typeName, type);
     addTypeToData(priv, data);
 
-    QQmlMetaTypeData::Files *files = fileImport ? &(data->urlToType) : &(data->urlToNonFileImportType);
-    files->insert(QQmlTypeLoader::normalize(type.url), priv);
+    data->urlToType.insert(QQmlTypeLoader::normalize(type.url), priv);
 
     return QQmlType(priv);
 }
@@ -712,11 +705,8 @@ QQmlType QQmlMetaType::findCompositeType(
 
     bool urlExists = true;
     auto found = data->urlToType.constFind(normalized);
-    if (found == data->urlToType.cend()) {
-        found = data->urlToNonFileImportType.constFind(normalized);
-        if (found == data->urlToNonFileImportType.cend())
-            urlExists = false;
-    }
+    if (found == data->urlToType.cend())
+        urlExists = false;
 
     if (urlExists) {
         if (compilationUnit.isNull())
@@ -741,15 +731,16 @@ static QQmlType doRegisterInlineComponentType(QQmlMetaTypeData *data, const QUrl
     priv->setName(QString(), url.fragment());
 
     priv->extraData.inlineComponentTypeData = url;
+    data->registerType(priv);
 
     addQQmlMetaTypeInterfaces(
             data, url, priv, QQmlPropertyCacheCreatorBase::createClassNameForInlineComponent(url));
-    const QQmlType result(priv);
-    priv->release();
+    data->urlToType.insert(url, priv);
 
-    data->inlineComponentTypes.insert(url, result);
+    data->idToType.insert(priv->typeId.id(), priv);
+    data->idToType.insert(priv->listId.id(), priv);
 
-    return result;
+    return QQmlType(priv);
 }
 
 QQmlType QQmlMetaType::findInlineComponentType(
@@ -759,11 +750,11 @@ QQmlType QQmlMetaType::findInlineComponentType(
 
     // If there is an "unclaimed" inline component type, we can "claim" it now. Otherwise
     // we have to create a new one.
-    const auto it = data->inlineComponentTypes.constFind(url);
-    if (it != data->inlineComponentTypes.constEnd()) {
-        const auto jt = data->compositeTypes.constFind(it->typeId().iface());
+    const auto it = data->urlToType.constFind(url);
+    if (it != data->urlToType.constEnd()) {
+        const auto jt = data->compositeTypes.constFind((*it)->typeId.iface());
         if (jt == data->compositeTypes.constEnd() || *jt == compilationUnit)
-            return *it;
+            return QQmlType(*it);
     }
 
     return doRegisterInlineComponentType(data, url);
@@ -1043,11 +1034,6 @@ QQmlType QQmlMetaType::typeForUrl(const QString &urlString,
     QQmlMetaTypeDataPtr data;
     {
         QQmlType ret(data->urlToType.value(url));
-        if (ret.isValid() && ret.sourceUrl() == url)
-            return ret;
-    }
-    {
-        QQmlType ret(data->urlToNonFileImportType.value(url));
         if (ret.isValid() && ret.sourceUrl() == url)
             return ret;
     }
@@ -1362,14 +1348,12 @@ QQmlType QQmlMetaType::qmlListType(QMetaType metaType)
 
     Returns null if no such type is registered.
 */
-QQmlType QQmlMetaType::qmlType(const QUrl &unNormalizedUrl, bool includeNonFileImports /* = false */)
+QQmlType QQmlMetaType::qmlType(const QUrl &unNormalizedUrl)
 {
     const QUrl url = QQmlTypeLoader::normalize(unNormalizedUrl);
     const QQmlMetaTypeDataPtr data;
 
     QQmlType type(data->urlToType.value(url));
-    if (!type.isValid() && includeNonFileImports)
-        type = QQmlType(data->urlToNonFileImportType.value(url));
 
     if (type.sourceUrl() == url)
         return type;
@@ -1380,9 +1364,9 @@ QQmlType QQmlMetaType::qmlType(const QUrl &unNormalizedUrl, bool includeNonFileI
 QQmlType QQmlMetaType::fetchOrCreateInlineComponentTypeForUrl(const QUrl &url)
 {
     QQmlMetaTypeDataPtr data;
-    const auto it = data->inlineComponentTypes.constFind(url);
-    if (it != data->inlineComponentTypes.constEnd())
-        return *it;
+    const auto it = data->urlToType.constFind(url);
+    if (it != data->urlToType.constEnd())
+        return QQmlType(*it);
 
     return doRegisterInlineComponentType(data, url);
 }
@@ -1528,11 +1512,10 @@ void QQmlMetaType::unregisterType(int typeIndex)
     const QQmlType type = data->types.value(typeIndex);
     if (const QQmlTypePrivate *d = type.priv()) {
         if (d->regType == QQmlType::CompositeType || d->regType == QQmlType::CompositeSingletonType)
-            removeFromInlineComponents(data->inlineComponentTypes, d);
+            removeFromInlineComponents(data->urlToType, d);
         removeQQmlTypePrivate(data->idToType, d);
         removeQQmlTypePrivate(data->nameToType, d);
         removeQQmlTypePrivate(data->urlToType, d);
-        removeQQmlTypePrivate(data->urlToNonFileImportType, d);
         removeQQmlTypePrivate(data->metaObjectToType, d);
         for (auto & module : data->uriToModule)
             module->remove(d);
@@ -1552,12 +1535,12 @@ void QQmlMetaType::registerMetaObjectForType(const QMetaObject *metaobject, QQml
 
 static bool hasActiveInlineComponents(const QQmlMetaTypeData *data, const QQmlTypePrivate *d)
 {
-    for (auto it = data->inlineComponentTypes.begin(), end = data->inlineComponentTypes.end();
+    for (auto it = data->urlToType.begin(), end = data->urlToType.end();
          it != end; ++it) {
         if (!QQmlMetaType::equalBaseUrls(it.key(), d->sourceUrl()))
             continue;
 
-        const QQmlTypePrivate *icPriv = it->priv();
+        const QQmlTypePrivate *icPriv = *it;
         if (icPriv && icPriv->count() > 1)
             return true;
     }
@@ -1618,12 +1601,11 @@ void QQmlMetaType::freeUnusedTypesAndCaches()
 
                 if (d->regType == QQmlType::CompositeType
                         || d->regType == QQmlType::CompositeSingletonType) {
-                    removeFromInlineComponents(data->inlineComponentTypes, d);
+                    removeFromInlineComponents(data->urlToType, d);
                 }
                 removeQQmlTypePrivate(data->idToType, d);
                 removeQQmlTypePrivate(data->nameToType, d);
                 removeQQmlTypePrivate(data->urlToType, d);
-                removeQQmlTypePrivate(data->urlToNonFileImportType, d);
                 removeQQmlTypePrivate(data->metaObjectToType, d);
 
                 for (auto &module : data->uriToModule)
@@ -1889,6 +1871,9 @@ static bool isInternalType(int idx)
 
 bool QQmlMetaType::isValueType(QMetaType type)
 {
+    if (type.flags().testFlag(QMetaType::PointerToQObject))
+        return false;
+
     if (!type.isValid() || isInternalType(type.id()))
         return false;
 
@@ -2016,11 +2001,8 @@ QQmlRefPointer<QV4::CompiledData::CompilationUnit> QQmlMetaType::obtainCompilati
     QQmlMetaTypeDataPtr data;
 
     auto found = data->urlToType.constFind(normalized);
-    if (found == data->urlToType.constEnd()) {
-        found = data->urlToNonFileImportType.constFind(normalized);
-        if (found == data->urlToNonFileImportType.constEnd())
-            return QQmlRefPointer<QV4::CompiledData::CompilationUnit>();
-    }
+    if (found == data->urlToType.constEnd())
+        return QQmlRefPointer<QV4::CompiledData::CompilationUnit>();
 
     const auto composite = data->compositeTypes.constFind(found.value()->typeId.iface());
     return composite == data->compositeTypes.constEnd()

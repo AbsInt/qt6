@@ -17,7 +17,7 @@ QQuickIconImagePrivate::~QQuickIconImagePrivate()
 bool QQuickIconImagePrivate::updateDevicePixelRatio(qreal targetDevicePixelRatio)
 {
     if (isThemeIcon) {
-        devicePixelRatio = calculateDevicePixelRatio();
+        devicePixelRatio = effectiveDevicePixelRatio();
         return true;
     }
 
@@ -42,7 +42,7 @@ void QQuickIconImage::load()
     if (size.height() <= 0)
         size.setHeight(height());
 
-    const qreal dpr = d->calculateDevicePixelRatio();
+    const qreal dpr = d->effectiveDevicePixelRatio();
 
     if (const auto *entry = QIconLoaderEngine::entryForSize(d->icon, size * dpr, qCeil(dpr))) {
         // First, try to load an icon from the theme (index.theme).
@@ -85,19 +85,13 @@ void QQuickIconImagePrivate::updateFillMode()
 
     updatingFillMode = true;
 
-    const QSize pixmapSize = QSize(currentPix->width(), currentPix->height()) / calculateDevicePixelRatio();
+    const QSize pixmapSize = QSize(currentPix->width(), currentPix->height()) / effectiveDevicePixelRatio();
     if (pixmapSize.width() > q->width() || pixmapSize.height() > q->height())
         q->setFillMode(QQuickImage::PreserveAspectFit);
     else
         q->setFillMode(QQuickImage::Pad);
 
     updatingFillMode = false;
-}
-
-qreal QQuickIconImagePrivate::calculateDevicePixelRatio() const
-{
-    Q_Q(const QQuickIconImage);
-    return q->window() ? q->window()->effectiveDevicePixelRatio() : qApp->devicePixelRatio();
 }
 
 QQuickIconImage::QQuickIconImage(QQuickItem *parent)

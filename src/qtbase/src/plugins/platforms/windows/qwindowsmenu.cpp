@@ -876,7 +876,7 @@ QDebug operator<<(QDebug d, const QPlatformMenuItem *i)
     if (i)
         static_cast<const QWindowsMenuItem *>(i)->formatDebug(d);
     else
-        d << '0';
+        d << "0x0";
     d << ')';
     return d;
 }
@@ -915,7 +915,7 @@ QDebug operator<<(QDebug d, const QPlatformMenu *m)
         static_cast<const QWindowsMenu *>(m)->formatDebug(d);
         d << ')';
     } else {
-        d << "QPlatformMenu(0)";
+        d << "QPlatformMenu(0x0)";
     }
     return d;
 }
@@ -929,7 +929,7 @@ QDebug operator<<(QDebug d, const QPlatformMenuBar *mb)
     if (mb)
         static_cast<const QWindowsMenuBar *>(mb)->formatDebug(d);
     else
-        d << '0';
+        d << "0x0";
     d << ')';
     return d;
 }

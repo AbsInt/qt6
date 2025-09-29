@@ -22,7 +22,13 @@ T.ScrollBar {
         implicitHeight: control.interactive ? 6 : 2
 
         radius: width / 2
-        color: control.pressed ? control.palette.dark : control.palette.mid
+        color: {
+            if (Qt.styleHints.accessibility.contrastPreference !== Qt.HighContrast)
+                return pressed ? control.palette.dark : control.palette.mid
+            else
+                return Color.blend(control.palette.text, control.palette.mid, pressed ? 0.0 : 0.3)
+        }
+
         opacity: 0.0
 
         states: State {
@@ -38,5 +44,11 @@ T.ScrollBar {
                 NumberAnimation { target: control.contentItem; duration: 200; property: "opacity"; to: 0.0 }
             }
         }
+    }
+
+    background: Rectangle {
+        visible: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast
+        opacity: control.contentItem.opacity
+        color: control.palette.mid
     }
 }

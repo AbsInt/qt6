@@ -48,6 +48,7 @@
 
 /*!
     \fn template <class T> void QQueue<T>::enqueue(const T& t)
+    \fn template <class T> void QQueue<T>::enqueue(T&& t)
 
     Adds value \a t to the tail of the queue.
 

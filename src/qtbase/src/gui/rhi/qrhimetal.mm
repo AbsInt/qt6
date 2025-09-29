@@ -14,6 +14,7 @@
 
 #include <QtCore/private/qcore_mac_p.h>
 #include <QtGui/private/qmetallayer_p.h>
+#include <QtGui/qpa/qplatformwindow_p.h>
 
 #ifdef Q_OS_MACOS
 #include <AppKit/AppKit.h>
@@ -1933,8 +1934,8 @@ void QRhiMetal::setBlendConstants(QRhiCommandBuffer *cb, const QColor &c)
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     Q_ASSERT(cbD->recordingPass == QMetalCommandBuffer::RenderPass);
 
-    [cbD->d->currentRenderPassEncoder setBlendColorRed: float(c.redF())
-      green: float(c.greenF()) blue: float(c.blueF()) alpha: float(c.alphaF())];
+    [cbD->d->currentRenderPassEncoder setBlendColorRed: c.redF()
+      green: c.greenF() blue: c.blueF() alpha: c.alphaF()];
 }
 
 void QRhiMetal::setStencilRef(QRhiCommandBuffer *cb, quint32 refValue)
@@ -2916,7 +2917,7 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             QMetalTexture *texD = QRHI_RES(QMetalTexture, u.rb.texture());
             QMetalSwapChain *swapChainD = nullptr;
             id<MTLTexture> src;
-            QSize srcSize;
+            QRect rect;
             bool is3D = false;
             if (texD) {
                 if (texD->samples > 1) {
@@ -2924,22 +2925,27 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                     continue;
                 }
                 is3D = texD->m_flags.testFlag(QRhiTexture::ThreeDimensional);
-                readback.pixelSize = q->sizeForMipLevel(u.rb.level(), texD->m_pixelSize);
+                if (u.rb.rect().isValid())
+                    rect = u.rb.rect();
+                else
+                    rect = QRect({0, 0}, q->sizeForMipLevel(u.rb.level(), texD->m_pixelSize));
                 readback.format = texD->m_format;
                 src = texD->d->tex;
-                srcSize = readback.pixelSize;
                 texD->lastActiveFrameSlot = currentFrameSlot;
             } else {
                 Q_ASSERT(currentSwapChain);
                 swapChainD = QRHI_RES(QMetalSwapChain, currentSwapChain);
-                readback.pixelSize = swapChainD->pixelSize;
+                if (u.rb.rect().isValid())
+                    rect = u.rb.rect();
+                else
+                    rect = QRect({0, 0}, swapChainD->pixelSize);
                 readback.format = swapChainD->d->rhiColorFormat;
                 // Multisample swapchains need nothing special since resolving
                 // happens when ending a renderpass.
                 const QMetalRenderTargetData::ColorAtt &colorAtt(swapChainD->rtWrapper.d->fb.colorAtt[0]);
                 src = colorAtt.resolveTex ? colorAtt.resolveTex : colorAtt.tex;
-                srcSize = swapChainD->rtWrapper.d->pixelSize;
             }
+            readback.pixelSize = rect.size();
 
             quint32 bpl = 0;
             textureFormatInfo(readback.format, readback.pixelSize, &bpl, &readback.bufSize, nullptr);
@@ -2949,8 +2955,8 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             [blitEnc copyFromTexture: src
                                       sourceSlice: NSUInteger(is3D ? 0 : u.rb.layer())
                                       sourceLevel: NSUInteger(u.rb.level())
-                                      sourceOrigin: MTLOriginMake(0, 0, is3D ? u.rb.layer() : 0)
-                                      sourceSize: MTLSizeMake(NSUInteger(srcSize.width()), NSUInteger(srcSize.height()), 1)
+                                      sourceOrigin: MTLOriginMake(NSUInteger(rect.x()), NSUInteger(rect.y()), NSUInteger(is3D ? u.rb.layer() : 0))
+                                      sourceSize: MTLSizeMake(NSUInteger(rect.width()), NSUInteger(rect.height()), 1)
                                       toBuffer: readback.buf
                                       destinationOffset: 0
                                       destinationBytesPerRow: bpl
@@ -3481,6 +3487,8 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
 #else
         return srgb ? MTLPixelFormatR8Unorm_sRGB : MTLPixelFormatR8Unorm;
 #endif
+    case QRhiTexture::R8SI:
+        return MTLPixelFormatR8Sint;
     case QRhiTexture::R8UI:
         return MTLPixelFormatR8Uint;
     case QRhiTexture::RG8:
@@ -3508,10 +3516,16 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
     case QRhiTexture::RGB10A2:
         return MTLPixelFormatRGB10A2Unorm;
 
+    case QRhiTexture::R32SI:
+        return MTLPixelFormatR32Sint;
     case QRhiTexture::R32UI:
         return MTLPixelFormatR32Uint;
+    case QRhiTexture::RG32SI:
+        return MTLPixelFormatRG32Sint;
     case QRhiTexture::RG32UI:
         return MTLPixelFormatRG32Uint;
+    case QRhiTexture::RGBA32SI:
+        return MTLPixelFormatRGBA32Sint;
     case QRhiTexture::RGBA32UI:
         return MTLPixelFormatRGBA32Uint;
 
@@ -6309,13 +6323,15 @@ QRhiRenderTarget *QMetalSwapChain::currentFrameRenderTarget()
 static inline CAMetalLayer *layerForWindow(QWindow *window)
 {
     Q_ASSERT(window);
+    CALayer *layer = nullptr;
 #ifdef Q_OS_MACOS
-    NSView *view = reinterpret_cast<NSView *>(window->winId());
+    if (auto *cocoaWindow = window->nativeInterface<QNativeInterface::Private::QCocoaWindow>())
+        layer = cocoaWindow->contentLayer();
 #else
-    UIView *view = reinterpret_cast<UIView *>(window->winId());
+    layer = reinterpret_cast<UIView *>(window->winId()).layer;
 #endif
-    Q_ASSERT(view);
-    return static_cast<CAMetalLayer *>(view.layer);
+    Q_ASSERT(layer);
+    return static_cast<CAMetalLayer *>(layer);
 }
 
 // If someone calls this, it is hopefully from the main thread, and they will
@@ -6346,6 +6362,11 @@ QSize QMetalSwapChain::surfacePixelSize()
 bool QMetalSwapChain::isFormatSupported(Format f)
 {
     if (f == HDRExtendedSrgbLinear) {
+        if (@available(iOS 16.0, *))
+            return hdrInfo().limits.colorComponentValue.maxPotentialColorComponentValue > 1.0f;
+        else
+            return false;
+    } else if (f == HDR10) {
         if (@available(iOS 16.0, *))
             return hdrInfo().limits.colorComponentValue.maxPotentialColorComponentValue > 1.0f;
         else
@@ -6394,6 +6415,11 @@ void QMetalSwapChain::chooseFormats()
         d->rhiColorFormat = QRhiTexture::RGBA16F;
         return;
     }
+    if (m_format == HDR10) {
+        d->colorFormat = MTLPixelFormatRGB10A2Unorm;
+        d->rhiColorFormat = QRhiTexture::RGB10A2;
+        return;
+    }
     d->colorFormat = m_flags.testFlag(sRGB) ? MTLPixelFormatBGRA8Unorm_sRGB : MTLPixelFormatBGRA8Unorm;
     d->rhiColorFormat = QRhiTexture::BGRA8;
 }
@@ -6440,6 +6466,11 @@ bool QMetalSwapChain::createOrResize()
     if (m_format == HDRExtendedSrgbLinear) {
         if (@available(iOS 16.0, *)) {
             d->layer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearSRGB);
+            d->layer.wantsExtendedDynamicRangeContent = YES;
+        }
+    } else if (m_format == HDR10) {
+        if (@available(iOS 16.0, *)) {
+            d->layer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2100_PQ);
             d->layer.wantsExtendedDynamicRangeContent = YES;
         }
     } else if (m_format == HDRExtendedDisplayP3Linear) {

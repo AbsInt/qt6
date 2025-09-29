@@ -28,7 +28,15 @@ T.RadioButton {
         radius: width / 2
         color: control.down ? control.palette.light : control.palette.base
         border.width: control.visualFocus ? 2 : 1
-        border.color: control.visualFocus ? control.palette.highlight : control.palette.mid
+        border.color: {
+            if (control.visualFocus)
+                return control.palette.highlight
+            else if (Qt.styleHints.accessibility.contrastPreference !== Qt.HighContrast)
+                return control.palette.mid
+            else
+                return Color.blend(control.palette.dark, control.palette.base,
+                                   control.enabled ? 0.0 : 0.5)
+        }
 
         Rectangle {
             x: (parent.width - width) / 2

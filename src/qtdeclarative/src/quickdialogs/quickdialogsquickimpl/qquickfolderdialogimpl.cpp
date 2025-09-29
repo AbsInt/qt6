@@ -144,7 +144,6 @@ void QQuickFolderDialogImplPrivate::handleClick(QQuickAbstractButton *button)
 QQuickFolderDialogImpl::QQuickFolderDialogImpl(QObject *parent)
     : QQuickDialog(*(new QQuickFolderDialogImplPrivate), parent)
 {
-    setPopupType(QQuickPopup::Window);
 }
 
 QQuickFolderDialogImplAttached *QQuickFolderDialogImpl::qmlAttachedProperties(QObject *object)

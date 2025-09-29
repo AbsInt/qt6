@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qgesture.h"
 #include "private/qgesture_p.h"
@@ -1080,6 +1081,10 @@ Q_WIDGETS_EXPORT QDebug operator<<(QDebug d, const QGesture *gesture)
 {
     QDebugStateSaver saver(d);
     d.nospace();
+
+    if (!gesture)
+        return d << "QGesture(0x0)";
+
     switch (gesture->gestureType()) {
     case Qt::TapGesture:
         formatGestureHeader(d, "QTapGesture", gesture);
@@ -1148,8 +1153,12 @@ Q_WIDGETS_EXPORT QDebug operator<<(QDebug d, const QGestureEvent *gestureEvent)
 {
     QDebugStateSaver saver(d);
     d.nospace();
-    d << "QGestureEvent(" << gestureEvent->gestures() << ')';
-    return d;
+    d << "QGestureEvent(";
+    if (gestureEvent)
+        d << gestureEvent->gestures();
+    else
+        d << "0x0";
+    return d << ')';
 }
 
 #endif // !QT_NO_DEBUG_STREAM

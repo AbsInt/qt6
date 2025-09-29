@@ -203,6 +203,7 @@ public:
     qreal prevScale = 0;
     QString title;
     QQuickPopup::PopupType popupType = QQuickPopup::Item;
+    Qt::WindowModality popupWndModality = Qt::NonModal;
 
     friend class QQuickPopupTransitionManager;
 };

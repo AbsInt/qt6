@@ -108,14 +108,14 @@ void QEglFSWindow::setBackingStore(QOpenGLCompositorBackingStore *backingStore)
 #ifndef QT_NO_OPENGL
     if (!m_rasterCompositingContext) {
         m_rasterCompositingContext = new QOpenGLContext;
-        m_rasterCompositingContext->setShareContext(qt_gl_global_share_context());
+        m_rasterCompositingContext->setShareContext(QOpenGLContext::globalShareContext());
         m_rasterCompositingContext->setFormat(m_format);
         m_rasterCompositingContext->setScreen(window()->screen());
         if (Q_UNLIKELY(!m_rasterCompositingContext->create()))
             qFatal("EGLFS: Failed to create compositing context");
         // If there is a "root" window into which raster and QOpenGLWidget content is
         // composited, all other contexts must share with its context.
-        if (!qt_gl_global_share_context())
+        if (!QOpenGLContext::globalShareContext())
             qt_gl_set_global_share_context(m_rasterCompositingContext);
     }
     QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
@@ -145,7 +145,7 @@ void QEglFSWindow::destroy()
 
         if (compositor->windows().isEmpty()) {
             compositor->destroy();
-            if (qt_gl_global_share_context() == m_rasterCompositingContext)
+            if (QOpenGLContext::globalShareContext() == m_rasterCompositingContext)
                 qt_gl_set_global_share_context(nullptr);
             delete m_rasterCompositingContext;
         } else {

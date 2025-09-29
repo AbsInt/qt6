@@ -30,7 +30,7 @@
 
 using namespace Qt::StringLiterals;
 
-constexpr int JSON_LOGGING_FORMAT_REVISION = 3;
+constexpr int JSON_LOGGING_FORMAT_REVISION = 4;
 
 bool argumentsFromCommandLineAndFile(QStringList& allArguments, const QStringList &arguments)
 {
@@ -77,6 +77,7 @@ All warnings can be set to three levels:
     disable - Fully disables the warning.
     info - Displays the warning but does not influence the return code.
     warning - Displays the warning and leads to a non-zero exit code if more warnings than max-warnings occur.
+    error - Displays the warning as error and leads to a non-zero exit code if encountered.
 )"));
 
     parser.addHelpOption();
@@ -199,6 +200,9 @@ All warnings can be set to three levels:
     parser.addOption(maxWarnings);
     const QString maxWarningsSetting = QLatin1String("MaxWarnings");
     settings.addOption(maxWarningsSetting, -1);
+
+    // QTBUG-135020: don't break existing user configs and still accept PropertyAliasCycles
+    settings.addOption("PropertyAliasCycles"_L1);
 
     auto addCategory = [&](const QQmlJS::LoggerCategory &category) {
         categories.push_back(category);
@@ -424,9 +428,11 @@ All warnings can be set to three levels:
             lintResult = linter.lintModule(filename, silent, useJson ? &jsonFiles : nullptr,
                                            qmlImportPaths, resourceFiles);
         } else {
+            // TODO: collect root urls here
+            const QQmlJS::ContextProperties contextProperties;
             lintResult = linter.lintFile(filename, nullptr, silent || isFixing,
                                          useJson ? &jsonFiles : nullptr, qmlImportPaths,
-                                         qmldirFiles, resourceFiles, categories);
+                                         qmldirFiles, resourceFiles, categories, contextProperties);
         }
         success &= (lintResult == QQmlJSLinter::LintSuccess || lintResult == QQmlJSLinter::HasWarnings);
         if (success) {

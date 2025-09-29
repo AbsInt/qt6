@@ -1,5 +1,6 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// Qt-Security score:significant
 
 #ifndef QQMLJSCOMPILER_P_H
 #define QQMLJSCOMPILER_P_H
@@ -51,6 +52,7 @@ struct Q_QMLCOMPILER_EXPORT QQmlJSAotFunction
     QStringList includes;
     QString code;
     QString signature;
+    std::optional<QString> skipReason;
     int numArguments = 0;
 };
 
@@ -81,6 +83,8 @@ public:
     Flags m_flags;
 
 protected:
+    std::optional<QList<QQmlJS::DiagnosticMessage>> finalizeBindingOrFunction();
+
     virtual QQmlJS::DiagnosticMessage diagnose(
             const QString &message, QtMsgType type, const QQmlJS::SourceLocation &location) const;
 
@@ -98,14 +102,11 @@ protected:
     QQmlJSLogger *m_logger = nullptr;
 
 private:
-    QQmlJSAotFunction doCompile(const QV4::Compiler::Context *context,
-                                QQmlJSCompilePass::Function *function,
-                                QList<QQmlJS::DiagnosticMessage> *error);
-    QQmlJSAotFunction doCompileAndRecordAotStats(const QV4::Compiler::Context *context,
-                                                 QQmlJSCompilePass::Function *function,
-                                                 QList<QQmlJS::DiagnosticMessage> *erros,
-                                                 const QString &name,
-                                                 QQmlJS::SourceLocation location);
+    QQmlJSAotFunction doCompile(
+            const QV4::Compiler::Context *context, QQmlJSCompilePass::Function *function);
+    QQmlJSAotFunction doCompileAndRecordAotStats(
+            const QV4::Compiler::Context *context, QQmlJSCompilePass::Function *function,
+            const QString &name, QQmlJS::SourceLocation location);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QQmlJSAotCompiler::Flags);

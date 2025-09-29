@@ -67,6 +67,7 @@ function(_qt_internal_sbom_begin_project_generate)
         SUPPLIER_URL
         NAMESPACE
         CPE
+        DOCUMENT_CREATOR_TOOL
         OUT_VAR_PROJECT_SPDX_ID
     )
     set(multi_args "")
@@ -85,10 +86,12 @@ function(_qt_internal_sbom_begin_project_generate)
 
     _qt_internal_sbom_get_git_version_vars()
 
-    set(default_sbom_file_name
-        "${arg_PROJECT}/${arg_PROJECT}-sbom-${QT_SBOM_GIT_VERSION_PATH}.spdx")
-    set(default_install_sbom_path
-        "\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR}/${default_sbom_file_name}")
+    _qt_internal_path_join(default_sbom_file_name
+        "${arg_PROJECT}" "${arg_PROJECT}-sbom-${QT_SBOM_GIT_VERSION_PATH}.spdx")
+
+    _qt_internal_path_join(default_install_sbom_path
+        "\${CMAKE_INSTALL_PREFIX}/" "${CMAKE_INSTALL_DATAROOTDIR}" "${default_sbom_file_name}"
+    )
 
     _qt_internal_sbom_set_default_option_value(OUTPUT "${default_install_sbom_path}")
     _qt_internal_sbom_set_default_option_value(OUTPUT_RELATIVE_PATH
@@ -102,6 +105,17 @@ function(_qt_internal_sbom_begin_project_generate)
         "${PROJECT_HOMEPAGE_URL}")
     _qt_internal_sbom_set_default_option_value(NAMESPACE
         "${arg_SUPPLIER}/spdxdocs/${arg_PROJECT}-${QT_SBOM_GIT_VERSION}")
+
+    _qt_internal_sbom_set_default_option_value(DOCUMENT_CREATOR_TOOL "Qt Build System")
+    if(arg_DOCUMENT_CREATOR_TOOL)
+        string(PREPEND arg_DOCUMENT_CREATOR_TOOL "Creator: Tool: ")
+    endif()
+
+    set(document_fields "")
+    if(arg_DOCUMENT_CREATOR_TOOL)
+        set(document_fields "${document_fields}
+${arg_DOCUMENT_CREATOR_TOOL}")
+    endif()
 
     set(fields "")
     if(arg_CPE)
@@ -158,8 +172,7 @@ DataLicense: CC0-1.0
 SPDXID: SPDXRef-DOCUMENT
 DocumentName: ${doc_name}
 DocumentNamespace: ${arg_NAMESPACE}
-Creator: Organization: ${arg_SUPPLIER}
-Creator: Tool: Qt Build System
+Creator: Organization: ${arg_SUPPLIER}${document_fields}
 CreatorComment: <text>This SPDX document was created from CMake ${CMAKE_VERSION}, using the qt
 build system from https://code.qt.io/cgit/qt/qtbase.git/tree/cmake/QtPublicSbomHelpers.cmake</text>
 Created: ${current_utc}\${QT_SBOM_EXTERNAL_DOC_REFS}

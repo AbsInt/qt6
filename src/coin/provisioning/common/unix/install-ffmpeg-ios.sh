@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 # This script will build and install FFmpeg static libs
+# Can take an optional final parameter to control installation directory
 set -ex
 
 # Must match or be lower than the minimum iOS version supported by the version of Qt that is
@@ -13,7 +14,8 @@ source "${BASH_SOURCE%/*}/../unix/ffmpeg-installation-utils.sh"
 
 ffmpeg_source_dir=$(download_ffmpeg)
 ffmpeg_config_options=$(get_ffmpeg_config_options "shared")
-prefix="/usr/local/ios/ffmpeg"
+default_prefix="/usr/local/ios/ffmpeg"
+prefix="${1:-$default_prefix}"
 dylib_regex="^@rpath/.*\.dylib$"
 
 build_ffmpeg_ios() {
@@ -104,6 +106,7 @@ build_info_plist() {
 </plist>"
     echo $info_plist | sudo tee ${file_path} 1>/dev/null
 }
+
 
 create_framework() {
     # Create a 'traditional' framework from the corresponding dylib.

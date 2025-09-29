@@ -37,7 +37,7 @@ Q_GUI_EXPORT qreal qt_pointMultiplier(QPageLayout::Unit unit)
 }
 
 // Multiplier for converting pixels to points.
-extern qreal qt_pixelMultiplier(int resolution);
+Q_GUI_EXPORT extern qreal qt_pixelMultiplier(int resolution);
 
 Q_GUI_EXPORT QMarginsF qt_convertMargins(const QMarginsF &margins, QPageLayout::Unit fromUnits, QPageLayout::Unit toUnits)
 {
@@ -72,7 +72,6 @@ public:
     QPageLayoutPrivate(const QPageSize &pageSize, QPageLayout::Orientation orientation,
                        const QMarginsF &margins, QPageLayout::Unit units,
                        const QMarginsF &minMargins);
-    ~QPageLayoutPrivate();
 
     bool operator==(const QPageLayoutPrivate &other) const;
     bool isEquivalentTo(const QPageLayoutPrivate &other) const;
@@ -122,10 +121,6 @@ QPageLayoutPrivate::QPageLayoutPrivate(const QPageSize &pageSize, QPageLayout::O
 {
     m_fullSize = fullSizeUnits(m_units);
     setDefaultMargins(minMargins);
-}
-
-QPageLayoutPrivate::~QPageLayoutPrivate()
-{
 }
 
 bool QPageLayoutPrivate::operator==(const QPageLayoutPrivate &other) const

@@ -189,7 +189,7 @@ void QDialogButtonBoxPrivate::layoutButtons()
     Q_Q(QDialogButtonBox);
     const int MacGap = 36 - 8;    // 8 is the default gap between a widget and a spacer item
 
-    QBoolBlocker blocker(ignoreShowAndHide);
+    QScopedValueRollback blocker(ignoreShowAndHide, true);
     for (int i = buttonLayout->count() - 1; i >= 0; --i) {
         QLayoutItem *item = buttonLayout->takeAt(i);
         if (QWidget *widget = item->widget())

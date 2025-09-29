@@ -15,7 +15,8 @@
 // We mean it.
 //
 
-#include <QPropertyAnimation>
+#include <QtCore/qpointer.h>
+#include <QtCore/qpropertyanimation.h>
 #include <QtCore/private/qglobal_p.h>
 #include <QtGui/qcolor.h>
 #include <QtQuick/qquickpainteditem.h>

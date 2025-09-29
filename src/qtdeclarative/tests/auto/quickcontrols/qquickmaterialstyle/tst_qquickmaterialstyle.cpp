@@ -40,7 +40,7 @@ static inline QQuickMaterialStyle::Theme toMaterialTheme(Qt::ColorScheme colorSc
 class Setup : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QQuickMaterialStyle::Theme platformTheme READ platformTheme WRITE setPlatformTheme CONSTANT FINAL)
+    Q_PROPERTY(QQuickMaterialStyle::Theme platformTheme READ platformTheme WRITE setPlatformTheme FINAL)
 
 public slots:
     void applicationAvailable()

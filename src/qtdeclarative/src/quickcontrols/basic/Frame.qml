@@ -17,6 +17,8 @@ T.Frame {
 
     background: Rectangle {
         color: "transparent"
-        border.color: control.palette.mid
+        border.color: Qt.styleHints.accessibility.contrastPreference !== Qt.HighContrast ?
+                      control.palette.mid : Color.blend(control.palette.dark, control.palette.base,
+                                                        enabled ? 0.0 : 0.5)
     }
 }

@@ -60,6 +60,14 @@ public:
     void handleContextMenuRequested(QPointF pos);
     void handleRemoveAction();
 
+protected:
+    qreal getContentWidth() const override;
+    qreal getContentHeight() const override;
+    void itemGeometryChanged(QQuickItem *item, QQuickGeometryChange change, const QRectF &diff) override;
+    void itemImplicitWidthChanged(QQuickItem *item) override;
+    void itemImplicitHeightChanged(QQuickItem *item) override;
+
+
 private:
     QQuickDialog *dialog = nullptr;
     QQmlComponent *buttonDelegate = nullptr;
@@ -72,6 +80,8 @@ private:
     QList<QStandardPaths::StandardLocation> folderPaths;
     QList<QUrl> favoritePaths;
     QUrl currentButtonClickedUrl;
+    qreal addFavoriteButtonImplicitSize = 0;
+    qreal separatorImplicitSize = 0;
     bool folderPathsValid = false;
     bool favoritePathsValid = false;
     bool repopulating = false;

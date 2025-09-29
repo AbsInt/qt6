@@ -179,6 +179,7 @@ void QmlTypesClassDescription::collectLocalAnonymous(
         const QVector<MetaType> &foreign, QTypeRevision defaultRevision)
 {
     file = classDef.inputFile();
+    lineNumber = classDef.lineNumber();
 
     resolvedClass = classDef;
     className = classDef.qualifiedClassName();
@@ -213,8 +214,10 @@ void QmlTypesClassDescription::collect(
         const MetaType &classDef, const QVector<MetaType> &types,
         const QVector<MetaType> &foreign, CollectMode mode, QTypeRevision defaultRevision)
 {
-    if (file.isEmpty())
+    if (file.isEmpty()) {
         file = classDef.inputFile();
+        lineNumber = classDef.lineNumber();
+    }
 
     const QAnyStringView classDefName = classDef.className();
     const QList<QAnyStringView> namespaces = MetaTypesJsonProcessor::namespaces(classDef);

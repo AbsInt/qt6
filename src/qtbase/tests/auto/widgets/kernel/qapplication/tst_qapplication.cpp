@@ -19,6 +19,7 @@
 #if QT_CONFIG(process)
 # include <QtCore/QProcess>
 #endif
+#include <QtCore/QSettings>
 #include <QtCore/private/qeventloop_p.h>
 
 #include <QtGui/QFontDatabase>

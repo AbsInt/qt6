@@ -355,11 +355,13 @@ private slots:
 #endif
 
     void evalInGlobalContext();
+    void truncateArrayData();
 
 public:
     Q_INVOKABLE QJSValue throwingCppMethod1();
     Q_INVOKABLE void throwingCppMethod2();
     Q_INVOKABLE QJSValue throwingCppMethod3();
+    Q_INVOKABLE QJSValue throwingCppMethod4();
 
 signals:
     void testSignal();
@@ -959,7 +961,7 @@ void tst_QJSEngine::newQObjectRace()
         void run() override
         {
             int newObjectCount = 1000;
-#if defined(Q_OS_QNX)
+#if defined(Q_OS_QNX) || defined(Q_OS_VXWORKS)
             newObjectCount = 128;
 #endif
             for (int i=0;i<newObjectCount;++i)
@@ -5129,6 +5131,14 @@ void tst_QJSEngine::returnError()
     QCOMPARE(result.property("lineNumber").toString(), "1");
     QCOMPARE(result.property("message").toString(), "Something is wrong");
     QVERIFY(!result.property("stack").isUndefined());
+
+    // NB: evaluate() does not return an ErrorObject if the exception is not an ErrorObject.
+    //     This is documented.
+    QStringList exceptionStackTrace;
+    result = engine.evaluate("testCase.throwingCppMethod4()", "foo.js", 1, &exceptionStackTrace);
+    QVERIFY(!exceptionStackTrace.isEmpty());
+    QVERIFY(result.isString());
+    QCOMPARE(result.toString(), "JSValue from string");
 }
 
 void tst_QJSEngine::catchError()
@@ -5160,6 +5170,13 @@ QJSValue tst_QJSEngine::throwingCppMethod3()
     QJSEngine *engine = qjsEngine(this);
     engine->throwError(engine->newErrorObject(QJSValue::EvalError, "Something is wrong"));
     return QJSValue(31);
+}
+
+QJSValue tst_QJSEngine::throwingCppMethod4()
+{
+    QJSEngine *engine = qjsEngine(this);
+    engine->throwError(QJSValue("JSValue from string"));
+    return QJSValue(32);
 }
 
 void tst_QJSEngine::mathMinMax()
@@ -6897,6 +6914,35 @@ void tst_QJSEngine::evalInGlobalContext()
     const QJSValue fun = myEngine.globalObject().property(QLatin1String("eval"));
     const QJSValue ret = fun.call({ QLatin1String("99") });
     QCOMPARE(ret.toString(), QLatin1String("99"));
+}
+
+void tst_QJSEngine::truncateArrayData()
+{
+    QJSEngine engine;
+
+    QJSValue array = engine.newArray();
+    array.setProperty(0, QJSValue::NullValue);
+    array.setProperty(1, QJSValue(14));
+    array.setProperty(2, QJSValue(QLatin1String("aaa")));
+
+    // Append a JavaScript-owned object to the array and don't keep a local reference.
+    QJSValue object = engine.newQObject(new QObject());
+    QSignalSpy spy(object.toQObject(), &QObject::destroyed);
+    // std::move won't do here because setProperty() doesn't accept rvalue refs
+    array.setProperty(3, std::exchange(object, QJSValue()));
+    QVERIFY(object.isUndefined());
+
+    QCOMPARE(array.property("length").toInt(), 4);
+
+    gc(*engine.handle());
+    QCOMPARE(spy.count(), 0);
+    QCOMPARE(array.property("length").toInt(), 4);
+
+    // Truncating the array allows the GC to collect the QObject, which results in its deletion.
+    array.setProperty("length", 3);
+    QCOMPARE(array.property("length").toInt(), 3);
+    gc(*engine.handle());
+    QCOMPARE(spy.count(), 1);
 }
 
 QTEST_MAIN(tst_QJSEngine)

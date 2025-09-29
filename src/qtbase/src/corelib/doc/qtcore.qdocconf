@@ -10,6 +10,9 @@ includepaths           += ./include
 
 examplesinstallpath     = corelib
 
+# Path to the root of qtbase (for automatic linking to source code)
+url.sources.rootdir     = ../../..
+
 qhp.projects            = QtCore
 
 qhp.QtCore.file                = qtcore.qhp

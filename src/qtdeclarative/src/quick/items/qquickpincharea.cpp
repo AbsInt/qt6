@@ -26,8 +26,6 @@ Q_STATIC_LOGGING_CATEGORY(lcPA, "qt.quick.pincharea")
     \ingroup qtquick-input-events
     \brief For specifying information about a pinch event.
 
-    \b {The PinchEvent type was added in QtQuick 1.1}
-
     The \c center, \c startCenter, \c previousCenter properties provide the center position between the two touch points.
 
     The \c scale and \c previousScale properties provide the scale factor.
@@ -136,8 +134,6 @@ QQuickPinchAreaPrivate::~QQuickPinchAreaPrivate()
     \ingroup qtquick-input
     \inherits Item
     \brief Enables simple pinch gesture handling.
-
-    \b {The PinchArea type was added in QtQuick 1.1}
 
     A PinchArea is an invisible item that is typically used in conjunction with
     a visible item in order to provide pinch gesture handling for that item.

@@ -9,6 +9,7 @@
 #include <QtQuickTemplates2/private/qquickabstractbutton_p.h>
 #include <QtQuickTemplates2/private/qquickapplicationwindow_p.h>
 #include <QtQuickTemplates2/private/qquickcontrol_p_p.h>
+#include <QtQuickTemplates2/private/qquickpopup_p.h>
 
 QQuickControlsTestUtils::QQuickControlsApplicationHelper::QQuickControlsApplicationHelper(QQmlDataTest *testCase,
     const QString &testFilePath, const QVariantMap &initialProperties, const QStringList &qmlImportPaths)
@@ -221,4 +222,16 @@ bool QQuickControlsTestUtils::arePopupWindowsSupported()
 #else
     return false;
 #endif
+}
+
+QByteArray QQuickTest::Private::qActiveFocusFailureMessage(QQuickPopup *popup)
+{
+    QByteArray message;
+    QDebug debug(&message);
+    const QQuickWindow *window = popup->window();
+    const QString activeFocusItemStr = window
+        ? QDebug::toString(window->activeFocusItem()) : QStringLiteral("(unknown; popup has no window)");
+    debug.nospace() << "popup: " << popup;
+    debug.noquote() << " window's activeFocusItem: " << activeFocusItemStr;
+    return message;
 }

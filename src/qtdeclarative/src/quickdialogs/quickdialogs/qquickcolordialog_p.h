@@ -26,7 +26,7 @@ class Q_QUICKDIALOGS2_EXPORT QQuickColorDialog : public QQuickAbstractDialog
     Q_OBJECT
     Q_PROPERTY(QColor selectedColor READ selectedColor WRITE setSelectedColor NOTIFY selectedColorChanged)
     Q_PROPERTY(QColorDialogOptions::ColorDialogOptions options READ options WRITE setOptions RESET resetOptions NOTIFY optionsChanged)
-    Q_FLAGS(QColorDialogOptions::ColorDialogOptions)
+    QML_EXTENDED_NAMESPACE(QColorDialogOptions)
     QML_NAMED_ELEMENT(ColorDialog)
     QML_ADDED_IN_VERSION(6, 4)
 

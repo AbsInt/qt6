@@ -48,6 +48,8 @@
 
 #define FILE_OPEN_EVENT_WAIT_TIME 3000 // ms
 
+extern void qml_register_types_QmlRuntime_Config();
+
 Q_LOGGING_CATEGORY(lcDeprecated, "qt.tools.qml.deprecated")
 
 enum QmlApplicationType {
@@ -386,6 +388,9 @@ static void loadDummyDataFiles(QQmlEngine &engine, const QString& directory)
 int main(int argc, char *argv[])
 {
     getAppFlags(argc, argv);
+    // We know we need the module in any case, so we might as well call the registration
+    // function at this point; this might also help with the linker discarding it
+    qml_register_types_QmlRuntime_Config();
 
     // Must set the default QSurfaceFormat before creating the app object if
     // AA_ShareOpenGLContexts is going to be set.

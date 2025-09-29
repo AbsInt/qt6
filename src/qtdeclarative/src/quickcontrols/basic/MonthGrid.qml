@@ -21,6 +21,7 @@ T.AbstractMonthGrid {
         opacity: model.month === control.month ? 1 : 0
         text: model.day
         font: control.font
+        color: control.palette.text
 
         required property var model
     }

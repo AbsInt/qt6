@@ -1,0 +1,43 @@
+// Copyright (C) 2025 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+\page qmllint-warnings-and-errors-comma.html
+\ingroup qmllint-warnings-and-errors
+
+\title Comma
+\brief [comma] Do not use comma expressions.
+
+\qmllintwarningcategory comma
+
+\section1 Do not use comma expressions
+
+\section2 What happened?
+A JavaScript comma expression was used outside of a for loop.
+
+\section2 Why is this bad?
+Comma expressions reduce readability of the code and obscure side-effects.
+
+\section2 Example
+\qml
+import QtQuick
+
+Item {
+    Component.onCompleted: init(config, true), enableLogging(categories), run(1000) // millis
+}
+\endqml
+To fix this warning, refactor the code to use distinct statements for each
+operation. This way, each side effect is explicit instead of happening as part
+of another unrelated operation:
+\qml
+import QtQuick
+
+Item {
+    Component.onCompleted: {
+        init(config, true)
+        enableLogging(categories)
+        run(1000) // millis
+    }
+}
+\endqml
+*/

@@ -973,10 +973,10 @@ QComboBox::QComboBox(QComboBoxPrivate &dd, QWidget *parent)
 
     \table
        \row
-          \li \inlineimage collapsed_combobox.png
+          \li \image collapsed_combobox.png
               \caption Collapsed QCombobox
           \li
-              \inlineimage expanded_combobox.png
+              \image expanded_combobox.png
               \caption Expanded QCombobox
     \endtable
 
@@ -2902,7 +2902,7 @@ void QComboBox::hidePopup()
     if (d->hidingPopup)
         return;
     d->hidingPopup = true;
-    // can't use QBoolBlocker on a bitfield
+    // can't use QScopedValueRollback on a bitfield
     auto resetHidingPopup = qScopeGuard([d]{
         d->hidingPopup = false;
     });

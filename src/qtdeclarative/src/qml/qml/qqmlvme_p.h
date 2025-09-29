@@ -25,7 +25,6 @@
 #include <QtCore/qtypeinfo.h>
 
 #include <private/qqmlengine_p.h>
-#include <private/qfinitestack_p.h>
 
 #include <atomic>
 
@@ -78,7 +77,7 @@ public:
     bool isOK() const;
 
 private:
-    int m_objectCount;
+    size_t m_objectCount;
     QQmlGuard<QObject> *m_objects;
     int m_contextCount;
     QQmlGuardedContextData *m_contexts;

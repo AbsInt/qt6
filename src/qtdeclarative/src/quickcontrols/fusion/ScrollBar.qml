@@ -24,8 +24,13 @@ T.ScrollBar {
         implicitHeight: control.interactive ? 6 : 2
 
         radius: width / 2
-        color: control.pressed ? control.palette.dark : control.palette.mid
         opacity: 0.0
+        color: {
+            if (Fusion.highContrast)
+                return control.pressed ? Fusion.highlightedOutline(control.palette) : Fusion.outline(control.palette)
+            else
+                return control.pressed ? control.palette.dark : control.palette.mid
+        }
 
         states: State {
             name: "active"

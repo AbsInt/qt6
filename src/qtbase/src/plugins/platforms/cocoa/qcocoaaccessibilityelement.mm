@@ -16,7 +16,7 @@
 
 QT_USE_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcAccessibilityTable, "qt.accessibility.table")
+Q_STATIC_LOGGING_CATEGORY(lcAccessibilityTable, "qt.accessibility.table")
 
 using namespace Qt::Literals::StringLiterals;
 
@@ -125,10 +125,6 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
                 if (iface->tableInterface()) {
                     [self updateTableModel];
                 } else if (const auto *cell = iface->tableCellInterface()) {
-                    // Called with role when populating a row with placeholder cells. The caller
-                    // inserts us into the correct array, so we don't have to look for it.
-                    if (role == NSAccessibilityCellRole)
-                        return self;
                     // If we create an element for a table cell, initialize it with row/column
                     // and insert it into the corresponding row's columns array.
                     m_rowIndex = cell->rowIndex();
@@ -576,6 +572,26 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
     return nil;
 }
 
+- (id) accessibilityTitleUIElement {
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
+        return nil;
+
+    const auto labelRelations = iface->relations(QAccessible::Label);
+    if (labelRelations.empty())
+        return nil;
+
+    QAccessibleInterface *label = labelRelations.first().first;
+    if (!label)
+        return nil;
+
+    QMacAccessibilityElement *accessibleElement = [QMacAccessibilityElement elementWithInterface:label];
+    if (!accessibleElement)
+        return nil;
+
+    return NSAccessibilityUnignoredAncestor(accessibleElement);
+}
+
 - (NSString*) accessibilityIdentifier {
     if (QAccessibleInterface *iface = self.qtInterface)
         return QAccessibleBridgeUtils::accessibleId(iface).toNSString();
@@ -703,6 +719,26 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
         // if we don't want the element to have a value attribute.
         if (QCocoaAccessible::hasValueAttribute(iface))
             return QCocoaAccessible::getValueAttribute(iface);
+    }
+    return nil;
+}
+
+
+- (id) accessibilityMinValue {
+    if (QAccessibleInterface *iface = self.qtInterface) {
+        if (iface->valueInterface()) {
+            return iface->valueInterface()->minimumValue().toString().toNSString();
+        }
+    }
+    return nil;
+}
+
+
+- (id) accessibilityMaxValue {
+    if (QAccessibleInterface *iface = self.qtInterface) {
+        if (iface->valueInterface()) {
+            return iface->valueInterface()->maximumValue().toString().toNSString();
+        }
     }
     return nil;
 }
