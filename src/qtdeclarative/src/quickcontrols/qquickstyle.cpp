@@ -388,8 +388,11 @@ const QPalette *QQuickStylePrivate::readPalette(const QSharedPointer<QSettings> 
 bool QQuickStylePrivate::isDarkSystemTheme()
 {
     const bool dark = [](){
-        if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme())
+        if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme()) {
+            if (theme->colorScheme() == Qt::ColorScheme::Unknown)
+                return theme->palette()->windowText().color().lightnessF() > theme->palette()->window().color().lightnessF();
             return theme->colorScheme() == Qt::ColorScheme::Dark;
+        }
         return false;
     }();
     return dark;

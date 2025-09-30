@@ -18069,35 +18069,35 @@
             <name>qCritical</name>
             <anchorfile>qdebug.html</anchorfile>
             <anchor>qCritical</anchor>
-            <arglist>QDebug qCritical</arglist>
+            <arglist>()</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDebug</type>
             <name>qDebug</name>
             <anchorfile>qdebug.html</anchorfile>
             <anchor>qDebug</anchor>
-            <arglist>QDebug qDebug</arglist>
+            <arglist>()</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDebug</type>
             <name>qFatal</name>
             <anchorfile>qdebug.html</anchorfile>
             <anchor>qFatal</anchor>
-            <arglist>QDebug qFatal</arglist>
+            <arglist>()</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDebug</type>
             <name>qInfo</name>
             <anchorfile>qdebug.html</anchorfile>
             <anchor>qInfo</anchor>
-            <arglist>QDebug qInfo</arglist>
+            <arglist>()</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDebug</type>
             <name>qWarning</name>
             <anchorfile>qdebug.html</anchorfile>
             <anchor>qWarning</anchor>
-            <arglist>QDebug qWarning</arglist>
+            <arglist>()</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
@@ -24983,265 +24983,272 @@
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-1</anchor>
-            <arglist>(QDate key, size_t seed)</arglist>
+            <arglist>(QByteArrayView key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-2</anchor>
-            <arglist>(QLatin1StringView key, size_t seed)</arglist>
+            <arglist>(QDate key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-3</anchor>
-            <arglist>(QPoint key, size_t seed)</arglist>
+            <arglist>(QLatin1StringView key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-4</anchor>
-            <arglist>(QTime key, size_t seed)</arglist>
+            <arglist>(QPoint key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-5</anchor>
-            <arglist>(T key, size_t seed)</arglist>
+            <arglist>(QTime key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-6</anchor>
-            <arglist>(char key, size_t seed)</arglist>
+            <arglist>(T key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-7</anchor>
-            <arglist>(char16_t key, size_t seed)</arglist>
+            <arglist>(char key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-8</anchor>
-            <arglist>(char32_t key, size_t seed)</arglist>
+            <arglist>(char16_t key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-9</anchor>
-            <arglist>(char8_t key, size_t seed)</arglist>
+            <arglist>(char32_t key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-10</anchor>
-            <arglist>(const QBitArray &amp;key, size_t seed)</arglist>
+            <arglist>(char8_t key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-11</anchor>
-            <arglist>(const QByteArray &amp;key, size_t seed)</arglist>
+            <arglist>(const QBitArray &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-12</anchor>
-            <arglist>(const QChar key, size_t seed)</arglist>
+            <arglist>(const QByteArray &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-13</anchor>
-            <arglist>(const QDateTime &amp;key, size_t seed)</arglist>
+            <arglist>(const QChar key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-14</anchor>
-            <arglist>(const QHash&lt;Key, T&gt; &amp;key, size_t seed)</arglist>
+            <arglist>(const QDateTime &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-15</anchor>
-            <arglist>(const QSet&lt;T&gt; &amp;key, size_t seed)</arglist>
+            <arglist>(const QHash&lt;Key, T&gt; &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-16</anchor>
-            <arglist>(const QString &amp;key, size_t seed)</arglist>
+            <arglist>(const QSet&lt;T&gt; &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-17</anchor>
-            <arglist>(const QTypeRevision &amp;key, size_t seed)</arglist>
+            <arglist>(const QString &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-18</anchor>
-            <arglist>(const QUrl &amp;key, size_t seed)</arglist>
+            <arglist>(const QTypeRevision &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-19</anchor>
-            <arglist>(const QVersionNumber &amp;key, size_t seed)</arglist>
+            <arglist>(const QUrl &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-20</anchor>
-            <arglist>(const T *key, size_t seed)</arglist>
+            <arglist>(const QVersionNumber &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-21</anchor>
-            <arglist>(const std::pair&lt;T1, T2&gt; &amp;key, size_t seed)</arglist>
+            <arglist>(const T *key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-22</anchor>
-            <arglist>(double key, size_t seed)</arglist>
+            <arglist>(const std::pair&lt;T1, T2&gt; &amp;key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-23</anchor>
-            <arglist>(float key, size_t seed)</arglist>
+            <arglist>(double key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-24</anchor>
-            <arglist>(int key, size_t seed)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>size_t</type>
-            <name>qHash</name>
-            <anchorfile>qhash.html</anchorfile>
-            <anchor>qHash-26</anchor>
-            <arglist>(long double key, size_t seed)</arglist>
+            <arglist>(float key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-25</anchor>
-            <arglist>(long key, size_t seed)</arglist>
+            <arglist>(int key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-27</anchor>
-            <arglist>(qint128 key, size_t seed)</arglist>
+            <arglist>(long double key, size_t seed)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>size_t</type>
+            <name>qHash</name>
+            <anchorfile>qhash.html</anchorfile>
+            <anchor>qHash-26</anchor>
+            <arglist>(long key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-28</anchor>
-            <arglist>(qint64 key, size_t seed)</arglist>
+            <arglist>(qint128 key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-29</anchor>
-            <arglist>(quint128 key, size_t seed)</arglist>
+            <arglist>(qint64 key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-30</anchor>
-            <arglist>(quint64 key, size_t seed)</arglist>
+            <arglist>(quint128 key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-31</anchor>
-            <arglist>(short key, size_t seed)</arglist>
+            <arglist>(quint64 key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-32</anchor>
-            <arglist>(signed char key, size_t seed)</arglist>
+            <arglist>(short key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-33</anchor>
-            <arglist>(std::nullptr_t key, size_t seed)</arglist>
+            <arglist>(signed char key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-34</anchor>
-            <arglist>(uchar key, size_t seed)</arglist>
+            <arglist>(std::nullptr_t key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-35</anchor>
-            <arglist>(uint key, size_t seed)</arglist>
+            <arglist>(uchar key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-36</anchor>
-            <arglist>(ulong key, size_t seed)</arglist>
+            <arglist>(uint key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-37</anchor>
-            <arglist>(ushort key, size_t seed)</arglist>
+            <arglist>(ulong key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>size_t</type>
             <name>qHash</name>
             <anchorfile>qhash.html</anchorfile>
             <anchor>qHash-38</anchor>
+            <arglist>(ushort key, size_t seed)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>size_t</type>
+            <name>qHash</name>
+            <anchorfile>qhash.html</anchorfile>
+            <anchor>qHash-39</anchor>
             <arglist>(wchar_t key, size_t seed)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -64096,7 +64103,7 @@
             <name>contains</name>
             <anchorfile>qstringview.html</anchorfile>
             <anchor>contains</anchor>
-            <arglist>(QChar c, Qt::CaseSensitivity cs) const const</arglist>
+            <arglist>(QChar ch, Qt::CaseSensitivity cs) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
@@ -64348,7 +64355,7 @@
             <name>indexOf</name>
             <anchorfile>qstringview.html</anchorfile>
             <anchor>indexOf</anchor>
-            <arglist>(QChar c, qsizetype from, Qt::CaseSensitivity cs) const const</arglist>
+            <arglist>(QChar ch, qsizetype from, Qt::CaseSensitivity cs) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>qsizetype</type>
@@ -64376,14 +64383,14 @@
             <name>lastIndexOf</name>
             <anchorfile>qstringview.html</anchorfile>
             <anchor>lastIndexOf-5</anchor>
-            <arglist>(QChar c, Qt::CaseSensitivity cs) const const</arglist>
+            <arglist>(QChar ch, Qt::CaseSensitivity cs) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>qsizetype</type>
             <name>lastIndexOf</name>
             <anchorfile>qstringview.html</anchorfile>
             <anchor>lastIndexOf-1</anchor>
-            <arglist>(QChar c, qsizetype from, Qt::CaseSensitivity cs) const const</arglist>
+            <arglist>(QChar ch, qsizetype from, Qt::CaseSensitivity cs) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>qsizetype</type>

@@ -1199,8 +1199,14 @@ bool QQuickDeliveryAgentPrivate::deliverHoverEventRecursive(
 
     const QQuickItemPrivate *itemPrivate = QQuickItemPrivate::get(item);
     const QList<QQuickItem *> children = itemPrivate->paintOrderChildItems();
+    const bool hadChildrenChanged = itemPrivate->dirtyAttributes & QQuickItemPrivate::ChildrenChanged;
 
     for (int ii = children.size() - 1; ii >= 0; --ii) {
+        // If the children had not changed before we started the loop, but now they have changed,
+        // stop looping to avoid potentially dereferencing a dangling pointer.
+        // This is unusual, and hover delivery occurs frequently anyway, so just wait until next time.
+        if (!hadChildrenChanged && Q_UNLIKELY(itemPrivate->dirtyAttributes & QQuickItemPrivate::ChildrenChanged))
+            break;
         QQuickItem *child = children.at(ii);
         const QQuickItemPrivate *childPrivate = QQuickItemPrivate::get(child);
 

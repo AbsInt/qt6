@@ -223,7 +223,7 @@ Button {
 //! [image alias]
 Button {
     id: imagebutton
-    buttonImage.source: "http://qt.nokia.com/logo.png"
+    buttonImage.source: "https://code.qt.io/cgit/qt/qtbase.git/plain/src/widgets/dialogs/images/qtlogo-64.png"
     buttonLabel: buttonImage.source
 }
 //! [image alias]

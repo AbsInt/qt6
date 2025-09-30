@@ -50,6 +50,7 @@ DialogsQuickImpl.FolderBreadcrumbBar {
         icon.width: 16
         icon.height: 16
         focusPolicy: Qt.TabFocus
+        Accessible.name: qsTr("Up")
     }
     textField: TextField {
         text: (control.dialog as DialogsQuickImpl.FileDialogImpl)?.selectedFile

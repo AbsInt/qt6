@@ -529,14 +529,16 @@ void QQuickMenuPrivate::setNativeMenuVisible(bool visible)
     this->visible = visible;
     syncWithNativeMenu();
 
-    QPoint offset;
-    QWindow *window = effectiveWindow(qGuiApp->topLevelWindows().first(), &offset);
-
     if (visible) {
-        lastDevicePixelRatio = window->devicePixelRatio();
+        QPoint offset;
+        QWindow *window = nullptr;
+        if (parentItem)
+            window = effectiveWindow(parentItem->window(), &offset);
+
+        lastDevicePixelRatio = window ? window->devicePixelRatio() : qGuiApp->devicePixelRatio();
 
         const QPointF globalPos = parentItem->mapToGlobal(x, y);
-        const QPoint windowPos = window->mapFromGlobal(globalPos.toPoint());
+        const QPoint windowPos = window ? window->mapFromGlobal(globalPos.toPoint()) : parentItem->mapToScene(QPoint(x, y)).toPoint();
         QRect targetRect(windowPos, QSize(0, 0));
         auto *daPriv = QQuickItemPrivate::get(parentItem)->deliveryAgentPrivate();
         Q_ASSERT(daPriv);

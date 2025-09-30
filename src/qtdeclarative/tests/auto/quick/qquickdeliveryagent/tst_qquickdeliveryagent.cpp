@@ -19,6 +19,7 @@
 #include <QtQuick/private/qquickshadereffectsource_p.h>
 #include <QtQuick/private/qquicktaphandler_p.h>
 #include <QtQuick/private/qquickwindow_p.h>
+#include <QtQuick/private/qquickitem_p.h>
 #include <QtQuickTest/quicktest.h>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <QtQuickTestUtils/private/visualtestutils_p.h>
@@ -154,6 +155,7 @@ private slots:
     void deleteTargetOnPress();
     void compoundControlsFocusInSubscene();
     void hoverEventGlobalPosition();
+    void layerEnabledHoverCrash();
 
 private:
     std::unique_ptr<QPointingDevice> touchscreen{QTest::createTouchDevice()};
@@ -707,6 +709,34 @@ void tst_qquickdeliveryagent::hoverEventGlobalPosition()
     QCOMPARE(child.hoverEnter, true);
     QTest::mousePress(&window, Qt::LeftButton, {}, point);
     QCOMPARE(child.globalHoverPosition, child.globalMousePosition);
+}
+
+void tst_qquickdeliveryagent::layerEnabledHoverCrash() // QTBUG-139561
+{
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("layerEnabledHoverCrash.qml")));
+    QSignalSpy swapSpy(&window, &QQuickView::frameSwapped);
+    QQuickItem *testRect = window.rootObject()->findChild<QQuickRectangle*>();
+    QVERIFY(testRect);
+    QQuickMouseArea *mouseArea = window.rootObject()->findChild<QQuickMouseArea*>();
+    QVERIFY(mouseArea);
+    QVERIFY(mouseArea->hoverEnabled());
+    QQuickItemLayer *layer = qvariant_cast<QQuickItemLayer*>(testRect->property("layer"));
+    QVERIFY(layer);
+
+    for (int i = 0; i < 8; ++i) {
+        swapSpy.clear();
+        QTest::mouseMove(&window, QPoint(150, 130));
+        QTRY_COMPARE_GE(swapSpy.size(), 1);
+        QCOMPARE(mouseArea->hovered(), true);
+        QCOMPARE(layer->enabled(), true);
+        QTest::mouseMove(&window, QPoint(10, 10));
+        // hover delivery is frame-synchronous, so wait for rendering to ensure it has a chance to crash :-/
+        QTRY_COMPARE_GE(swapSpy.size(), 2);
+        QCOMPARE(mouseArea->hovered(), false);
+        QCOMPARE(layer->enabled(), false);
+        QTest::qWait(50); // visually verify that it gets un-hovered
+    }
 }
 
 QTEST_MAIN(tst_qquickdeliveryagent)

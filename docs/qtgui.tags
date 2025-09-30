@@ -16748,7 +16748,7 @@
             <type>QRect</type>
             <name>availableVirtualGeometry</name>
             <anchorfile>qinputdevice.html</anchorfile>
-            <anchor>availableVirtualGeometry</anchor>
+            <anchor>availableVirtualGeometry-prop</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -16789,6 +16789,12 @@
             <name>DeviceTypes</name>
             <anchorfile>qinputdevice.html</anchorfile>
             <anchor>DeviceType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="QRect">
+            <name>availableVirtualGeometry</name>
+            <anchorfile>qinputdevice.html</anchorfile>
+            <anchor>availableVirtualGeometry-prop</anchor>
             <arglist></arglist>
         </member>
     </compound>
