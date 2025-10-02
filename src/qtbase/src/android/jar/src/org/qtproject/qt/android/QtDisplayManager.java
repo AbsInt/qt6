@@ -7,6 +7,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.content.res.TypedArray;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.os.Build;
@@ -195,11 +196,29 @@ class QtDisplayManager
             setSystemUiVisibilityPreAndroidR(decorView);
         }
 
-        if (!isFullScreen) {
+        if (!isFullScreen && !edgeToEdgeEnabled(m_activity)) {
+            // These are needed to operate on system bar colors
+            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
+                        | WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+
             // Handle transparent status and navigation bars
             if (m_expandedToCutout) {
-                window.setStatusBarColor(Color.TRANSPARENT);
-                window.setNavigationBarColor(Color.TRANSPARENT);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    window.setStatusBarColor(Color.TRANSPARENT);
+                    window.setNavigationBarColor(Color.TRANSPARENT);
+                } else {
+                    // Android 9 and prior doesn't add the semi-transparent bars
+                    // to avoid low contrast system icons, so try to mimick it
+                    // by taking the current color and only increase the opacity.
+                    int statusBarColor = window.getStatusBarColor();
+                    int transparentStatusBar = statusBarColor & 0x00FFFFFF;
+                    window.setStatusBarColor(transparentStatusBar);
+
+                    int navigationBarColor = window.getNavigationBarColor();
+                    int semiTransparentNavigationBar = navigationBarColor & 0x7FFFFFFF;
+                    window.setNavigationBarColor(semiTransparentNavigationBar);
+                }
             } else {
                 // Restore theme's system bars colors
                 Theme theme = m_activity.getTheme();
@@ -218,6 +237,20 @@ class QtDisplayManager
         decorView.post(() -> decorView.requestApplyInsets());
     }
 
+    private static boolean edgeToEdgeEnabled(Activity activity) {
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.VANILLA_ICE_CREAM)
+            return true;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM)
+            return false;
+        int[] attrs = new int[] { android.R.attr.windowOptOutEdgeToEdgeEnforcement };
+        TypedArray ta = activity.getTheme().obtainStyledAttributes(attrs);
+        try {
+            return !ta.getBoolean(0, false);
+        } finally {
+            ta.recycle();
+        }
+    }
+
     boolean isFullScreen()
     {
         return m_isFullScreen;
@@ -228,12 +261,136 @@ class QtDisplayManager
         return m_expandedToCutout;
     }
 
+    boolean decorFitsSystemWindows()
+    {
+        return !isFullScreen() && !expandedToCutout();
+    }
+
     void reinstateFullScreen()
     {
         if (m_isFullScreen) {
             m_isFullScreen = false;
             setSystemUiVisibility(true, m_expandedToCutout);
         }
+    }
+
+    /*
+    * Convenience method to call deprecated API prior to Android R (30).
+    */
+    @SuppressWarnings ("deprecation")
+    private static void setSystemUiVisibility(View decorView, int flags)
+    {
+        decorView.setSystemUiVisibility(flags);
+    }
+
+    /*
+    * Set the status bar color scheme hint so that the system decides how to color the icons.
+    */
+    @UsedFromNativeCode
+    static void setStatusBarColorHint(Activity activity, boolean isLight)
+    {
+        Window window = activity.getWindow();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                int lightStatusBarMask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS;
+                int appearance = isLight ? lightStatusBarMask : 0;
+                controller.setSystemBarsAppearance(appearance, lightStatusBarMask);
+            }
+        } else {
+            @SuppressWarnings("deprecation")
+            int currentFlags = window.getDecorView().getSystemUiVisibility();
+            @SuppressWarnings("deprecation")
+            int lightStatusBarMask = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            int appearance = isLight
+                ? currentFlags | lightStatusBarMask
+                : currentFlags & ~lightStatusBarMask;
+            setSystemUiVisibility(window.getDecorView(), appearance);
+        }
+    }
+
+    /*
+    * Set the navigation bar color scheme hint so that the system decides how to color the icons.
+    */
+    @UsedFromNativeCode
+    static void setNavigationBarColorHint(Activity activity, boolean isLight)
+    {
+        Window window = activity.getWindow();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                int lightNavigationBarMask = WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                int appearance = isLight ? lightNavigationBarMask : 0;
+                controller.setSystemBarsAppearance(appearance, lightNavigationBarMask);
+            }
+        } else {
+            @SuppressWarnings("deprecation")
+            int currentFlags = window.getDecorView().getSystemUiVisibility();
+            @SuppressWarnings("deprecation")
+            int lightNavigationBarMask = View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            int appearance = isLight
+                ? currentFlags | lightNavigationBarMask
+                : currentFlags & ~lightNavigationBarMask;
+            setSystemUiVisibility(window.getDecorView(), appearance);
+        }
+    }
+
+    static int resolveColorAttribute(Activity activity, int attribute)
+    {
+        Theme theme = activity.getTheme();
+        Resources resources = activity.getResources();
+        TypedValue tv = new TypedValue();
+
+        if (theme.resolveAttribute(attribute, tv, true)) {
+            if (tv.resourceId != 0)
+                return resources.getColor(tv.resourceId, theme);
+            if (tv.type >= TypedValue.TYPE_FIRST_COLOR_INT && tv.type <= TypedValue.TYPE_LAST_COLOR_INT)
+                return tv.data;
+        }
+
+        return -1;
+    }
+
+    @SuppressWarnings("deprecation")
+    static int getThemeDefaultStatusBarColor(Activity activity)
+    {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM)
+            return -1;
+        return resolveColorAttribute(activity, android.R.attr.statusBarColor);
+    }
+
+    @SuppressWarnings("deprecation")
+    static int getThemeDefaultNavigationBarColor(Activity activity)
+    {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM)
+            return -1;
+        return resolveColorAttribute(activity, android.R.attr.navigationBarColor);
+    }
+
+    static void enableSystemBarsBackgroundDrawing(Window window)
+    {
+        // These are needed to operate on system bar colors
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        @SuppressWarnings("deprecation")
+        final int translucentFlags =  WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
+                                    | WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION;
+        window.clearFlags(translucentFlags);
+    }
+
+    @SuppressWarnings("deprecation")
+    static void setStatusBarColor(Window window, int color)
+    {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM)
+            return;
+        window.setStatusBarColor(color);
+    }
+
+    @SuppressWarnings("deprecation")
+    static void setNavigationBarColor(Window window, int color)
+    {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM)
+            return;
+        window.setNavigationBarColor(color);
     }
 
     @SuppressWarnings("deprecation")

@@ -511,22 +511,6 @@ the displayed text at all, as property bindings are not bi-directional: the
 \c buttonText value would have changed if textItem.text was changed, but not
 the other way around.
 
-
-\section4 Considerations for Property Aliases
-
-It is possible for an aliasing property to have the same name as an existing
-property, effectively overwriting the existing property. For example,
-the following QML type has a \c color alias property, named the same as the
-built-in \l {Rectangle::color} property:
-
-\snippet qml/properties.qml alias overwrite
-
-Any object that use this type and refer to its \c color property will be
-referring to the alias rather than the ordinary \l {Rectangle::color} property.
-Internally, however, the rectangle can correctly set its \c color
-property and refer to the actual defined property rather than the alias.
-
-
 \section4 Property Aliases and Types
 
 Property aliases cannot have explicit type specifications. The type of a

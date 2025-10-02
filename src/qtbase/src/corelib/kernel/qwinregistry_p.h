@@ -15,7 +15,6 @@
 // We mean it.
 //
 
-#include <QtCore/qpair.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qstringview.h>
 #include <QtCore/qt_windows.h>
@@ -41,7 +40,10 @@ public:
     QWinRegistryKey(QWinRegistryKey &&other) noexcept
         : m_key(std::exchange(other.m_key, nullptr)) {}
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_MOVE_AND_SWAP(QWinRegistryKey)
-    void swap(QWinRegistryKey &other) noexcept { qSwap(m_key, other.m_key); }
+    void swap(QWinRegistryKey &other) noexcept
+    {
+        qt_ptr_swap(m_key, other.m_key);
+    }
 
     [[nodiscard]] bool isValid() const { return m_key != nullptr; }
 

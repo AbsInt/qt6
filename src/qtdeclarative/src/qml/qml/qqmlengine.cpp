@@ -614,6 +614,9 @@ void QQmlEngine::clearComponentCache()
 {
     Q_D(QQmlEngine);
 
+    // QQmlGadgetPtrWrapper can have QQmlData with various references.
+    qDeleteAll(std::exchange(d->cachedValueTypeInstances, {}));
+
     // Contexts can hold on to CUs but live on the JS heap.
     // Use a non-incremental GC run to get rid of those.
     QV4::MemoryManager *mm = handle()->memoryManager;

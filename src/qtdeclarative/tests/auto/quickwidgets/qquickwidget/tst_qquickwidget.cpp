@@ -1174,7 +1174,7 @@ void tst_qquickwidget::focusOnClickInProxyWidget()
 
     QVERIFY(QTest::qWaitForWindowExposed(&view2));
     QWindow *window2 = view2.windowHandle();
-    QVERIFY(window2);
+    QVERIFY(QTest::qWaitForWindowActive(window2));
 
     QTest::mouseClick(window2, Qt::LeftButton, Qt::KeyboardModifiers(), QPoint(300, 300));
     QTRY_VERIFY(!text1->hasActiveFocus());

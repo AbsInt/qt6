@@ -18,7 +18,7 @@ add_subdirectory(Dependency)
 add_subdirectory(ModuleWithDependency)
 add_subdirectory(quotesInPath)
 add_subdirectory(QmllsBuildIni)
-
+add_subdirectory(WrongOutput)
 add_subdirectory(WithoutCMakeBuilds)
 
 qt_add_qml_module(tst_generate_qmlls_ini

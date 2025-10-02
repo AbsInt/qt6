@@ -235,31 +235,6 @@ Item {
     Text {id: label}
 }
 
-//![alias overwrite]
-Rectangle {
-    id: coloredrectangle
-    property alias color: bluerectangle.color
-    color: "red"
-
-    Rectangle {
-        id: bluerectangle
-        color: "#1234ff"
-    }
-
-    Component.onCompleted: {
-        console.log (coloredrectangle.color)    //prints "#1234ff"
-        setInternalColor()
-        console.log (coloredrectangle.color)    //prints "#111111"
-        coloredrectangle.color = "#884646"
-        console.log (coloredrectangle.color)    //prints #884646
-    }
-
-    //internal function that has access to internal properties
-    function setInternalColor() {
-        color = "#111111"
-    }
-}
-//![alias overwrite]
 //! [parent end]
 }
 //! [parent end]

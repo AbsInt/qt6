@@ -435,6 +435,40 @@ void tst_qqmlengine::clearComponentCache()
     // event delivery. Call sendPostedEvents() to get rid of it so that
     // the temporary directory can be removed.
     QCoreApplication::sendPostedEvents();
+
+    engine.clearComponentCache();
+    {
+        // Type referenced by a QQmlGadgetPtrWrapper can be removed using clearComponentCache().
+
+        QQmlComponent component(&engine, testFileUrl("clearGadgetPtrWrappers.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> obj { component.create() };
+        QVERIFY(obj.get() != nullptr);
+
+        static const QRegularExpression re("MyItem_QMLTYPE_([0-9]+)\\(0x[0-9a-f]+\\)");
+        auto match = re.match(obj->objectName());
+        QVERIFY(match.hasMatch());
+        bool ok = false;
+        const int typeNumber = match.captured(1).toInt(&ok);
+        QVERIFY(ok);
+        QVERIFY(typeNumber >= 0);
+
+        const QUrl source = obj->property("source").value<QUrl>();
+        QVERIFY(source.isValid());
+        obj->setProperty("source", QUrl());
+
+        engine.collectGarbage();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
+        engine.clearComponentCache();
+
+        obj->setProperty("source", source);
+        match = re.match(obj->objectName());
+        QVERIFY(match.hasMatch());
+        ok = false;
+        QVERIFY(match.captured(1).toInt(&ok) > typeNumber);
+        QVERIFY(ok);
+    }
 }
 
 struct ComponentCacheFunctions : public QObject, public QQmlIncubationController

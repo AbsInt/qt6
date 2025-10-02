@@ -343,12 +343,17 @@ bool QQuickSpinBoxPrivate::handleMove(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickSpinBox);
     QQuickControlPrivate::handleMove(point, timestamp);
-    QQuickItem *ui = up->indicator();
-    QQuickItem *di = down->indicator();
-    up->setHovered(ui && ui->isEnabled() && ui->contains(ui->mapFromItem(q, point)));
-    up->setPressed(up->isHovered());
-    down->setHovered(di && di->isEnabled() && di->contains(di->mapFromItem(q, point)));
-    down->setPressed(down->isHovered());
+    QQuickItem *upIndicator = up->indicator();
+    const bool upIndicatorContainsPoint = upIndicator && upIndicator->isEnabled()
+        && upIndicator->contains(upIndicator->mapFromItem(q, point));
+    up->setHovered(touchId == -1 && upIndicatorContainsPoint);
+    up->setPressed(upIndicatorContainsPoint);
+
+    QQuickItem *downIndicator = down->indicator();
+    const bool downIndicatorContainsPoint = downIndicator && downIndicator->isEnabled()
+        && downIndicator->contains(downIndicator->mapFromItem(q, point));
+    down->setHovered(touchId == -1 && downIndicatorContainsPoint);
+    down->setPressed(downIndicatorContainsPoint);
 
     bool pressed = up->isPressed() || down->isPressed();
     q->setAccessibleProperty("pressed", pressed);
@@ -475,6 +480,9 @@ QQuickSpinBox::QQuickSpinBox(QQuickItem *parent)
     setAcceptedMouseButtons(Qt::LeftButton);
 #if QT_CONFIG(cursor)
     setCursor(Qt::ArrowCursor);
+#endif
+#if QT_CONFIG(quicktemplates2_multitouch)
+    setAcceptTouchEvents(true);
 #endif
 }
 

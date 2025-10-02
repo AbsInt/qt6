@@ -114,6 +114,13 @@ void tst_generate_qmlls_ini::qmllsIniAreCorrect_data()
                 << withoutCMakeBuilds.absolutePath() << QStringList{ build.absolutePath(), }
                 << u"true"_s << docPath << defaultImportPaths;
     }
+    {
+        QDir wrongOutput = source;
+        QVERIFY(wrongOutput.cd(u"WrongOutput"_s));
+        QTest::addRow("wrong-output")
+                << wrongOutput.absolutePath() << QStringList{ build.filePath("WrongOutput"), }
+                << noCMakeCalls << docPath << defaultImportPaths;
+    }
 }
 
 void tst_generate_qmlls_ini::qmllsIniAreCorrect()

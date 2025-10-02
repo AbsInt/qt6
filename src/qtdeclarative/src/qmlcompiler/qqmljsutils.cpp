@@ -253,10 +253,11 @@ QStringList QQmlJSUtils::resourceFilesFromBuildFolders(const QStringList &buildF
 {
     QStringList result;
     for (const QString &path : buildFolders) {
-        QDirIterator it(path, QStringList{ u"*.qrc"_s }, QDir::Files | QDir::Hidden,
-                        QDirIterator::Subdirectories);
-        while (it.hasNext()) {
-            result.append(it.next());
+        for (auto it : QDirListing{ path, QStringList{ u"*.qrc"_s },
+                                    QDirListing::IteratorFlag::Recursive
+                                            | QDirListing::IteratorFlag::FilesOnly
+                                            | QDirListing::IteratorFlag::IncludeHidden }) {
+            result.append(it.filePath());
         }
     }
     return result;

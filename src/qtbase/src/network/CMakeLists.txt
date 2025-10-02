@@ -9,6 +9,7 @@ qt_internal_add_module(Network
     PLUGIN_TYPES networkaccess networkinformation tls
     SOURCES
         access/qabstractnetworkcache.cpp access/qabstractnetworkcache.h access/qabstractnetworkcache_p.h
+        access/qbytedatabuffer_p.h
         access/qhsts.cpp access/qhsts_p.h
         access/qhstspolicy.cpp access/qhstspolicy.h
         access/qnetworkaccessauthenticationmanager.cpp access/qnetworkaccessauthenticationmanager_p.h
@@ -38,6 +39,7 @@ qt_internal_add_module(Network
         kernel/qnetworkinterface.cpp kernel/qnetworkinterface.h kernel/qnetworkinterface_p.h
         kernel/qnetworkinterface_unix_p.h
         kernel/qnetworkproxy.cpp kernel/qnetworkproxy.h
+        kernel/qtcontenttypeparser_p.h
         kernel/qtnetworkglobal.h kernel/qtnetworkglobal_p.h
         socket/qabstractsocket.cpp socket/qabstractsocket.h socket/qabstractsocket_p.h
         socket/qabstractsocketengine.cpp socket/qabstractsocketengine_p.h

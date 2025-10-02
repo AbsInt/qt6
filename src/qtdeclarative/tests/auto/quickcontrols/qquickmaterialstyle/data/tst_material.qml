@@ -1588,4 +1588,33 @@ TestCase {
         compare(popup.Material.theme, Material.Light)
         compare(popup.label.Material.theme, Material.Light)
     }
+
+    Component {
+        id: spinBoxComponent
+
+        SpinBox {
+            anchors.centerIn: parent
+        }
+    }
+
+    function test_spinBoxShouldNotBeHoveredOnTouch() {
+        let spinBox = createTemporaryObject(spinBoxComponent, testCase)
+        verify(spinBox)
+        let up = spinBox.up
+        let indicator = up.indicator
+
+        let touch = touchEvent(indicator)
+        touch.press(0, indicator, indicator.width * 0.5, indicator.height * 0.5).commit()
+        verify(up.pressed)
+        verify(!up.hovered)
+
+        // Move around a bit while pressed.
+        touch.move(0, indicator, indicator.width * 0.4, indicator.height * 0.4).commit()
+        verify(up.pressed)
+        verify(!up.hovered)
+
+        touch.release(0).commit()
+        verify(!up.pressed)
+        verify(!up.hovered)
+    }
 }
