@@ -375,7 +375,9 @@ public:
     { return typeId->firstSourceLocation(); }
 
     SourceLocation lastSourceLocation() const override
-    { return typeArgument ? typeArgument->lastSourceLocation() : typeId->lastSourceLocation(); }
+    {
+        return rAngleBracketToken.isValid() ? rAngleBracketToken : typeId->lastSourceLocation();
+    }
 
     QString toString() const;
     void toString(QString *out) const;
@@ -383,6 +385,8 @@ public:
 // attributes
     UiQualifiedId *typeId;
     UiQualifiedId *typeArgument;
+    SourceLocation lAngleBracketToken;
+    SourceLocation rAngleBracketToken;
 };
 
 class QML_PARSER_EXPORT TypeAnnotation: public Node

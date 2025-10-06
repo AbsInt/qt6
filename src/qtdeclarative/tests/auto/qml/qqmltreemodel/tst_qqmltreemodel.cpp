@@ -36,6 +36,7 @@ private slots:
     void setRowsForEmptyModel();
     void setRowsOnNonEmptyModel();
     void setRow();
+    void setData();
 };
 
 void tst_QQmlTreeModel::appendToEmptyModel()
@@ -1088,6 +1089,128 @@ void tst_QQmlTreeModel::setRow()
     QCOMPARE(model->data(model->index({1,0}, 3), roleNames.key("decoration")).toString(), u"orange"_s);
     QCOMPARE(model->data(model->index({1,0}, 4), roleNames.key("display")).toDouble(), 2.5);
     QCOMPARE(model->data(model->index({1,0}, 4), roleNames.key("decoration")).toString(), u"orange"_s);
+}
+
+void tst_QQmlTreeModel::setData()
+{
+    QQuickView view;
+    QVERIFY(QQuickTest::showView(view, testFileUrl("setData.qml")));
+
+    auto *model = view.rootObject()->property("testModel").value<QQmlTreeModel*>();
+    QVERIFY(model);
+
+    QCOMPARE(model->columnCount(), 5);
+    QCOMPARE(model->treeSize(), 8);
+
+    QSignalSpy columnCountSpy(model, SIGNAL(columnCountChanged()));
+    QVERIFY(columnCountSpy.isValid());
+
+    QSignalSpy rowsChangedSpy(model, SIGNAL(rowsChanged()));
+    QVERIFY(rowsChangedSpy.isValid());
+    int rowsChangedSignalEmissions = 0;
+
+    const QHash<int, QByteArray> roleNames = model->roleNames();
+    QCOMPARE(roleNames.size(), 2);
+    QVERIFY(roleNames.values().contains("display"));
+    QVERIFY(roleNames.values().contains("decoration"));
+
+    // first top level node
+    QCOMPARE(model->data(model->index(0, 0, QModelIndex()), roleNames.key("display")).toBool(), false);
+    QCOMPARE(model->data(model->index(0, 0, QModelIndex()), roleNames.key("decoration")).toString(), u"red"_s);
+    QCOMPARE(model->data(model->index(0, 1, QModelIndex()), roleNames.key("display")).toInt(), 1);
+    QCOMPARE(model->data(model->index(0, 1, QModelIndex()), roleNames.key("decoration")).toString(), u"red"_s);
+    QCOMPARE(model->data(model->index(0, 2, QModelIndex()), roleNames.key("display")).toString(), u"Apple"_s);
+    QCOMPARE(model->data(model->index(0, 2, QModelIndex()), roleNames.key("decoration")).toString(), u"red"_s);
+    QCOMPARE(model->data(model->index(0, 3, QModelIndex()), roleNames.key("display")).toString(), u"Granny Smith"_s);
+    QCOMPARE(model->data(model->index(0, 3, QModelIndex()), roleNames.key("decoration")).toString(), u"red"_s);
+    QCOMPARE(model->data(model->index(0, 4, QModelIndex()), roleNames.key("display")).toDouble(), 1.5);
+    QCOMPARE(model->data(model->index(0, 4, QModelIndex()), roleNames.key("decoration")).toString(), u"red"_s);
+
+    // model->index(0, 2, QModelIndex()): index to the fruit type "Apple"
+    model->setData(model->index(0, 2, QModelIndex()), u"Passion fruit"_s, Qt::DisplayRole);
+    QCOMPARE(model->data(model->index(0, 2, QModelIndex()), roleNames.key("display")).toString(), u"Passion fruit"_s);
+
+    // Test the other overload
+    // model->index(0, 3, QModelIndex()): index to the fruit name "Granny Smith"
+    model->setData(model->index(0, 3, QModelIndex()), u"My favorite fruit"_s, u"display"_s);
+    QCOMPARE(model->data(model->index(0, 3, QModelIndex()), roleNames.key("display")).toString(), u"My favorite fruit"_s);
+
+    // Everything else is unchanged
+    QCOMPARE(model->data(model->index(0, 0, QModelIndex()), roleNames.key("display")).toBool(), false);
+    QCOMPARE(model->data(model->index(0, 0, QModelIndex()), roleNames.key("decoration")).toString(), u"red"_s);
+    QCOMPARE(model->data(model->index(0, 1, QModelIndex()), roleNames.key("display")).toInt(), 1);
+    QCOMPARE(model->data(model->index(0, 1, QModelIndex()), roleNames.key("decoration")).toString(), u"red"_s);
+    QCOMPARE(model->data(model->index(0, 2, QModelIndex()), roleNames.key("decoration")).toString(), u"red"_s);
+    QCOMPARE(model->data(model->index(0, 3, QModelIndex()), roleNames.key("decoration")).toString(), u"red"_s);
+    QCOMPARE(model->data(model->index(0, 4, QModelIndex()), roleNames.key("display")).toDouble(), 1.5);
+    QCOMPARE(model->data(model->index(0, 4, QModelIndex()), roleNames.key("decoration")).toString(), u"red"_s);
+
+    // the other level node
+    QCOMPARE(model->data(model->index(1, 0, QModelIndex()), roleNames.key("display")).toBool(), false);
+    QCOMPARE(model->data(model->index(1, 0, QModelIndex()), roleNames.key("decoration")).toString(), u"yellow"_s);
+    QCOMPARE(model->data(model->index(1, 1, QModelIndex()), roleNames.key("display")).toInt(), 4);
+    QCOMPARE(model->data(model->index(1, 1, QModelIndex()), roleNames.key("decoration")).toString(), u"yellow"_s);
+    QCOMPARE(model->data(model->index(1, 2, QModelIndex()), roleNames.key("display")).toString(), u"Peach"_s);
+    QCOMPARE(model->data(model->index(1, 2, QModelIndex()), roleNames.key("decoration")).toString(), u"yellow"_s);
+    QCOMPARE(model->data(model->index(1, 3, QModelIndex()), roleNames.key("display")).toString(), u"Princess Peach"_s);
+    QCOMPARE(model->data(model->index(1, 3, QModelIndex()), roleNames.key("decoration")).toString(), u"yellow"_s);
+    QCOMPARE(model->data(model->index(1, 4, QModelIndex()), roleNames.key("display")).toDouble(), 1.45);
+    QCOMPARE(model->data(model->index(1, 4, QModelIndex()), roleNames.key("decoration")).toString(), u"yellow"_s);
+
+    // now change the type on the JS side to "Ananas"
+    QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "changeFruitTypeIntOverload"));
+    QCOMPARE(model->data(model->index(1, 2, QModelIndex()), roleNames.key("display")).toString(), u"Ananas"_s);
+
+    // use the other overload and change the name on the JS side tp "My other favorite fruit"
+    QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "changeFruitNameStringOverload"));
+    QCOMPARE(model->data(model->index(1, 3, QModelIndex()), roleNames.key("display")).toString(), u"My other favorite fruit"_s);
+
+    // like before, everything else is unchanged
+    QCOMPARE(model->data(model->index(1, 0, QModelIndex()), roleNames.key("display")).toBool(), false);
+    QCOMPARE(model->data(model->index(1, 0, QModelIndex()), roleNames.key("decoration")).toString(), u"yellow"_s);
+    QCOMPARE(model->data(model->index(1, 1, QModelIndex()), roleNames.key("display")).toInt(), 4);
+    QCOMPARE(model->data(model->index(1, 1, QModelIndex()), roleNames.key("decoration")).toString(), u"yellow"_s);
+    QCOMPARE(model->data(model->index(1, 2, QModelIndex()), roleNames.key("decoration")).toString(), u"yellow"_s);
+    QCOMPARE(model->data(model->index(1, 3, QModelIndex()), roleNames.key("decoration")).toString(), u"yellow"_s);
+    QCOMPARE(model->data(model->index(1, 4, QModelIndex()), roleNames.key("display")).toDouble(), 1.45);
+    QCOMPARE(model->data(model->index(1, 4, QModelIndex()), roleNames.key("decoration")).toString(), u"yellow"_s);
+
+    // check the first child of the first top level node
+    QCOMPARE(model->data(model->index({0,0}, 0), roleNames.key("display")).toBool(), true);
+    QCOMPARE(model->data(model->index({0,0}, 0), roleNames.key("decoration")).toString(), u"orange"_s);
+    QCOMPARE(model->data(model->index({0,0}, 1), roleNames.key("display")).toInt(), 4);
+    QCOMPARE(model->data(model->index({0,0}, 1), roleNames.key("decoration")).toString(), u"orange"_s);
+    QCOMPARE(model->data(model->index({0,0}, 2), roleNames.key("display")).toString(), u"Orange"_s);
+    QCOMPARE(model->data(model->index({0,0}, 2), roleNames.key("decoration")).toString(), u"orange"_s);
+    QCOMPARE(model->data(model->index({0,0}, 3), roleNames.key("display")).toString(), u"Navel"_s);
+    QCOMPARE(model->data(model->index({0,0}, 3), roleNames.key("decoration")).toString(), u"orange"_s);
+    QCOMPARE(model->data(model->index({0,0}, 4), roleNames.key("display")).toDouble(), 2.50);
+    QCOMPARE(model->data(model->index({0,0}, 4), roleNames.key("decoration")).toString(), u"orange"_s);
+
+    // This is probably not the most common use case, but it won't hurt to test if it works
+    QModelIndex idxType = model->index({0,0}, 2);
+    QString type = u"Weird fruit"_s;
+    int role = Qt::DisplayRole;
+
+    QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "changeFruitType", Q_ARG(QVariant, idxType), Q_ARG(QVariant, type), Q_ARG(QVariant, role)));
+    QCOMPARE(model->data(model->index({0,0}, 2), roleNames.key("display")).toString(), u"Weird fruit"_s);
+
+    QModelIndex idxName = model->index({0,0}, 3);
+    QString name = u"Unknown fruit"_s;
+    QString roleAsString = u"display"_s;
+
+    QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "changeFruitName", Q_ARG(QVariant, idxName), Q_ARG(QVariant, name), Q_ARG(QVariant, roleAsString)));
+    QCOMPARE(model->data(model->index({0,0}, 3), roleNames.key("display")).toString(), u"Unknown fruit"_s);
+
+    // Everything else is unchanged
+    QCOMPARE(model->data(model->index({0,0}, 0), roleNames.key("display")).toBool(), true);
+    QCOMPARE(model->data(model->index({0,0}, 0), roleNames.key("decoration")).toString(), u"orange"_s);
+    QCOMPARE(model->data(model->index({0,0}, 1), roleNames.key("display")).toInt(), 4);
+    QCOMPARE(model->data(model->index({0,0}, 1), roleNames.key("decoration")).toString(), u"orange"_s);
+    QCOMPARE(model->data(model->index({0,0}, 2), roleNames.key("decoration")).toString(), u"orange"_s);
+    QCOMPARE(model->data(model->index({0,0}, 3), roleNames.key("decoration")).toString(), u"orange"_s);
+    QCOMPARE(model->data(model->index({0,0}, 4), roleNames.key("display")).toDouble(), 2.50);
+    QCOMPARE(model->data(model->index({0,0}, 4), roleNames.key("decoration")).toString(), u"orange"_s);
 }
 
 QTEST_MAIN(tst_QQmlTreeModel)

@@ -212,6 +212,9 @@ private slots:
     void touchscreenDoesNotSelect();
     void touchscreenSetsFocusAndMovesCursor();
 
+    void imeSelectionWithCommitMovesCursor_NoMask();
+    void imeSelectionWithCommitDoesNotOverride_WithMask();
+
 private:
     void simulateKeys(QWindow *window, const QList<Key> &keys);
 #if QT_CONFIG(shortcut)
@@ -7258,6 +7261,69 @@ void tst_qquicktextinput::touchscreenSetsFocusAndMovesCursor()
     QQuickTouchUtils::flush(&window);
     QCOMPARE(qApp->focusObject(), top);
     QVERIFY(top->selectedText().isEmpty());
+}
+
+void tst_qquicktextinput::imeSelectionWithCommitMovesCursor_NoMask()
+{
+    // QTBUG-140400: Selection (len 0) must move cursor even when commit is present.
+    QString componentStr = "import QtQuick 2.0\nTextInput { focus: true; text: \"abcdef\" }";
+    QQmlComponent comp(&engine);
+    comp.setData(componentStr.toLatin1(), QUrl());
+    QQuickTextInput *ti = qobject_cast<QQuickTextInput*>(comp.create());
+    QVERIFY(ti);
+
+    QQuickWindow win;
+    ti->setParentItem(win.contentItem());
+    win.show();
+    QVERIFY(QTest::qWaitForWindowActive(&win));
+    QVERIFY_ACTIVE_FOCUS(ti);
+
+    ti->setCursorPosition(3);
+    QCOMPARE(ti->cursorPosition(), 3);
+
+    // Commit + Selection(start=4, length=0) in the same IME event.
+    {
+        QList<QInputMethodEvent::Attribute> attrs;
+        attrs << QInputMethodEvent::Attribute(QInputMethodEvent::Selection, 4, 0, QVariant());
+        QInputMethodEvent ev(QString(), attrs);
+        ev.setCommitString("HELLO");
+        QGuiApplication::sendEvent(ti, &ev);
+    }
+
+    // Commit happened at old cursor (-> abcHELLOdef), then Selection moved cursor to 4.
+    QCOMPARE(ti->text(), QStringLiteral("abcHELLOdef"));
+    QCOMPARE(ti->selectionStart(), ti->selectionEnd());
+    QCOMPARE(ti->cursorPosition(), 4);
+}
+
+void tst_qquicktextinput::imeSelectionWithCommitDoesNotOverride_WithMask()
+{
+    // Preserve QTBUG-94253 behavior: with input mask, Selection must not override
+    // cursor set by internalInsert() when a commit is present.
+    QString componentStr = "import QtQuick 2.0\nTextInput { focus: true; inputMask: \"AA.AA.AA\" }";
+    QQmlComponent comp(&engine);
+    comp.setData(componentStr.toLatin1(), QUrl());
+    QQuickTextInput *ti = qobject_cast<QQuickTextInput*>(comp.create());
+    QVERIFY(ti);
+
+    QQuickWindow win;
+    ti->setParentItem(win.contentItem());
+    win.show();
+    QVERIFY(QTest::qWaitForWindowActive(&win));
+    QVERIFY_ACTIVE_FOCUS(ti);
+
+    // One IME event: commit + Selection(start: 4, length: 0). Selection start must NOT override the cursor.
+    {
+        QList<QInputMethodEvent::Attribute> attrs;
+        attrs << QInputMethodEvent::Attribute(QInputMethodEvent::Selection, 4, 0, QVariant());
+        QInputMethodEvent ev(QString(), attrs);
+        ev.setCommitString("HELLO");
+        QGuiApplication::sendEvent(ti, &ev);
+    }
+
+    // Matches existing mask expectations (cursor at the end after commit string)
+    QCOMPARE(ti->text(), QStringLiteral("HE.LL.O"));
+    QCOMPARE(ti->cursorPosition(), ti->text().size());
 }
 
 QTEST_MAIN(tst_qquicktextinput)

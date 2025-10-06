@@ -344,11 +344,9 @@ void QQuickQmlGenerator::generateEasing(const QQuickAnimatedProperty::PropertyAn
 
         bool isLinear = (c1 == c1.transposed() && c2 == c2.transposed());
         if (!isLinear) {
-            int nextIdx = m_easings.size();
-            QString &id = m_easings[{c1.x(), c1.y(), c2.x(), c2.y()}];
-            if (id.isNull())
-                id = QString(QLatin1String("easing_%1")).arg(nextIdx, 2, 10, QLatin1Char('0'));
-            stream() << "easing: " << m_topLevelIdString << "." << id;
+            stream() << "easing.type: Easing.BezierSpline";
+            stream() << "easing.bezierCurve: [ " << c1.x() << ", " << c1.y()
+                     << ", " << c2.x() << ", " << c2.y() << ", 1, 1 ]";
         }
     }
 }
@@ -1181,13 +1179,6 @@ bool QQuickQmlGenerator::generateRootNode(const StructureNodeInfo &info)
             m_inShapeItemLevel--;
             m_indentLevel--;
             stream() << "}";
-        }
-
-        for (const auto [coords, id] : m_easings.asKeyValueRange()) {
-            stream() << "property easingCurve " << id << ": { type: Easing.BezierSpline; bezierCurve: [ ";
-            for (auto coord : coords)
-                stream(SameLine) << coord << ", ";
-            stream(SameLine) << "1, 1 ] }";
         }
 
         m_indentLevel--;

@@ -443,6 +443,55 @@ private slots:
         QCOMPARE(formattedDeclaration, expectedFormattedDeclaration);
     }
 
+    void typeAnnotations_data()
+    {
+        QTest::addColumn<QString>("declarationToBeFormatted");
+        QTest::addColumn<QString>("expectedFormattedDeclaration");
+
+        QTest::newRow("Function") << u"function a(a:date,b:int):real{}"_s
+                                  << u"function a(a: date, b: int): real {}"_s;
+        // note: we need to wrap the lambda in `()`, otherwise its invalid JS
+        QTest::newRow("AnonymousFunction") << u"(function (a:date,b:int):real{})"_s
+                                           << u"(function (a: date, b: int): real {})"_s;
+
+        // note: generator can't have return type annotations
+        QTest::newRow("Generator_lhs_star")
+                << u"function* g(a:date,b:int){}"_s << u"function* g(a: date, b: int) {}"_s;
+        QTest::newRow("Generator_rhs_star")
+                << u"function *g(a:int,b:date){}"_s << u"function* g(a: int, b: date) {}"_s;
+        QTest::newRow("list") << u"function a(a:list<date>,b:list<int>):list<real>{}"_s
+                              << u"function a(a: list<date>, b: list<int>): list<real> {}"_s;
+
+        QTest::newRow("comments")
+                << u"function a(a/*1*/:/*2*/list/*3*/</*4*/date/*5*/>/*6*/,/*7*/b/*8*/:/*9*/int/*10*/){}"_s
+                << u"function a(a/*1*/: /*2*/list/*3*/</*4*/date/*5*/>/*6*/, /*7*/b/*8*/: /*9*/int/*10*/) {}"_s;
+
+        QTest::newRow("comments2")
+                << u"function a(a: Q/*10*/./*11*/W/*12*/./*13*/E/*14*/./*15*/R/*16*/){}"_s
+                << u"function a(a: Q/*10*/./*11*/W/*12*/./*13*/E/*14*/./*15*/R/*16*/) {}"_s;
+
+        QTest::newRow("commentsOnReturnType") << u"function a()/*1*/:/*2*/real/*3*/{}"_s
+                                              << u"function a()/*1*/: /*2*/real/*3*/ {}"_s;
+        QTest::newRow("commentsOnReturnType2")
+                << u"function a():Q/*10*/./*11*/W/*12*/./*13*/E/*14*/./*15*/R/*16*/{}"_s
+                << u"function a(): Q/*10*/./*11*/W/*12*/./*13*/E/*14*/./*15*/R/*16*/ {}"_s;
+        QTest::newRow("commentsOnListReturnType")
+                << u"function a():/*2*/list/*3*/</*4*/Q/*10*/./*11*/W/*12*/./*13*/E/*14*/./*15*/R/*16*/>/*17*/{}"_s
+                << u"function a(): /*2*/list/*3*/</*4*/Q/*10*/./*11*/W/*12*/./*13*/E/*14*/./*15*/R/*16*/>/*17*/ {}"_s;
+    }
+
+    void typeAnnotations()
+    {
+        QFETCH(QString, declarationToBeFormatted);
+        QFETCH(QString, expectedFormattedDeclaration);
+
+        // type annotations only exist in qml files, not in JS or JS module files
+        const QString formattedDeclaration = formatPlainJS(
+                declarationToBeFormatted, ScriptExpression::ExpressionType::BindingExpression);
+
+        QCOMPARE(formattedDeclaration, expectedFormattedDeclaration);
+    }
+
     void exportDeclarations_data()
     {
         QTest::addColumn<QString>("exportToBeFormatted");

@@ -21,7 +21,6 @@
 
 #include <QtCore/qtextstream.h>
 #include <QtCore/qbuffer.h>
-#include <QtCore/qmap.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -151,7 +150,6 @@ private:
     QString m_urlPrefix;
     QString m_topLevelIdString;
     QStringList m_extraImports;
-    QMap<std::array<qreal, 4>, QString> m_easings;
 };
 
 QT_END_NAMESPACE

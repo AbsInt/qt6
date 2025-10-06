@@ -151,13 +151,13 @@ TestCase {
 
         textItem.text = "a"
         compare(control.suggestionCount, 2)
-        compare(control.currentIndex, 0)
+        compare(control.currentIndex, -1)
         compare(control.highlightedIndex, 0)
         compare(control.popup.visible, true)
 
         textItem.text = "c"
         compare(control.suggestionCount, 3)
-        compare(control.currentIndex, 0)
+        compare(control.currentIndex, -1)
         compare(control.highlightedIndex, 0)
         compare(control.popup.visible, true)
     }
@@ -177,9 +177,41 @@ TestCase {
         textItem.text = "a"
 
         compare(control.text, "a")
+        compare(control.currentIndex, -1)
         compare(textEditedSpy.count, 1)
 
         compare(searchTriggeredSpy.count, 1)
+    }
+
+    function test_currentIndexResetsOnEdit() {
+        ignoreWarning(/Unable to assign QQmlDMAbstractItemModelData to QString/)
+        let control = createTemporaryObject(searchField, testCase)
+        verify(control)
+
+        control.forceActiveFocus()
+        verify(control.activeFocus)
+
+        control.suggestionModel = fruitModel
+        control.textRole = "name"
+
+        let textItem = control.contentItem
+        textItem.text = "a"
+
+        compare(control.popup.visible, true)
+
+        compare(control.currentIndex, -1)
+        compare(control.highlightedIndex, 0)
+
+        keyClick(Qt.Key_Down)
+        compare(control.currentIndex, -1)
+        compare(control.highlightedIndex, 1)
+
+        keyClick(Qt.Key_Enter)
+        compare(control.currentIndex, 1)
+        compare(control.popup.visible, false)
+
+        textItem.text = control.text + "x"
+        compare(control.currentIndex, -1)
     }
 
     function test_arrowKeys() {
@@ -220,7 +252,7 @@ TestCase {
         compare(control.popup.visible, true)
 
         keyClick(Qt.Key_Down)
-        compare(control.currentIndex, 0)
+        compare(control.currentIndex, -1)
         compare(control.highlightedIndex, 1)
         compare(activatedSpy.count, 0)
         compare(highlightedSpy.count, 1)
@@ -228,7 +260,7 @@ TestCase {
         highlightedSpy.clear()
 
         keyClick(Qt.Key_Down)
-        compare(control.currentIndex, 0)
+        compare(control.currentIndex, -1)
         compare(control.highlightedIndex, 2)
         compare(activatedSpy.count, 0)
         compare(highlightedSpy.count, 1)
@@ -236,7 +268,7 @@ TestCase {
         highlightedSpy.clear()
 
         keyClick(Qt.Key_Up)
-        compare(control.currentIndex, 0)
+        compare(control.currentIndex, -1)
         compare(control.highlightedIndex, 1)
         compare(activatedSpy.count, 0)
         compare(highlightedSpy.count, 1)
@@ -245,6 +277,7 @@ TestCase {
 
         keyClick(Qt.Key_Enter)
         compare(control.text, "Cherry")
+        compare(control.currentIndex, 1)
         compare(acceptedSpy.count, 1)
         compare(searchTriggeredSpy.count, 2)
 

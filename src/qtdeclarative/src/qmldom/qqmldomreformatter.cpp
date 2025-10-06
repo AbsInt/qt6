@@ -530,6 +530,35 @@ bool ScriptFormatter::visit(PatternElement *ast)
         }
         accept(ast->initializer);
     }
+    accept(ast->typeAnnotation);
+    return false;
+}
+
+bool ScriptFormatter::visit(TypeAnnotation *ast)
+{
+    out(ast->colonToken);
+    lw.lineWriter.ensureSpace();
+    accept(ast->type);
+    return false;
+}
+
+bool ScriptFormatter::visit(Type *ast)
+{
+    accept(ast->typeId);
+    if (ast->typeArgument) {
+        outWithComments(ast->lAngleBracketToken, ast);
+        accept(ast->typeArgument);
+        outWithComments(ast->rAngleBracketToken, ast);
+    }
+    return false;
+}
+
+bool ScriptFormatter::visit(UiQualifiedId *ast)
+{
+    for (UiQualifiedId *it = ast; it; it = it->next) {
+        outWithComments(it->dotToken, it);
+        outWithComments(it->identifierToken, it);
+    }
     return false;
 }
 
@@ -832,6 +861,7 @@ bool ScriptFormatter::visit(FunctionExpression *ast)
     accept(ast->formals);
     lw.decreaseIndent(1, baseIndent);
     outWithComments(ast->rparenToken, ast, removeParentheses ? OnlyComments : NoSpace);
+    accept(ast->typeAnnotation);
     lw.lineWriter.ensureSpace();
     if (ast->isArrowFunction) {
         out("=>");

@@ -1685,6 +1685,8 @@ Type: UiQualifiedId T_LT SimpleType T_GT;
 /.
     case $rule_number: {
         sym(1).Type = new (pool) AST::Type(sym(1).UiQualifiedId, sym(3).Type);
+        sym(1).Type->lAngleBracketToken = loc(2);
+        sym(1).Type->rAngleBracketToken = loc(4);
     } break;
 ./
 
@@ -3974,8 +3976,7 @@ FunctionDeclaration: Function BindingIdentifier T_LPAREN FormalParameters T_RPAR
     case $rule_number: {
         if (!ensureNoFunctionTypeAnnotations(sym(6).TypeAnnotation, sym(4).FormalParameterList))
             return false;
-        AST::FunctionDeclaration *node = new (pool) AST::FunctionDeclaration(stringRef(2), sym(4).FormalParameterList, sym(8).StatementList,
-                                                                             /*type annotation*/nullptr);
+        AST::FunctionDeclaration *node = new (pool) AST::FunctionDeclaration(stringRef(2), sym(4).FormalParameterList, sym(8).StatementList, sym(6).TypeAnnotation);
         node->functionToken = loc(1);
         node->identifierToken = loc(2);
         node->lparenToken = loc(3);
@@ -4008,7 +4009,7 @@ FunctionDeclaration_Default: Function T_LPAREN FormalParameters T_RPAREN TypeAnn
         if (!ensureNoFunctionTypeAnnotations(sym(5).TypeAnnotation, sym(3).FormalParameterList))
             return false;
         AST::FunctionDeclaration *node = new (pool) AST::FunctionDeclaration(QStringView(), sym(3).FormalParameterList, sym(7).StatementList,
-                                                                             /*type annotation*/nullptr);
+                                                                             sym(5).TypeAnnotation);
         node->functionToken = loc(1);
         node->lparenToken = loc(2);
         node->rparenToken = loc(4);
