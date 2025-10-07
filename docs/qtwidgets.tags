@@ -507,6 +507,13 @@
             <anchor>editorEvent</anchor>
             <arglist>(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &amp;option, const QModelIndex &amp;index)</arglist>
         </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>handleEditorEvent</name>
+            <anchorfile>qabstractitemdelegate.html</anchorfile>
+            <anchor>handleEditorEvent</anchor>
+            <arglist>(QObject *editor, QEvent *event)</arglist>
+        </member>
         <member kind="function" protection="public" virtualness="virtual" static="no">
             <type>virtual bool</type>
             <name>helpEvent</name>
@@ -2913,6 +2920,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>returnPressed</name>
+            <anchorfile>qabstractspinbox.html</anchorfile>
+            <anchor>returnPressed</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>selectAll</name>
             <anchorfile>qabstractspinbox.html</anchorfile>
             <anchor>selectAll</anchor>
@@ -3273,6 +3287,13 @@
             <name>QAccessibleWidget</name>
             <anchorfile>qaccessiblewidget.html</anchorfile>
             <anchor>QAccessibleWidget</anchor>
+            <arglist>(QWidget *w, QAccessible::Role role)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QAccessibleWidget</name>
+            <anchorfile>qaccessiblewidget.html</anchorfile>
+            <anchor>QAccessibleWidget-1</anchor>
             <arglist>(QWidget *w, QAccessible::Role role, const QString &amp;name)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="virtual" static="no">
@@ -7587,7 +7608,7 @@
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
             <name>setTimeSpec</name>
-            <anchorfile>qdatetimeedit.html</anchorfile>
+            <anchorfile>qdatetimeedit-obsolete.html</anchorfile>
             <anchor>timeSpec-prop</anchor>
             <arglist>(Qt::TimeSpec spec)</arglist>
         </member>
@@ -7783,7 +7804,7 @@
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>Qt::TimeSpec</type>
             <name>timeSpec</name>
-            <anchorfile>qdatetimeedit.html</anchorfile>
+            <anchorfile>qdatetimeedit-obsolete.html</anchorfile>
             <anchor>timeSpec-prop</anchor>
             <arglist>() const const</arglist>
         </member>
@@ -7920,7 +7941,7 @@
         </member>
         <member kind="property" type="Qt::TimeSpec">
             <name>timeSpec</name>
-            <anchorfile>qdatetimeedit.html</anchorfile>
+            <anchorfile>qdatetimeedit-obsolete.html</anchorfile>
             <anchor>timeSpec-prop</anchor>
             <arglist></arglist>
         </member>
@@ -20119,7 +20140,7 @@
             <type>void</type>
             <name>resize</name>
             <anchorfile>qgraphicswidget.html</anchorfile>
-            <anchor>resize-1</anchor>
+            <anchor>resize</anchor>
             <arglist>(qreal w, qreal h)</arglist>
         </member>
         <member kind="function" protection="protected" virtualness="virtual" static="no">
@@ -20628,7 +20649,7 @@
             <type>void</type>
             <name>addWidget</name>
             <anchorfile>qgridlayout.html</anchorfile>
-            <anchor>addWidget-2</anchor>
+            <anchor>addWidget-1</anchor>
             <arglist>(QWidget *widget, int fromRow, int fromColumn, int rowSpan, int columnSpan, Qt::Alignment alignment)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -22531,7 +22552,7 @@
             <name>eventFilter</name>
             <anchorfile>qitemdelegate.html</anchorfile>
             <anchor>eventFilter</anchor>
-            <arglist>(QObject *editor, QEvent *event) override</arglist>
+            <arglist>(QObject *object, QEvent *event) override</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
@@ -23850,6 +23871,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setHorizontalSizeConstraint</name>
+            <anchorfile>qlayout.html</anchorfile>
+            <anchor>horizontalSizeConstraint-prop</anchor>
+            <arglist>(QLayout::SizeConstraint constraint)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setMenuBar</name>
             <anchorfile>qlayout.html</anchorfile>
             <anchor>setMenuBar</anchor>
@@ -23860,7 +23888,14 @@
             <name>setSizeConstraint</name>
             <anchorfile>qlayout.html</anchorfile>
             <anchor>sizeConstraint-prop</anchor>
-            <arglist>(QLayout::SizeConstraint)</arglist>
+            <arglist>(QLayout::SizeConstraint constraint)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setSizeConstraints</name>
+            <anchorfile>qlayout.html</anchorfile>
+            <anchor>setSizeConstraints</anchor>
+            <arglist>(QLayout::SizeConstraint horizontal, QLayout::SizeConstraint vertical)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="virtual" static="no">
             <type>virtual void</type>
@@ -23868,6 +23903,13 @@
             <anchorfile>qlayout.html</anchorfile>
             <anchor>spacing-prop</anchor>
             <arglist>(int)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setVerticalSizeConstraint</name>
+            <anchorfile>qlayout.html</anchorfile>
+            <anchor>verticalSizeConstraint-prop</anchor>
+            <arglist>(QLayout::SizeConstraint constraint)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
@@ -23885,9 +23927,23 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QLayout::SizeConstraint</type>
+            <name>horizontalSizeConstraint</name>
+            <anchorfile>qlayout.html</anchorfile>
+            <anchor>horizontalSizeConstraint-prop</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QLayout::SizeConstraint</type>
             <name>sizeConstraint</name>
             <anchorfile>qlayout.html</anchorfile>
             <anchor>sizeConstraint-prop</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QLayout::SizeConstraint</type>
+            <name>verticalSizeConstraint</name>
+            <anchorfile>qlayout.html</anchorfile>
+            <anchor>verticalSizeConstraint-prop</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="pure" static="no">
@@ -24017,6 +24073,12 @@
             <arglist>(int *left, int *top, int *right, int *bottom) const const</arglist>
         </member>
         <member kind="property" type="SizeConstraint">
+            <name>horizontalSizeConstraint</name>
+            <anchorfile>qlayout.html</anchorfile>
+            <anchor>horizontalSizeConstraint-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="SizeConstraint">
             <name>sizeConstraint</name>
             <anchorfile>qlayout.html</anchorfile>
             <anchor>sizeConstraint-prop</anchor>
@@ -24026,6 +24088,12 @@
             <name>spacing</name>
             <anchorfile>qlayout.html</anchorfile>
             <anchor>spacing-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="SizeConstraint">
+            <name>verticalSizeConstraint</name>
+            <anchorfile>qlayout.html</anchorfile>
+            <anchor>verticalSizeConstraint-prop</anchor>
             <arglist></arglist>
         </member>
     </compound>
@@ -25903,6 +25971,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setSupportedDragActions</name>
+            <anchorfile>qlistwidget.html</anchorfile>
+            <anchor>supportedDragActions-prop</anchor>
+            <arglist>(Qt::DropActions actions)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>sortItems</name>
             <anchorfile>qlistwidget.html</anchorfile>
             <anchor>sortItems</anchor>
@@ -26006,6 +26081,13 @@
             <anchor>itemWidget</anchor>
             <arglist>(QListWidgetItem *item) const const</arglist>
         </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>Qt::DropActions</type>
+            <name>supportedDragActions</name>
+            <anchorfile>qlistwidget.html</anchorfile>
+            <anchor>supportedDragActions-prop</anchor>
+            <arglist>() const const</arglist>
+        </member>
         <member kind="function" protection="protected" virtualness="virtual" static="no">
             <type>virtual Qt::DropActions</type>
             <name>supportedDropActions</name>
@@ -26064,6 +26146,12 @@
             <name>sortingEnabled</name>
             <anchorfile>qlistwidget.html</anchorfile>
             <anchor>sortingEnabled-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="Qt::DropActions">
+            <name>supportedDragActions</name>
+            <anchorfile>qlistwidget.html</anchorfile>
+            <anchor>supportedDragActions-prop</anchor>
             <arglist></arglist>
         </member>
     </compound>
@@ -28871,7 +28959,7 @@
             <type>int</type>
             <name>critical</name>
             <anchorfile>qmessagebox-obsolete.html</anchorfile>
-            <anchor>critical-3</anchor>
+            <anchor>critical-2</anchor>
             <arglist>(QWidget *parent, const QString &amp;title, const QString &amp;text, const QString &amp;button0Text, const QString &amp;button1Text, const QString &amp;button2Text, int defaultButtonNumber, int escapeButtonNumber)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -28892,7 +28980,7 @@
             <type>int</type>
             <name>information</name>
             <anchorfile>qmessagebox-obsolete.html</anchorfile>
-            <anchor>information-3</anchor>
+            <anchor>information-2</anchor>
             <arglist>(QWidget *parent, const QString &amp;title, const QString &amp;text, const QString &amp;button0Text, const QString &amp;button1Text, const QString &amp;button2Text, int defaultButtonNumber, int escapeButtonNumber)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -28906,7 +28994,7 @@
             <type>int</type>
             <name>question</name>
             <anchorfile>qmessagebox-obsolete.html</anchorfile>
-            <anchor>question-3</anchor>
+            <anchor>question-2</anchor>
             <arglist>(QWidget *parent, const QString &amp;title, const QString &amp;text, const QString &amp;button0Text, const QString &amp;button1Text, const QString &amp;button2Text, int defaultButtonNumber, int escapeButtonNumber)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -28920,7 +29008,7 @@
             <type>int</type>
             <name>warning</name>
             <anchorfile>qmessagebox-obsolete.html</anchorfile>
-            <anchor>warning-3</anchor>
+            <anchor>warning-2</anchor>
             <arglist>(QWidget *parent, const QString &amp;title, const QString &amp;text, const QString &amp;button0Text, const QString &amp;button1Text, const QString &amp;button2Text, int defaultButtonNumber, int escapeButtonNumber)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -32343,6 +32431,13 @@
         <filename>qscrollbar.html</filename>
         <base>QAbstractSlider</base>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QMenu *</type>
+            <name>createStandardContextMenu</name>
+            <anchorfile>qscrollbar.html</anchorfile>
+            <anchor>createStandardContextMenu</anchor>
+            <arglist>(QPoint position)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QScrollBar</name>
             <anchorfile>qscrollbar.html</anchorfile>
@@ -33259,14 +33354,14 @@
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
             <anchorfile>qsizepolicy.html</anchorfile>
-            <anchor>operator-lt-lt-1</anchor>
+            <anchor>operator-lt-lt</anchor>
             <arglist>(QDataStream &amp;stream, const QSizePolicy &amp;policy)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&gt;&gt;</name>
             <anchorfile>qsizepolicy.html</anchorfile>
-            <anchor>operator-gt-gt-1</anchor>
+            <anchor>operator-gt-gt</anchor>
             <arglist>(QDataStream &amp;stream, QSizePolicy &amp;policy)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -33959,7 +34054,7 @@
             <type></type>
             <name>QSplashScreen</name>
             <anchorfile>qsplashscreen.html</anchorfile>
-            <anchor>QSplashScreen-2</anchor>
+            <anchor>QSplashScreen-1</anchor>
             <arglist>(QScreen *screen, const QPixmap &amp;pixmap, Qt::WindowFlags f)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -40795,7 +40890,7 @@
             <name>eventFilter</name>
             <anchorfile>qstyleditemdelegate.html</anchorfile>
             <anchor>eventFilter</anchor>
-            <arglist>(QObject *editor, QEvent *event) override</arglist>
+            <arglist>(QObject *object, QEvent *event) override</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
@@ -43418,6 +43513,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setSupportedDragActions</name>
+            <anchorfile>qtablewidget.html</anchorfile>
+            <anchor>supportedDragActions-prop</anchor>
+            <arglist>(Qt::DropActions actions)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setVerticalHeaderItem</name>
             <anchorfile>qtablewidget.html</anchorfile>
             <anchor>setVerticalHeaderItem</anchor>
@@ -43556,6 +43658,13 @@
             <anchor>cellWidget</anchor>
             <arglist>(int row, int column) const const</arglist>
         </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>Qt::DropActions</type>
+            <name>supportedDragActions</name>
+            <anchorfile>qtablewidget.html</anchorfile>
+            <anchor>supportedDragActions-prop</anchor>
+            <arglist>() const const</arglist>
+        </member>
         <member kind="function" protection="protected" virtualness="virtual" static="no">
             <type>virtual Qt::DropActions</type>
             <name>supportedDropActions</name>
@@ -43643,6 +43752,12 @@
             <name>rowCount</name>
             <anchorfile>qtablewidget.html</anchorfile>
             <anchor>rowCount-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="Qt::DropActions">
+            <name>supportedDragActions</name>
+            <anchorfile>qtablewidget.html</anchorfile>
+            <anchor>supportedDragActions-prop</anchor>
             <arglist></arglist>
         </member>
     </compound>
@@ -47404,6 +47519,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setSupportedDragActions</name>
+            <anchorfile>qtreewidget.html</anchorfile>
+            <anchor>supportedDragActions-prop</anchor>
+            <arglist>(Qt::DropActions actions)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>sortItems</name>
             <anchorfile>qtreewidget.html</anchorfile>
             <anchor>sortItems</anchor>
@@ -47528,6 +47650,13 @@
             <anchor>itemWidget</anchor>
             <arglist>(QTreeWidgetItem *item, int column) const const</arglist>
         </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>Qt::DropActions</type>
+            <name>supportedDragActions</name>
+            <anchorfile>qtreewidget.html</anchorfile>
+            <anchor>supportedDragActions-prop</anchor>
+            <arglist>() const const</arglist>
+        </member>
         <member kind="function" protection="protected" virtualness="virtual" static="no">
             <type>virtual Qt::DropActions</type>
             <name>supportedDropActions</name>
@@ -47581,6 +47710,12 @@
             <name>columnCount</name>
             <anchorfile>qtreewidget.html</anchorfile>
             <anchor>columnCount-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="Qt::DropActions">
+            <name>supportedDragActions</name>
+            <anchorfile>qtreewidget.html</anchorfile>
+            <anchor>supportedDragActions-prop</anchor>
             <arglist></arglist>
         </member>
         <member kind="property" type="int">
@@ -49017,7 +49152,7 @@
             <type>void</type>
             <name>move</name>
             <anchorfile>qwidget.html</anchorfile>
-            <anchor>move-1</anchor>
+            <anchor>move</anchor>
             <arglist>(int x, int y)</arglist>
         </member>
         <member kind="function" protection="protected" virtualness="virtual" static="no">
@@ -49129,7 +49264,7 @@
             <type>void</type>
             <name>resize</name>
             <anchorfile>qwidget.html</anchorfile>
-            <anchor>resize-1</anchor>
+            <anchor>resize</anchor>
             <arglist>(int w, int h)</arglist>
         </member>
         <member kind="function" protection="protected" virtualness="virtual" static="no">
@@ -49213,7 +49348,7 @@
             <type>void</type>
             <name>setBaseSize</name>
             <anchorfile>qwidget.html</anchorfile>
-            <anchor>setBaseSize-1</anchor>
+            <anchor>setBaseSize</anchor>
             <arglist>(int basew, int baseh)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -49346,7 +49481,7 @@
             <type>void</type>
             <name>setGeometry</name>
             <anchorfile>qwidget.html</anchorfile>
-            <anchor>setGeometry-1</anchor>
+            <anchor>setGeometry</anchor>
             <arglist>(int x, int y, int w, int h)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -49423,7 +49558,7 @@
             <type>void</type>
             <name>setMaximumSize</name>
             <anchorfile>qwidget.html</anchorfile>
-            <anchor>setMaximumSize-1</anchor>
+            <anchor>setMaximumSize</anchor>
             <arglist>(int maxw, int maxh)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -49451,7 +49586,7 @@
             <type>void</type>
             <name>setMinimumSize</name>
             <anchorfile>qwidget.html</anchorfile>
-            <anchor>setMinimumSize-1</anchor>
+            <anchor>setMinimumSize</anchor>
             <arglist>(int minw, int minh)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -49521,7 +49656,7 @@
             <type>void</type>
             <name>setSizeIncrement</name>
             <anchorfile>qwidget.html</anchorfile>
-            <anchor>setSizeIncrement-1</anchor>
+            <anchor>setSizeIncrement</anchor>
             <arglist>(int w, int h)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -49535,7 +49670,7 @@
             <type>void</type>
             <name>setSizePolicy</name>
             <anchorfile>qwidget.html</anchorfile>
-            <anchor>setSizePolicy-1</anchor>
+            <anchor>setSizePolicy</anchor>
             <arglist>(QSizePolicy::Policy horizontal, QSizePolicy::Policy vertical)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">

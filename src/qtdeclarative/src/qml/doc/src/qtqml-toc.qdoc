@@ -44,7 +44,6 @@
     \li \l{The QML Disk Cache}
     \li \l{Overview - QML and C++ Integration}{QML and C++ Integration}
         \list
-            \li \l{Exposing Attributes of C++ Types to QML}
             \li \l{Defining QML Types from C++}
             \li \l{Embedding C++ Objects into QML with Context Properties}
             \li \l{Data Type Conversion Between QML and C++}

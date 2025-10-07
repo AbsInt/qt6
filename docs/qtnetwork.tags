@@ -4789,6 +4789,20 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setDateTimeValue</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>setDateTimeValue</anchor>
+            <arglist>(QAnyStringView name, const QDateTime &amp;dateTime)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setDateTimeValue</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>setDateTimeValue-1</anchor>
+            <arglist>(QHttpHeaders::WellKnownHeader name, const QDateTime &amp;dateTime)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>swap</name>
             <anchorfile>qhttpheaders.html</anchorfile>
             <anchor>swap</anchor>
@@ -4905,6 +4919,76 @@
             <anchorfile>qhttpheaders.html</anchorfile>
             <anchor>size</anchor>
             <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::optional&lt;QDateTime&gt;</type>
+            <name>dateTimeValue</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>dateTimeValue</anchor>
+            <arglist>(QAnyStringView name) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::optional&lt;QDateTime&gt;</type>
+            <name>dateTimeValue</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>dateTimeValue-1</anchor>
+            <arglist>(QHttpHeaders::WellKnownHeader name) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::optional&lt;QDateTime&gt;</type>
+            <name>dateTimeValueAt</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>dateTimeValueAt</anchor>
+            <arglist>(qsizetype i) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::optional&lt;QList&lt;QDateTime&gt;&gt;</type>
+            <name>dateTimeValues</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>dateTimeValues</anchor>
+            <arglist>(QAnyStringView name) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::optional&lt;QList&lt;QDateTime&gt;&gt;</type>
+            <name>dateTimeValues</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>dateTimeValues-1</anchor>
+            <arglist>(QHttpHeaders::WellKnownHeader name) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::optional&lt;QList&lt;qint64&gt;&gt;</type>
+            <name>intValues</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>intValues</anchor>
+            <arglist>(QAnyStringView name) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::optional&lt;QList&lt;qint64&gt;&gt;</type>
+            <name>intValues</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>intValues-1</anchor>
+            <arglist>(QHttpHeaders::WellKnownHeader name) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::optional&lt;qint64&gt;</type>
+            <name>intValue</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>intValue</anchor>
+            <arglist>(QAnyStringView name) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::optional&lt;qint64&gt;</type>
+            <name>intValue</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>intValue-1</anchor>
+            <arglist>(QHttpHeaders::WellKnownHeader name) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::optional&lt;qint64&gt;</type>
+            <name>intValueAt</name>
+            <anchorfile>qhttpheaders.html</anchorfile>
+            <anchor>intValueAt</anchor>
+            <arglist>(qsizetype i) const const</arglist>
         </member>
     </compound>
     <compound kind="class">
@@ -10027,7 +10111,7 @@
             <type>QNetworkReply *</type>
             <name>get</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>get-6</anchor>
+            <anchor>get-2</anchor>
             <arglist>(const QNetworkRequest &amp;request, QIODevice *data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -10041,7 +10125,7 @@
             <type>QNetworkReply *</type>
             <name>get</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>get-7</anchor>
+            <anchor>get-3</anchor>
             <arglist>(const QNetworkRequest &amp;request, const QJsonDocument &amp;data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -10062,14 +10146,14 @@
             <type>QNetworkReply *</type>
             <name>patch</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>patch-5</anchor>
+            <anchor>patch-1</anchor>
             <arglist>(const QNetworkRequest &amp;request, QIODevice *data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QNetworkReply *</type>
             <name>patch</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>patch-6</anchor>
+            <anchor>patch-2</anchor>
             <arglist>(const QNetworkRequest &amp;request, const QByteArray &amp;data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -10083,28 +10167,28 @@
             <type>QNetworkReply *</type>
             <name>patch</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>patch-7</anchor>
+            <anchor>patch-3</anchor>
             <arglist>(const QNetworkRequest &amp;request, const QVariantMap &amp;data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QNetworkReply *</type>
             <name>post</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>post-6</anchor>
+            <anchor>post-1</anchor>
             <arglist>(const QNetworkRequest &amp;request, QHttpMultiPart *data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QNetworkReply *</type>
             <name>post</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>post-7</anchor>
+            <anchor>post-2</anchor>
             <arglist>(const QNetworkRequest &amp;request, QIODevice *data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QNetworkReply *</type>
             <name>post</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>post-8</anchor>
+            <anchor>post-3</anchor>
             <arglist>(const QNetworkRequest &amp;request, const QByteArray &amp;data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -10118,28 +10202,28 @@
             <type>QNetworkReply *</type>
             <name>post</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>post-9</anchor>
+            <anchor>post-4</anchor>
             <arglist>(const QNetworkRequest &amp;request, const QVariantMap &amp;data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QNetworkReply *</type>
             <name>put</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>put-6</anchor>
+            <anchor>put-1</anchor>
             <arglist>(const QNetworkRequest &amp;request, QHttpMultiPart *data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QNetworkReply *</type>
             <name>put</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>put-7</anchor>
+            <anchor>put-2</anchor>
             <arglist>(const QNetworkRequest &amp;request, QIODevice *data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QNetworkReply *</type>
             <name>put</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>put-8</anchor>
+            <anchor>put-3</anchor>
             <arglist>(const QNetworkRequest &amp;request, const QByteArray &amp;data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -10153,21 +10237,21 @@
             <type>QNetworkReply *</type>
             <name>put</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>put-9</anchor>
+            <anchor>put-4</anchor>
             <arglist>(const QNetworkRequest &amp;request, const QVariantMap &amp;data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QNetworkReply *</type>
             <name>sendCustomRequest</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>sendCustomRequest-4</anchor>
+            <anchor>sendCustomRequest-1</anchor>
             <arglist>(const QNetworkRequest &amp;request, const QByteArray &amp;method, QHttpMultiPart *data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QNetworkReply *</type>
             <name>sendCustomRequest</name>
             <anchorfile>qrestaccessmanager.html</anchorfile>
-            <anchor>sendCustomRequest-5</anchor>
+            <anchor>sendCustomRequest-2</anchor>
             <arglist>(const QNetworkRequest &amp;request, const QByteArray &amp;method, QIODevice *data, const QRestAccessManager::ContextTypeForFunctor&lt;Functor&gt; *context, Functor &amp;&amp;callback)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -11111,6 +11195,13 @@
             <anchorfile>qsslcertificate.html</anchorfile>
             <anchor>fromDevice</anchor>
             <arglist>(QIODevice *device, QSsl::EncodingFormat format)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QList&lt;QSslCertificate&gt;</type>
+            <name>fromFile</name>
+            <anchorfile>qsslcertificate.html</anchorfile>
+            <anchor>fromFile</anchor>
+            <arglist>(const QString &amp;filePath, QSsl::EncodingFormat format)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
             <type>QList&lt;QSslCertificate&gt;</type>

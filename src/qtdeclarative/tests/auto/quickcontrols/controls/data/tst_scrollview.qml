@@ -4,6 +4,7 @@
 import QtQuick
 import QtTest
 import QtQuick.Controls
+import Qt.test.controls
 
 TestCase {
     id: testCase
@@ -761,5 +762,27 @@ TestCase {
         compare(contentItem.contentHeight, 1200)
         compare(scrollview.contentWidth, 400)
         compare(scrollview.contentHeight, 1200)
+    }
+
+
+    Component {
+        id: scrollViewPaddingComp
+
+        ScrollView {
+            id: scrollView
+            anchors.fill: parent
+            padding: 100
+        }
+    }
+
+    function test_scrollViewPadding() {
+        if (StyleInfo.styleName !== "macOS" && StyleInfo.styleName !== "Windows")
+            skip("rightPadding and bottomPadding properties are only explicitly " +
+                  "set in macos and windows style implementation of ScrollView. " +
+                  "more details in QTBUG-123631")
+        let scrollview = createTemporaryObject(scrollViewPaddingComp, testCase)
+        verify(scrollview)
+        verify(scrollview.rightPadding >= scrollview.padding)
+        verify(scrollview.bottomPadding >= scrollview.padding)
     }
 }

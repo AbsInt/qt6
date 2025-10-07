@@ -11,6 +11,7 @@
 #include <data/listprovider.h>
 #include <data/objectwithmethod.h>
 #include <data/qmlusing.h>
+#include <data/refuseWrite.h>
 #include <data/resettable.h>
 #include <data/sequenceToIterable.h>
 #include <data/takenumber.h>
@@ -233,9 +234,10 @@ private slots:
     void propertyOfParent();
     void qmlUsing();
     void qtfont();
-    void reduceWithNullThis();
     void readEnumFromInstance();
     void readonlyListProperty();
+    void reduceWithNullThis();
+    void refuseWrite();
     void registerElimination();
     void registerPropagation();
     void renameAdjust();
@@ -4960,6 +4962,86 @@ void tst_QmlCppCodegen::reduceWithNullThis()
 
     QCOMPARE(object->property("preferredHeight").toDouble(), 28.0);
     QCOMPARE(object->property("preferredHeight2").toDouble(), 28.0);
+}
+
+void tst_QmlCppCodegen::refuseWrite()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/writeBackReferenceObject.qml"_s));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+
+    QObject *a = object->property("a").value<QObject*>();
+    QVERIFY(a);
+    QVERIFY(a->property("things").value<QVariantList>().isEmpty());
+
+    RefuseWrite *refuse = qobject_cast<RefuseWrite *>(object.data());
+    QVERIFY(refuse->things().isEmpty());
+    QCOMPARE(refuse->pendingChanges(), 0);
+
+    QMetaObject::invokeMethod(object.data(), "idToId");
+
+    QTRY_COMPARE(refuse->pendingChanges(), 0);
+    QCOMPARE(refuse->things(), QVariantList({QVariant(), QVariant::fromValue<double>(42.25)}));
+    QVERIFY(a->property("things").value<QVariantList>().isEmpty());
+
+    QMetaObject::invokeMethod(object.data(), "scopeToScope");
+
+    QTRY_COMPARE(refuse->pendingChanges(), 0);
+    QCOMPARE(refuse->things(), QVariantList({
+        QVariant::fromValue<double>(0.5),
+        QVariant::fromValue<double>(42.25)
+    }));
+    QVERIFY(a->property("things").value<QVariantList>().isEmpty());
+
+    QMetaObject::invokeMethod(object.data(), "idToScope");
+
+    QTRY_COMPARE(refuse->pendingChanges(), 0);
+    QCOMPARE(refuse->things(), QVariantList({
+        QVariant::fromValue<double>(0.5),
+        QVariant::fromValue<double>(42.25),
+        QVariant::fromValue<double>(3),
+    }));
+    QVERIFY(a->property("things").value<QVariantList>().isEmpty());
+
+    QMetaObject::invokeMethod(object.data(), "scopeToId");
+
+    QTRY_COMPARE(refuse->pendingChanges(), 0);
+    QCOMPARE(refuse->things(), QVariantList({
+        QVariant::fromValue<double>(0.5),
+        QVariant::fromValue<double>(42.25),
+        QVariant::fromValue<double>(3),
+        QVariant::fromValue<double>(4),
+    }));
+    QVERIFY(a->property("things").value<QVariantList>().isEmpty());
+
+    QMetaObject::invokeMethod(object.data(), "scopeToUnrelated");
+
+    QTRY_COMPARE(refuse->pendingChanges(), 0);
+    const QVariantList expected5 = QVariantList({
+        QVariant::fromValue<double>(0.5),
+        QVariant::fromValue<double>(42.25),
+        QVariant::fromValue<double>(3),
+        QVariant::fromValue<double>(4),
+        QVariant::fromValue<double>(5),
+    });
+    QCOMPARE(refuse->things(), expected5);
+    QCOMPARE(a->property("things").value<QVariantList>(), expected5);
+
+    QMetaObject::invokeMethod(object.data(), "idToUnrelated");
+
+    QTRY_COMPARE(refuse->pendingChanges(), 0);
+    const QVariantList expected6 = QVariantList({
+        QVariant::fromValue<double>(0.5),
+        QVariant::fromValue<double>(42.25),
+        QVariant::fromValue<double>(3),
+        QVariant::fromValue<double>(4),
+        QVariant::fromValue<double>(5),
+        QVariant::fromValue<double>(6),
+    });
+    QCOMPARE(refuse->things(), expected6);
+    QCOMPARE(a->property("things").value<QVariantList>(), expected6);
 }
 
 void tst_QmlCppCodegen::readEnumFromInstance()

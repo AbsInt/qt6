@@ -14,8 +14,12 @@ T.ScrollView {
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
                              implicitContentHeight + topPadding + bottomPadding)
 
-    rightPadding: effectiveScrollBarWidth
-    bottomPadding: effectiveScrollBarHeight
+    // rightPadding and bottomPadding are used to make space for the scrollBars
+    // but because we're setting them explicitly here, there will be no effect
+    // if the user assign a value to the padding property, so we accumulate it
+    // with the scrollbar width and height
+    rightPadding: effectiveScrollBarWidth + padding
+    bottomPadding: effectiveScrollBarHeight + padding
 
     // Don't set __notCustomizable here, because it would require special-casing
     // setFlickable's call to setContentItem.

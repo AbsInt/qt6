@@ -6,6 +6,7 @@
   \inmodule QtQml
   \inheaderfile QtQmlIntegration/qqmlintegration.h
   \title Registering C++ types to QML
+  \keyword qqmlintegration.h
 
   This header provides macros that can be used to register C++ types with QML.
 
