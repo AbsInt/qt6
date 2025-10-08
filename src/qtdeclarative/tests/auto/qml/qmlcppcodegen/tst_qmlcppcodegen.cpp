@@ -6097,6 +6097,12 @@ void tst_QmlCppCodegen::variantMapLookup()
     QVERIFY(!o.isNull());
     QCOMPARE(o->property("i"), 42);
     QCOMPARE(o->property("j"), 42);
+    QCOMPARE(o->property("foo"), u"blue"_s);
+
+    QMetaObject::invokeMethod(o.data(), "doI");
+    QCOMPARE(o->property("i"), 43);
+    QCOMPARE(o->property("j"), 43);
+    QCOMPARE(o->property("foo"), u"blue"_s);
 }
 
 void tst_QmlCppCodegen::variantReturn()

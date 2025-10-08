@@ -266,6 +266,12 @@ QQuickPane::QQuickPane(QQuickItem *parent)
 QQuickPane::~QQuickPane()
 {
     Q_D(QQuickPane);
+    if (d->contentItem) {
+        // It's possible for the focus frame to be removed as a child of our contentItem
+        // upon our destruction, so disconnect to avoid getting our slot getting called during this.
+        QObjectPrivate::disconnect(d->contentItem, &QQuickItem::childrenChanged,
+            d, &QQuickPanePrivate::contentChildrenChange);
+    }
     d->removeImplicitSizeListener(d->contentItem);
     d->removeImplicitSizeListener(d->firstChild);
 }

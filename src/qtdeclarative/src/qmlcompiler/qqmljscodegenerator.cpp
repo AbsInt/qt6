@@ -1472,7 +1472,7 @@ void QQmlJSCodeGenerator::generate_GetLookup(int index)
     generate_GetLookupHelper(index);
 }
 
-QString QQmlJSCodeGenerator::generateVariantMapLookup(
+QString QQmlJSCodeGenerator::generateVariantMapGetLookup(
         const QString &map, const int nameIndex)
 {
     const QString mapLookup = map
@@ -1480,6 +1480,18 @@ QString QQmlJSCodeGenerator::generateVariantMapLookup(
 
     return m_state.accumulatorVariableOut + u" = "_s
             + conversion(m_typeResolver->varType(), m_state.accumulatorOut(), mapLookup)
+            + u";\n"_s;
+}
+
+QString QQmlJSCodeGenerator::generateVariantMapSetLookup(
+        const QString &map, const int nameIndex,
+        const QQmlJSScope::ConstPtr &property, const QString &variableIn)
+{
+    const QString mapLookup = map
+            + u"["_s + QQmlJSUtils::toLiteral(m_jsUnitGenerator->lookupName(nameIndex)) + u"]"_s;
+
+    return mapLookup + u" = "_s
+            + conversion(property, m_typeResolver->varType(), variableIn)
             + u";\n"_s;
 }
 
@@ -1628,7 +1640,7 @@ void QQmlJSCodeGenerator::generate_GetLookupHelper(int index)
             REJECT(u"access to 'length' property of sequence wrapped in non-sequence"_s);
         }
     } else if (accumulatorIn.isStoredIn(m_typeResolver->variantMapType())) {
-        m_body += generateVariantMapLookup(m_state.accumulatorVariableIn, index);
+        m_body += generateVariantMapGetLookup(m_state.accumulatorVariableIn, index);
     } else {
         if (m_state.isRegisterAffectedBySideEffects(Accumulator))
             REJECT(u"reading from a value that's potentially affected by side effects"_s);
@@ -1639,7 +1651,7 @@ void QQmlJSCodeGenerator::generate_GetLookupHelper(int index)
                         m_jsUnitGenerator->lookupName(index)));
 
         if (scope.contains(m_typeResolver->variantMapType())) {
-            m_body += generateVariantMapLookup(
+            m_body += generateVariantMapGetLookup(
                     u"(*static_cast<const QVariantMap *>("_s
                             + inputContentPointer + u"))"_s, index);
             return;
@@ -1699,6 +1711,15 @@ void QQmlJSCodeGenerator::generate_StoreProperty(int nameIndex, int baseReg)
     REJECT(u"StoreProperty"_s);
 }
 
+// TODO: This shouldn't be necessary. If the content can be stored directly, then it should
+//       be stored and used directly. If it cannot be stored directly, it should be stored
+//       as QVariant, but then we cannot dereference the content pointer either.
+static QString derefContentPointer(const QString &contentPointer)
+{
+    Q_ASSERT(contentPointer.startsWith(u'&') || contentPointer[0].isLetterOrNumber());
+    return contentPointer.startsWith(u'&') ? contentPointer.mid(1) : (u'*' + contentPointer);
+}
+
 void QQmlJSCodeGenerator::generate_SetLookup(int index, int baseReg)
 {
     INJECT_TRACE_INFO(generate_SetLookup);
@@ -1707,8 +1728,9 @@ void QQmlJSCodeGenerator::generate_SetLookup(int index, int baseReg)
     const QQmlJSScope::ConstPtr valueType = m_state.accumulatorIn().storedType();
     const QQmlJSRegisterContent property = m_state.readAccumulator();
     Q_ASSERT(property.isConversion());
-    const QQmlJSScope::ConstPtr originalScope
-        = m_typeResolver->original(property.conversionResultScope()).containedType();
+    const QQmlJSRegisterContent original
+            = m_typeResolver->original(property.conversionResultScope());
+    const QQmlJSScope::ConstPtr originalScope = original.containedType();
 
     if (property.storedType().isNull()) {
         REJECT(u"SetLookup. Could not find property "
@@ -1758,9 +1780,7 @@ void QQmlJSCodeGenerator::generate_SetLookup(int index, int baseReg)
 
         // We can resize without write back on a list property because it's actually a reference.
         m_body += u"const int begin = "_s + object + u".count(&" + object + u");\n"_s;
-        m_body += u"const int end = "_s
-                + (variableIn.startsWith(u'&') ? variableIn.mid(1) : (u'*' + variableIn))
-                + u";\n"_s;
+        m_body += u"const int end = "_s + derefContentPointer(variableIn) + u";\n"_s;
         m_body += u"for (int i = begin; i < end; ++i)\n"_s;
         m_body += u"    "_s + object + u".append(&"_s + object + u", nullptr);\n"_s;
         m_body += u"for (int i = begin; i > end; --i)\n"_s;
@@ -1770,9 +1790,25 @@ void QQmlJSCodeGenerator::generate_SetLookup(int index, int baseReg)
     }
     case QQmlJSScope::AccessSemantics::Value: {
         const QQmlJSRegisterContent base = registerType(baseReg);
+        if (base.isStoredIn(m_typeResolver->variantMapType())) {
+            m_body += generateVariantMapSetLookup(
+                    registerVariable(baseReg), index, property.storedType(),
+                    derefContentPointer(variableIn));
+            generateWriteBack(baseReg);
+            break;
+        }
         const QString baseContentPointer = resolveValueTypeContentPointer(
                     originalScope, base, object,
                     u"TypeError: Value is %1 and could not be converted to an object"_s);
+
+        if (original.contains(m_typeResolver->variantMapType())) {
+            m_body += generateVariantMapSetLookup(
+                    u"(*static_cast<const QVariantMap *>("_s
+                            + baseContentPointer + u"))"_s, index, property.storedType(),
+                    derefContentPointer(variableIn));
+            generateWriteBack(baseReg);
+            break;
+        }
 
         const QString lookup = u"aotContext->setValueLookup("_s + indexString
                 + u", "_s + baseContentPointer

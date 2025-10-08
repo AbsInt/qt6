@@ -366,7 +366,10 @@ private:
             const QQmlJSMetaMethod &ctor, const QList<QQmlJSRegisterContent> &argumentTypes,
             const QStringList &arguments, const QString &metaType, const QString &metaObject);
 
-    QString generateVariantMapLookup(const QString &map, const int nameIndex);
+    QString generateVariantMapGetLookup(const QString &map, const int nameIndex);
+    QString generateVariantMapSetLookup(
+            const QString &map, const int nameIndex, const QQmlJSScope::ConstPtr &property,
+            const QString &variableIn);
 
     QQmlJSRegisterContent originalType(QQmlJSRegisterContent tracked)
     {
