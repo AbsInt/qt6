@@ -98,6 +98,7 @@ private slots:
     void cppValueTypeList();
     void dateConstruction();
     void dateConversions();
+    void deadContext();
     void deadShoeSize();
     void deduplicateConversionOrigins();
     void destroyAndToString();
@@ -257,6 +258,7 @@ private slots:
     void shadowedAsCasts();
     void shadowedMethod();
     void shadowedPrimitiveCmpEqNull();
+    void shadowingSingleton();
     void shifts();
     void signalHandler();
     void signalIndexMismatch();
@@ -1668,6 +1670,28 @@ void tst_QmlCppCodegen::dateConversions()
     QCOMPARE(o->property("timeString").toString(), "Invalid Date"_L1);
     QVERIFY(qIsNaN(o->property("timeNumber").toDouble()));
 
+}
+
+void tst_QmlCppCodegen::deadContext()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/deadContext.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
+
+    const char *vmeError = "QQmlVMEMetaObject: Internal error "
+                           "- attempted to evaluate a function in an invalid context";
+    static const QRegularExpression timerError(
+                u"qrc:/qt/qml/TestTypes/deadContext\\.qml:[0-9]+: TypeError: Property 'doit' of "
+                 "object QQmlTimer_QML_[0-9]+\\(0x[0-9a-f]+\\) is not a function"_s);
+
+    for (int i = 0; i < 4; ++i) {
+        QTest::ignoreMessage(QtWarningMsg,  vmeError);
+        QTest::ignoreMessage(QtWarningMsg,  timerError);
+    }
+
+    QTRY_COMPARE(o->property("choice").toInt(), 4);
 }
 
 void tst_QmlCppCodegen::deadShoeSize()
@@ -5378,6 +5402,17 @@ void tst_QmlCppCodegen::shadowedPrimitiveCmpEqNull()
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
+}
+
+void tst_QmlCppCodegen::shadowingSingleton()
+{
+    QQmlEngine e;
+    QQmlComponent c(&e, QUrl(u"qrc:/qt/qml/TestTypes/shadowingSingleton.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QCOMPARE(o->objectName(), u"Hej"_s);
 }
 
 void tst_QmlCppCodegen::shifts()

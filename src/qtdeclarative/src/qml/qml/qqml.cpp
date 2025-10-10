@@ -2333,9 +2333,15 @@ void AOTCompiledContext::initCallQmlContextPropertyLookup(uint index, int relati
         return;
     }
 
+    QV4::Scoped<QV4::QObjectWrapper> object(
+            scope, QV4::QObjectWrapper::wrap(scope.engine, qmlScopeObject));
     scope.engine->throwTypeError(
-            QStringLiteral("Property '%1' of object [null] is not a function").arg(
-                    compilationUnit->runtimeStrings[lookup->nameIndex]->toQString()));
+            QStringLiteral("Property '%1' of object %2 is not a function").arg(
+                    compilationUnit->runtimeStrings[lookup->nameIndex]->toQString(),
+                    object->toQStringNoThrow()));
+
+    lookup->releasePropertyCache();
+    lookup->call = QV4::Lookup::Call::ContextGetterGeneric;
 }
 
 bool AOTCompiledContext::loadContextIdLookup(uint index, void *target) const

@@ -32,6 +32,7 @@ set(cpp_sources
     scriptstringholder.h
     sequenceToIterable.h
     sequencetypeexample.cpp sequencetypeexample.h
+    shadowingSingleton.h
     state.h
     takenumber.cpp takenumber.h
     theme.cpp theme.h
@@ -146,6 +147,7 @@ set(qml_files
     cycleHead.qml
     dateConstruction.qml
     dateConversions.qml
+    deadContext.qml
     deadShoeSize.qml
     deadStoreLoop.qml
     destroyAndToString.qml
@@ -296,6 +298,7 @@ set(qml_files
     shadowedAsCasts.qml
     shadowedMethod.qml
     shadowedPrimitiveCmpEqNull.qml
+    shadowingSingleton.qml
     shared/Slider.qml
     shifts.qml
     signal.qml

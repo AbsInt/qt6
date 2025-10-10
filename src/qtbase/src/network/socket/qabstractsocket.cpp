@@ -432,6 +432,7 @@
 
 #include "qabstractsocket.h"
 #include "qabstractsocket_p.h"
+#include "qnetworkinterface.h"
 
 #include "private/qhostinfo_p.h"
 
@@ -1500,7 +1501,8 @@ bool QAbstractSocket::bind(const QHostAddress &address, quint16 port, BindMode m
     return d->bind(address, port, mode);
 }
 
-bool QAbstractSocketPrivate::bind(const QHostAddress &address, quint16 port, QAbstractSocket::BindMode mode)
+bool QAbstractSocketPrivate::bind(const QHostAddress &address, quint16 port, QAbstractSocket::BindMode mode,
+                                  const QNetworkInterface *iface)
 {
     Q_Q(QAbstractSocket);
 
@@ -1535,6 +1537,10 @@ bool QAbstractSocketPrivate::bind(const QHostAddress &address, quint16 port, QAb
         socketEngine->setOption(QAbstractSocketEngine::BindExclusively, 0);
 #endif
     }
+#if QT_CONFIG(networkinterface)
+    if (iface && iface->isValid())
+        socketEngine->setOption(QAbstractSocketEngine::BindInterfaceIndex, iface->index());
+#endif
     bool result = socketEngine->bind(address, port);
     cachedSocketDescriptor = socketEngine->socketDescriptor();
 

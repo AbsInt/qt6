@@ -21,6 +21,8 @@ T.Button {
 
     icon.width: 16
     icon.height: 16
+    icon.color: control.checked || control.highlighted ? control.palette.brightText :
+                control.flat && !control.down ? (control.visualFocus ? control.palette.highlight : control.palette.windowText) : control.palette.buttonText
 
     contentItem: IconLabel {
         spacing: control.spacing

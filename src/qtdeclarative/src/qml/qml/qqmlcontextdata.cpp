@@ -329,7 +329,8 @@ void QQmlContextData::initFromTypeCompilationUnit(const QQmlRefPointer<QV4::Exec
     Q_ASSERT(!m_idValues);
     m_idValueCount = m_typeCompilationUnit->objectAt(m_componentObjectIndex)
             ->nNamedObjectsInComponent;
-    m_idValues = new ContextGuard[m_idValueCount];
+    if (m_idValueCount > 0)
+        m_idValues = new ContextGuard[m_idValueCount];
 }
 
 void QQmlContextData::addComponentAttached(QQmlComponentAttached *attached)

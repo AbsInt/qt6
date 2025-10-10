@@ -140,14 +140,16 @@ T.ComboBox {
         y: control.editable ? control.height
                             : -0.25 * Math.max(implicitBackgroundHeight + topInset + bottomInset,
                                                 contentHeight + topPadding + bottomPadding)
-        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, control.Window.height - topMargin - bottomMargin)
+        readonly property real __targetHeight: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, control.Window.height - topMargin - bottomMargin)
+        property real __heightScale: 1
+        height: __heightScale * __targetHeight
         width: control.width
         topMargin: 8
         bottomMargin: 8
         palette: control.palette
 
         enter: Transition {
-            NumberAnimation { property: "height"; from: control.popup.height / 3; to: control.popup.height; easing.type: Easing.OutCubic; duration: 250 }
+            NumberAnimation { property: "__heightScale"; from: 0.33; to: 1; easing.type: Easing.OutCubic; duration: 250 }
         }
 
         background: ItemGroup {

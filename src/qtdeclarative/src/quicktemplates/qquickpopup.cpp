@@ -3222,6 +3222,7 @@ bool QQuickPopup::overlayEvent(QQuickItem *item, QEvent *event)
     // If \a item doesn't belong to any of these popups, but exists in an overlay subtree, we shouldn't filter the event,
     // since the item is supposed to be independent of any active popups.
     auto *overlay = QQuickOverlay::overlay(d->window);
+    Q_ASSERT(overlay);
     const QList<QQuickItem *> paintOrderChildItems = QQuickOverlayPrivate::get(overlay)->paintOrderChildItems();
     const qsizetype targetItemPaintOrderIndex = paintOrderChildItems.indexOf(findRootOfOverlaySubtree(item, overlay));
     const qsizetype popupItemPaintOrderIndex = paintOrderChildItems.indexOf(d->popupItem);

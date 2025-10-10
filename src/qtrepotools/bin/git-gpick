@@ -1958,7 +1958,7 @@ sub finalize_insertion_specs($)
         # the step may be obsoleted by the spec being matched up.
         next if ($$spec{action} != INSERT);
 
-        ($$spec{new_range_commits}, undef) =
+        ($$spec{new_range_commits}, $$spec{drop_closed}) =
                 finalize_remote_series($$spec{orig}, [], $$spec{changes});
         $$spec{new_range_reference} = $$spec{tip};
     }

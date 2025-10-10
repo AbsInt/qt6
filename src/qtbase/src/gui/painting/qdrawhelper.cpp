@@ -802,7 +802,7 @@ static DestStoreProc64 destStoreProc64[] =
     destStore64,        // Format_A2RGB30_Premultiplied
     destStore64,        // Format_Alpha8
     destStore64Gray8,   // Format_Grayscale8
-    nullptr,            // Format_RGBX64
+    destStore64,        // Format_RGBX64
     destStore64RGBA64,  // Format_RGBA64
     nullptr,            // Format_RGBA64_Premultiplied
     destStore64Gray16,  // Format_Grayscale16
@@ -3904,6 +3904,9 @@ static inline Operator getOperator(const QSpanData *data, const QT_FT_Span *span
     op.destStore64 = destStoreProc64[data->rasterBuffer->format];
     op.funcSolid64 = functionForModeSolid64[op.mode];
     op.func64 = functionForMode64[op.mode];
+    // RGBx64 do not need conversion on writeback if all pixels are opaque
+    if (data->rasterBuffer->format == QImage::Format_RGBX64 && solidSource)
+        op.destStore64 = nullptr;
 #else
     op.destStore64 = nullptr;
     op.funcSolid64 = nullptr;
@@ -6162,6 +6165,14 @@ static void qt_rectfill_nonpremul_argb32(QRasterBuffer *rasterBuffer,
                          color.unpremultiplied().toArgb32(), x, y, width, height, rasterBuffer->bytesPerLine());
 }
 
+static void qt_rectfill_rgbx(QRasterBuffer *rasterBuffer,
+                             int x, int y, int width, int height,
+                             const QRgba64 &color)
+{
+    qt_rectfill<quint32>(reinterpret_cast<quint32 *>(rasterBuffer->buffer()),
+                         ARGB2RGBA(color.toArgb32() | 0xff000000), x, y, width, height, rasterBuffer->bytesPerLine());
+}
+
 static void qt_rectfill_rgba(QRasterBuffer *rasterBuffer,
                              int x, int y, int width, int height,
                              const QRgba64 &color)
@@ -6353,7 +6364,7 @@ DrawHelper qDrawHelper[] =
         qt_bitmapblit_rgba8888,
         qt_alphamapblit_generic,
         qt_alphargbblit_generic,
-        qt_rectfill_rgba
+        qt_rectfill_rgbx
     },
     // Format_RGBA8888
     {

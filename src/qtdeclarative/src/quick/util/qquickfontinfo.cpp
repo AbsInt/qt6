@@ -8,7 +8,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \qmltype FontInfo
-    \instantiates QQuickFontInfo
+    \nativetype QQuickFontInfo
     \inqmlmodule QtQuick
     \since 6.9
     \ingroup qtquick-text-utility

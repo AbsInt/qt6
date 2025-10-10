@@ -11,6 +11,7 @@
 #include "qhostaddress.h"
 #include "qvarlengtharray.h"
 #include "qnetworkinterface.h"
+#include "qnetworkinterface_p.h"
 #include "qendian.h"
 #ifdef Q_OS_WASM
 #include <private/qeventdispatcher_wasm_p.h>
@@ -81,6 +82,9 @@ static void convertToLevelAndOption(QNativeSocketEngine::SocketOption opt,
     case QNativeSocketEngine::BindExclusively:          // not handled on Unix
     case QNativeSocketEngine::MaxStreamsSocketOption:
         Q_UNREACHABLE();
+
+    case QNativeSocketEngine::BindInterfaceIndex:
+        Q_UNREACHABLE(); // handled directly in setOption()
 
     case QNativeSocketEngine::BroadcastSocketOption:
         n = SO_BROADCAST;
@@ -236,6 +240,20 @@ bool QNativeSocketEnginePrivate::createNewSocket(QAbstractSocket::SocketType soc
         return false;
     }
 
+    // Attempt to enable dual-stack
+    if (domain == AF_INET6) {
+        const int ipv6only = 0;
+        [[maybe_unused]] const int ret = ::setsockopt(socket, IPPROTO_IPV6, IPV6_V6ONLY,
+                                                      &ipv6only, sizeof(ipv6only));
+#if defined (QNATIVESOCKETENGINE_DEBUG)
+        if (ret != 0) {
+            qDebug("QNativeSocketEnginePrivate::createNewSocket(%d, %d): "
+                   "failed to set IPV6_V6ONLY to %d.",
+                   socketType, socketProtocol, ipv6only);
+        }
+#endif
+    }
+
 #if defined (QNATIVESOCKETENGINE_DEBUG)
     qDebug("QNativeSocketEnginePrivate::createNewSocket(%d, %d) == true",
            socketType, socketProtocol);
@@ -359,7 +377,27 @@ bool QNativeSocketEnginePrivate::setOption(QNativeSocketEngine::SocketOption opt
 #endif
         return false;
     }
-
+    case QNativeSocketEngine::BindInterfaceIndex: {
+#if defined(SO_BINDTOIFINDEX) // seen on Linux
+        return ::setsockopt(socketDescriptor, SOL_SOCKET, SO_BINDTOIFINDEX,
+                            &v, sizeof(v)) == 0;
+#elif defined(IPV6_BOUND_IF) && defined(IP_BOUND_IF) // seen on Darwin
+        // note: on Darwin, this only limits sending the data, not receiving it
+        if (socketProtocol == QAbstractSocket::IPv6Protocol
+            || socketProtocol == QAbstractSocket::AnyIPProtocol) {
+            return ::setsockopt(socketDescriptor, IPPROTO_IPV6, IPV6_BOUND_IF, &v, sizeof(v)) == 0;
+        } else {
+            return ::setsockopt(socketDescriptor, IPPROTO_IP, IP_BOUND_IF, &v, sizeof(v)) == 0;
+        }
+#elif defined(SO_BINDTODEVICE) && QT_CONFIG(networkinterface)
+        // need to convert to interface name
+        const QByteArray name = QNetworkInterfaceManager::interfaceNameFromIndex(v).toLatin1();
+        return ::setsockopt(socketDescriptor, SOL_SOCKET, SO_BINDTODEVICE,
+                            name.data(), socklen_t(name.size())) == 0;
+#else
+        return false;
+#endif
+    }
     default:
         break;
     }

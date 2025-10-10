@@ -24,7 +24,7 @@ static const int AUTO_REPEAT_INTERVAL = 100;
 //!     \nativetype QQuickSpinBox
     \inqmlmodule QtQuick.Controls
     \since 5.7
-    \ingroup input
+    \ingroup qtquickcontrols-input
     \ingroup qtquickcontrols-focusscopes
     \brief Allows the user to select from a set of preset values.
 

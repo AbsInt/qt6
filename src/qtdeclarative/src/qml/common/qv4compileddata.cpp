@@ -30,7 +30,7 @@ bool Unit::verifyHeader(QDateTime expectedSourceTimeStamp, QString *errorString)
 
     if (version != quint32(QV4_DATA_STRUCTURE_VERSION)) {
         *errorString = QString::fromUtf8("V4 data structure version mismatch. Found %1 expected %2")
-                               .arg(version, 0, 16).arg(QV4_DATA_STRUCTURE_VERSION, 0, 16);
+                               .arg(quint32(version), 0, 16).arg(QV4_DATA_STRUCTURE_VERSION, 0, 16);
         return false;
     }
 

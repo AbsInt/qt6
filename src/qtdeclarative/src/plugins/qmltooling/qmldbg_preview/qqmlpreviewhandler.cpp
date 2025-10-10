@@ -119,6 +119,7 @@ void QQmlPreviewHandler::loadUrl(const QUrl &url)
     m_lastPosition.loadWindowPositionSettings(url);
 
     QQmlEngine *engine = m_engines.front();
+    engine->clearSingletons();
     engine->clearComponentCache();
     m_component.reset(new QQmlComponent(engine, url, this));
 

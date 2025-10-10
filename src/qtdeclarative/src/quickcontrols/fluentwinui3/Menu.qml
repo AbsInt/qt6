@@ -46,14 +46,10 @@ T.Menu {
         ScrollIndicator.vertical: ScrollIndicator {}
     }
 
+    property real __heightScale: 1
+    height: __heightScale * implicitHeight
     enter: Transition {
-        NumberAnimation {
-            property: "height"
-            from: control.implicitHeight * 0.33
-            to: control.implicitHeight
-            easing.type: Easing.OutCubic
-            duration: 250
-        }
+        NumberAnimation { property: "__heightScale"; from: 0.33; to: 1; easing.type: Easing.OutCubic; duration: 250 }
     }
 
     background: Impl.StyleImage {
