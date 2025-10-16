@@ -1,5 +1,6 @@
 // Copyright (C) 2019 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:trivial-impl-only
 
 #ifndef QWINREGISTRY_H
 #define QWINREGISTRY_H
@@ -41,12 +42,17 @@ public:
     ~QWinRegistryKey();
 
     QWinRegistryKey(QWinRegistryKey &&other) noexcept
+#if 1 // QTBUG-140725
+        = delete;
+    void operator=(QWinRegistryKey &&) = delete;
+#else
         : m_key(std::exchange(other.m_key, nullptr)) {}
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_MOVE_AND_SWAP(QWinRegistryKey)
     void swap(QWinRegistryKey &other) noexcept
     {
         qt_ptr_swap(m_key, other.m_key);
     }
+#endif
 
     [[nodiscard]] bool isValid() const { return m_key != nullptr; }
 

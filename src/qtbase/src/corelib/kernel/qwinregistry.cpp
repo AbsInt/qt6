@@ -1,5 +1,6 @@
 // Copyright (C) 2019 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #define UMDF_USING_NTSTATUS // Avoid ntstatus redefinitions
 
@@ -190,7 +191,9 @@ QVariant QWinRegistryKey::value(const QString &subKey) const
 // Otherwise, the resulting string (which may be empty) is returned.
 QString QWinRegistryKey::stringValue(const wchar_t *subKey) const
 {
-    return value<QString>(subKey).value_or(QString());
+    if (auto v = value<QString>(subKey))
+        return std::move(*v);
+    return QString();
 }
 
 QString QWinRegistryKey::stringValue(const QString &subKey) const
