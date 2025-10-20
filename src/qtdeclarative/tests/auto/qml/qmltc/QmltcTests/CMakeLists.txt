@@ -117,6 +117,7 @@ set(qml_sources
     stringToUrl.qml
     myCheckBox.qml
     signalConnections.qml
+    myMatryoshkaItems.qml
 
     # support types:
     DefaultPropertySingleChild.qml
@@ -132,6 +133,8 @@ set(qml_sources
     InlineComponentProvider.qml
     InlineComponentReexporter.qml
     NamespacedTypes.qml
+    MyBaseItem.qml
+    MyDerivedItem.qml
 
     badFile.qml
 

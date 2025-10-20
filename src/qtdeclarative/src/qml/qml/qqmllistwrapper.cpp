@@ -164,10 +164,10 @@ ReturnedValue QmlListWrapper::create(ExecutionEngine *engine, QMetaType propType
 
 QVariant QmlListWrapper::toVariant() const
 {
-    if (!d()->object())
-        return QVariant();
-
-    return QVariant::fromValue(toListReference());
+    Heap::QmlListWrapper *p = d();
+    return p->object()
+            ? QVariant::fromValue(toListReference())
+            : QVariant::fromValue(p->property()->toList<QObjectList>());
 }
 
 QQmlListReference QmlListWrapper::toListReference() const

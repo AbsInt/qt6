@@ -121,7 +121,6 @@ enum class StructureNodeStage
 
 struct UseNodeInfo : NodeInfo
 {
-    QPointF startPos;
     StructureNodeStage stage;
 };
 

@@ -1065,13 +1065,16 @@ UiAnnotatedObjectMember: UiObjectMember;
 
 UiObjectMember: UiObjectDefinition;
 
-UiObjectMember: UiQualifiedId T_COLON ExpressionStatementLookahead T_LBRACKET UiArrayMemberList T_RBRACKET;
+CommaOpt: T_COMMA;
+CommaOpt: ;
+
+UiObjectMember: UiQualifiedId T_COLON ExpressionStatementLookahead T_LBRACKET UiArrayMemberList CommaOpt T_RBRACKET;
 /.
     case $rule_number: {
         AST::UiArrayBinding *node = new (pool) AST::UiArrayBinding(sym(1).UiQualifiedId, sym(5).UiArrayMemberList->finish());
         node->colonToken = loc(2);
         node->lbracketToken = loc(4);
-        node->rbracketToken = loc(6);
+        node->rbracketToken = loc(7);
         sym(1).Node = node;
     } break;
 ./
@@ -1444,7 +1447,7 @@ UiObjectMemberWithScriptStatement: UiPropertyAttributes T_IDENTIFIER T_LT UiProp
 
 UiObjectMember: UiObjectMemberWithScriptStatement;
 
-UiObjectMemberWithArray: UiPropertyAttributes T_IDENTIFIER T_LT UiPropertyType T_GT QmlIdentifier T_COLON ExpressionStatementLookahead T_LBRACKET UiArrayMemberList T_RBRACKET Semicolon;
+UiObjectMemberWithArray: UiPropertyAttributes T_IDENTIFIER T_LT UiPropertyType T_GT QmlIdentifier T_COLON ExpressionStatementLookahead T_LBRACKET UiArrayMemberList CommaOpt T_RBRACKET Semicolon;
 /.
     case $rule_number: {
         AST::UiPublicMember *node = new (pool) AST::UiPublicMember(sym(4).UiQualifiedId->finish(), stringRef(6));
@@ -1466,7 +1469,7 @@ UiObjectMemberWithArray: UiPropertyAttributes T_IDENTIFIER T_LT UiPropertyType T
         AST::UiArrayBinding *binding = new (pool) AST::UiArrayBinding(propertyName, sym(10).UiArrayMemberList->finish());
         binding->colonToken = loc(7);
         binding->lbracketToken = loc(9);
-        binding->rbracketToken = loc(11);
+        binding->rbracketToken = loc(12);
 
         node->binding = binding;
 

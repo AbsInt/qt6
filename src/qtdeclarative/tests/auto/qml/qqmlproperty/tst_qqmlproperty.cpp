@@ -2615,7 +2615,12 @@ void tst_qqmlproperty::listAssignmentSignals()
     QVERIFY(!root.isNull());
 
     QCOMPARE(root->property("signalCounter").toInt(), 1);
+
+    // Does not actually assign anything since all the objects are the same
     QMetaObject::invokeMethod(root.get(), "assignList");
+    QCOMPARE(root->property("signalCounter").toInt(), 1);
+
+    QMetaObject::invokeMethod(root.get(), "assignList2");
     QCOMPARE(root->property("signalCounter").toInt(), 2);
 }
 

@@ -117,4 +117,6 @@ private slots:
     void attachedNamespacedProperty();
 
     void newLineTranslation();
+
+    void nestedWithId();
 };

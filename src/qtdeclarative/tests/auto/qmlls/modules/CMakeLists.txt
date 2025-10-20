@@ -34,7 +34,6 @@ qt_internal_add_test(tst_qmlls_modules
         Qt::QuickTestUtilsPrivate
         Qt::QmlLSPrivate
     TESTDATA ${test_data}
-    DEPENDENCIES TARGET MyModule
 )
 
 qt_internal_extend_target(tst_qmlls_modules CONDITION ANDROID OR IOS

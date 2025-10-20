@@ -629,6 +629,11 @@ void tst_QQuickColorDialogImpl::workingInsideQQuickViewer() // QTBUG-106598
 
 void tst_QQuickColorDialogImpl::dialogCanMoveBetweenWindows()
 {
+#ifdef Q_OS_WINDOWS
+    // QTBUG-141162
+    QSKIP("Crashes on windows");
+#endif
+
     DialogTestHelper<QQuickColorDialog, QQuickColorDialogImpl> dialogHelper(this, "windowSwapping.qml");
     QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
     QVERIFY(dialogHelper.waitForWindowActive());

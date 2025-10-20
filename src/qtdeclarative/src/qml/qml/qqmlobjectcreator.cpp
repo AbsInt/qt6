@@ -496,11 +496,11 @@ void QQmlObjectCreator::setPropertyValue(const QQmlPropertyData *property, const
     }
     break;
     case QMetaType::QColor: {
-        QVariant data = QQmlValueTypeProvider::createValueType(
-                    compilationUnit->bindingValueAsString(binding), propertyType);
-        if (data.isValid()) {
-            property->writeProperty(_qobject, data.data(), propertyWriteFlags);
-        }
+        bool ok = false;
+        QVariant data = QQmlStringConverters::colorFromString(
+                compilationUnit->bindingValueAsString(binding), &ok);
+        Q_ASSERT(ok); // We've checked this in QQmlPropertyValidator
+        property->writeProperty(_qobject, data.data(), propertyWriteFlags);
     }
     break;
 #if QT_CONFIG(datestring)

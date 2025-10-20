@@ -1026,9 +1026,45 @@ struct ComponentWithPublicSetInitial : QQmlComponent
     }
 };
 
+class MyObject : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int resettable MEMBER m_resettable RESET resetIt NOTIFY resettableChanged)
+    void resetIt() { resetCalled = true; }
+
+public:
+    MyObject(QObject *parent = nullptr) : QObject(parent) { }
+    int m_resettable;
+    bool resetCalled = false;
+
+signals:
+    void resettableChanged();
+};
+
+
 void tst_qqmlcomponent::testSetInitialProperties()
 {
     QQmlEngine eng;
+    qmlRegisterType<MyObject>("ResetTest", 1, 0, "MyObject");
+    // reset logic
+    {
+        QQmlComponent comp(&eng);
+        comp.loadFromModule("ResetTest", "MyObject");
+        std::unique_ptr<QObject>  obj {comp.createWithInitialProperties({{u"resettable"_s, QVariant() }}) };
+        QVERIFY(obj);
+        QVERIFY(qobject_cast<MyObject *>(obj.get())->resetCalled);
+    }
+    // reset logic - null != undefined
+    {
+        QQmlComponent comp(&eng);
+        comp.loadFromModule("ResetTest", "MyObject");
+        QVariant var = QVariant::fromValue(nullptr);
+        QVERIFY(var.isNull() && var.isValid());
+        QTest::ignoreMessage(QtMsgType::QtWarningMsg, QRegularExpression(".*Could not set initial property resettable"_L1));
+        std::unique_ptr<QObject>  obj {comp.createWithInitialProperties({{u"resettable"_s, var }}) };
+        QVERIFY(obj);
+        QVERIFY(!qobject_cast<MyObject *>(obj.get())->resetCalled);
+    }
     {
         //  QVariant
         ComponentWithPublicSetInitial comp(&eng);

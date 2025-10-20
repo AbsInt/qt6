@@ -15,6 +15,19 @@
 
 QT_BEGIN_NAMESPACE
 
+static void printConversionWarning(QV4::ExecutionEngine *engine, const QString &propertyValue,
+                                   const QString &propertyType, const QString &propertyName) {
+    auto stackTrace = engine->stackTrace(1);
+    QString errorLocation;
+    if (!stackTrace.isEmpty()) {
+        const auto& stackTop = stackTrace[0];
+        errorLocation = QString::fromLatin1("%1:%2: ").arg(stackTop.source, QString::number(stackTop.line));
+    }
+    qWarning().noquote()
+        << QLatin1String("%4Could not convert %1 to %2 for property %3")
+                .arg(propertyValue, propertyType, propertyName, errorLocation);
+}
+
 // Pre-filter the metatype before poking QQmlMetaType::qmlType() and locking its mutex.
 static bool isConstructibleMetaType(const QMetaType metaType)
 {
@@ -396,10 +409,8 @@ static void doWriteProperties(
             continue;
         }
 
-        qWarning().noquote()
-                << QLatin1String("Could not convert %1 to %2 for property %3")
-                   .arg(v4PropValue->toQStringNoThrow(), QString::fromUtf8(propertyType.name()),
-                        propertyName);
+        printConversionWarning(engine, v4PropValue->toQStringNoThrow(),
+                               QString::fromUtf8(propertyType.name()), propertyName);
     }
 }
 
@@ -451,10 +462,9 @@ static void doWriteProperties(
             continue;
         }
 
-        qWarning().noquote()
-            << QLatin1String("Could not convert %1 to %2 for property %3")
-                   .arg(property.toString(), QString::fromUtf8(propertyType.name()),
-                        QString::fromUtf8(metaProperty.name()));
+        printConversionWarning(engine, QDebug::toString(property),
+                               QString::fromUtf8(propertyType.name()),
+                               QString::fromUtf8(metaProperty.name()));
     }
 }
 
@@ -532,10 +542,9 @@ void doWriteProperties(
             continue;
         }
 
-        qWarning().noquote()
-            << QLatin1String("Could not convert %1 to %2 for property %3")
-                   .arg(property.toString(), QString::fromUtf8(propertyType.name()),
-                        QString::fromUtf8(metaProperty.name()));
+        printConversionWarning(engine, QDebug::toString(property),
+                               QString::fromUtf8(propertyType.name()),
+                               QString::fromUtf8(metaProperty.name()));
     }
 }
 

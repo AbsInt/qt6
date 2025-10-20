@@ -204,6 +204,69 @@ TestCase {
         compare(control.Material.roundedScale, Material.NotRounded)
     }
 
+    function test_resetBackground_propagation_fromDefaultSet() {
+        // Parent/child that will exercise propagation
+        let parent = createTemporaryObject(buttonComponent, testCase)
+        verify(parent)
+        let child = buttonComponent.createObject(parent)
+        verify(child)
+
+        // Start from Dark background
+        parent.Material.theme = Material.Dark
+        compare(child.Material.theme, Material.Dark)
+
+        // 1) Make background explicit to light background (children "freeze" to this explicit color)
+        parent.Material.background = "#fafafa"
+        compare(parent.Material.background, "#fafafa")
+        compare(child.Material.background, parent.Material.background)
+
+        // 2) Switch to light theme, background remains unchanged
+        parent.Material.theme = Material.Light
+        compare(parent.Material.background, "#fafafa")
+        compare(child.Material.background, parent.Material.background)
+
+        // 3) Reset background to the theme default (remains unchanged)
+        parent.Material.background = undefined
+        compare(parent.Material.background, "#fffbfe")
+        compare(child.Material.background, parent.Material.background)
+
+        // 4) Now theme flips; child must track theme default (Dark)
+        parent.Material.theme = Material.Dark
+        compare(parent.Material.background, "#1c1b1f")
+        compare(child.Material.background, parent.Material.background)
+    }
+
+    function test_resetForeground_propagation_fromDefaultSet() {
+        let parent = createTemporaryObject(buttonComponent, testCase)
+        verify(parent)
+        let child = buttonComponent.createObject(parent)
+        verify(child)
+
+        // Start from Dark theme
+        parent.Material.theme = Material.Dark
+        compare(child.Material.theme, Material.Dark)
+
+        // 1) Make foreground explicit to light foreground (children "freeze" to this explicit color)
+        parent.Material.foreground = "#dd000000"
+        compare(parent.Material.foreground, "#dd000000")
+        compare(child.Material.foreground, parent.Material.foreground)
+
+        // 2) Switch to light theme, foreground remains unchanged
+        parent.Material.theme = Material.Light
+        compare(parent.Material.foreground, "#dd000000")
+        compare(child.Material.foreground, parent.Material.foreground)
+
+        // 3) Reset foreground to the theme default (remains unchanged)
+        parent.Material.foreground = undefined
+        compare(parent.Material.foreground, "#dd000000")
+        compare(child.Material.foreground, parent.Material.foreground)
+
+        // 4) Now theme flips; child must track theme default (Dark)
+        parent.Material.theme = Material.Dark
+        compare(parent.Material.foreground, "#ffffff")
+        compare(child.Material.foreground, parent.Material.foreground)
+    }
+
     function test_inheritance_data() {
         return [
             { tag: "primary", value1: Material.color(Material.Amber), value2: Material.color(Material.Indigo) },
@@ -286,6 +349,38 @@ TestCase {
         compare(popupObject.popup.Material.textSelectionColor.toString(), popupObject.Material.textSelectionColor.toString())
         compare(popupObject.label.color.toString(), popupObject.Material.textSelectionColor.toString())
         compare(popupObject.label2.color.toString(), popupObject.Material.textSelectionColor.toString())
+    }
+
+    function test_setBackground_toGlobalDefault_propagates() {
+        let parent = createTemporaryObject(buttonComponent, testCase)
+        verify(parent)
+        let child = buttonComponent.createObject(parent)
+        verify(child)
+
+        parent.Material.theme = Material.Dark
+
+        // Explicitly set to the global default value
+        parent.Material.background = "#fafafa"
+
+        // Explicitly set background is inherited to children
+        compare(parent.Material.background, "#fafafa")
+        compare(child.Material.background, "#fafafa")
+    }
+
+    function test_setForeground_toGlobalDefault_propagates() {
+        let parent = createTemporaryObject(buttonComponent, testCase)
+        verify(parent)
+        let child = buttonComponent.createObject(parent)
+        verify(child)
+
+        parent.Material.theme = Material.Dark
+
+        // Explicitly set to the global default value
+        parent.Material.foreground = "#dd000000"
+
+        // Explicitly set foreground is inherited to children
+        compare(parent.Material.foreground, "#dd000000")
+        compare(child.Material.foreground, "#dd000000")
     }
 
     component StyledChildWindow: Window {

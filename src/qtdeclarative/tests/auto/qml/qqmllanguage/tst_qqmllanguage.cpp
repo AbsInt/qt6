@@ -533,6 +533,8 @@ private slots:
 
     void variantAssociationHasOwnProperty();
 
+    void colorWithoutQuick();
+
 private:
     QQmlEngine engine;
     QStringList defaultImportPathList;
@@ -10066,6 +10068,20 @@ void tst_qqmllanguage::variantAssociationHasOwnProperty()
     QCOMPARE(engine.evaluate("typeof qobject.variantobj.hasOwnProperty").toString(), "function");
     QVERIFY(engine.evaluate("qobject.variantobj.hasOwnProperty('key1')").toBool());
     QVERIFY(!engine.evaluate("qobject.variantobj.hasOwnProperty('key3')").toBool());
+}
+
+void tst_qqmllanguage::colorWithoutQuick()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("colorWithoutQuick.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    MyTypeObject *t = qobject_cast<MyTypeObject *>(o.data());
+    QVERIFY(t);
+    const QColor expected = QColor::fromString("grey");
+    QVERIFY(expected.isValid());
+    QCOMPARE(t->colorProperty(), expected);
 }
 
 QTEST_MAIN(tst_qqmllanguage)

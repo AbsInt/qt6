@@ -205,6 +205,7 @@ public:
 
 protected:
     int metaCall(QObject *o, QMetaObject::Call _c, int _id, void **_a) override;
+    bool getListProperty(int id, QQmlListProperty<QObject> *target);
 
 public:
     QV4::ExecutionEngine *engine;

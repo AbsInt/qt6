@@ -996,7 +996,16 @@ void QSvgVisitorImpl::visitUseNode(const QSvgUse *node)
     fillAnimationInfo(node, info);
 
     info.stage = StructureNodeStage::Start;
-    info.startPos = node->start();
+
+    QPointF startPos = node->start();
+    if (!startPos.isNull()) {
+        QTransform xform;
+        if (!info.isDefaultTransform)
+            xform = info.transform.defaultValue().value<QTransform>();
+        xform.translate(startPos.x(), startPos.y());
+        info.transform.setDefaultValue(QVariant::fromValue(xform));
+        info.isDefaultTransform = false;
+    }
 
     m_generator->generateUseNode(info);
 

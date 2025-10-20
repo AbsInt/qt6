@@ -98,6 +98,7 @@ set(qml_files
     WindowDerived.qml
     aliasLookup.qml
     aliasToAliasResolutionSkipCorruption.qml
+    aliasToLocalAlias.qml
     ambiguous1/Ambiguous.qml
     ambiguous2/Ambiguous.qml
     ambiguousAs.qml
@@ -152,6 +153,7 @@ set(qml_files
     deadStoreLoop.qml
     destroyAndToString.qml
     detachOnAssignment.qml
+    detachedListAssignment.qml
     detachedreferences.qml
     dialog.qml
     dialogButtonBox.qml

@@ -769,39 +769,10 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
                         const QMetaType propType = propertyData->propType();
 
                         if (propType.flags().testFlag(QMetaType::IsQmlList)) {
-                            // when reading from the list, we need to find the correct MetaObject,
-                            // namely this. However, obejct->metaObject might point to any
-                            // MetaObject down the inheritance hierarchy, so we need to store how
-                            // far we have to go down
-                            // To do this, we encode the hierarchy depth together with the id of the
-                            // property in a single quintptr, with the first half storing the depth
-                            // and the second half storing the property id
-                            auto mo = static_cast<QQmlVMEMetaObject *>(
-                                        QObjectPrivate::get(object)->metaObject);
-                            quintptr inheritanceDepth = 0u;
-                            while (mo && mo != this) {
-                                mo = mo->parentVMEMetaObject();
-                                ++inheritanceDepth;
-                            }
-                            constexpr quintptr idBits = sizeof(quintptr) * CHAR_BIT / 2u;
-                            if (Q_UNLIKELY(inheritanceDepth >= (quintptr(1) << idBits))) {
-                                qmlWarning(object) << "Too many objects in inheritance hierarchy "
-                                                      "for list property";
+                            if (!getListProperty(
+                                        id, static_cast<QQmlListProperty<QObject> *>(a[0]))) {
                                 return -1;
                             }
-                            if (Q_UNLIKELY(quintptr(id) >= (quintptr(1) << idBits))) {
-                                qmlWarning(object) << "Too many properties in object "
-                                                      "for list property";
-                                return -1;
-                            }
-                            quintptr encodedIndex = (inheritanceDepth << idBits) + id;
-
-                            initPropertyAsList(id);
-                            *static_cast<QQmlListProperty<QObject> *>(a[0])
-                                    = QQmlListProperty<QObject>(
-                                        object, reinterpret_cast<void *>(quintptr(encodedIndex)),
-                                        list_append, list_count, list_at,
-                                        list_clear, list_replace, list_removeLast);
                         } else if (QV4::MemberData *md = propertyAndMethodStorageAsMemberData()) {
                             // Value type list
                             QV4::Scope scope(engine);
@@ -912,8 +883,37 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
                         const QMetaType propType = propertyData->propType();
 
                         if (propType.flags().testFlag(QMetaType::IsQmlList)) {
-                            // Writing such a property is not supported. Content is added through
-                            // the list property methods.
+                            // Object list
+                            QQmlListProperty<QObject> listProp;
+                            if (!getListProperty(id, &listProp))
+                                return -1;
+
+                            QQmlListProperty<QObject> *input
+                                    = static_cast<QQmlListProperty<QObject> *>(a[0]);
+
+                            // First check if we need to do anything at all. If the lists are
+                            // the same we don't.
+                            if (listProp.count(&listProp) != input->count(input)) {
+                                needActivate = true;
+                            } else {
+                                for (qsizetype i = 0, end = input->count(input); i < end; ++i) {
+                                    if (listProp.at(&listProp, i) == input->at(input, i))
+                                        continue;
+                                    needActivate = true;
+                                    break;
+                                }
+                            }
+
+                            // Then clear the property and re-fill it using the input list,
+                            // without sending separate signals for each element. We're sending a
+                            // summary signal below.
+                            if (needActivate) {
+                                QQmlVMEMetaObject::list_clear_nosignal(&listProp);
+                                for (qsizetype i = 0, end = input->count(input); i < end; ++i) {
+                                    QQmlVMEMetaObject::list_append_nosignal(
+                                            &listProp, input->at(input, i));
+                                }
+                            }
                         } else if (QV4::MemberData *md = propertyAndMethodStorageAsMemberData()) {
                             // Value type list
                             QV4::Scope scope(engine);
@@ -1231,6 +1231,44 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
         return parent.asT1()->metaCall(object, c, _id, a);
     else
         return object->qt_metacall(c, _id, a);
+}
+
+bool QQmlVMEMetaObject::getListProperty(int id, QQmlListProperty<QObject> *target)
+{
+    // when accessing the list, we need to find the correct MetaObject,
+    // namely this. However, obejct->metaObject might point to any
+    // MetaObject down the inheritance hierarchy, so we need to store how
+    // far we have to go down
+    // To do this, we encode the hierarchy depth together with the id of the
+    // property in a single quintptr, with the first half storing the depth
+    // and the second half storing the property id
+
+    auto mo = static_cast<QQmlVMEMetaObject *>(
+            QObjectPrivate::get(object)->metaObject);
+    quintptr inheritanceDepth = 0u;
+    while (mo && mo != this) {
+        mo = mo->parentVMEMetaObject();
+        ++inheritanceDepth;
+    }
+    constexpr quintptr idBits = sizeof(quintptr) * CHAR_BIT / 2u;
+    if (Q_UNLIKELY(inheritanceDepth >= (quintptr(1) << idBits))) {
+        qmlWarning(object) << "Too many objects in inheritance hierarchy "
+                              "for list property";
+        return false;
+    }
+    if (Q_UNLIKELY(quintptr(id) >= (quintptr(1) << idBits))) {
+        qmlWarning(object) << "Too many properties in object "
+                              "for list property";
+        return false;
+    }
+    quintptr encodedIndex = (inheritanceDepth << idBits) + id;
+
+    initPropertyAsList(id);
+    *target = QQmlListProperty<QObject>(
+                    object, reinterpret_cast<void *>(quintptr(encodedIndex)),
+                    list_append, list_count, list_at,
+                    list_clear, list_replace, list_removeLast);
+    return true;
 }
 
 QV4::ReturnedValue QQmlVMEMetaObject::method(int localMethodIndex) const

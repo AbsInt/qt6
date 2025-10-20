@@ -25,8 +25,8 @@ inline decltype(auto) createBindingInScope(QObject *thisObject, CreateBinding cr
     Q_ASSERT(v4);
 
     QQmlData *ddata = QQmlData::get(thisObject);
-    Q_ASSERT(ddata && ddata->outerContext);
-    QQmlRefPointer<QQmlContextData> ctxtdata = QQmlRefPointer<QQmlContextData>(ddata->outerContext);
+    Q_ASSERT(ddata && ddata->context);
+    QQmlRefPointer<QQmlContextData> ctxtdata = QQmlRefPointer<QQmlContextData>(ddata->context);
 
     QV4::Scope scope(v4);
     QV4::ExecutionContext *executionCtx = v4->scriptContext();

@@ -308,6 +308,8 @@ void QQuickLayoutAttached::setMaximumImplicitSize(const QSizeF &sz)
     set to the preferred width.
     The default depends on implicit (built-in) size policy of item.
 
+    \note By default, this property is \c true for layouts.
+
     \sa fillHeight
 */
 void QQuickLayoutAttached::setFillWidth(bool fill)
@@ -328,6 +330,8 @@ void QQuickLayoutAttached::setFillWidth(bool fill)
     the given constraints. If the property is \c false, the item will have a fixed height
     set to the preferred height.
     The default depends on implicit (built-in) size policy of the item.
+
+    \note By default, this property is \c true for layouts.
 
     \sa fillWidth
 */

@@ -736,8 +736,14 @@ QSGNode *QQuickShaderEffectSource::updatePaintNode(QSGNode *oldNode, UpdatePaint
     node->setFiltering(filtering);
     node->setHorizontalWrapMode(hWrap);
     node->setVerticalWrapMode(vWrap);
-    node->setTargetRect(QRectF(0, 0, width(), height()));
-    node->setInnerTargetRect(QRectF(0, 0, width(), height()));
+
+    qreal dummy;
+    qreal fx = std::modf(x(), &dummy);
+    qreal fy = std::modf(y(), &dummy);
+    QRectF targetRect(0, 0, qCeil(fx) + qCeil(width()), qCeil(fy) + qCeil(height()));
+    node->setTargetRect(targetRect);
+    node->setInnerTargetRect(targetRect);
+
     node->update();
 
     return node;

@@ -21,6 +21,7 @@
 #include <private/qqmlvmemetaobject_p.h>
 #include <private/qv4functionobject_p.h>
 #include <private/qv4qobjectwrapper_p.h>
+#include <private/qv4sequenceobject_p.h>
 
 #include <QtQml/qqmlcontext.h>
 #include <QtQml/qqmlengine.h>
@@ -1506,6 +1507,114 @@ static bool tryAssignBinding(
     return true;
 }
 
+template<typename L>
+qsizetype listCount(const L *list)
+{
+    if constexpr (std::is_same_v<L, QQmlListReference>)
+        return list->count();
+    if constexpr (std::is_same_v<L, QObjectList>)
+        return list->count();
+    if constexpr (std::is_same_v<L, QVariantList>)
+        return list->count();
+    return -1;
+}
+
+template<typename L, typename F>
+bool iterateList(const L *list, qsizetype size, F &&callback)
+{
+    for (qsizetype i = 0; i < size; ++i){
+        if (!callback(i, list->at(i)))
+            return false;
+    }
+
+    return true;
+}
+
+static QObject *extractObject(const QVariant &variant)
+{
+    return QQmlMetaType::toQObject(variant);
+}
+
+static QObject *extractObject(QObject *object)
+{
+    return object;
+}
+
+using AssignResult = QV4::SequencePrototype::RawCopyResult;
+
+template<typename L, typename DoAppend>
+AssignResult assignListToListProperty(
+        QQmlListProperty<QObject> *prop, const L *list, DoAppend &&doAppend)
+{
+    const qsizetype newSize = listCount(list);
+    if (prop->at && prop->count && newSize == prop->count(prop)) {
+        if (iterateList(list, newSize, [prop](qsizetype i, const auto &element) {
+            return (extractObject(element) == prop->at(prop, i));
+        })) {
+            // Nothing to do, the lists are the same
+            return AssignResult::WasEqual;
+        }
+    }
+
+    prop->clear(prop);
+    iterateList(list, newSize, [&](qsizetype, const auto &element) {
+        return doAppend(prop, extractObject(element));
+    });
+
+    return AssignResult::Copied;
+}
+
+template<typename DoAppend>
+AssignResult assignMetaContainerToListProperty(
+        QQmlListProperty<QObject> *prop, QMetaType metaType, const void *data, DoAppend &&doAppend)
+{
+    QSequentialIterable iterable;
+    if (!QMetaType::convert(metaType, data, QMetaType::fromType<QSequentialIterable>(), &iterable))
+        return AssignResult::TypeMismatch;
+
+    const QMetaSequence metaSequence = iterable.metaContainer();
+    if (!metaSequence.hasConstIterator()
+            || !metaSequence.canGetValueAtConstIterator()
+            || !iterable.valueMetaType().flags().testFlag(QMetaType::PointerToQObject)) {
+        return AssignResult::TypeMismatch;
+    }
+
+    const void *container = iterable.constIterable();
+    const void *end = metaSequence.constEnd(container);
+
+    QObject *o = nullptr;
+    bool same = false;
+    if (prop->at && prop->count && metaSequence.hasSize()
+            && metaSequence.size(container) == prop->count(prop)) {
+        void *it = metaSequence.constBegin(container);
+        same = true;
+        qsizetype i = -1;
+        while (!metaSequence.compareConstIterator(it, end)) {
+            metaSequence.valueAtConstIterator(it, &o);
+            if (o != prop->at(prop, ++i)) {
+                same = false;
+                break;
+            }
+            metaSequence.advanceConstIterator(it, 1);
+        }
+        metaSequence.destroyConstIterator(it);
+    }
+
+    if (!same) {
+        prop->clear(prop);
+        void *it = metaSequence.constBegin(container);
+        while (!metaSequence.compareConstIterator(it, end)) {
+            metaSequence.valueAtConstIterator(it, &o);
+            doAppend(prop, o);
+            metaSequence.advanceConstIterator(it, 1);
+        }
+        metaSequence.destroyConstIterator(it);
+    }
+
+    metaSequence.destroyConstIterator(end);
+    return same ? AssignResult::WasEqual : AssignResult::Copied;
+}
+
 static bool assignToListProperty(
         const QQmlPropertyData &property, QQmlPropertyData::WriteFlags flags,
         const QMetaType propertyMetaType, const QMetaType variantMetaType, const QVariant &value,
@@ -1520,50 +1629,56 @@ static bool assignToListProperty(
         QQmlListProperty<QObject> prop;
         property.readProperty(object, &prop);
 
+        // clear and append are the minimum operations we need to perform an assignment.
         if (!prop.clear || !prop.append)
             return false;
 
         const bool useNonsignalingListOps = prop.clear == &QQmlVMEMetaObject::list_clear
                 && prop.append == &QQmlVMEMetaObject::list_append;
+        if (useNonsignalingListOps) {
+            prop.clear = &QQmlVMEMetaObject::list_clear_nosignal;
+            prop.append = &QQmlVMEMetaObject::list_append_nosignal;
+        }
 
-        auto propClear =
-                useNonsignalingListOps ? &QQmlVMEMetaObject::list_clear_nosignal : prop.clear;
-        auto propAppend =
-                useNonsignalingListOps ? &QQmlVMEMetaObject::list_append_nosignal : prop.append;
-
-        propClear(&prop);
-
-        const auto doAppend = [&](QObject *o) {
+        auto doAppend = [&](QQmlListProperty<QObject> *propPtr, QObject *o) {
             if (Q_UNLIKELY(o && !QQmlMetaObject::canConvert(o, valueMetaObject))) {
                 qCWarning(lcIncompatibleElement)
                 << "Cannot append" << o << "to a QML list of" << listValueType.name();
                 o = nullptr;
             }
-            propAppend(&prop, o);
+            propPtr->append(propPtr, o);
+            return true;
         };
 
+        AssignResult result = AssignResult::TypeMismatch;
         if (variantMetaType == QMetaType::fromType<QQmlListReference>()) {
-            QQmlListReference qdlr = value.value<QQmlListReference>();
-            for (qsizetype ii = 0; ii < qdlr.count(); ++ii)
-                doAppend(qdlr.at(ii));
-        } else if (variantMetaType == QMetaType::fromType<QList<QObject *>>()) {
-            const QList<QObject *> &list = qvariant_cast<QList<QObject *> >(value);
-            for (qsizetype ii = 0; ii < list.size(); ++ii)
-                doAppend(list.at(ii));
-        } else if (variantMetaType == QMetaType::fromType<QList<QVariant>>()) {
-            const QList<QVariant> &list
-                    = *static_cast<const QList<QVariant> *>(value.constData());
-            for (const QVariant &entry : list)
-                doAppend(QQmlMetaType::toQObject(entry));
-        } else if (!iterateQObjectContainer(variantMetaType, value.data(), doAppend)) {
-            doAppend(QQmlMetaType::toQObject(value));
+            result = assignListToListProperty(
+                    &prop, static_cast<const QQmlListReference *>(value.constData()),
+                    std::move(doAppend));
+        } else if (variantMetaType == QMetaType::fromType<QObjectList>()) {
+            result = assignListToListProperty(
+                    &prop, static_cast<const QObjectList *>(value.constData()),
+                    std::move(doAppend));
+        } else if (variantMetaType == QMetaType::fromType<QVariantList>()) {
+            result = assignListToListProperty(
+                    &prop, static_cast<const QVariantList *>(value.constData()),
+                    std::move(doAppend));
+        } else {
+            result = assignMetaContainerToListProperty(
+                    &prop, variantMetaType, value.data(), doAppend);
+            if (result == AssignResult::TypeMismatch) {
+                prop.clear(&prop);
+                doAppend(&prop, QQmlMetaType::toQObject(value));
+                result = AssignResult::Copied;
+            }
         }
-        if (useNonsignalingListOps) {
+
+        if (useNonsignalingListOps && result == AssignResult::Copied) {
             Q_ASSERT(QQmlVMEMetaObject::get(object));
             QQmlVMEResolvedList(&prop).activateSignal();
         }
 
-        return true;
+        return result != AssignResult::TypeMismatch;
     } else if (variantMetaType == propertyMetaType) {
         QVariant v = value;
         return property.writeProperty(object, v.data(), flags);
@@ -1730,6 +1845,11 @@ bool QQmlPropertyPrivate::write(
         return property.writeProperty(object, &jsValue, flags);
     } else {
         Q_ASSERT(variantMetaType != propertyMetaType);
+
+        if (property.isResettable() && !value.isValid()) {
+            property.resetProperty(object, flags);
+            return true;
+        }
 
         bool ok = false;
         QVariant v;

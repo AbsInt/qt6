@@ -222,7 +222,7 @@ public:
     static QVariant createValueType(const QJSValue &, QMetaType);
     static QVariant createValueType(const QString &, QMetaType);
     static QVariant createValueType(const QV4::Value &, QMetaType, QV4::ExecutionEngine *);
-    static QVariant createValueType(const QVariant &, QMetaType, QV4::ExecutionEngine *);
+    static QVariant Q_AUTOTEST_EXPORT createValueType(const QVariant &, QMetaType, QV4::ExecutionEngine *);
 };
 
 class Q_QML_EXPORT QQmlColorProvider

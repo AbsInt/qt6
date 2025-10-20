@@ -178,6 +178,7 @@ void tst_qqmlqt::rgba()
     QCOMPARE(qvariant_cast<QColor>(object->property("test4")), QColor());
     QCOMPARE(qvariant_cast<QColor>(object->property("test5")), QColor::fromRgbF(1, 1, 1, 1));
     QCOMPARE(qvariant_cast<QColor>(object->property("test6")), QColor::fromRgbF(0, 0, 0, 0));
+    QCOMPARE(qvariant_cast<QColor>(object->property("test7")), QColor::fromRgbF(0, 0, 0, 0));
 }
 
 void tst_qqmlqt::hsla()
@@ -201,6 +202,7 @@ void tst_qqmlqt::hsla()
     QColor test7 = qvariant_cast<QColor>(object->property("test7"));
     QCOMPARE(test7, QColor::fromHslF(-1, 0, 0.5, 1));
     QCOMPARE(test7.hslHue(), -1.0f);
+    QCOMPARE(qvariant_cast<QColor>(object->property("test8")), QColor::fromHslF(0, 0, 0, 0));
 }
 
 void tst_qqmlqt::hsva()
@@ -224,6 +226,7 @@ void tst_qqmlqt::hsva()
     QColor test7 = qvariant_cast<QColor>(object->property("test7"));
     QCOMPARE(test7, QColor::fromHsvF(-1, 0, 0.5, 1));
     QCOMPARE(test7.hsvHue(), -1.0f);
+    QCOMPARE(qvariant_cast<QColor>(object->property("test8")), QColor::fromHsvF(0, 0, 0, 0));
 }
 
 void tst_qqmlqt::colorEqual()

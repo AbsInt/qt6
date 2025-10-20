@@ -339,14 +339,10 @@ QVariant QtObject::color(const QString &name) const
 */
 QVariant QtObject::rgba(double r, double g, double b, double a) const
 {
-    if (r < 0.0) r=0.0;
-    if (r > 1.0) r=1.0;
-    if (g < 0.0) g=0.0;
-    if (g > 1.0) g=1.0;
-    if (b < 0.0) b=0.0;
-    if (b > 1.0) b=1.0;
-    if (a < 0.0) a=0.0;
-    if (a > 1.0) a=1.0;
+    r = qBound(0.0, r, 1.0);
+    g = qBound(0.0, g, 1.0);
+    b = qBound(0.0, b, 1.0);
+    a = qBound(0.0, a, 1.0);
 
     return QQml_colorProvider()->fromRgbF(r, g, b, a);
 }

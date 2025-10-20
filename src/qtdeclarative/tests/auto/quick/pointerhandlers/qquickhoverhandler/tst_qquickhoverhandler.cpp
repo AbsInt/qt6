@@ -775,8 +775,6 @@ void tst_HoverHandler::asProperty()
     QQuickView window;
     window.setFlag(Qt::FramelessWindowHint, true);
     QVERIFY(QQuickTest::showView(window, testFileUrl("asProperty.qml")));
-    window.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&window));
     const QQuickItem *root = window.rootObject();
     QQuickHoverHandler *handler = root->property("handler").value<QQuickHoverHandler *>();
     QVERIFY(handler);

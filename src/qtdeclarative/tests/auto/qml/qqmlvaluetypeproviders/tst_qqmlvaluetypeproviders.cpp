@@ -35,6 +35,9 @@ class tst_qqmlvaluetypeproviders : public QQmlDataTest
 public:
     tst_qqmlvaluetypeproviders() : QQmlDataTest(QT_QMLTEST_DATADIR) {}
 
+public:
+    Q_INVOKABLE void incompatibleStructuredValue();
+
 private slots:
     void initTestCase() override;
 
@@ -51,6 +54,10 @@ private slots:
     void date();
     void constructors();
     void constructFromJSValue();
+    void createValueTypeErrors();
+
+private:
+    QQmlEngine *m_engine = nullptr;
 };
 
 void tst_qqmlvaluetypeproviders::initTestCase()
@@ -611,6 +618,32 @@ void tst_qqmlvaluetypeproviders::constructFromJSValue()
     const QVariant fromJSManaged = o->property("managed");
     QCOMPARE(fromJSManaged.metaType(), QMetaType::fromType<FromJSManaged>());
     QCOMPARE(fromJSManaged.value<FromJSManaged>().toString(), QStringLiteral("bbbb"));
+}
+
+void tst_qqmlvaluetypeproviders::incompatibleStructuredValue()
+{
+    QMetaType structuredValueTypeType = QMetaType::fromType<StructuredValueType>();
+    QVariantMap m;
+    m.insert(QLatin1String("i"), QVariant::fromValue(m_engine));
+    QVariant source = QVariant::fromValue(std::move(m));
+    QQmlValueTypeProvider::createValueType(source, structuredValueTypeType, m_engine->handle());
+}
+
+void tst_qqmlvaluetypeproviders::createValueTypeErrors()
+{
+    QQmlEngine engine;
+    m_engine = &engine;
+    auto url = testFileUrl("createValueTypeErrors.qml");
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(url.toString()
+        + u":\\d+: Could not convert QVariant\\(QQmlEngine.*\\) to int for property i"
+    ));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(url.toString()
+        + u":\\d+: Could not convert QRectF\\(0, 0, 0, 0\\) to int for property i"
+    ));
+    QQmlComponent comp(&engine, url);
+    std::unique_ptr<QObject> rooot(comp.createWithInitialProperties(
+        {{QLatin1String("runner"), QVariant::fromValue(this)}}
+    ));
 }
 
 QTEST_MAIN(tst_qqmlvaluetypeproviders)

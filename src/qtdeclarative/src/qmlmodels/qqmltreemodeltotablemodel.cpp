@@ -779,9 +779,13 @@ void QQmlTreeModelToTableModel::modelRowsInserted(const QModelIndex & parent, in
     TreeItem item;
     int parentRow = itemIndex(parent);
     if (parentRow >= 0) {
+        const bool isExpanded = m_items.at(parentRow).expanded;
         queueDataChanged(parentRow, parentRow, {HasChildrenRole});
         item = m_items.at(parentRow);
-        if (!item.expanded) {
+        // If the item not expanded earlier, and if expanded due to expand() triggered during
+        // new child added to the row (parentRow), then we don't want to continue with showing model
+        // child items (in showModelChildItems()) as its already expanded.
+        if ((!isExpanded && item.expanded) || !item.expanded) {
             ASSERT_CONSISTENCY();
             return;
         }

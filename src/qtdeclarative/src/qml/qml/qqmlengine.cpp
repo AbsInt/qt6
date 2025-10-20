@@ -1939,7 +1939,7 @@ void QQmlEnginePrivate::executeRuntimeFunction(const QV4::ExecutableCompilationU
     Q_ASSERT(thisObject);
 
     QQmlData *ddata = QQmlData::get(thisObject);
-    Q_ASSERT(ddata && ddata->outerContext);
+    Q_ASSERT(ddata && ddata->context);
 
     QV4::Function *function = unit->runtimeFunctions[functionIndex];
     Q_ASSERT(function);
@@ -1954,7 +1954,7 @@ void QQmlEnginePrivate::executeRuntimeFunction(const QV4::ExecutableCompilationU
     QV4::Scope scope(v4);
     QV4::ExecutionContext *ctx = v4->scriptContext();
     QV4::Scoped<QV4::ExecutionContext> callContext(scope,
-        QV4::QmlContext::create(ctx, ddata->outerContext, thisObject));
+        QV4::QmlContext::create(ctx, ddata->context, thisObject));
 
     if (auto nested = function->nestedFunction()) {
         // if a nested function is already known, call the closure directly

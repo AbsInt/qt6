@@ -847,6 +847,7 @@ QQmlComponentAndAliasResolver<QQmlTypeCompiler>::resolveAliasesInObject(
 
     int aliasIndex = 0;
     int numSkippedAliases = 0;
+    bool hasUnresolvedLocalAliases = false;
 
     for (QmlIR::Alias *alias = obj->firstAlias(); alias; alias = alias->next, ++aliasIndex) {
         if (resolvedAliases.contains(alias)) {
@@ -903,14 +904,25 @@ QQmlComponentAndAliasResolver<QQmlTypeCompiler>::resolveAliasesInObject(
             if (!targetProperty) {
                 bool aliasPointsToOtherAlias = false;
                 int localAliasIndex = 0;
-                for (auto targetAlias = targetObject->aliasesBegin(), end = targetObject->aliasesEnd(); targetAlias != end; ++targetAlias, ++localAliasIndex) {
+                auto targetAlias = targetObject->aliasesBegin();
+                for (const auto end = targetObject->aliasesEnd(); targetAlias != end;
+                        ++targetAlias, ++localAliasIndex) {
                     if (stringAt(targetAlias->nameIndex()) == property) {
                         aliasPointsToOtherAlias = true;
                         break;
                     }
                 }
                 if (aliasPointsToOtherAlias) {
-                    if (targetObjectIndex == objectIndex) {
+                    if (targetObjectIndex != objectIndex) {
+                        // Don't continue, yet. We need to respect the order of objects.
+                        alias->setIdIndex(idIndex);
+                        return aliasIndex == numSkippedAliases
+                                ? NoAliasResolved
+                                : SomeAliasesResolved;
+                    }
+
+                    if (resolvedAliases.contains(targetAlias)) {
+                        // Target already resolved. We can set the alias right away.
                         alias->localAliasIndex = localAliasIndex;
                         alias->setIsAliasToLocalAlias(true);
                         if (!appendAliasToPropertyCache(
@@ -921,10 +933,13 @@ QQmlComponentAndAliasResolver<QQmlTypeCompiler>::resolveAliasesInObject(
                         continue;
                     }
 
-                    // restore
+                    // Target isn't resolved yet, but it's in the same object.
+                    // Continue with the other aliases.
                     alias->setIdIndex(idIndex);
                     // Try again later and resolve the target alias first.
-                    return aliasIndex == numSkippedAliases ? NoAliasResolved : SomeAliasesResolved;
+                    ++numSkippedAliases;
+                    hasUnresolvedLocalAliases = true;
+                    continue;
                 }
             }
 
@@ -992,7 +1007,7 @@ QQmlComponentAndAliasResolver<QQmlTypeCompiler>::resolveAliasesInObject(
     if (numSkippedAliases == aliasIndex)
         return NoAliasResolved;
 
-    if (aliasIndex == obj->aliasCount())
+    if (aliasIndex == obj->aliasCount() && !hasUnresolvedLocalAliases)
         return AllAliasesResolved;
 
     return SomeAliasesResolved;

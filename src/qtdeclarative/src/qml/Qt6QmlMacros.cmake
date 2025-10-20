@@ -4838,6 +4838,7 @@ function(qt6_generate_deploy_qml_app_script)
     # need information associated with the target (scanning all its .qml files
     # for imported QML modules).
     set(no_value_options
+        NO_PLUGINS
         NO_UNSUPPORTED_PLATFORM_ERROR
         NO_TRANSLATIONS
         NO_COMPILER_RUNTIME
@@ -4850,6 +4851,10 @@ function(qt6_generate_deploy_qml_app_script)
     )
     set(qt_deploy_runtime_dependencies_options
         # These options are forwarded as is to qt_deploy_runtime_dependencies.
+        EXCLUDE_PLUGINS
+        EXCLUDE_PLUGIN_TYPES
+        INCLUDE_PLUGINS
+        INCLUDE_PLUGIN_TYPES
         PRE_INCLUDE_REGEXES
         PRE_EXCLUDE_REGEXES
         POST_INCLUDE_REGEXES
@@ -4923,6 +4928,9 @@ function(qt6_generate_deploy_qml_app_script)
     string(APPEND skip_message "\n)")
 
     set(common_deploy_args "")
+    if(arg_NO_PLUGINS)
+        string(APPEND common_deploy_args "    NO_PLUGINS\n")
+    endif()
     if(arg_NO_TRANSLATIONS)
         string(APPEND common_deploy_args "    NO_TRANSLATIONS\n")
     endif()

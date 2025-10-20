@@ -48,6 +48,7 @@ private slots:
     void accessModelMethodFromOutSide();
     void aliasLookup();
     void aliasToAliasResolutionSkipCorruption();
+    void aliasToLocalAlias();
     void ambiguousAs();
     void ambiguousSignals();
     void anchorsFill();
@@ -103,6 +104,7 @@ private slots:
     void deduplicateConversionOrigins();
     void destroyAndToString();
     void detachOnAssignment();
+    void detachedListAssignment();
     void detachedReferences();
     void dialogButtonBox();
     void disappearingArrowFunction();
@@ -607,6 +609,27 @@ void tst_QmlCppCodegen::aliasToAliasResolutionSkipCorruption()
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
+}
+
+void tst_QmlCppCodegen::aliasToLocalAlias()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/aliasToLocalAlias.qml"_s));
+    QVERIFY2(!component.isError(), component.errorString().toUtf8());
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+
+    const QVariant label = object->property("label");
+    QCOMPARE(label.metaType(), QMetaType::fromType<QString>());
+    QVERIFY(label.toString().isEmpty());
+
+    const QVariant description = object->property("description");
+    QCOMPARE(description.metaType(), QMetaType::fromType<QString>());
+    QVERIFY(description.toString().isEmpty());
+
+    object->setObjectName(u"nnn");
+    QCOMPARE(object->property("label").toString(), u"nnn");
+    QCOMPARE(object->property("description").toString(), u"nnn");
 }
 
 void tst_QmlCppCodegen::ambiguousAs()
@@ -1803,6 +1826,33 @@ void tst_QmlCppCodegen::detachOnAssignment()
 
     QCOMPARE(o->property("v").value<QVariantList>()[0], QStringLiteral("a"));
     QCOMPARE(p->things()[0], QStringLiteral("c"));
+}
+
+void tst_QmlCppCodegen::detachedListAssignment()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/detachedListAssignment.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
+    QCOMPARE(o->property("changes").toInt(), 0);
+
+    QTest::ignoreMessage(QtDebugMsg, "Return value (l): 2");
+    QTest::ignoreMessage(QtDebugMsg, "root.testProp before assigning l: 0");
+    QTest::ignoreMessage(QtDebugMsg, "root.testProp after assigning l: 2");
+    QMetaObject::invokeMethod(o.data(), "testF");
+
+    // Changes only once in total, not once per element added
+    QCOMPARE(o->property("changes").toInt(), 1);
+
+    QTest::ignoreMessage(QtDebugMsg, "Return value (l): 2");
+    QTest::ignoreMessage(QtDebugMsg, "root.testProp before assigning l: 2");
+    QTest::ignoreMessage(QtDebugMsg, "root.testProp after assigning l: 2");
+    QMetaObject::invokeMethod(o.data(), "testG");
+
+    // No further changes: The lists stay the same
+    QCOMPARE(o->property("changes").toInt(), 1);
 }
 
 void tst_QmlCppCodegen::detachedReferences()

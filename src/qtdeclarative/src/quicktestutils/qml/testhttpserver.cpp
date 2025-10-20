@@ -249,6 +249,11 @@ void TestHTTPServer::readyRead()
                 m_data += socket->readAll();
                 break;
             } else {
+                qsizetype prefixIndex = line.indexOf(':');
+                if (prefixIndex > 0) {
+                    const QByteArray prefix = line.left(prefixIndex);
+                    line = std::move(line).replace(prefix, prefix.toLower());
+                }
                 bool prefixFound = false;
                 for (const QByteArray &prefix : m_waitData.headerPrefixes) {
                     if (line.startsWith(prefix)) {
