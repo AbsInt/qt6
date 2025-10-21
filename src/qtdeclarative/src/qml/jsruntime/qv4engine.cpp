@@ -118,6 +118,7 @@ int ExecutionEngine::s_maxCallDepth = -1;
 int ExecutionEngine::s_jitCallCountThreshold = 3;
 int ExecutionEngine::s_maxJSStackSize = 4 * 1024 * 1024;
 int ExecutionEngine::s_maxGCStackSize = 2 * 1024 * 1024;
+int ExecutionEngine::s_stackSizeSoftLimit = -1;
 
 ReturnedValue throwTypeError(const FunctionObject *b, const QV4::Value *, const QV4::Value *, int)
 {
@@ -308,6 +309,12 @@ void ExecutionEngine::initializeStaticMembers()
     if (ok && envMaxGCStackSize > 0)
         s_maxGCStackSize = envMaxGCStackSize;
 
+    const int envStackSizeSoftLimit = qEnvironmentVariableIntValue("QV4_STACK_SOFT_LIMIT", &ok);
+    if (ok && envStackSizeSoftLimit > -1)
+        s_stackSizeSoftLimit = envStackSizeSoftLimit;
+    else
+        s_stackSizeSoftLimit = -1;
+
     if (qEnvironmentVariableIsSet("QV4_CRASH_ON_STACKOVERFLOW")) {
         s_maxCallDepth = std::numeric_limits<qint32>::max();
     } else {
@@ -361,13 +368,10 @@ ExecutionEngine::ExecutionEngine(QJSEngine *jsEngine)
         }
     }
 
-    if (s_maxCallDepth < 0) {
-        const StackProperties stack = stackProperties();
-        cppStackBase = stack.base;
-        cppStackLimit = stack.softLimit;
-    } else {
+    if (s_maxCallDepth < 0)
+        setCppStackProperties();
+    else
         callDepth = 0;
-    }
 
     // We allocate guard pages around our stacks.
     const size_t guardPages = 2 * WTF::pageSize();

@@ -3685,6 +3685,12 @@ void QQuickTextInputPrivate::processInputMethodEvent(QInputMethodEvent *event)
     }
     m_textLayout.setFormats(formats);
 
+    // Set cursor visible state. Do this before updating the text,
+    // since user code connected to onTextChanged may set a different
+    // cursor visible state (for instance by setting the focus), which
+    // we don't want to overwrite.
+    q->setCursorVisible(cursorVisible);
+
     updateDisplayText(/*force*/ true);
     if (cursorPositionChanged && emitCursorPositionChanged())
         q->updateInputMethod(Qt::ImCursorPosition | Qt::ImAnchorPosition);
@@ -3693,8 +3699,6 @@ void QQuickTextInputPrivate::processInputMethodEvent(QInputMethodEvent *event)
 
     if (isGettingInput)
         finishChange(priorState);
-
-    q->setCursorVisible(cursorVisible);
 
     if (selectionChange) {
         emit q->selectionChanged();

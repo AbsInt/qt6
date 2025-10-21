@@ -72,7 +72,7 @@ qt_internal_add_qml_module(qtquickcontrols2nativestyleplugin
         qstyle/qquickcommonstyle.cpp qstyle/qquickcommonstyle.h qstyle/qquickcommonstyle_p.h
         qstyle/qquickcommonstylepixmaps_p.h
         qstyle/qquickdrawutil.cpp qstyle/qquickdrawutil.h
-        qstyle/qquicknativestyle.h
+        qstyle/qquicknativestyle.cpp qstyle/qquicknativestyle_p.h
         qstyle/qquickstyle.cpp qstyle/qquickstyle.h qstyle/qquickstyle_p.h
         qstyle/qquickstylehelper.cpp qstyle/qquickstylehelper_p.h
         qstyle/qquickstyleoption.cpp qstyle/qquickstyleoption.h

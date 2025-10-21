@@ -252,7 +252,7 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
             } else if (name == QLatin1String("immediateNames")) {
                 readImmediateNames(script, scope);
             } else if (name == QLatin1String("isJavaScriptBuiltin")) {
-                scope->setIsJavaScriptBuiltin(true);
+                scope->setIsJavaScriptBuiltin(readBoolBinding(script));
             } else {
                 addWarning(script->firstSourceLocation(),
                            tr("Expected only lineNumber, name, prototype, defaultProperty, "

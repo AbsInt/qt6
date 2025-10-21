@@ -529,8 +529,10 @@ bool QQuickOverlay::eventFilter(QObject *object, QEvent *event)
 
         // allow non-modal popups to close on touch release outside
         if (!d->mouseGrabberPopup) {
-            for (const QTouchEvent::TouchPoint &point : static_cast<QTouchEvent *>(event)->points()) {
+            QTouchEvent *touchEvent = static_cast<QTouchEvent *>(event);
+            for (const QTouchEvent::TouchPoint &point : touchEvent->points()) {
                 if (point.state() == QEventPoint::Released) {
+                    QQuickDeliveryAgentPrivate::translateTouchEvent(touchEvent);
                     if (d->handleRelease(d->window->contentItem(), event, nullptr))
                         break;
                 }

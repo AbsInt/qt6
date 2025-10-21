@@ -826,6 +826,16 @@ private:
 #endif
     }
 
+    void setCppStackProperties()
+    {
+        const StackProperties stack = stackProperties();
+        cppStackBase = stack.base;
+        if (s_stackSizeSoftLimit == -1)
+            cppStackLimit = stack.softLimit;
+        else
+            cppStackLimit = incrementStackPointer(stack.base, s_stackSizeSoftLimit);
+    }
+
     bool hasCppStackOverflow()
     {
         if (s_maxCallDepth >= 0)
@@ -836,9 +846,8 @@ private:
 
         // Double check the stack limits on failure.
         // We may have moved to a different thread.
-        const StackProperties stack = stackProperties();
-        cppStackBase = stack.base;
-        cppStackLimit = stack.softLimit;
+        setCppStackProperties();
+
         return !inStack(currentStackPointer());
     }
 
@@ -856,6 +865,7 @@ private:
     static int s_jitCallCountThreshold;
     static int s_maxJSStackSize;
     static int s_maxGCStackSize;
+    static int s_stackSizeSoftLimit;
 
 #if QT_CONFIG(qml_debug)
     QScopedPointer<QV4::Debugging::Debugger> m_debugger;

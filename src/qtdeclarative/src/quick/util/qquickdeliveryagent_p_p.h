@@ -121,7 +121,7 @@ public:
     // Mouse positions are saved in widget coordinates
     QPointF lastMousePosition;
     bool deliverTouchAsMouse(QQuickItem *item, QTouchEvent *pointerEvent);
-    void translateTouchEvent(QTouchEvent *touchEvent);
+    static void translateTouchEvent(QTouchEvent *touchEvent);
     void removeGrabber(QQuickItem *grabber, bool mouse = true, bool touch = true, bool cancel = false);
     void clearGrabbers(QPointerEvent *pointerEvent);
     void onGrabChanged(QObject *grabber, QPointingDevice::GrabTransition transition, const QPointerEvent *event, const QEventPoint &point);

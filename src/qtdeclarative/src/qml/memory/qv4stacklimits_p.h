@@ -29,6 +29,30 @@ QT_BEGIN_NAMESPACE
 
 namespace QV4 {
 
+// We may not be able to take the negative of the type
+// used to represent stack size, but we can always add
+// or subtract it to/from a quint8 pointer.
+
+template<typename Size>
+static const void *incrementStackPointer(const void *base, Size amount)
+{
+#if Q_STACK_GROWTH_DIRECTION > 0
+    return static_cast<const quint8 *>(base) + amount;
+#else
+    return static_cast<const quint8 *>(base) - amount;
+#endif
+}
+
+template<typename Size>
+static void *decrementStackPointer(void *base, Size amount)
+{
+#if Q_STACK_GROWTH_DIRECTION > 0
+    return static_cast<quint8 *>(base) - amount;
+#else
+    return static_cast<quint8 *>(base) + amount;
+#endif
+}
+
 // Note: This does not return a completely accurate stack pointer.
 //       Depending on whether this function is inlined or not, we may get the address of
 //       this function's stack frame or the caller's stack frame.
