@@ -61,22 +61,14 @@ T.Slider {
                 height: parent.height
                 radius: parent.radius
                 // No border in dark mode, instead we fill.
-                color: Application.styleHints.colorScheme === Qt.Light
-                    ? "transparent" : Qt.lighter(control.palette.window, 1.4)
-                border.color: Application.styleHints.colorScheme === Qt.Light
-                    ? Qt.darker(control.palette.window, 1.06)
-                    : "transparent"
-
-                Rectangle {
-                    x: 1
-                    y: 1
-                    width: parent.width - 2
-                    height: parent.height - 2
-                    radius: parent.radius
-                    color: "transparent"
-                    border.color: Qt.darker(control.palette.window, 1.05)
-                    visible: Application.styleHints.colorScheme === Qt.Light
-                }
+                color: NativeStyle.StyleConstants.runningWithLiquidGlass
+                    ? NativeStyle.StyleConstants.tertiarySystemFillColor
+                    : Application.styleHints.colorScheme === Qt.Light
+                      ? "transparent" : Qt.lighter(control.palette.window, 1.6)
+                border.color: NativeStyle.StyleConstants.runningWithLiquidGlass
+                              ? NativeStyle.StyleConstants.tertiarySystemFillColor
+                              : Application.styleHints.colorScheme === Qt.Light
+                                ? Qt.darker(control.palette.window, 1.1) : "transparent"
             }
         }
 

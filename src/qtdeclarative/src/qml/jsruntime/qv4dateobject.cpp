@@ -528,10 +528,13 @@ static inline double ParseString(const QString &s, double localTZA)
             // ISO 8601 and RFC 2822 with a GMT as prefix on its offset, or GMT as zone.
             QStringLiteral("yyyy-MM-dd hh:mm:ss t"),
             QStringLiteral("ddd, d MMM yyyy hh:mm:ss t"),
+            QStringLiteral("ddd, d MMM yy hh:mm:ss t"),
+            QStringLiteral("ddd, d MMM yyyy h:mm:ss t"),
+            QStringLiteral("ddd, d MMM yy h:mm:ss t"),
         };
 
         for (const QString &format : formats) {
-            dt = format.indexOf(QLatin1String("hh:mm")) < 0
+            dt = format.indexOf(QLatin1String("h:mm")) < 0
                     ? QDate::fromString(s, format).startOfDay(QTimeZone::UTC)
                     : QDateTime::fromString(s, format); // as local time
             if (dt.isValid())

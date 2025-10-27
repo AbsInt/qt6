@@ -1581,6 +1581,9 @@ void TestQmllint::cleanQmlSnippet_data()
     QTest::newRow("usefulExpressionStatement") << u"x: y + 3;"_s << defaultOptions;
     QTest::newRow("usefulExpressionStatement") << u"x: 3;"_s << defaultOptions;
     QTest::newRow("void") << u"function f(): void {}"_s << defaultOptions;
+    QTest::newRow("ambiguity-enum-and-chained-attached-property")
+            << u"import EnumList\nFlexboxLayout { direction: FlexboxLayout.Row; }"_s
+            << defaultOptions;
 }
 
 void TestQmllint::cleanQmlSnippet()
@@ -1588,7 +1591,8 @@ void TestQmllint::cleanQmlSnippet()
     QFETCH(QString, code);
     QFETCH(CallQmllintOptions, options);
 
-    const QString qmlCode = "import QtQuick\nItem {%1}"_L1.arg(code);
+    const QString qmlCode =
+            code.startsWith("import"_L1) ? code : "import QtQuick\nItem {%1}"_L1.arg(code);
     const Result result = Result::clean();
 
     const QJsonArray warnings =
@@ -1606,7 +1610,7 @@ void TestQmllint::dirtyJsSnippet_data()
 
     QTest::newRow("assignmentInCondition")
             << u"let xxx = 3; if (xxx=3) return;"_s
-            << Result{ { { "Assignment in condition: did you meant to use \"===\" or \"==\" "
+            << Result{ { { "Assignment in condition: did you mean to use \"===\" or \"==\" "
                            "instead of \"=\"?"_L1,
                            1, 21 } } }
             << defaultOptions;

@@ -738,11 +738,11 @@ bool QQuickPopupPrivate::handleTouchEvent(QQuickItem *item, QTouchEvent *event)
 
             switch (point.state()) {
             case QEventPoint::Pressed:
-                return handlePress(item, item->mapToScene(point.position()), event->timestamp());
+                return handlePress(item, point.scenePosition(), event->timestamp());
             case QEventPoint::Updated:
-                return handleMove(item, item->mapToScene(point.position()), event->timestamp());
+                return handleMove(item, point.scenePosition(), event->timestamp());
             case QEventPoint::Released:
-                return handleRelease(item, item->mapToScene(point.position()), event->timestamp());
+                return handleRelease(item, point.scenePosition(), event->timestamp());
             default:
                 break;
             }

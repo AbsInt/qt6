@@ -15,7 +15,7 @@ QT_BEGIN_NAMESPACE
 /*
  * For testing Qt Quick for Android (QQ4A) applications with QuickTest
  * Usage:
- *  QUICK_FOR_ANDROID_TEST_MAIN("test_name")
+ *  QUICK_FOR_ANDROID_TEST_MAIN(test_name)
  *
  * This function does the same steps as the regular QtQuickTest macro, with one
  * exception: it does not parse tests from QML files. This is because in the

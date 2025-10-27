@@ -169,8 +169,10 @@ QString levelToString(const QQmlJS::LoggerCategory &category)
 static QStringList settingsNamesForCategory(const LoggerCategory &category)
 {
     const QString name = category.settingsName();
-    const QStringList result{ QStringLiteral("Warnings/") += name,
-                              QStringLiteral("Warnings/") += name.sliced(name.indexOf(u'.') + 1) };
+    QStringList result{ QStringLiteral("Warnings/") + name };
+    const QString sliced = "Warnings/"_L1 + name.sliced(name.indexOf(u'.') + 1);
+    if (sliced != result.last())
+        result.append(sliced);
     return result;
 }
 

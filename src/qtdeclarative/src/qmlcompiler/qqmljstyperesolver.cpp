@@ -1557,7 +1557,7 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberType(
 
     // If we got a plain type reference we have to check the enums of the _scope_.
     if (contained == metaObjectType())
-        return {};
+        return memberEnumType(type.scope(), name);
 
     if (contained == variantMapType() || contained->inherits(qmlPropertyMapType())) {
         QQmlJSMetaProperty prop;
@@ -1633,6 +1633,12 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberType(
         }
     }
 
+    // check enums before checking attached types of attached types (chained attached types)
+    if (type.isType()) {
+        if (auto result = memberEnumType(type.scope(), name); result.isValid())
+            return result;
+    }
+
     if (QQmlJSScope::ConstPtr attachedBase = typeForName(name)) {
         if (QQmlJSScope::ConstPtr attached = attachedBase->attachedType()) {
             if (!genericType(attached)) {
@@ -1682,15 +1688,8 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberEnumType(
 QQmlJSRegisterContent QQmlJSTypeResolver::memberType(
         QQmlJSRegisterContent type, const QString &name, int lookupIndex) const
 {
-    if (type.isType()) {
-        const auto result = memberType(type, name, type.resultLookupIndex(), lookupIndex);
-        if (result.isValid())
-            return result;
-
-        // If we didn't find anything and it's an attached type,
-        // we might have an enum of the attaching type.
-        return memberEnumType(type.scope(), name);
-    }
+    if (type.isType())
+        return memberType(type, name, type.resultLookupIndex(), lookupIndex);
     if (type.isProperty() || type.isMethodCall())
         return memberType(type, name, type.resultLookupIndex(), lookupIndex);
     if (type.isEnumeration()) {

@@ -43,7 +43,7 @@ modules, or to merge sets of QML modules under a common base point.
 
 \title QT_QML_GENERATE_QMLLS_INI_NO_CMAKE_CALLS
 
-\brief Customizes the value of \c no-cmake-calls in .qmlls.ini files for \QMLLS.
+\brief Customizes the value of no-cmake-calls in .qmlls.ini files for \QMLLS.
 \cmakevariablesince 6.10
 
 \c QT_QML_GENERATE_QMLLS_INI_NO_CMAKE_CALLS is a boolean that controls the \c no-cmake-calls value in

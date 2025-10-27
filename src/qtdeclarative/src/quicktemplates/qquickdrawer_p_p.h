@@ -22,7 +22,7 @@
 
 QT_BEGIN_NAMESPACE
 
-class QQuickDrawerPrivate : public QQuickPopupPrivate
+class Q_QUICKTEMPLATES2_EXPORT QQuickDrawerPrivate : public QQuickPopupPrivate
 {
     Q_DECLARE_PUBLIC(QQuickDrawer)
 
