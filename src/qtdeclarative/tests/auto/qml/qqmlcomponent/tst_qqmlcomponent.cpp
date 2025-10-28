@@ -1028,14 +1028,25 @@ struct ComponentWithPublicSetInitial : QQmlComponent
 
 class MyObject : public QObject
 {
+public:
+    enum E { };
+    Q_ENUM(E)
     Q_OBJECT
     Q_PROPERTY(int resettable MEMBER m_resettable RESET resetIt NOTIFY resettableChanged)
+    Q_PROPERTY(QObject * resettableObject MEMBER m_resettableObj RESET resetObject NOTIFY resettableChanged)
+    Q_PROPERTY(MyObject::E resettableEnum MEMBER m_resettableEnum RESET resetEnum NOTIFY resettableChanged)
     void resetIt() { resetCalled = true; }
+    void resetObject() { resetObjectCalled = true; }
+    void resetEnum() { resetEnumCalled = true; }
 
 public:
     MyObject(QObject *parent = nullptr) : QObject(parent) { }
     int m_resettable;
+    QObject *m_resettableObj = nullptr;
+    E m_resettableEnum = {};
     bool resetCalled = false;
+    bool resetObjectCalled = false;
+    bool resetEnumCalled = false;
 
 signals:
     void resettableChanged();
@@ -1053,6 +1064,22 @@ void tst_qqmlcomponent::testSetInitialProperties()
         std::unique_ptr<QObject>  obj {comp.createWithInitialProperties({{u"resettable"_s, QVariant() }}) };
         QVERIFY(obj);
         QVERIFY(qobject_cast<MyObject *>(obj.get())->resetCalled);
+    }
+    // reset logic - works also with object properties
+    {
+        QQmlComponent comp(&eng);
+        comp.loadFromModule("ResetTest", "MyObject");
+        std::unique_ptr<QObject>  obj {comp.createWithInitialProperties({{u"resettableObject"_s, QVariant() }}) };
+        QVERIFY(obj);
+        QVERIFY(qobject_cast<MyObject *>(obj.get())->resetObjectCalled);
+    }
+    // reset logic - works also with enums
+    {
+        QQmlComponent comp(&eng);
+        comp.loadFromModule("ResetTest", "MyObject");
+        std::unique_ptr<QObject>  obj {comp.createWithInitialProperties({{u"resettableEnum"_s, QVariant() }}) };
+        QVERIFY(obj);
+        QVERIFY(qobject_cast<MyObject *>(obj.get())->resetEnumCalled);
     }
     // reset logic - null != undefined
     {

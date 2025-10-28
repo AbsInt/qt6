@@ -1756,6 +1756,12 @@ bool QQmlPropertyPrivate::write(
 
     const BindingFixer bindingFixer(object, property, flags);
 
+    // handle property resets here to avoid duplciating code for QObject and other properties
+    if (property.isResettable() && !value.isValid()) {
+        property.resetProperty(object, flags);
+        return true;
+    }
+
     if (property.isEnum()) {
         QMetaProperty prop = object->metaObject()->property(property.coreIndex());
         QVariant v = value;

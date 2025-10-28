@@ -21,47 +21,53 @@ with the \l{QML Coding Conventions}. \l{Details}{More...}
 
 \section2 Options
 \target options
-The following options are available:
+qmlformat can be configured via command line options. There are two groups of options: Those which
+are directly related to formatting, and those which control the behavior of the tool.
 
+
+The following options only affect the tool behavior:
+\table
+\header
+    \li Command Line Option
+    \li Description
+\row
+    \li \c{-h}, \c{--help}
+    \li Displays help on commandline options.
+\row
+    \li \c{--help-all}
+    \li Displays help, including generic Qt options.
+
+\row
+    \li \c{-v}, \c{--version}
+    \li Displays version information.
+\row
+    \li \c{-V}, \c{--verbose}
+    \li Verbose mode. Outputs more detailed information.
+\row
+    \li \c{--write-defaults}
+    \li Writes defaults settings to .qmlformat.ini and exits
+        (Warning: This will overwrite any existing settings and comments!)
+\row
+    \li \c{--ignore-settings}
+    \li Ignores all settings files and only takes command line options into consideration
+\row
+    \li \c{-i}, \c{--inplace}
+    \li Edit file in-place instead of outputting to stdout.
+\row
+    \li \c{-f}, \c{--force}
+    \li Continue even if an error has occurred.
+\row
+    \li \c{-F}, \c{--files <file>}
+    \li Format all files listed in file, in-place
+\endtable
+
+The next group of options controls how files should be formatted, and can additionally also be
+controlled via a  \l{Settings File}{settings file}.:
 \table
 \header
     \li Option
     \li Default Value
     \li Description
-\row
-    \li \c{-h}, \c{--help}
-    \li
-    \li Displays help on commandline options.
-\row
-    \li \c{--help-all}
-    \li
-    \li Displays help, including generic Qt options.
-
-\row
-    \li \c{-v}, \c{--version}
-    \li
-    \li Displays version information.
-\row
-    \li \c{-V}, \c{--verbose}
-    \li
-    \li Verbose mode. Outputs more detailed information.
-\row
-    \li \c{--write-defaults}
-    \li
-    \li Writes defaults settings to .qmlformat.ini and exits
-        (Warning: This will overwrite any existing settings and comments!)
-\row
-    \li \c{--ignore-settings}
-    \li
-    \li Ignores all settings files and only takes command line options into consideration
-\row
-    \li \c{-i}, \c{--inplace}
-    \li
-    \li Edit file in-place instead of outputting to stdout.
-\row
-    \li \c{-f}, \c{--force}
-    \li
-    \li Continue even if an error has occurred.
 \row
     \li \c{-t}, \c{--tabs}
     \li
@@ -80,10 +86,6 @@ The following options are available:
     \li \c{-n}, \c{--normalize}
     \li
     \li Reorders the attributes of the objects according to the QML Coding Guidelines.
-\row
-    \li \c{-F}, \c{--files <file>}
-    \li
-    \li Format all files listed in file, in-place
 \row
     \li \c{-l}, \c{--newline <newline>}
     \li

@@ -340,21 +340,13 @@ All warnings can be set to three levels:
             settings.search(filename);
         updateLogLevels();
 
-        const QDir fileDir = QFileInfo(filename).absoluteDir();
-        auto addAbsolutePaths = [&](QStringList &list, const QStringList &entries) {
-            for (const QString &file : entries)
-                list << (QFileInfo(file).isAbsolute() ? file : fileDir.filePath(file));
-        };
-
         resourceFiles = defaultResourceFiles;
-
-        addAbsolutePaths(resourceFiles, settings.value(resourceSetting).toStringList());
+        resourceFiles.append(settings.valueAsAbsolutePathList(resourceSetting, filename));
 
         qmldirFiles = defaultQmldirFiles;
         if (settings.isSet(qmldirFilesSetting)
             && !settings.value(qmldirFilesSetting).toStringList().isEmpty()) {
-            qmldirFiles = {};
-            addAbsolutePaths(qmldirFiles, settings.value(qmldirFilesSetting).toStringList());
+            qmldirFiles = settings.valueAsAbsolutePathList(qmldirFilesSetting, filename);
         }
 
         if (parser.isSet(qmlImportNoDefault)
@@ -396,7 +388,7 @@ All warnings can be set to three levels:
             }
         }
 
-        addAbsolutePaths(qmlImportPaths, settings.value(qmlImportPathsSetting).toStringList());
+        qmlImportPaths.append(settings.valueAsAbsolutePathList(qmlImportPathsSetting, filename));
 
         QSet<QString> disabledPlugins;
 

@@ -301,4 +301,46 @@ void tst_qmlls_qqmlcodemodel::reloadLotsOfFiles()
     thread->wait();
 }
 
+void tst_qmlls_qqmlcodemodel::withQmllsBuildIniRelativeImportPath()
+{
+    const QString defaultImportPath = QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
+
+    QTemporaryDir buildPathA;
+    QVERIFY(buildPathA.isValid());
+
+    QDir(buildPathA.path()).mkdir(".qt"_L1);
+
+    {
+        const QString qmllsBuildIni = buildPathA.filePath(".qt/.qmlls.build.ini"_L1);
+        QFile qmllsBuildIniFile(qmllsBuildIni);
+        QVERIFY(qmllsBuildIniFile.open(QFile::WriteOnly | QFile::Text));
+
+        const QString rootA = testFile("twoWorkspaces/WorkSpaceA/"_L1);
+        qmllsBuildIniFile.write(
+                "[General]\n[%1]\nimportPaths=\"%2\"\n"_L1
+                        .arg(QString(rootA).replace("/"_L1, "<SLASH>"_L1), "../ImportPathA")
+                        .toUtf8());
+    }
+
+    QmlLsp::QQmlCodeModel codemodel;
+    codemodel.setBuildPathsForRootUrl({}, { buildPathA.path() });
+
+    const QString importPathA = testFile("twoWorkspaces/ImportPathA"_L1);
+    const QStringList expectedImportPathA{ defaultImportPath, importPathA };
+    QCOMPARE_EQ(codemodel.importPathsForFile(testFile("twoWorkspaces/WorkSpaceA/file.qml"_L1)),
+                expectedImportPathA);
+}
+
+void tst_qmlls_qqmlcodemodel::withQmllsIniRelativeImportPath()
+{
+    const QString defaultImportPath = QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
+
+    QQmlToolingSettings settings("qmlls");
+    QmlLsp::QQmlCodeModel model(nullptr, &settings);
+    const QString importPathA = testFile("twoWorkspaces"_L1);
+    const QStringList expectedImportPathA = (model.importPaths() << importPathA);
+    QCOMPARE_EQ(model.importPathsForFile(testFile("FolderWithQmllsIni/SomeType.qml")),
+                expectedImportPathA);
+}
+
 QTEST_MAIN(tst_qmlls_qqmlcodemodel)

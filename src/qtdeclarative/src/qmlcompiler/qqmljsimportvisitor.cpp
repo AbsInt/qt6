@@ -836,8 +836,10 @@ void QQmlJSImportVisitor::processPropertyTypes()
             property.setType(propertyType);
             type.scope->addOwnProperty(property);
         } else {
-            m_logger->log(property.typeName() + ' '_L1 + wasNotFound + ' '_L1 + didYouAddAllImports,
-                          qmlImport, type.location);
+            QString msg = property.typeName() + ' '_L1 + wasNotFound + ' '_L1 + didYouAddAllImports;
+            if (property.typeName() == "list"_L1)
+                msg += " list is not a type. It requires an element type argument (eg. list<int>)"_L1;
+            m_logger->log(msg, qmlImport, type.location);
         }
     }
 }

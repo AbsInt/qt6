@@ -4704,6 +4704,9 @@ void QMacStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComplex 
                 const auto cw = QMacStylePrivate::CocoaControl(QMacStylePrivate::Stepper, aquaSize);
                 NSStepperCell *cell = static_cast<NSStepperCell *>(d->cocoaCell(cw));
                 cell.enabled = (sb->state & State_Enabled);
+                const auto controlSize = cell.controlSize;
+                 if (qt_apple_runningWithLiquidGlass())
+                     cell.controlSize = NSControlSizeMini;
 
                 const CGRect newRect = [cell drawingRectForBounds:updown.toCGRect()];
 
@@ -4723,6 +4726,8 @@ void QMacStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComplex 
                     [cell stopTracking:pressPoint at:pressPoint inView:d->backingStoreNSView mouseIsUp:NO];
 
                 d->restoreNSGraphicsContext(cg);
+                if (qt_apple_runningWithLiquidGlass())
+                    cell.controlSize = controlSize;
             }
         }
         break;

@@ -33,6 +33,11 @@ public:
     bool search(const QString &path);
 
     QVariant value(const QString &name) const;
+    QStringList valueAsStringList(const QString &name) const;
+
+    static void resolveRelativeImportPaths(const QString &filePath, QStringList *paths);
+    QStringList valueAsAbsolutePathList(const QString &name,
+                                        const QString &baseForRelativePaths) const;
     bool isSet(const QString &name) const;
 
 private:

@@ -137,6 +137,30 @@ QVariant QQmlToolingSettings::value(const QString &name) const
     return m_values.value(name);
 }
 
+QStringList QQmlToolingSettings::valueAsStringList(const QString &name) const
+{
+    return value(name).toString().split(QDir::listSeparator());
+}
+
+void QQmlToolingSettings::resolveRelativeImportPaths(const QString &filePath, QStringList *paths)
+{
+    // transform relative paths in absolute paths starting from filePath's directory
+    const QDir fileDir = QFileInfo(filePath).absoluteDir();
+    for (auto it = paths->begin(), end = paths->end(); it != end; ++it) {
+        if (QFileInfo(*it).isAbsolute())
+            continue;
+        *it = QDir::cleanPath(fileDir.filePath(*it));
+    }
+}
+
+QStringList QQmlToolingSettings::valueAsAbsolutePathList(const QString &name,
+                                                         const QString &baseForRelativePaths) const
+{
+    QStringList paths = valueAsStringList(name);
+    resolveRelativeImportPaths(baseForRelativePaths, &paths);
+    return paths;
+}
+
 bool QQmlToolingSettings::isSet(const QString &name) const
 {
     if (!m_values.contains(name))

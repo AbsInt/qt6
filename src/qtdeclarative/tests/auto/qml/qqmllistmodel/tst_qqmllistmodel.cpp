@@ -125,6 +125,7 @@ private slots:
     void deadModelData();
     void valuesOfInnerList();
     void arrayLikes();
+    void functionInNested();
 };
 
 bool tst_qqmllistmodel::compareVariantList(const QVariantList &testList, QVariant object)
@@ -2196,6 +2197,18 @@ void tst_qqmllistmodel::arrayLikes()
     QCOMPARE(o->property("a").toInt(), 3);
     QCOMPARE(o->property("r").toInt(), 1);
     QCOMPARE(o->property("s").toString(), "2t");
+}
+
+void tst_qqmllistmodel::functionInNested()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("functionInNested.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QTest::ignoreMessage(QtDebugMsg, "called");
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
 }
 
 QTEST_MAIN(tst_qqmllistmodel)

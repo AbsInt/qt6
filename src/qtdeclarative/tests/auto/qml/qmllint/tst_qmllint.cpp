@@ -1496,6 +1496,12 @@ void TestQmllint::dirtyQmlSnippet_data()
             << u"property var v: {}"_s
             << Result{ { { "Unintentional empty block, use ({}) for empty object literal"_L1, 1, 17 } } }
             << defaultOptions;
+    QTest::newRow("unspecializedList")
+            << u"property list l"_s
+            << Result{ { { "list was not found. Did you add all imports and dependencies? list is "
+                           "not a type. It requires an element type argument (eg. list<int>)"_L1,
+                           1, 1 } } }
+            << defaultOptions;
     QTest::newRow("upperCaseId")
             << u"id: Root"_s
             << Result{ { { "Id must start with a lower case letter or an '_'"_L1, 1, 5 } } }

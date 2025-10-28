@@ -177,7 +177,8 @@ private:
     // returns true if a role was set
     bool applyProperty(
             const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
-            const QV4::CompiledData::Binding *binding, ListModel *model, int outterElementIndex);
+            const QV4::CompiledData::Binding *binding, ListModel *model, QQmlListModel *owner,
+            int outterElementIndex);
 
     static bool definesEmptyList(const QString &);
 

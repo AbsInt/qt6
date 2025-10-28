@@ -116,10 +116,15 @@ QQmlFormatOptions QQmlFormatOptions::buildCommandLineOptions(const QStringList &
     QQmlFormatOptions options;
     QCommandLineParser parser;
     parser.setApplicationDescription(
-            "Formats QML files according to the QML Coding Conventions."_L1);
+            "Formats QML files according to the QML Coding Conventions.\n"_L1
+            "Options below the \"Formatting options\" section can also be set via .qmlformat.ini"_L1
+            " unless --ignore-settings is used"_L1);
     parser.addHelpOption();
     parser.addVersionOption();
 
+    //
+    // options that only are set via CLI
+    //
     parser.addOption(
             QCommandLineOption({ "V"_L1, "verbose"_L1 },
                                QStringLiteral("Verbose mode. Outputs more detailed information.")));
@@ -135,12 +140,42 @@ QQmlFormatOptions QQmlFormatOptions::buildCommandLineOptions(const QStringList &
                                                     "command line options into consideration"_L1));
     parser.addOption(ignoreSettings);
 
+    QCommandLineOption filesOption(
+            { "F"_L1, "files"_L1 }, "Format all files listed in file, in-place"_L1, "file"_L1);
+    parser.addOption(filesOption);
+
+
+    QCommandLineOption dryrunOption(
+            QStringList() << "dry-run"_L1,
+            QStringLiteral("Prints the settings file that would be used for this instance."
+                           "This is useful to see what settings would be used "
+                           "without actually performing anything."));
+    parser.addOption(dryrunOption);
+
+    QCommandLineOption settingsOption(
+            { "s"_L1, "settings"_L1 },
+            QStringLiteral("Use the specified .qmlformat.ini file as the only configuration source."
+                           "Overrides any per-directory configuration lookup."),
+            "file"_L1);
+    parser.addOption(settingsOption);
+
     parser.addOption(QCommandLineOption(
             { "i"_L1, "inplace"_L1 },
             QStringLiteral("Edit file in-place instead of outputting to stdout.")));
 
+    // Note the blatant abuse of the option's help text to add a "section marker"
+    // Therefore, this needs to come last. Also, on Windows, the unicode characters seem to cause issues
     parser.addOption(QCommandLineOption({ "f"_L1, "force"_L1 },
-                                        QStringLiteral("Continue even if an error has occurred.")));
+                                        #ifdef Q_OS_WINDOWS
+                                        "Continue even if an error has occurred.\n<><><><><><><><><>\nFormatting options\n<><><><><><><><><>"_L1
+                                        #else
+                                        u"Continue even if an error has occurred.\n♦♦♦♦♦♦♦♦♦♦♦♦♦♦♦♦♦♦\nFormatting options\n♦♦♦♦♦♦♦♦♦♦♦♦♦♦♦♦♦♦"_s
+                                        #endif
+                                        ));
+
+    //
+    // options that can be configured by qmlformat.ini
+    //
 
     parser.addOption(QCommandLineOption({ "t"_L1, "tabs"_L1 },
                                         QStringLiteral("Use tabs instead of spaces.")));
@@ -159,9 +194,6 @@ QQmlFormatOptions QQmlFormatOptions::buildCommandLineOptions(const QStringList &
                                         QStringLiteral("Reorders the attributes of the objects "
                                                        "according to the QML Coding Guidelines.")));
 
-    QCommandLineOption filesOption(
-            { "F"_L1, "files"_L1 }, "Format all files listed in file, in-place"_L1, "file"_L1);
-    parser.addOption(filesOption);
 
     parser.addOption(QCommandLineOption(
             { "l"_L1, "newline"_L1 },

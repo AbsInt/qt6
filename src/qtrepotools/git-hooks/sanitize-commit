@@ -293,6 +293,41 @@ sub check_apple_terminology()
     }
 }
 
+sub check_invisible_unicode()
+{
+    # Check for invisible Unicode characters that can hide malicious code.
+    # This protects against GlassWorm-style stealth payloads that exploit
+    # the gap between what humans see in editors and what machines execute.
+    # See: https://www.firetail.ai/blog/glassworm-when-invisible-worms-meet-invisible-payloads
+    # See: https://www.koi.ai/blog/glassworm-first-self-propagating-worm-using-invisible-code-hits-openvsx-marketplace
+    #
+    # Blocks the most dangerous invisible characters while allowing:
+    # - U+200C (ZWNJ) and U+200D (ZWJ): Essential for emoji and complex scripts
+    # - U+FE00-FE0F (variation selectors): Used with emoji
+    # - U+FEFF (BOM): Only at file start (position 0)
+    #
+    # Always blocked:
+    # - U+200B (zero-width space): Primary stealth attack vector
+    # - U+2060-2069 (invisible operators/separators): Stealth attack vectors
+    # - U+E0100-E01EF (variation selectors supplement): Rarely legitimate
+    #
+    # This check cannot be bypassed via configuration. Legitimate uses of blocked
+    # characters (e.g., in Unicode test data) require manual admin approval.
+    if (/[\x{200B}]                 # Zero-width space
+         |[\x{2060}-\x{2069}]       # Invisible operators, word joiner, separators
+         |[\x{E0100}-\x{E01EF}]/x) {  # Variation selectors supplement
+        complain_ln("Invisible Unicode characters detected (possible stealth payload)",
+                    "stealth", 1);
+    }
+    # BOM (U+FEFF) is only allowed at position 0 of the file
+    if (/\x{FEFF}/) {
+        if ($lineno != 1 || !/^\x{FEFF}/) {
+            complain_ln("Invisible Unicode characters detected (possible stealth payload)",
+                        "stealth", 1);
+        }
+    }
+}
+
 # The hard-coded fallbacks could be avoided by init-repository setting things up.
 my $with_pickbot = parse_bool($config{'with-pickbot'} // "false");
 my @LTS = split(/\s+/, $config{'lts-branch'} || "5.6 5.9 5.12 5.15 6.2 6.5");
@@ -423,6 +458,7 @@ my $prevline = "";
 my $changelog3rdparty = 0;
 my $reopens = 0;
 open MSG, "git cat-file -p ".$sha1." |" or die "cannot run git: $!";
+binmode(MSG, ":utf8") or die "cannot set encoding: $!";
 while (<MSG>) {
     last if ($_ eq "\n");
     if (/^parent /) {
@@ -610,6 +646,7 @@ while (<MSG>) {
     }
     check_spelling() if ($spell_check);
     check_apple_terminology();
+    check_invisible_unicode();
     styleFail("Trailing whitespace") if (s/[ \t]+\r?$//);
     styleFail("Space indent followed by a TAB character") if (/^ +\t/);
     styleFail("TAB character in non-leading whitespace") if (/\S *\t/);
@@ -840,10 +877,12 @@ my $eof_check;
 my $ctlkw_check;
 my $apple_check;
 my $notobjc_check;
+my $stealth_check;
 my $attribution_changed;
 open DIFF, "git diff-tree --minimal --no-commit-id --diff-filter=ACMR --ignore-submodules " .
     "--src-prefix=\@old\@/ --dst-prefix=\@new\@/ --full-index -r -U100000 --cc -C -l1000 " .
     "--root ".$sha1." |" or die "cannot run git: $!";
+binmode(DIFF, ":utf8");
 while (<DIFF>) {
     if (/^-/) {
         if ($mixws_check) {
@@ -950,6 +989,7 @@ while (<DIFF>) {
                 complain_ln("__OBJC__ will never be defined for non-Objective-C/C++ source files", "objc");
             }
         }
+        check_invisible_unicode() if ($stealth_check);
         if ($clike && /\bQ_CLANG_QDOC\b/) {
             complain_ln("Using deprecated define Q_CLANG_QDOC; use Q_QDOC instead", "qdoc");
         }
@@ -1029,6 +1069,9 @@ while (<DIFF>) {
             $spell_check = !defined($cfg{spell}) && !$foreign && ($file !~ /\.ts$/i);
             $apple_check = !$foreign && ($file !~ /\.ts$/i);
             $notobjc_check = $apple_check && ($file =~ /\.(c|cc|cpp|c\+\+|cxx)$/i);
+            # Invisible Unicode detection is always enabled. File-type exclusions
+            # can be added here if needed (e.g., for Unicode test data files).
+            $stealth_check = 1;
             $conflict_fail = $is_bin || defined($cfg{conflict});
             $braces = 0;
             $check_gen = 0;
