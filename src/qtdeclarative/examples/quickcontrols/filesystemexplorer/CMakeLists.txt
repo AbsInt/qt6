@@ -24,7 +24,6 @@ set_source_files_properties(qml/Colors.qml
 
 qt_add_qml_module(filesystemexplorer
     URI FileSystemModule
-    VERSION 1.0
     QML_FILES
         "Main.qml"
         "qml/About.qml"

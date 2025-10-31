@@ -837,6 +837,17 @@ TestCase {
             property GroupBox groupbox: GroupBox { Material.elevation: 10 }
             property Frame frame: Frame { Material.elevation: 10 }
             property Menu menu: Menu { }
+            property Menu menu_window_propagate: Menu {
+                readonly property var childItem: _subSubMenuItem
+                popupType: Popup.Window
+                onOpened: _subMenuItem.open()
+                Menu {
+                    id: _subMenuItem
+                    onOpened: _subSubMenuItem.open()
+                    Menu { id: _subSubMenuItem }
+                }
+                Component.onCompleted: this.open()
+            }
             property Page page: Page { }
             property Pane pane: Pane { }
             property Popup popup: Popup { }
@@ -854,6 +865,7 @@ TestCase {
             { tag: "groupbox", inherit: true },
             { tag: "frame", inherit: true },
             { tag: "menu", inherit: true },
+            { tag: "menu_window_propagate", inherit: true, propagate: true },
             { tag: "page", inherit: true },
             { tag: "pane", inherit: true },
             { tag: "popup", inherit: true },
@@ -873,6 +885,13 @@ TestCase {
 
         control.parent = window.contentItem
         control.visible = true
+
+        if (data.propagate) {
+            control = control.childItem
+            if (control instanceof T.Menu) {
+                tryCompare(control, "opened", true)
+            }
+        }
 
         let defaultBackground = control.background.color
 

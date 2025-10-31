@@ -545,6 +545,7 @@ bool QQmlValueTypeWrapper::write(QObject *target, int propertyIndex) const
     bool destructGadgetOnExit = false;
     auto cleanup = qScopeGuard([&]() {
         if (destructGadgetOnExit) {
+            d()->setDirty(true);
             d()->metaType().destruct(d()->gadgetPtr());
             d()->setGadgetPtr(nullptr);
         }

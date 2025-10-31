@@ -967,7 +967,7 @@ void QAccessible::updateAccessibility(QAccessibleEvent *event)
 
 /*!
     \internal
-    \brief getBoundaries is a helper function to find the accessible text boundaries for QTextCursor based documents.
+    \brief qAccessibleTextBoundaryHelper is a helper function to find the accessible text boundaries for QTextCursor based documents.
     \param documentCursor a valid cursor bound to the document (not null). It needs to ba at the position to look for the boundary
     \param boundaryType the type of boundary to find
     \return the boundaries as pair
@@ -2262,13 +2262,16 @@ QString QAccessibleTextInterface::textBeforeOffset(int offset, QAccessible::Text
             break;
     } while (boundary.toPreviousBoundary() > 0);
     Q_ASSERT(boundary.position() >= 0);
-    *endOffset = boundary.position();
+    const int endPos = boundary.position();
 
     while (boundary.toPreviousBoundary() > 0) {
         if ((boundary.boundaryReasons() & (QTextBoundaryFinder::StartOfItem | QTextBoundaryFinder::EndOfItem)))
             break;
     }
-    Q_ASSERT(boundary.position() >= 0);
+    if (boundary.position() < 0)
+        return QString();
+
+    *endOffset = endPos;
     *startOffset = boundary.position();
 
     return txt.mid(*startOffset, *endOffset - *startOffset);
@@ -2425,13 +2428,17 @@ QString QAccessibleTextInterface::textAtOffset(int offset, QAccessible::TextBoun
             break;
     } while (boundary.toPreviousBoundary() > 0);
     Q_ASSERT(boundary.position() >= 0);
-    *startOffset = boundary.position();
+    const int startPos = boundary.position();
 
     while (boundary.toNextBoundary() < txt.size()) {
         if ((boundary.boundaryReasons() & (QTextBoundaryFinder::StartOfItem | QTextBoundaryFinder::EndOfItem)))
             break;
+        if (boundary.position() == -1)
+            return QString();
     }
+
     Q_ASSERT(boundary.position() <= txt.size());
+    *startOffset = startPos;
     *endOffset = boundary.position();
 
     return txt.mid(*startOffset, *endOffset - *startOffset);

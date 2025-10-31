@@ -1304,9 +1304,9 @@ void tst_qmlls_modules::warnings_data()
             << u"warnings/InvalidImport.qml"_s
             << ExpectedWarnings{ {
                        u"Warnings occurred while importing module \"foobar\": [import]"_s,
-                       u"Failed to import foobar. Are your import paths set up properly? Did you build your project? If yes, did you set the \"QT_QML_GENERATE_QMLLS_INI\" CMake variable on your project to \"ON\"? [import]"_s,
+                       u"Failed to import foobar. Are your import paths set up properly? Did you build your project? [import]"_s,
                        u"Warnings occurred while importing module \"foobaz\": [import]"_s,
-                       u"Failed to import foobaz. Are your import paths set up properly? Did you build your project? If yes, did you set the \"QT_QML_GENERATE_QMLLS_INI\" CMake variable on your project to \"ON\"? [import]"_s,
+                       u"Failed to import foobaz. Are your import paths set up properly? Did you build your project? [import]"_s,
                } };
 
     QTest::addRow("WithoutQmllsBuildIni")
@@ -1314,8 +1314,7 @@ void tst_qmlls_modules::warnings_data()
             << ExpectedWarnings{
                    { "Warnings occurred while importing module \"MyModule\": [import]"_L1,
                      "Failed to import MyModule. Are your import paths set up properly? Did you "
-                     "build your project? If yes, did you set the \"QT_QML_GENERATE_QMLLS_INI\" "
-                     "CMake variable on your project to \"ON\"? [import]"_L1,
+                     "build your project? [import]"_L1,
                      "MyComponent was not found. Did you add all imports and dependencies?: Did "
                      "you mean \"Component\"? [import]"_L1 }
                };

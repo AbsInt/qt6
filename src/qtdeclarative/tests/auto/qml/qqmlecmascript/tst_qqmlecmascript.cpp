@@ -103,6 +103,7 @@ private slots:
     void attachedProperties();
     void enums();
     void valueTypeFunctions();
+    void valueTypeReadAfterWrite();
     void constantsOverrideBindings();
     void outerBindingOverridesInnerBinding();
     void groupPropertyBindingOrder();
@@ -1644,6 +1645,22 @@ void tst_qqmlecmascript::valueTypeFunctions()
     QVERIFY(obj != nullptr);
     QCOMPARE(obj->rectProperty(), QRect(0,0,100,100));
     QCOMPARE(obj->rectFProperty(), QRectF(0,0.5,100,99.5));
+}
+
+void tst_qqmlecmascript::valueTypeReadAfterWrite()
+{
+    QQmlEngine engine;
+    {
+        QQmlComponent testComponent(&engine);
+        testComponent.loadFromModule("QtQuick", "Item");
+        if (!testComponent.isReady())
+            QSKIP("Test requires QtQuick");
+    }
+    QQmlComponent component(&engine, testFileUrl("valueTypeReadAfterWrite.qml"));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY2(object, qPrintable(component.errorString()));
+    QString result = object->property("result").toString();
+    QVERIFY2(result.contains("\"b\":1"), result.toUtf8().constData());
 }
 
 /*

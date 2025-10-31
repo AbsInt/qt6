@@ -391,9 +391,7 @@ void QmlLintSuggestions::diagnoseHelper(const QByteArray &url,
             }
 
             Message modified {message};
-            modified.message.append(
-                    u" Did you build your project? If yes, did you set the "
-                    u"\"QT_QML_GENERATE_QMLLS_INI\" CMake variable on your project to \"ON\"?");
+            modified.message.append(u" Did you build your project?");
 
             diagnostics.append(messageToDiagnostic(modified));
         });
