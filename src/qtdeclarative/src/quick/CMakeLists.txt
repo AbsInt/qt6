@@ -569,6 +569,7 @@ qt_internal_extend_target(Quick CONDITION QT_FEATURE_quick_designer
 qt_internal_extend_target(Quick CONDITION QT_FEATURE_accessibility
     SOURCES
         accessible/qaccessiblequickitem.cpp accessible/qaccessiblequickitem_p.h
+        accessible/qaccessiblequicktextedit.cpp accessible/qaccessiblequicktextedit_p.h
         accessible/qaccessiblequickview.cpp accessible/qaccessiblequickview_p.h
         accessible/qquickaccessiblefactory.cpp accessible/qquickaccessiblefactory_p.h
     LIBRARIES

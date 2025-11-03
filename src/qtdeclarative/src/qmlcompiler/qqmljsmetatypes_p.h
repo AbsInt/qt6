@@ -512,15 +512,6 @@ public:
     }
 };
 
-/*!
-    \class QQmlJSMetaPropertyBinding
-
-    \internal
-
-    Represents a single QML binding of a specific type. Typically, when you
-    create a new binding, you know all the details of it already, so you should
-    just set all the data at once.
-*/
 class Q_QMLCOMPILER_EXPORT QQmlJSMetaPropertyBinding
 {
     using BindingType = QQmlSA::BindingType;

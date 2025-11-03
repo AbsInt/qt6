@@ -164,6 +164,10 @@ static QStringList aliases(const QQmlJSScope::ConstPtr &scope)
         : scope->aliases();
 }
 
+/*!
+    \class QQmlJSImporter
+    \internal
+*/
 QQmlJSImporter::QQmlJSImporter(const QStringList &importPaths, QQmlJSResourceFileMapper *mapper,
                                QQmlJSImporterFlags flags)
     : m_importPaths(importPaths),

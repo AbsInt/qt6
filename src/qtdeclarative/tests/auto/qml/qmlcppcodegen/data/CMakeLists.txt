@@ -56,6 +56,7 @@ set(qml_files
     BindingExpression.qml
     BindingToScriptStringProperty.qml
     Categorizer.qml
+    CategorizerBase.qml
     CxxTypeFromDir.qml
     CxxTypeFromImplicit.qml
     Cycle1.qml
@@ -303,6 +304,7 @@ set(qml_files
     shadowingSingleton.qml
     shared/Slider.qml
     shifts.qml
+    sideEffectOnArgument.qml
     signal.qml
     signalHandler.qml
     signalIndexMismatch.qml

@@ -557,8 +557,19 @@ void tst_QQuickAccessible::basicPropertiesTest()
     QVERIFY(!textEdit->state().readOnly);
     QVERIFY(textEdit->state().focusable);
     QCOMPARE(textEdit->text(QAccessible::Value), "A multi-line text edit\nTesting Accessibility.");
+
     auto textEditTextInterface = textEdit->textInterface();
     QVERIFY(textEditTextInterface);
+    QCOMPARE(textEditTextInterface->selectionCount(), 0);
+    textEditTextInterface->setSelection(0, 1, 4);
+    QCOMPARE(textEditTextInterface->selectionCount(), 1);
+    int selectionStart = 0, selectionEnd = 0;
+    textEditTextInterface->selection(0, &selectionStart, &selectionEnd);
+    QCOMPARE(selectionStart, 1);
+    QCOMPARE(selectionEnd, 4);
+    textEditTextInterface->removeSelection(0);
+    QCOMPARE(textEditTextInterface->selectionCount(), 0);
+
     auto textEditEditableTextInterface = textEdit->editableTextInterface();
     QEXPECT_FAIL("", "EditableTextInterface is not implemented", Continue);
     QVERIFY(textEditEditableTextInterface);

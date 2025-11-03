@@ -261,6 +261,7 @@ private slots:
     void shadowedMethod();
     void shadowedPrimitiveCmpEqNull();
     void shadowingSingleton();
+    void sideEffectOnArgument();
     void shifts();
     void signalHandler();
     void signalIndexMismatch();
@@ -5463,6 +5464,18 @@ void tst_QmlCppCodegen::shadowingSingleton()
     QVERIFY(!o.isNull());
 
     QCOMPARE(o->objectName(), u"Hej"_s);
+}
+
+void tst_QmlCppCodegen::sideEffectOnArgument()
+{
+    QQmlEngine e;
+    QQmlComponent c(&e, QUrl(u"qrc:/qt/qml/TestTypes/sideEffectOnArgument.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QTest::ignoreMessage(QtInfoMsg, "check ok");
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
 }
 
 void tst_QmlCppCodegen::shifts()

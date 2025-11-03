@@ -939,9 +939,9 @@ int QAccessibleQuickItem::selectionCount() const
     return 0;
 }
 
-void QAccessibleQuickItem::addSelection(int /* startOffset */, int /* endOffset */)
+void QAccessibleQuickItem::addSelection(int startOffset, int endOffset)
 {
-
+    setSelection(0, startOffset, endOffset);
 }
 void QAccessibleQuickItem::removeSelection(int /* selectionIndex */)
 {

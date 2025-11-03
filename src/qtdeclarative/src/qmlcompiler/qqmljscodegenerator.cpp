@@ -1192,11 +1192,6 @@ void QQmlJSCodeGenerator::generateWriteBack(int registerIndex)
 
     for (QQmlJSRegisterContent writeBack = registerType(registerIndex);
          !writeBack.storedType()->isReferenceType();) {
-        if (writeBackAffectedBySideEffects)
-            REJECT(u"write-back of value affected by side effects"_s);
-
-        if (writeBack.isConversion())
-            REJECT(u"write-back of converted value"_s);
 
         switch (writeBack.variant()) {
         case QQmlJSRegisterContent::Literal:
@@ -1207,6 +1202,12 @@ void QQmlJSCodeGenerator::generateWriteBack(int registerIndex)
         default:
             break;
         }
+
+        if (writeBackAffectedBySideEffects)
+            REJECT(u"write-back of value affected by side effects"_s);
+
+        if (writeBack.isConversion())
+            REJECT(u"write-back of converted value"_s);
 
         const int lookupIndex = writeBack.resultLookupIndex();
 
@@ -1410,12 +1411,9 @@ QString QQmlJSCodeGenerator::generateCallConstructor(
     return result + u"}()"_s;
 }
 
-bool QQmlJSCodeGenerator::isRegisterAffectedBySideEffects(int registerIndex)
+static bool canTypeBeAffectedBySideEffects(
+        const QQmlJSTypeResolver *typeResolver, const QQmlJSRegisterContent &baseType)
 {
-    if (!m_state.isRegisterAffectedBySideEffects(registerIndex))
-        return false;
-
-    QQmlJSRegisterContent baseType = registerType(registerIndex);
     const QQmlJSScope::ConstPtr contained = baseType.containedType();
     switch (contained->accessSemantics()) {
     case QQmlSA::AccessSemantics::Reference:
@@ -1426,7 +1424,7 @@ bool QQmlJSCodeGenerator::isRegisterAffectedBySideEffects(int registerIndex)
         // Value types can have inner objects, and we may have pre-created them where the
         // interpreter keeps them in JavaScript object form for longer.
         // TODO: We can probably improve here.
-        return !m_typeResolver->isPrimitive(contained);
+        return !typeResolver->isPrimitive(contained);
     case QQmlSA::AccessSemantics::Sequence: {
         // List properties are never affected by side effects
         if (contained->isListProperty())
@@ -1438,7 +1436,7 @@ bool QQmlJSCodeGenerator::isRegisterAffectedBySideEffects(int registerIndex)
             // Stack-created lists of primitives and pointers can't be affected by side effects
             const QQmlJSScope::ConstPtr elementContained = contained->valueType();
             return !elementContained->isReferenceType()
-                    && !m_typeResolver->isPrimitive(elementContained);
+                    && !typeResolver->isPrimitive(elementContained);
         }
         default:
             return true;
@@ -1446,6 +1444,28 @@ bool QQmlJSCodeGenerator::isRegisterAffectedBySideEffects(int registerIndex)
     }
     }
     return true;
+}
+
+bool QQmlJSCodeGenerator::isRegisterAffectedBySideEffects(int registerIndex)
+{
+    if (!m_state.isRegisterAffectedBySideEffects(registerIndex))
+        return false;
+
+    QQmlJSRegisterContent baseType = registerType(registerIndex);
+    if (baseType.isConversion()) {
+        // A conversion can be affected by side effects if any of its origins can.
+        // Conversions are unrolled on creation, so we don't have to recurse.
+
+        const auto origins = baseType.conversionOrigins();
+        for (QQmlJSRegisterContent origin : origins) {
+            if (canTypeBeAffectedBySideEffects(m_typeResolver, m_typeResolver->original(origin)))
+                return true;
+        }
+
+        return false;
+    }
+
+    return canTypeBeAffectedBySideEffects(m_typeResolver, m_typeResolver->original(baseType));
 }
 
 QString QQmlJSCodeGenerator::resolveValueTypeContentPointer(
@@ -1885,6 +1905,8 @@ QString QQmlJSCodeGenerator::initAndCall(
     // are created, but if they are read as different types in multiple places, we can't.
     QString argumentPreparation;
     for (int i = 0; i < argc; ++i) {
+        if (isRegisterAffectedBySideEffects(argv + i))
+            reject(u"calling method with argument affected by side effects"_s);
         const QQmlJSRegisterContent content = registerType(argv + i);
         const QQmlJSRegisterContent read = m_state.readRegister(argv + i);
         if (read.contains(content.containedType())) {
