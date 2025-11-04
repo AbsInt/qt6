@@ -249,7 +249,7 @@ void QQmlApplicationEnginePrivate::updateTranslationDirectory(const QUrl &url)
         needs to include the resource prefix of the main file's QML module
         (\e{/qt/qml} by default) and the module URI. For example, to provide
         translation files for a module called "Translated":
-        \snippet qml-i18n/CMakeLists.txt 0
+        \snippet cmake/qt_add_translations.cmake 0
 */
 
 /*!
