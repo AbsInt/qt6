@@ -1,0 +1,4 @@
+{
+    "name": "Qt 6.x Sources",
+    "files": [ { "git": 1 } ]
+}
