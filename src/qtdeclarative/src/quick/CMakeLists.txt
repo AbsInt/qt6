@@ -244,8 +244,6 @@ qt_internal_add_qml_module(Quick
         Qt::Core
         Qt::Gui
         Qt::Qml
-        Qt::QmlMeta
-        Qt::QmlModels
     PRIVATE_MODULE_INTERFACE
         Qt::CorePrivate
         Qt::GuiPrivate
