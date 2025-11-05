@@ -67,6 +67,16 @@ QQmlFormatOptionLineEndings QQmlFormatOptions::parseEndings(const QString &endin
 #endif
 }
 
+std::optional<QQmlJS::Dom::LineWriterOptions::SemicolonRule> parseSemicolonRule(const QString &value) {
+    if (value == "always"_L1) {
+        return QQmlJS::Dom::LineWriterOptions::SemicolonRule::Always;
+    } else if (value == "essential"_L1) {
+        return QQmlJS::Dom::LineWriterOptions::SemicolonRule::Essential;
+    } else {
+        return std::nullopt;
+    }
+}
+
 void QQmlFormatOptions::applySettings(const QQmlFormatSettings &settings)
 {
     // If the options is already set by commandline, don't override it with the values in the .ini
@@ -108,6 +118,18 @@ void QQmlFormatOptions::applySettings(const QQmlFormatSettings &settings)
     if (!isMarked(Settings::SortImports)
         && settings.isSet(QQmlFormatSettings::s_sortImportsSetting)) {
         setSortImports(settings.value(QQmlFormatSettings::s_sortImportsSetting).toBool());
+    }
+
+    if (!isMarked(Settings::SemicolonRule)
+        && settings.isSet(QQmlFormatSettings::s_semiColonRuleSetting)) {
+        const auto semicolonRule = parseSemicolonRule(
+                settings.value(QQmlFormatSettings::s_semiColonRuleSetting).toString());
+        if (!semicolonRule.has_value()) {
+            qWarning().noquote() << "Invalid semicolon rule in settings file, using 'always'";
+            setSemicolonRule(QQmlJS::Dom::LineWriterOptions::SemicolonRule::Always);
+        } else {
+            setSemicolonRule(semicolonRule.value());
+        }
     }
 }
 
@@ -321,14 +343,12 @@ QQmlFormatOptions QQmlFormatOptions::buildCommandLineOptions(const QStringList &
     if (parser.isSet(semicolonRuleOption)) {
         options.mark(Settings::SemicolonRule);
         const auto value = parser.value(semicolonRuleOption);
-        if (value == "always"_L1) {
-            options.setSemicolonRule(QQmlJS::Dom::LineWriterOptions::SemicolonRule::Always);
-        } else if (value == "essential"_L1) {
-            options.setSemicolonRule(QQmlJS::Dom::LineWriterOptions::SemicolonRule::Essential);
-        } else {
-            options.addError("Error: Invalid value passed to --semicolon-rule."_L1);
+        auto semicolonRule = parseSemicolonRule(value);
+        if (!semicolonRule.has_value()) {
+            options.addError("Error: Invalid value passed to --semicolon-rule. Must be 'always' or 'essential'."_L1);
             return options;
         }
+        options.setSemicolonRule(semicolonRule.value());
     }
     options.setFiles(files);
     options.setArguments(parser.positionalArguments());

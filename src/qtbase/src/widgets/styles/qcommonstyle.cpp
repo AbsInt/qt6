@@ -5,15 +5,12 @@
 #include "qcommonstyle.h"
 #include "qcommonstyle_p.h"
 
-#include <qfile.h>
 #if QT_CONFIG(itemviews)
 #include <qabstractitemview.h>
 #endif
 #include <qapplication.h>
 #include <private/qguiapplication_p.h>
 #include <qpa/qplatformtheme.h>
-#include <qbitmap.h>
-#include <qcache.h>
 #if QT_CONFIG(dockwidget)
 #include <qdockwidget.h>
 #endif
@@ -61,18 +58,12 @@
 #endif
 #include <private/qcommonstylepixmaps_p.h>
 #include <private/qmath_p.h>
-#include <qdebug.h>
 #include <qtextformat.h>
 #if QT_CONFIG(wizard)
 #include <qwizard.h>
 #endif
 #if QT_CONFIG(filedialog)
 #include <qsidebar_p.h>
-#endif
-#include <qfileinfo.h>
-#include <qdir.h>
-#if QT_CONFIG(settings)
-#include <qsettings.h>
 #endif
 #include <qvariant.h>
 #include <qpixmapcache.h>
@@ -6198,17 +6189,17 @@ QPixmap QCommonStyle::generatedIconPixmap(QIcon::Mode iconMode, const QPixmap &p
         return QPixmap::fromImage(std::move(im));
     }
     case QIcon::Selected: {
-        QImage img = pixmap.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
         QColor color = opt->palette.color(QPalette::Normal, QPalette::Highlight);
         color.setAlphaF(0.3f);
-        QPainter painter(&img);
+        QPixmap ret(pixmap);
+        QPainter painter(&ret);
         painter.setCompositionMode(QPainter::CompositionMode_SourceAtop);
-        painter.fillRect(0, 0, img.width(), img.height(), color);
+        painter.fillRect(0, 0, pixmap.width(), pixmap.height(), color);
         painter.end();
-        return QPixmap::fromImage(std::move(img)); }
+        return ret;
+    }
     case QIcon::Active:
-        return pixmap;
-    default:
+    case QIcon::Normal:
         break;
     }
     return pixmap;

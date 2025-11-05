@@ -4,10 +4,11 @@
 /*!
 \page qmllint-warnings-and-errors-assignment-in-condition.html
 \ingroup qmllint-warnings-and-errors
-\qmllintwarningcategory warn-assignment-in-condition
 
 \title Warn about using assignment in conditions
 \brief [assignment-in-condition] An assignment statement is used inside a condition
+
+\qmllintwarningcategory assignment-in-condition
 
 \section1 Warn about using assignment in conditions
 

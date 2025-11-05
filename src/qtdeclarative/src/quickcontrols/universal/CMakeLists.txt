@@ -40,6 +40,7 @@ set(qml_files
     "ScrollView.qml"
     "ScrollBar.qml"
     "ScrollIndicator.qml"
+    "SearchField.qml"
     "SelectionRectangle.qml"
     "Slider.qml"
     "SpinBox.qml"
@@ -151,6 +152,10 @@ qt_internal_add_resource(QuickControls2Universal "qtquickcontrols2universalstyle
         "images/checkmark@2x.png"
         "images/checkmark@3x.png"
         "images/checkmark@4x.png"
+        "images/close_big.png"
+        "images/close_big@2x.png"
+        "images/close_big@3x.png"
+        "images/close_big@4x.png"
         "images/downarrow.png"
         "images/downarrow@2x.png"
         "images/downarrow@3x.png"
@@ -163,6 +168,10 @@ qt_internal_add_resource(QuickControls2Universal "qtquickcontrols2universalstyle
         "images/rightarrow@2x.png"
         "images/rightarrow@3x.png"
         "images/rightarrow@4x.png"
+        "images/search-magnifier.png"
+        "images/search-magnifier@2x.png"
+        "images/search-magnifier@3x.png"
+        "images/search-magnifier@4x.png"
 )
 
 _qt_internal_add_qml_static_plugin_dependency(qtquickcontrols2universalstyleplugin quickwindow)

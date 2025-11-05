@@ -452,6 +452,15 @@ void TestQmlformatCli::settingsFromFileOrCommandLine_data()
                 << testFile("iniFiles/dummySettingsFile.ini")
                 << QStringList{ m_qmlformatPath, "-F", "dummyFilesPath" } << options;
     }
+    {
+        // In settings file, semicolonRule is set to Essential and cli does not override it.
+        // Essential should be the final value
+        QQmlFormatOptions expectedOptions;
+        expectedOptions.setSemicolonRule(QQmlJS::Dom::LineWriterOptions::SemicolonRule::Essential);
+        QTest::newRow("semiColonRuleFromIniFile")
+                << testFile("iniFiles/semicolonRule.ini")
+                << QStringList{ m_qmlformatPath} << expectedOptions;
+    }
 }
 
 void TestQmlformatCli::settingsFromFileOrCommandLine()
@@ -484,6 +493,7 @@ void TestQmlformatCli::settingsFromFileOrCommandLine()
         QCOMPARE(overridenOptions.objectsSpacing(), expectedOptions.objectsSpacing());
         QCOMPARE(overridenOptions.functionsSpacing(), expectedOptions.functionsSpacing());
         QCOMPARE(overridenOptions.sortImports(), expectedOptions.sortImports());
+        QCOMPARE(overridenOptions.semicolonRule(), expectedOptions.semicolonRule());
     };
 
     verify();
@@ -524,6 +534,7 @@ void TestQmlformatCli::multipleSettingsFiles()
     QCOMPARE(test1Options.objectsSpacing(), test2Options.objectsSpacing());
     QCOMPARE(test1Options.functionsSpacing(), test2Options.functionsSpacing());
     QCOMPARE(test1Options.sortImports(), test2Options.sortImports());
+    QCOMPARE(test1Options.semicolonRule(), test2Options.semicolonRule());
 }
 QTEST_MAIN(TestQmlformatCli)
 #include "tst_qmlformat_cli.moc"
