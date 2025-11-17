@@ -1008,7 +1008,7 @@ void QQuickScrollBarAttachedPrivate::initVertical()
 
 void QQuickScrollBarAttachedPrivate::cleanupHorizontal()
 {
-    Q_ASSERT(flickable && horizontal);
+    Q_ASSERT(horizontal);
 
     QQuickControlPrivate::hideOldItem(horizontal);
     // ScrollBar.qml has a binding to visible and ScrollView.qml has a binding to parent.
@@ -1020,6 +1020,9 @@ void QQuickScrollBarAttachedPrivate::cleanupHorizontal()
     QQmlPropertyPrivate::removeBinding(visibleProperty);
     QQmlPropertyPrivate::removeBinding(parentProperty);
 
+    if (!flickable)
+        return;
+
     disconnect(flickable, &QQuickFlickable::movingHorizontallyChanged, this, &QQuickScrollBarAttachedPrivate::activateHorizontal);
 
     // TODO: export QQuickFlickableVisibleArea
@@ -1030,13 +1033,16 @@ void QQuickScrollBarAttachedPrivate::cleanupHorizontal()
 
 void QQuickScrollBarAttachedPrivate::cleanupVertical()
 {
-    Q_ASSERT(flickable && vertical);
+    Q_ASSERT(vertical);
 
     QQuickControlPrivate::hideOldItem(vertical);
     const QQmlProperty visibleProperty(vertical, QStringLiteral("visible"));
     const QQmlProperty parentProperty(vertical, QStringLiteral("parent"));
     QQmlPropertyPrivate::removeBinding(visibleProperty);
     QQmlPropertyPrivate::removeBinding(parentProperty);
+
+    if (!flickable)
+        return;
 
     disconnect(flickable, &QQuickFlickable::movingVerticallyChanged, this, &QQuickScrollBarAttachedPrivate::activateVertical);
 
@@ -1221,8 +1227,9 @@ void QQuickScrollBarAttached::setHorizontal(QQuickScrollBar *horizontal)
         QQuickItemPrivate::get(d->horizontal)->removeItemChangeListener(d, QsbHorizontalChangeTypes);
         QObjectPrivate::disconnect(d->horizontal, &QQuickScrollBar::positionChanged, d, &QQuickScrollBarAttachedPrivate::scrollHorizontal);
 
-        if (d->flickable)
-            d->cleanupHorizontal();
+        // Call this regardless of whether we have a flickable, because we need to clean up the old
+        // horizontal item.
+        d->cleanupHorizontal();
     }
 
     d->horizontal = horizontal;
@@ -1272,8 +1279,9 @@ void QQuickScrollBarAttached::setVertical(QQuickScrollBar *vertical)
         QObjectPrivate::disconnect(d->vertical, &QQuickScrollBar::mirroredChanged, d, &QQuickScrollBarAttachedPrivate::mirrorVertical);
         QObjectPrivate::disconnect(d->vertical, &QQuickScrollBar::positionChanged, d, &QQuickScrollBarAttachedPrivate::scrollVertical);
 
-        if (d->flickable)
-            d->cleanupVertical();
+        // Call this regardless of whether we have a flickable, because we need to clean up the old
+        // vertical item.
+        d->cleanupVertical();
     }
 
     d->vertical = vertical;

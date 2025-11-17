@@ -3,12 +3,17 @@
 // Qt-Security score:significant reason:default
 
 #include "qquickpopupwindow_p_p.h"
-#include "qquickcombobox_p.h"
+#if QT_CONFIG(quicktemplates2_container)
 #include "qquickdialog_p.h"
+#endif
 #include "qquickpopup_p.h"
 #include "qquickpopup_p_p.h"
+
 #include "qquickmenu_p_p.h"
+#if QT_CONFIG(quicktemplates2_container)
 #include "qquickmenubar_p_p.h"
+#endif
+
 #include "qquickpopupitem_p_p.h"
 #include <QtGui/private/qguiapplication_p.h>
 
@@ -87,10 +92,12 @@ void QQuickPopupWindow::hideEvent(QHideEvent *e)
     // Avoid potential infinite recursion, between QWindowPrivate::setVisible(false) and this function.
     QScopedValueRollback<bool>inHideEventRollback(d->m_inHideEvent, true);
     if (QQuickPopup *popup = d->m_popup) {
+#if QT_CONFIG(quicktemplates2_container)
         QQuickDialog *dialog = qobject_cast<QQuickDialog *>(popup);
         if (dialog && QQuickPopupPrivate::get(dialog)->visible)
             dialog->reject();
         else
+#endif
             popup->setVisible(false);
     }
 }
@@ -195,6 +202,8 @@ void QQuickPopupWindowPrivate::setVisible(bool visible)
  */
 bool QQuickPopupWindowPrivate::filterPopupSpecialCases(QEvent *event)
 {
+    Q_UNUSED(event);
+#if QT_CONFIG(quicktemplates2_container)
     Q_Q(QQuickPopupWindow);
 
     if (!event->isPointerEvent())
@@ -303,6 +312,7 @@ bool QQuickPopupWindowPrivate::filterPopupSpecialCases(QEvent *event)
             QQuickMenuPrivate::get(targetMenu)->handleReleaseWithoutGrab(pe->point(0));
         }
     }
+#endif
 
     return false;
 }

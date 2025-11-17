@@ -2377,7 +2377,18 @@ void ExecutionEngine::createQtObject()
 {
     QV4::Scope scope(this);
     QtObject *qtObject = new QtObject(this);
-    QJSEngine::setObjectOwnership(qtObject, QJSEngine::JavaScriptOwnership);
+
+    if (publicEngine) {
+        // If we have a public engine, parent to that one so that we don't delete
+        // the instance on QQmlEngine::clearSingletons() we still need it as property
+        // of the global object after all.
+        QJSEngine::setObjectOwnership(qtObject, QJSEngine::CppOwnership);
+        qtObject->setParent(publicEngine);
+    } else {
+        // If we don't have a public engine, the object isn't exposed as a singleton.
+        // We can use JavaScript ownership to have it deleted by the last GC run.
+        QJSEngine::setObjectOwnership(qtObject, QJSEngine::JavaScriptOwnership);
+    }
 
     QV4::ScopedObject qtObjectWrapper(
                 scope, QV4::QObjectWrapper::wrap(this, qtObject));

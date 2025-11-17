@@ -26,8 +26,8 @@ ApplicationWindow {
         model: listModel
         filters: [
             FunctionFilter {
-                roleData: QtObject { property int age }
-                function filter(data: QtObject) : bool {
+                component RoleData: QtObject { property int age }
+                function filter(data: RoleData) : bool {
                     return data.age > 30
                 }
             }

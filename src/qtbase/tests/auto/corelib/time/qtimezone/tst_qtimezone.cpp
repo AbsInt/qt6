@@ -3,7 +3,9 @@
 
 #include <QTest>
 #include <qtimezone.h>
-#include <private/qtimezoneprivate_p.h>
+#if QT_CONFIG(timezone)
+#  include <private/qtimezoneprivate_p.h>
+#endif
 #include <private/qcomparisontesthelper_p.h>
 
 #include <qlocale.h>
@@ -71,8 +73,8 @@ private Q_SLOTS:
 #endif // timezone backends
 
 private:
-    void printTimeZone(const QTimeZone &tz);
 #if QT_CONFIG(timezone)
+    void printTimeZone(const QTimeZone &tz);
 #  if defined(QT_BUILD_INTERNAL)
     // Generic tests of privates, called by implementation-specific private tests:
     void testCetPrivate(const QTimeZonePrivate &tzp);
@@ -102,6 +104,7 @@ private:
     static constexpr bool debug = false;
 };
 
+#if QT_CONFIG(timezone)
 void tst_QTimeZone::printTimeZone(const QTimeZone &tz)
 {
     QDateTime now = QDateTime::currentDateTime();
@@ -167,9 +170,11 @@ void tst_QTimeZone::printTimeZone(const QTimeZone &tz)
     qDebug() << "Transition before 1 Jun = " << tz.previousTransition(jun).atUtc;
     qDebug() << "";
 }
+#endif // feature timezone
 
 void tst_QTimeZone::createTest()
 {
+#if QT_CONFIG(timezone)
     const QTimeZone tz("Pacific/Auckland");
 
     if constexpr (debug)
@@ -265,13 +270,16 @@ void tst_QTimeZone::createTest()
             QCOMPARE(result.at(i).daylightTimeOffset, expected.at(i).daylightTimeOffset);
         }
     }
+#else
+    QSKIP("Test depends on backends, enabled by feature timezone");
+#endif // feature timezone
 }
 
 void tst_QTimeZone::nullTest()
 {
     QTimeZone nullTz1;
     QTimeZone nullTz2;
-    QTimeZone utc("UTC");
+    QTimeZone utc(QTimeZone::UTC);
 
     // Validity tests
     QCOMPARE(nullTz1.isValid(), false);
@@ -290,6 +298,7 @@ void tst_QTimeZone::nullTest()
     utc = nullTz1;
     QCOMPARE(utc.isValid(), false);
 
+#if QT_CONFIG(timezone)
     QCOMPARE(nullTz1.id(), QByteArray());
     QCOMPARE(nullTz1.territory(), QLocale::AnyTerritory);
     QCOMPARE(nullTz1.comment(), QString());
@@ -335,6 +344,7 @@ void tst_QTimeZone::nullTest()
     QCOMPARE(data.offsetFromUtc, invalidOffset);
     QCOMPARE(data.standardTimeOffset, invalidOffset);
     QCOMPARE(data.daylightTimeOffset, invalidOffset);
+#endif // feature timezone
 }
 
 void tst_QTimeZone::assign()
@@ -487,7 +497,7 @@ void tst_QTimeZone::offset()
 
 void tst_QTimeZone::dataStreamTest()
 {
-#ifndef QT_NO_DATASTREAM
+#if QT_CONFIG(timezone) && !defined(QT_NO_DATASTREAM)
     // Test the OffsetFromUtc backend serialization. First with a custom timezone:
     QTimeZone tz1("QST"_ba, 23456,
                   u"Qt Standard Time"_s, u"QST"_s, QLocale::Norway, u"Qt Testing"_s);
@@ -546,7 +556,7 @@ void tst_QTimeZone::dataStreamTest()
         QCOMPARE(ds.status(), QDataStream::Ok);
     }
     QCOMPARE(tz2.id(), tz1.id());
-#endif
+#endif // feature timezone and enabled datastream
 }
 
 #if QT_CONFIG(timezone)
@@ -791,7 +801,7 @@ void tst_QTimeZone::hasAlternativeName()
 
 void tst_QTimeZone::specificTransition_data()
 {
-#if QT_CONFIG(timezone) && QT_CONFIG(timezone_tzdb) && defined(__GLIBCXX__)
+#if QT_CONFIG(timezone_tzdb) && defined(__GLIBCXX__)
     QSKIP("libstdc++'s C++20 misreads the IANA DB for Moscow's transitions (among others).");
 #endif
 #if defined Q_OS_ANDROID && !QT_CONFIG(timezone_tzdb)
@@ -1408,7 +1418,8 @@ void tst_QTimeZone::utcTest()
 
 void tst_QTimeZone::icuTest()
 {
-#if defined(QT_BUILD_INTERNAL) && QT_CONFIG(icu) && !QT_CONFIG(timezone_tzdb) && !defined(Q_OS_UNIX)
+#if defined(QT_BUILD_INTERNAL) && QT_CONFIG(icu) && !QT_CONFIG(timezone_tzdb) \
+    && (defined(Q_OS_VXWORKS) || !defined(Q_OS_UNIX))
     // Known datetimes
     qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0), QTimeZone::UTC).toMSecsSinceEpoch();
     qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0), QTimeZone::UTC).toMSecsSinceEpoch();
@@ -1456,8 +1467,9 @@ void tst_QTimeZone::icuTest()
 
 void tst_QTimeZone::tzTest()
 {
-#if defined QT_BUILD_INTERNAL && defined Q_OS_UNIX \
-        && !QT_CONFIG(timezone_tzdb) && !defined Q_OS_DARWIN && !defined Q_OS_ANDROID
+#if defined QT_BUILD_INTERNAL && defined Q_OS_UNIX  \
+    && !(QT_CONFIG(timezone_tzdb) || defined(Q_OS_DARWIN) \
+         || defined(Q_OS_ANDROID) || defined(Q_OS_VXWORKS))
     const auto UTC = QTimeZone::UTC;
     // Known datetimes
     qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0), UTC).toMSecsSinceEpoch();
@@ -1873,12 +1885,13 @@ void tst_QTimeZone::roundtripDisplayNames_data()
 #else
     const QList<QByteArray> idList = {
         "Africa/Casablanca"_ba, "Africa/Lagos"_ba, "Africa/Tunis"_ba,
-        "America/Caracas"_ba, "America/Indiana/Tell_City"_ba, "America/Managua"_ba,
+        "America/Caracas"_ba, "America/Coyhaique"_ba,
+        "America/Indiana/Tell_City"_ba, "America/Managua"_ba,
         "Asia/Bangkok"_ba, "Asia/Colombo"_ba, "Asia/Tokyo"_ba,
         "Atlantic/Bermuda"_ba, "Atlantic/Faroe"_ba, "Atlantic/Madeira"_ba,
         "Australia/Broken_Hill"_ba, "Australia/NSW"_ba, "Australia/Tasmania"_ba,
-        "Brazil/Acre"_ba, "CST6CDT"_ba, "Canada/Atlantic"_ba,
-        "Chile/EasterIsland"_ba, "Etc/Greenwich"_ba, "Etc/Universal"_ba,
+        "Brazil/Acre"_ba, "Canada/Atlantic"_ba, "Chile/EasterIsland"_ba,
+        "CST6CDT"_ba, "Etc/Greenwich"_ba, "Etc/Universal"_ba,
         "Europe/Guernsey"_ba, "Europe/Kaliningrad"_ba, "Europe/Kyiv"_ba,
         "Europe/Prague"_ba, "Europe/Vatican"_ba,
         "Indian/Comoro"_ba, "Mexico/BajaSur"_ba,
@@ -1892,7 +1905,7 @@ void tst_QTimeZone::roundtripDisplayNames_data()
         "America/New_York"_ba, "America/Sao_Paulo"_ba, "America/Vancouver"_ba,
         "Asia/Kathmandu"_ba, "Asia/Singapore"_ba,
         "Australia/Brisbane"_ba, "Australia/Eucla"_ba, "Australia/Sydney"_ba,
-        "Europe/Berlin"_ba, "Europe/Helsinki"_ba, "Europe/Rome"_ba, "Europe/Oslo"_ba,
+        "Europe/Berlin"_ba, "Europe/Helsinki"_ba, "Europe/Oslo"_ba, "Europe/Rome"_ba,
         "Pacific/Apia"_ba, "Pacific/Auckland"_ba, "Pacific/Kiritimati"_ba,
         "Vulcan/ShiKahr"_ba // Invalid: also worth testing.
     };

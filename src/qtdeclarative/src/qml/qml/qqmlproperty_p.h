@@ -47,6 +47,14 @@ public:
     };
     Q_DECLARE_FLAGS(InitFlags, InitFlag);
 
+    // like SequencePrototype, but we want to avoid tight coupling
+    enum class ListCopyResult
+    {
+        Copied,
+        WasEqual,
+        TypeMismatch
+    };
+
     QQmlRefPointer<QQmlContextData> context;
     QPointer<QQmlEngine> engine;
     QPointer<QObject> object;
@@ -90,6 +98,18 @@ public:
                                    const QQmlPropertyData &, const QQmlPropertyData &valueTypeData,
                                    const QQmlRefPointer<QQmlContextData> &,
                                    QQmlPropertyData::WriteFlags flags = {});
+
+    /*!
+      \internal
+      Attempts to convert \a value to a QQmlListProperty. The existing \a listProperty will be modified (so use a
+      temporary one if that is not desired).
+      \a listProperty is passed as a QQmlListProperty<QObject>, but might actually be a list property of a more specific
+      type. The actual type of the list property is given by \a actualListType.
+    */
+    static ListCopyResult convertToQQmlListProperty(QQmlListProperty<QObject> *listProperty,
+                                                    QMetaType actualListType,
+                                                    const QVariant &value);
+    static QVariant convertToWriteTargetType(const QVariant &value, QMetaType targetMetaType);
     static bool write(QObject *, const QQmlPropertyData &, const QVariant &,
                       const QQmlRefPointer<QQmlContextData> &,
                       QQmlPropertyData::WriteFlags flags = {});

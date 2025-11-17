@@ -8,6 +8,7 @@
 
 #include <QtCore/qscopedpointer.h>
 #include <QtQuick/private/qquickwindow_p.h>
+#include <QtQuickTemplates2/private/qtquicktemplates2math_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -343,6 +344,8 @@ class QQuickRangeSliderPrivate : public QQuickControlPrivate
     Q_DECLARE_PUBLIC(QQuickRangeSlider)
 
 public:
+    static const QQuickRangeSliderPrivate *get(const QQuickRangeSlider *slider);
+
     QQuickRangeSliderNode *pressedNode(int touchId = -1) const;
 
 #if QT_CONFIG(quicktemplates2_multitouch)
@@ -359,7 +362,8 @@ public:
     void itemImplicitHeightChanged(QQuickItem *item) override;
     void itemDestroyed(QQuickItem *item) override;
 
-    bool live = true;
+    void updateAllValuesAreInteger();
+
     qreal from = defaultFrom;
     qreal to = defaultTo;
     qreal stepSize = 0;
@@ -369,11 +373,19 @@ public:
     QPointF pressPoint;
     Qt::Orientation orientation = Qt::Horizontal;
     QQuickRangeSlider::SnapMode snapMode = QQuickRangeSlider::NoSnap;
+    bool live = true;
+    bool allValuesAreInteger = false;
 };
 
 static qreal valueAt(const QQuickRangeSlider *slider, qreal position)
 {
-    return slider->from() + (slider->to() - slider->from()) * position;
+    qreal value = slider->from() + (slider->to() - slider->from()) * position;
+
+    // See the comment in QQuickDialPrivate::valueAt for why we do this.
+    if (QQuickRangeSliderPrivate::get(slider)->allValuesAreInteger)
+        value = qRound(value);
+
+    return value;
 }
 
 static qreal snapPosition(const QQuickRangeSlider *slider, qreal position)
@@ -408,6 +420,11 @@ static qreal positionAt(const QQuickRangeSlider *slider, QQuickItem *handle, con
             return (slider->height() - point.y() - slider->bottomPadding() - offset) / extent;
     }
     return 0;
+}
+
+const QQuickRangeSliderPrivate *QQuickRangeSliderPrivate::get(const QQuickRangeSlider *slider)
+{
+    return slider->d_func();
 }
 
 QQuickRangeSliderNode *QQuickRangeSliderPrivate::pressedNode(int touchId) const
@@ -613,6 +630,11 @@ void QQuickRangeSliderPrivate::itemDestroyed(QQuickItem *item)
         second->setHandle(nullptr);
 }
 
+void QQuickRangeSliderPrivate::updateAllValuesAreInteger()
+{
+    allValuesAreInteger = areRepresentableAsInteger(to, from, stepSize) && stepSize != 0.0;
+}
+
 QQuickRangeSlider::QQuickRangeSlider(QQuickItem *parent)
     : QQuickControl(*(new QQuickRangeSliderPrivate), parent)
 {
@@ -664,6 +686,7 @@ void QQuickRangeSlider::setFrom(qreal from)
 
     d->from = from;
     emit fromChanged();
+    d->updateAllValuesAreInteger();
 
     if (isComponentComplete()) {
         d->first->setValue(d->first->value());
@@ -696,6 +719,7 @@ void QQuickRangeSlider::setTo(qreal to)
 
     d->to = to;
     emit toChanged();
+    d->updateAllValuesAreInteger();
 
     if (isComponentComplete()) {
         d->first->setValue(d->first->value());
@@ -922,6 +946,7 @@ void QQuickRangeSlider::setStepSize(qreal step)
 
     d->stepSize = step;
     emit stepSizeChanged();
+    d->updateAllValuesAreInteger();
 }
 
 /*!
@@ -1298,6 +1323,8 @@ void QQuickRangeSlider::componentComplete()
         firstPrivate->updatePosition();
         secondPrivate->updatePosition();
     }
+
+    d->updateAllValuesAreInteger();
 }
 
 /*!

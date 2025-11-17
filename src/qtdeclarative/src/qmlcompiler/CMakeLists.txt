@@ -11,6 +11,7 @@ qt_internal_add_module(QmlCompiler
         qcoloroutput.cpp qcoloroutput_p.h
         qdeferredpointer_p.h
         qqmljsannotation.cpp qqmljsannotation_p.h
+        qqmljsaotirbuilder.cpp qqmljsaotirbuilder_p.h
         qqmljsbasicblocks.cpp qqmljsbasicblocks_p.h
         qqmljscodegenerator.cpp qqmljscodegenerator_p.h
         qqmljscompilepass_p.h

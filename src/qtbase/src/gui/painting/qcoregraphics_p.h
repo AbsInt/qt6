@@ -64,6 +64,7 @@ QT_END_NAMESPACE
                       withSize:(const QT_PREPEND_NAMESPACE(QSize) &)size
                       withMode:(QT_PREPEND_NAMESPACE(QIcon)::Mode)mode
                      withState:(QT_PREPEND_NAMESPACE(QIcon)::State)state;
++ (instancetype)internalImageFromQIcon:(const QT_PREPEND_NAMESPACE(QIcon) &)icon;
 @end
 QT_BEGIN_NAMESPACE
 #endif // __OBJC__
@@ -71,6 +72,8 @@ QT_BEGIN_NAMESPACE
 #endif
 Q_GUI_EXPORT CGImageRef qt_mac_toCGImage(const QImage &qImage);
 Q_GUI_EXPORT QImage qt_mac_toQImage(CGImageRef image);
+
+Q_GUI_EXPORT QImage qt_mac_padToSquareImage(const QImage &image);
 
 Q_GUI_EXPORT void qt_mac_drawCGImage(CGContextRef inContext, const CGRect *inBounds, CGImageRef inImage);
 

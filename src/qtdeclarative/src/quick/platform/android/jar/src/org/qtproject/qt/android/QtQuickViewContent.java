@@ -14,7 +14,7 @@ import java.util.HashSet;
  * This abstract class should be extended to be used by a QtQuickView. It provides QtQuickView with
  * essential information to load the QML component it represents.
  * It also offers convenient methods for seamless interaction with the QtQuickView that loads it.
- * @Since 6.8
+ * @since 6.8
  **/
 public abstract class QtQuickViewContent
 {

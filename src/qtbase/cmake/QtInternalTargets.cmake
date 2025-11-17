@@ -23,16 +23,6 @@ function(qt_internal_set_warnings_are_errors_flags target target_scope)
             COMPILERS CLANG AppleClang
                     OPTIONS
                     -Werror -Wno-error=\#warnings -Wno-error=deprecated-declarations
-            COMPILERS CLANG
-                CONDITIONS VERSION_GREATER_EQUAL 10
-                    OPTIONS
-                    # We do mixed enum arithmetic all over the place:
-                    -Wno-error=deprecated-enum-enum-conversion
-                CONDITIONS VERSION_GREATER_EQUAL 14
-                    OPTIONS
-                    # Clang 14 introduced these two but we are not clean for it.
-                    -Wno-error=deprecated-copy-with-user-provided-copy
-                    -Wno-error=unused-but-set-variable
             COMMON_CONDITIONS
                 ${common_conditions}
                 ${clang_msvc_frontend_args}
@@ -46,17 +36,8 @@ function(qt_internal_set_warnings_are_errors_flags target target_scope)
                     # error: assuming signed overflow does not occur when assuming that (X + c) < X
                     #        is always false
                     -Wno-error=strict-overflow
-                CONDITIONS VERSION_GREATER_EQUAL 7
-                    OPTIONS
-                    # GCC 7 includes -Wimplicit-fallthrough in -Wextra, but Qt is not yet free of
-                    # implicit fallthroughs.
-                    -Wno-error=implicit-fallthrough
                 CONDITIONS VERSION_GREATER_EQUAL 9
                     OPTIONS
-                    # GCC 9 introduced these but we are not clean for it.
-                    -Wno-error=deprecated-copy
-                    -Wno-error=redundant-move
-                    -Wno-error=init-list-lifetime
                     # GCC 9 introduced -Wformat-overflow in -Wall, but it is buggy:
                     -Wno-error=format-overflow
                 CONDITIONS VERSION_GREATER_EQUAL 10
@@ -70,9 +51,6 @@ function(qt_internal_set_warnings_are_errors_flags target target_scope)
                     OPTIONS
                     # Ditto
                     -Wno-error=stringop-overread
-                    # We do mixed enum arithmetic all over the place:
-                    -Wno-error=deprecated-enum-enum-conversion
-                    -Wno-error=deprecated-enum-float-conversion
                 CONDITIONS VERSION_GREATER_EQUAL 11.0 AND VERSION_LESS 11.2
                     OPTIONS
                     # GCC 11.1 has a regression in the integrated preprocessor, so disable it as a

@@ -57,6 +57,7 @@ private slots:
     void elideParentChanged();
     void elideRelayoutAfterZeroWidth_data();
     void elideRelayoutAfterZeroWidth();
+    void elideRelayoutAfterGrowingWidth();
     void multilineElide_data();
     void multilineElide();
     void implicitElide_data();
@@ -613,6 +614,40 @@ void tst_qquicktext::elideRelayoutAfterZeroWidth()
     QScopedPointer<QObject> root(component.create());
     QVERIFY2(root, qPrintable(component.errorString()));
     QVERIFY(root->property("ok").toBool());
+}
+
+void tst_qquicktext::elideRelayoutAfterGrowingWidth()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("elideBindingOnWidth.qml"));
+    QScopedPointer<QObject> root(component.create());
+    QVERIFY2(root, qPrintable(component.errorString()));
+    QQuickText *text = qobject_cast<QQuickText *>(root.get());
+    QVERIFY(text);
+    auto *textPrivate = QQuickTextPrivate::get(text);
+    QVERIFY(textPrivate->widthValid());
+
+    const qreal implicitWidth = text->implicitWidth();
+    const int steps = 6;
+    const int startingStep = 1;
+
+    // Initially set it to larger than the implicitWidth
+    text->setProperty("explicitWidth", implicitWidth * 2);
+    QVERIFY(!textPrivate->widthExceeded);
+
+    // Then make it small
+    text->setProperty("explicitWidth", implicitWidth / (steps + startingStep));
+    qreal lastLayedOutRect = textPrivate->layedOutTextRect.width();
+    QVERIFY(text->truncated());
+
+    // Steadily increase the width. The text should get laid out each time.
+    for (int i = startingStep; i < steps; ++i) {
+        const qreal newWidth = implicitWidth / (steps + startingStep - i);
+        text->setProperty("explicitWidth", newWidth);
+        QCOMPARE_GT(textPrivate->layedOutTextRect.width(), lastLayedOutRect);
+        lastLayedOutRect = textPrivate->layedOutTextRect.width();
+        QVERIFY(text->truncated());
+    }
 }
 
 void tst_qquicktext::multilineElide_data()

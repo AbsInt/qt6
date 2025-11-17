@@ -473,15 +473,15 @@ inline void setupQObjectLookup(
 // template parameter is an ugly trick to avoid pulling in the QObjectMethod header here
 template<typename QObjectMethod = Heap::QObjectMethod>
 inline void setupQObjectMethodLookup(
-        Lookup *lookup, const QQmlData *ddata, const QQmlPropertyData *propertyData,
-        const Object *self, QObjectMethod *method)
+        Lookup *lookup, const QQmlPropertyCache::ConstPtr &propertyCache,
+        const QQmlPropertyData *propertyData, const Object *self, QObjectMethod *method)
 {
     lookup->releasePropertyCache();
-    Q_ASSERT(!ddata->propertyCache.isNull());
+    Q_ASSERT(!propertyCache.isNull());
     auto engine = self->engine();
     lookup->qobjectMethodLookup.method.set(engine, method);
     lookup->qobjectMethodLookup.ic.set(engine, self->internalClass());
-    lookup->qobjectMethodLookup.propertyCache = ddata->propertyCache.data();
+    lookup->qobjectMethodLookup.propertyCache = propertyCache.data();
     lookup->qobjectMethodLookup.propertyCache->addref();
     lookup->qobjectMethodLookup.propertyData = propertyData;
 }

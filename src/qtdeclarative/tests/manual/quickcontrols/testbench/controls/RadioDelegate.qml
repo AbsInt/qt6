@@ -14,7 +14,13 @@ QtObject {
         ["checked", "pressed"],
         ["highlighted"],
         ["highlighted", "pressed"],
-        ["mirrored"]
+        ["mirrored"],
+        ["icon"],
+        ["icon", "disabled"],
+        ["icon", "pressed"],
+        ["icon", "highlighted"],
+        ["icon", "highlighted", "pressed"],
+        ["icon", "mirrored"]
     ]
 
     property Component component: Component {
@@ -25,6 +31,7 @@ QtObject {
             // Only set it if it's pressed, or the non-pressed examples will have no press effects
             down: is("pressed") ? true : undefined
             highlighted: is("highlighted")
+            icon.source: is("icon") ? Utils.iconUrl : ""
             focusPolicy: Qt.StrongFocus
 
             LayoutMirroring.enabled: is("mirrored")

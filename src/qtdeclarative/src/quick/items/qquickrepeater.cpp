@@ -631,6 +631,7 @@ void QQuickRepeater::modelUpdated(const QQmlChangeSet &changeSet, bool reset)
 
 /*!
     \qmlproperty enumeration QtQuick::Repeater::delegateModelAccess
+    \since 6.10
 
     \include delegatemodelaccess.qdocinc
 */

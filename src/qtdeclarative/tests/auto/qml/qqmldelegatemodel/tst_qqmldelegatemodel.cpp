@@ -60,6 +60,8 @@ private slots:
 
     void delegateModelAccess_data();
     void delegateModelAccess();
+
+    void recursiveDrain();
 };
 
 class BaseAbstractItemModel : public QAbstractItemModel
@@ -1027,6 +1029,17 @@ void tst_QQmlDelegateModel::delegateModelAccess()
     xAt0 = -1;
     QMetaObject::invokeMethod(object.data(), "xAt0", Q_RETURN_ARG(double, xAt0));
     QCOMPARE(xAt0, writeShouldPropagate ? expected : 11);
+}
+
+void tst_QQmlDelegateModel::recursiveDrain()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("recursiveDrain.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QTRY_VERIFY(o->property("height").toDouble() < 4.0);
 }
 
 QTEST_MAIN(tst_QQmlDelegateModel)

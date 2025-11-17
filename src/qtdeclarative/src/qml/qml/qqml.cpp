@@ -1274,10 +1274,10 @@ void AOTCompiledContext::mark(const QVariant &variant, QV4::MarkStack *markStack
     iterateVariant(variant, &stack);
 
     while (!stack.empty()) {
-        const QVariant &element = std::as_const(stack).back();
+        const QVariant element = std::as_const(stack).back();
+        stack.pop_back();
         if (!markPointer(element, markStack))
             iterateVariant(element, &stack);
-        stack.pop_back();
     }
 }
 

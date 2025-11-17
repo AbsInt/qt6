@@ -138,9 +138,11 @@ QString IRBuilder::sanityCheckFunctionNames(Object *obj, QQmlJS::SourceLocation 
         Function *f = functionit.ptr;
         errorLocation->startLine = f->location.line();
         errorLocation->startColumn = f->location.column();
-        if (functionNames.contains(f->nameIndex))
-            return tr("Duplicate method name");
-        functionNames.insert(f->nameIndex);
+        if (f->isQmlFunction) {
+            if (functionNames.contains(f->nameIndex))
+                return tr("Duplicate method name");
+            functionNames.insert(f->nameIndex);
+        }
 
         for (auto signalit = obj->signalsBegin(); signalit != obj->signalsEnd(); ++signalit) {
             QmlIR::Signal *s = signalit.ptr;
@@ -149,7 +151,8 @@ QString IRBuilder::sanityCheckFunctionNames(Object *obj, QQmlJS::SourceLocation 
         }
 
         const QString name = stringAt(f->nameIndex);
-        if (name.at(0).isUpper())
+        Q_ASSERT(!f->isQmlFunction || !name.isEmpty());
+        if (!name.isEmpty() && name.at(0).isUpper())
             return tr("Method names cannot begin with an upper case letter");
         if (QV4::Compiler::Codegen::isNameGlobal(name))
             return tr("Illegal method name");
@@ -1126,6 +1129,45 @@ bool IRBuilder::visit(QQmlJS::AST::UiPublicMember *node)
     return false;
 }
 
+void IRBuilder::registerFunctionExpr(QQmlJS::AST::FunctionExpression *fexp, IsQmlFunction isQmlFunction)
+{
+    CompiledFunctionOrExpression *foe = New<CompiledFunctionOrExpression>();
+    foe->node = fexp;
+    foe->parentNode = fexp;
+    foe->nameIndex = registerString(fexp->name.toString());
+    const int index = _object->functionsAndExpressions->append(foe);
+
+    Function *f = New<Function>();
+    QQmlJS::SourceLocation loc = fexp->identifierToken;
+    f->location.set(loc.startLine, loc.startColumn);
+    f->index = index;
+    f->nameIndex = registerString(fexp->name.toString());
+    f->isQmlFunction = isQmlFunction == IsQmlFunction::Yes;
+
+    const auto idGenerator = [this](const QString &str) { return registerString(str); };
+
+    Parameter::initType(
+            &f->returnType, idGenerator,
+            fexp->typeAnnotation ? fexp->typeAnnotation->type : nullptr);
+
+    const QQmlJS::AST::BoundNames formals = fexp->formals ? fexp->formals->formals()
+                                                          : QQmlJS::AST::BoundNames();
+    int formalsCount = formals.size();
+    f->formals.allocate(pool, formalsCount);
+
+    int i = 0;
+    for (const auto &arg : formals) {
+        Parameter *functionParameter = &f->formals[i];
+        functionParameter->nameIndex = registerString(arg.id);
+        Parameter::initType(
+                &functionParameter->type, idGenerator,
+                arg.typeAnnotation.isNull() ? nullptr : arg.typeAnnotation->type);
+        ++i;
+    }
+
+    _object->appendFunction(f);
+}
+
 bool IRBuilder::visit(QQmlJS::AST::UiSourceElement *node)
 {
     if (QQmlJS::AST::FunctionExpression *funDecl = node->sourceElement->asFunctionDefinition()) {
@@ -1136,40 +1178,7 @@ bool IRBuilder::visit(QQmlJS::AST::UiSourceElement *node)
                                 "QQmlParser", "Function declaration inside grouped property"));
             return false;
         }
-
-        CompiledFunctionOrExpression *foe = New<CompiledFunctionOrExpression>();
-        foe->node = funDecl;
-        foe->parentNode = funDecl;
-        foe->nameIndex = registerString(funDecl->name.toString());
-        const int index = _object->functionsAndExpressions->append(foe);
-
-        Function *f = New<Function>();
-        QQmlJS::SourceLocation loc = funDecl->identifierToken;
-        f->location.set(loc.startLine, loc.startColumn);
-        f->index = index;
-        f->nameIndex = registerString(funDecl->name.toString());
-
-        const auto idGenerator = [this](const QString &str) { return registerString(str); };
-
-        Parameter::initType(
-                    &f->returnType, idGenerator,
-                    funDecl->typeAnnotation ? funDecl->typeAnnotation->type : nullptr);
-
-        const QQmlJS::AST::BoundNames formals = funDecl->formals ? funDecl->formals->formals() : QQmlJS::AST::BoundNames();
-        int formalsCount = formals.size();
-        f->formals.allocate(pool, formalsCount);
-
-        int i = 0;
-        for (const auto &arg : formals) {
-            Parameter *functionParameter = &f->formals[i];
-            functionParameter->nameIndex = registerString(arg.id);
-            Parameter::initType(
-                        &functionParameter->type, idGenerator,
-                        arg.typeAnnotation.isNull() ? nullptr : arg.typeAnnotation->type);
-            ++i;
-        }
-
-        _object->appendFunction(f);
+        registerFunctionExpr(funDecl, IsQmlFunction::Yes);
     } else {
         recordError(node->firstSourceLocation(), QCoreApplication::translate("QQmlParser","JavaScript declaration outside Script element"));
     }

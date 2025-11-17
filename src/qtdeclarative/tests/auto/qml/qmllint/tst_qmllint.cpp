@@ -992,6 +992,17 @@ void TestQmllint::dirtyQmlCode_data()
     QTest::newRow("jsVarDeclarationsWriteConst")
             << QStringLiteral("jsVarDeclarationsWriteConst.qml")
             << Result{ { { "Cannot assign to read-only property constProp"_L1 } } };
+    QTest::newRow("lintInnerFunctionsToo")
+            << QStringLiteral("lintInnerFunctionsToo.qml")
+            << Result{ { { "Unqualified access"_L1, 5, 17 },
+                         { "Unqualified access"_L1, 6, 23 },
+                         { "Unqualified access"_L1, 7, 25 },
+                         { "Unqualified access"_L1, 8, 26 },
+                         { "Unqualified access"_L1, 11, 17 },
+                         { "Unqualified access"_L1, 16, 30 },
+                         { "Unqualified access"_L1, 17, 38 },
+                         { "Unqualified access"_L1, 18, 35 },
+                         { "Unqualified access"_L1, 19, 51 } } };
     QTest::newRow("lowerCaseQualifiedImport")
             << QStringLiteral("lowerCaseQualifiedImport.qml")
             << Result{ { { "Import qualifier 'test' must start with a capital letter."_L1 },

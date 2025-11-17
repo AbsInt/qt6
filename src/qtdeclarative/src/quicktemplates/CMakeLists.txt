@@ -113,6 +113,7 @@ qt_internal_add_qml_module(QuickTemplates2
         qquickvelocitycalculator.cpp
         qquickvelocitycalculator_p_p.h
         qtquicktemplates2global.cpp qtquicktemplates2global_p.h
+        qtquicktemplates2math_p.h
     NO_UNITY_BUILD_SOURCES
         qquickpopupitem.cpp # redefinition of 'contentItemName' (from qquickcontrol.cpp)
     DEFINES

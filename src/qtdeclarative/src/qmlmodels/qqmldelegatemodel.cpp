@@ -540,6 +540,7 @@ void QQmlDelegateModel::setRootIndex(const QVariant &root)
 
 /*!
     \qmlproperty enumeration QtQml.Models::DelegateModel::delegateModelAccess
+    \since 6.10
 
     \include delegatemodelaccess.qdocinc
 */
@@ -4040,14 +4041,29 @@ void QQmlReusableDelegateModelItemsPool::drain(int maxPoolTime, std::function<vo
     // items should stay in "circulation", even if they are not recycled right away.
     qCDebug(lcItemViewDelegateRecycling) << "pool size before drain:" << m_reusableItemsPool.size();
 
-    for (auto it = m_reusableItemsPool.begin(); it != m_reusableItemsPool.end();) {
-        if (++(it->poolTime) <= maxPoolTime) {
-            ++it;
-        } else {
-            releaseItem(it->item);
-            it = m_reusableItemsPool.erase(it);
-        }
+    if (maxPoolTime == 0) {
+        // Special-case 0 because it's so common and so easy to handle.
+        const std::vector<PoolItem> removed = std::exchange(m_reusableItemsPool, {});
+        for (const PoolItem &item : removed)
+            releaseItem(item.item);
+        qCDebug(lcItemViewDelegateRecycling) << "pool size after drain: 0";
+        return;
     }
+
+    const auto begin = m_reusableItemsPool.begin();
+    const auto oldEnd = m_reusableItemsPool.end();
+    const auto newEnd = std::stable_partition(
+            begin, oldEnd,
+            [maxPoolTime](const PoolItem &item) { return item.poolTime < maxPoolTime; });
+    std::for_each(begin, newEnd, [](PoolItem &item) { ++item.poolTime; });
+
+    QVarLengthArray<PoolItem> removed;
+    removed.reserve(oldEnd - newEnd);
+    std::move(newEnd, oldEnd, std::back_inserter(removed));
+    m_reusableItemsPool.erase(newEnd, oldEnd);
+
+    for (const PoolItem &item : removed)
+        releaseItem(item.item);
 
     qCDebug(lcItemViewDelegateRecycling) << "pool size after drain:" << m_reusableItemsPool.size();
 }

@@ -1097,7 +1097,7 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
         cmake_language(DEFER DIRECTORY "${CMAKE_BINARY_DIR}" GET_CALL qmlls_build_ini_generation_id call)
         if("${call}" STREQUAL "")
             cmake_language(EVAL CODE
-                "cmake_language(DEFER DIRECTORY ${CMAKE_BINARY_DIR} "
+                "cmake_language(DEFER DIRECTORY \"${CMAKE_BINARY_DIR}\" "
                     "ID qmlls_build_ini_generation_id "
                     "CALL _qt_internal_write_deferred_qmlls_build_ini_file"
                     "${QT_CMAKE_EXPORT_NAMESPACE}"

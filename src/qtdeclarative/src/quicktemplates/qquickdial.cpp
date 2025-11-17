@@ -8,6 +8,7 @@
 #include <QtCore/qmath.h>
 #include <QtQuick/private/qquickflickable_p.h>
 #include <QtQuickTemplates2/private/qquickcontrol_p_p.h>
+#include <QtQuickTemplates2/private/qtquicktemplates2math_p.h>
 
 #include <cmath>
 
@@ -341,12 +342,6 @@ void QQuickDialPrivate::executeHandle(bool complete)
         quickBeginDeferred(q, handleName(), handle);
     if (complete)
         quickCompleteDeferred(q, handleName(), handle);
-}
-
-template<typename ...Real>
-static bool areRepresentableAsInteger(Real... numbers) {
-    auto check = [](qreal number) -> bool { return std::nearbyint(number) == number; };
-    return (... && check(numbers));
 }
 
 void QQuickDialPrivate::updateAllValuesAreInteger()

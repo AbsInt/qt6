@@ -445,6 +445,7 @@ void QQmlInstantiator::setModel(const QVariant &v)
 #if QT_CONFIG(qml_delegate_model)
 /*!
     \qmlproperty enumeration QtQml.Models::Instantiator::delegateModelAccess
+    \since 6.10
 
     \include delegatemodelaccess.qdocinc
 */

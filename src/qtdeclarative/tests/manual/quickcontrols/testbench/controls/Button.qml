@@ -61,6 +61,6 @@ QtObject {
         // Only set it if it's pressed, or the non-pressed examples will have no press effects
         down: is("pressed") ? true : undefined
         highlighted: is("highlighted")
-        icon.source: is("icon") ? "qrc:/qt-project.org/imports/QtQuick/Controls/Basic/images/check.png" : ""
+        icon.source: is("icon") ? Utils.iconUrl : ""
     }
 }

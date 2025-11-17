@@ -15,12 +15,15 @@
 #include <private/qv4qmlcontext_p.h>
 #include <private/qv4resolvedtypereference_p.h>
 #include <private/qv4runtime_p.h>
+#include <private/qv4qobjectwrapper_p.h>
 
 #include <QtQml/qqmlcontext.h>
 #include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlinfo.h>
 #include <QtQml/qqmlproperty.h>
 #include <QtQml/qqmlpropertymap.h>
+#include <QtQml/private/qqmllist_p.h>
+#include <QtQml/private/qqmllistwrapper_p.h>
 
 #include <QtCore/private/qobject_p.h>
 
@@ -1253,7 +1256,42 @@ bool QQmlBindPrivate::isCurrent(QQmlBindEntry *entry) const
     }
     case QQmlBindEntryKind::Variant: {
         const QV4::PersistentValue &v4Value = entry->current.v4Value;
-        return v4Value.engine()->toVariant(*v4Value.valueRef(), entry->prop.propertyMetaType())
+        QMetaType propMetaType = entry->prop.propertyMetaType();
+        /*
+         * We currently really want to use toVariant here, and not metaTypeFromJS.
+         * metaTypeFromJS can't do all conversions, and would leave us with an
+         * empty QVariant if it fails; whereas toVariant tries very hard to give
+         * us a QVariant representation, even though its type might not match the
+         * property's meta-type. In case of an actual mismatch, we use
+         * convertToWriteTargetType to mirror the conversions that writing to a
+         * property would have done; with the exception of list properties, where
+         * we directly go through a specialized code path using
+         * QQmlPropertyPrivate::convertToQQmlListProperty
+         */
+        QVariant valueAsVariant = v4Value.engine()->toVariant(*v4Value.valueRef(),
+                                                              propMetaType);
+        if (propMetaType.flags() & QMetaType::IsQmlList) {
+            // our expected value is not necessarily of the correct type, so we copy the steps done by
+            // QQmlPropertyPrivate::write to bring them into the correct format
+            QList<QObject *> expectedObjectList;
+            QQmlListProperty<QObject> expectedAsListProp(nullptr, &expectedObjectList);
+            QQmlPropertyPrivate::convertToQQmlListProperty(&expectedAsListProp, propMetaType, valueAsVariant);
+
+            QVariant actualValue = entry->prop.read();
+            // reading a QQmlListProperty property yields a QQmlListReference
+            QQmlListReference* listReference = get_if<QQmlListReference>(&actualValue);
+            Q_ASSERT(listReference);
+            auto actualObjectList = QQmlListReferencePrivate::get(listReference)->property.toList<QList<QObject *>>();
+            return std::equal(expectedObjectList.constBegin(), expectedObjectList.constEnd(),
+                              actualObjectList.constBegin(), actualObjectList.constEnd());
+
+        } else if (QMetaType varMetaType = valueAsVariant.metaType(); varMetaType != propMetaType) {
+            QVariant converted = QQmlPropertyPrivate::convertToWriteTargetType(
+                    valueAsVariant, propMetaType);
+            if (converted.isValid())
+                valueAsVariant = std::move(converted);
+        }
+        return valueAsVariant
                 == entry->prop.read();
     }
     case QQmlBindEntryKind::Binding:
@@ -1329,6 +1367,13 @@ void QQmlBindPrivate::preEvalEntry(QQmlBindEntry *entry)
                 auto retVal = vmemo->vmeProperty(propData.coreIndex());
                 entry->previousKind = entry->previous.set(
                         QV4::PersistentValue(vmemo->engine, retVal), entry->previousKind);
+            } else if (entry->prop.propertyMetaType().flags() & QMetaType::IsQmlList) {
+                using namespace QV4;
+                ExecutionEngine *v4 = qmlEngine(q_func())->handle();
+                entry->previousKind = entry->previous.setVariant(
+                        QV4::PersistentValue(v4, QV4::QmlListWrapper::createOwned(v4, entry->prop)),
+                        entry->previousKind);
+
             } else {
                 // nope, use the meta object to get a QVariant
                 entry->previousKind = entry->previous.set(

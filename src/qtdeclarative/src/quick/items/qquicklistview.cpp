@@ -2462,6 +2462,7 @@ QQuickListView::~QQuickListView()
 
 /*!
     \qmlproperty enumeration QtQuick::ListView::delegateModelAccess
+    \since 6.10
 
     \include delegatemodelaccess.qdocinc
 */

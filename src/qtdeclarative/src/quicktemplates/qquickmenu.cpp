@@ -298,6 +298,7 @@ QQuickPopup::PopupType QQuickMenuPrivate::resolvedPopupType() const
     QQuickMenu *root = rootMenu();
     QQuickMenuPrivate *root_d = QQuickMenuPrivate::get(rootMenu());
 
+#if QT_CONFIG(quicktemplates2_container)
     if (auto menuBar = QQuickMenuPrivate::get(root)->menuBar.get()) {
         // When a menu is inside a MenuBar, the MenuBar decides if the menu
         // should be native or not. The menu's popupType is therefore ignored.
@@ -305,7 +306,9 @@ QQuickPopup::PopupType QQuickMenuPrivate::resolvedPopupType() const
         // a non-native MenuBar can only contain non-native Menus.
         if (QQuickMenuBarPrivate::get(menuBar)->useNativeMenu(q_func()))
             return QQuickPopup::Native;
-    } else {
+    } else
+#endif
+    {
         // If the root menu is native, this menu needs to be native as well
         if (root_d->maybeNativeHandle()) {
             return QQuickPopup::Native;
@@ -355,12 +358,14 @@ bool QQuickMenuPrivate::createNativeMenu()
     qCDebug(lcNativeMenus) << "createNativeMenu called on" << q;
 
     if (auto menuBar = QQuickMenuPrivate::get(rootMenu())->menuBar) {
+#if QT_CONFIG(quicktemplates2_container)
         auto menuBarPrivate = QQuickMenuBarPrivate::get(menuBar);
         if (menuBarPrivate->useNativeMenuBar()) {
             qCDebug(lcNativeMenus) << "- creating native menu from native menubar";
             if (QPlatformMenuBar *menuBarHandle = menuBarPrivate->nativeHandle())
                 handle.reset(menuBarHandle->createMenu());
         }
+#endif
     }
 
     if (!handle) {

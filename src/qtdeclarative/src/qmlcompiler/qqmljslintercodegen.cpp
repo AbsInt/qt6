@@ -24,6 +24,7 @@ QQmlJSLinterCodegen::QQmlJSLinterCodegen(QQmlJSImporter *importer, const QString
     : QQmlJSAotCompiler(importer, fileName, qmldirFiles, logger),
       m_knownContextProperties(knownContextProperties)
 {
+    m_flags |= QQmlJSAotCompiler::IsLintCompiler;
 }
 
 void QQmlJSLinterCodegen::setDocument(const QmlIR::JSCodeGen *codegen,

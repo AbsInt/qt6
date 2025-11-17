@@ -27,6 +27,8 @@ QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(lcIncompatibleElement)
 
+class QQmlProperty;
+
 namespace QV4 {
 
 namespace Heap {
@@ -73,6 +75,7 @@ struct Q_QML_EXPORT QmlListWrapper : Object
     static ReturnedValue create(ExecutionEngine *engine, QObject *object, int propId, QMetaType propType);
     static ReturnedValue create(ExecutionEngine *engine, const QQmlListProperty<QObject> &prop, QMetaType propType);
     static ReturnedValue create(ExecutionEngine *engine, QMetaType propType);
+    static ReturnedValue createOwned(ExecutionEngine *engine, const QQmlProperty &prop);
 
     QVariant toVariant() const;
     QQmlListReference toListReference() const;

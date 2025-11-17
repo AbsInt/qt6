@@ -27,6 +27,7 @@ set(cpp_sources
     objectwithmethod.h
     person.cpp person.h
     qmlusing.h
+    recursiveObject.h
     refuseWrite.h
     resettable.h
     scriptstringholder.h
@@ -159,6 +160,7 @@ set(qml_files
     dialog.qml
     dialogButtonBox.qml
     disappearingArrowFunction.qml
+    dynamicObjectProperty.qml
     dynamicscene.qml
     enforceSignature.qml
     enumConversion.qml
@@ -236,6 +238,7 @@ set(qml_files
     listPropertyAsModel.qml
     listToString.qml
     listlength.qml
+    markRecursive.qml
     math.qml
     mathMinMax.qml
     mathOperations.qml

@@ -315,12 +315,34 @@ All warnings can be set to three levels:
     if (parser.isSet(listPluginsOption)) {
         const std::vector<QQmlJSLinter::Plugin> &plugins = linter.plugins();
         if (!plugins.empty()) {
-            qInfo().nospace().noquote() << "Plugin\t\t\tBuilt-in?\tVersion\tAuthor\t\tDescription";
+            int nameWidth = "Plugin"_L1.size();
+            int builtinWidth = "Built-in?"_L1.size();
+            int versionWidth = "Version"_L1.size();
+            int authorWidth = "Author"_L1.size();
+            for (const auto &p : plugins) {
+                nameWidth = qMax(nameWidth, p.name().size());
+                versionWidth = qMax(versionWidth, p.version().size());
+                authorWidth = qMax(authorWidth, p.author().size());
+            }
+
+            // At least 4 spaces between columns
+            nameWidth += 4;
+            builtinWidth += 4;
+            versionWidth += 4;
+            authorWidth += 4;
+
+            qInfo().nospace().noquote() << u"Plugin"_s.leftJustified(nameWidth, u' ')
+                                        << u"Built-in?"_s.leftJustified(builtinWidth, u' ')
+                                        << u"Version"_s.leftJustified(versionWidth, u' ')
+                                        << u"Author"_s.leftJustified(authorWidth, u' ')
+                                        << u"Description"_s;
             for (const QQmlJSLinter::Plugin &plugin : plugins) {
                 qInfo().nospace().noquote()
-                        << plugin.name() << "\t\t\t" << (plugin.isBuiltin() ? "Yes" : "No")
-                        << "\t\t" << plugin.version() << "\t" << plugin.author() << "\t\t"
-                        << plugin.description();
+                << plugin.name().leftJustified(nameWidth, u' ')
+                << (plugin.isBuiltin() ? u"Yes"_s : u"No"_s).leftJustified(builtinWidth, u' ')
+                << plugin.version().leftJustified(versionWidth, u' ')
+                << plugin.author().leftJustified(authorWidth, u' ')
+                << plugin.description();
             }
         } else {
             qWarning() << "No plugins installed.";

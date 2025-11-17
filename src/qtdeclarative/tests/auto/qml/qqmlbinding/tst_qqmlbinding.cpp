@@ -54,6 +54,7 @@ private slots:
     void qQmlPropertyToPropertyBinding();
     void qQmlPropertyToPropertyBindingReverse();
     void delayedBindingDestruction();
+    void restoreNotConfusedByTypeConversion();
     void deleteStashedObject();
     void multiValueTypeBinding();
 
@@ -891,6 +892,47 @@ void tst_qqmlbinding::delayedBindingDestruction()
     QCoreApplication::processEvents();
     QCOMPARE(object->objectName(), QLatin1String("foo"));
     verifyDelegate(QLatin1String("foo"));
+}
+
+void tst_qqmlbinding::restoreNotConfusedByTypeConversion()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("restoreNotConfusedByTypeConversion.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(object);
+    {
+        // toggling the binding twice yields the blue color
+        // even if "blue" and QColor::fromString("blue") are different values
+        object->setProperty("isRectBlue", true);
+        QCOMPARE(object->property("color").value<QColor>(), QColor::fromString("blue"));
+        object->setProperty("isRectBlue", false);
+        QCOMPARE_NE(object->property("color").value<QColor>(), QColor::fromString("blue"));
+        // toggling the binding twice yields the blue color
+        // even if "blue" and QColor::fromString("blue") are different values
+        object->setProperty("isRectBlue", true);
+        QCOMPARE(object->property("color").value<QColor>(), QColor::fromString("blue"));
+    }
+    {
+        // now do the same with an Item list property, exercising another code path
+        QVERIFY(!object->property("hasListItem").toBool()); // initially empty
+        object->setProperty("shouldHaveListItem", true);
+        QVERIFY(object->property("hasListItem").toBool());
+        object->setProperty("shouldHaveListItem", false);
+        QVERIFY(!object->property("hasListItem").toBool());
+        object->setProperty("shouldHaveListItem", true);
+        QVERIFY(object->property("hasListItem").toBool());
+    }
+    {
+        // now do the same with a value list property, exercising yet another code path
+        QVERIFY(!object->property("hasListInt").toBool()); // initially empty
+        object->setProperty("shouldHaveListInt", true);
+        QVERIFY(object->property("hasListInt").toBool());
+        object->setProperty("shouldHaveListInt", false);
+        QVERIFY(!object->property("hasListInt").toBool());
+        object->setProperty("shouldHaveListInt", true);
+        QVERIFY(object->property("hasListInt").toBool());
+    }
 }
 
 void tst_qqmlbinding::deleteStashedObject()

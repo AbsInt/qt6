@@ -62,6 +62,7 @@ public:
     enum Flag {
         NoFlags = 0x0,
         ValidateBasicBlocks = 0x1,
+        IsLintCompiler = 0x2, // When we're linting and not compiling
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -79,6 +80,8 @@ public:
             const QV4::Compiler::Context *context, const QString &name, QQmlJS::AST::Node *astNode);
 
     virtual QQmlJSAotFunction globalCode() const;
+
+    bool isLintCompiler() const { return m_flags & IsLintCompiler; }
 
     Flags m_flags;
 

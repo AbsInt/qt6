@@ -4,6 +4,7 @@
 import QtQuick
 import QtTest
 import QtQuick.Controls
+import QtQuick.Templates as T
 import Qt.test.controls
 
 TestCase {
@@ -583,6 +584,54 @@ TestCase {
         verify(newHorizontalScrollBar)
         verify(newHorizontalScrollBar.visible)
         verify(!oldHorizontalScrollBar.visible)
+    }
+
+    component CustomScrollView: ScrollView {
+        ScrollBar.vertical: ScrollBar {
+            objectName: "customVertical"
+            contentItem: Rectangle {
+                implicitWidth: 8
+                implicitHeight: 100
+            }
+        }
+        ScrollBar.horizontal: ScrollBar {
+            objectName: "customHorizontal"
+            contentItem: Rectangle {
+                implicitWidth: 100
+                implicitHeight: 8
+            }
+        }
+    }
+
+    Component {
+        id: customScrollViewComponent
+
+        CustomScrollView {
+            anchors.fill: parent
+            anchors.margins: 20
+
+            contentWidth: rect.width
+            contentHeight: rect.height
+
+            Rectangle {
+                id: rect
+                width: 1000
+                height: 1000
+                opacity: 0.2
+                color: "orange"
+                border.width: 3
+                border.color: "magenta"
+            }
+        }
+    }
+
+    function test_customScrollBarsDeclarative() {
+        let control = createTemporaryObject(customScrollViewComponent, testCase)
+        verify(control)
+
+        let scrollBars = control.children.filter((child) => child instanceof T.ScrollBar)
+        compare(scrollBars.length, 2, "Expected 2 ScrollBar as children of ScrollView, "
+            + `got ${scrollBars.length}: ${scrollBars.toString()}`)
     }
 
     Component {

@@ -283,8 +283,9 @@ struct RequiredPropertyExtraData : public QV4::CompiledData::RequiredPropertyExt
 struct Function
 {
     QV4::CompiledData::Location location;
-    int nameIndex;
-    quint32 index; // index in parsedQML::functions
+    quint32 nameIndex : 31;
+    quint32 isQmlFunction : 1;
+    quint32 index = 0; // index in parsedQML::functions
     QQmlJS::FixedPoolArray<Parameter> formals;
     QV4::CompiledData::ParameterType returnType;
 
@@ -564,8 +565,8 @@ public:
     QStringView textRefAt(const QQmlJS::SourceLocation &first,
                          const QQmlJS::SourceLocation &last) const;
 
-    void setBindingValue(QV4::CompiledData::Binding *binding, QQmlJS::AST::Statement *statement,
-                         QQmlJS::AST::Node *parentNode);
+    virtual void setBindingValue(QV4::CompiledData::Binding *binding,
+                                 QQmlJS::AST::Statement *statement, QQmlJS::AST::Node *parentNode);
     void tryGeneratingTranslationBinding(QStringView base, QQmlJS::AST::ArgumentList *args, QV4::CompiledData::Binding *binding);
 
     void appendBinding(QQmlJS::AST::UiQualifiedId *name, QQmlJS::AST::Statement *value,
@@ -579,6 +580,9 @@ public:
                        int objectIndex, bool isListItem = false, bool isOnAssignment = false);
 
     bool appendAlias(QQmlJS::AST::UiPublicMember *node);
+
+    enum class IsQmlFunction { Yes, No };
+    virtual void registerFunctionExpr(QQmlJS::AST::FunctionExpression *fexp, IsQmlFunction);
 
     Object *bindingsTarget() const;
 

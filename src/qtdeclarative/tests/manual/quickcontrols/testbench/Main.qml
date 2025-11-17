@@ -8,10 +8,9 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Qt.labs.folderlistmodel
 
-import Backend
-import "." as Ui
+import Testbench as Testbench
 
-Ui.ApplicationWindow {
+MainWindow {
     id: window
     visible: true
     width: 1000
@@ -115,7 +114,7 @@ Ui.ApplicationWindow {
         property string link
     }
 
-    header: Ui.ToolBar {
+    header: TestbenchToolBar {
         RowLayout {
             anchors.fill: parent
 
@@ -167,7 +166,7 @@ Ui.ApplicationWindow {
 
                 onClicked: optionsMenu.open()
 
-                Ui.Menu {
+                TestbenchMenu {
                     id: optionsMenu
                     x: 1
                     y: 1 + parent.height
@@ -349,7 +348,7 @@ Ui.ApplicationWindow {
         return props;
     }
 
-    Ui.ContentPane {
+    ContentPane {
         id: contentPane
         anchors.fill: parent
 
@@ -377,9 +376,9 @@ Ui.ApplicationWindow {
 
         FolderListModel {
             id: controlFolderListModel
-            folder: "qrc:/controls"
+            folder: "qrc:/qt/qml/Testbench/controls"
             showDirs: false
-            nameFilters: searchTextField.text.length > 0 ? ["*" + searchTextField.text + "*.qml"] : []
+            nameFilters: searchTextField.text.length > 0 ? ["*" + searchTextField.text + "*.qml"] : ["*.qml"]
             caseSensitive: false
         }
 

@@ -32,6 +32,9 @@
 #if QT_CONFIG(tabwidget)
 #  include <QtWidgets/qtabwidget.h>
 #endif
+#if QT_CONFIG(menubar)
+#  include <QtWidgets/qmenubar.h>
+#endif
 #include "qdrawutil.h"
 #include <chrono>
 
@@ -247,10 +250,13 @@ static qreal radioButtonInnerRadius(int state)
 
 static qreal sliderInnerRadius(QStyle::State state, bool insideHandle)
 {
-    if (state & QStyle::State_Sunken)
-        return 0.29;
-    else if (insideHandle)
-        return 0.71;
+    const bool isEnabled = state & QStyle::State_Enabled;
+    if (isEnabled) {
+        if (state & QStyle::State_Sunken)
+            return 0.29;
+        else if (insideHandle)
+            return 0.71;
+    }
     return 0.43;
 }
 /*!
@@ -408,13 +414,14 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
 
                 const bool isMouseOver = state & State_MouseOver;
                 const bool hasFocus = state & State_HasFocus;
-                if (isMouseOver && !hasFocus && !highContrastTheme)
+                const bool isEnabled = state & QStyle::State_Enabled;
+                if (isEnabled && isMouseOver && !hasFocus && !highContrastTheme)
                     drawRoundedRect(cp.painter(), frameRect, Qt::NoPen, winUI3Color(subtleHighlightColor));
 
                 const auto drawUpDown = [&](QStyle::SubControl sc) {
                     const bool isUp = sc == SC_SpinBoxUp;
                     const QRect rect = proxy()->subControlRect(CC_SpinBox, option, sc, widget);
-                    if (sb->activeSubControls & sc)
+                    if (isEnabled && sb->activeSubControls & sc)
                         drawRoundedRect(cp.painter(), rect.adjusted(1, 1, -1, -2), Qt::NoPen,
                                         winUI3Color(subtleHighlightColor));
 
@@ -986,7 +993,8 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
 
             const bool isMouseOver = state & State_MouseOver;
             const bool hasFocus = state & State_HasFocus;
-            if (isMouseOver && !hasFocus && !highContrastTheme)
+            const bool isEnabled = state & State_Enabled;
+            if (isMouseOver && isEnabled && hasFocus && !highContrastTheme)
                 drawRoundedRect(painter, frameRect, Qt::NoPen, winUI3Color(subtleHighlightColor));
         }
         break;
@@ -1200,10 +1208,11 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
     case QStyle::CE_TabBarTabShape:
 #if QT_CONFIG(tabbar)
         if (const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(option)) {
+            const bool isEnabled = tab->state & QStyle::State_Enabled;
             QRectF tabRect = tab->rect.marginsRemoved(QMargins(2,2,0,0));
             painter->setPen(Qt::NoPen);
             painter->setBrush(tab->palette.base());
-            if (tab->state & State_MouseOver){
+            if (isEnabled && tab->state & State_MouseOver) {
                 painter->setBrush(WINUI3Colors[colorSchemeIndex][subtleHighlightColor]);
             } else if (tab->state & State_Selected) {
                 painter->setBrush(tab->palette.base());
@@ -1392,6 +1401,13 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
             const qreal offset = (int(rect.height()) % 2 == 0) ? 0.5f : 0.0f;
 
             if (isIndeterminate) {
+#if QT_CONFIG(animation)
+                auto anim = d->animation(option->styleObject);
+                if (!anim) {
+                    auto anim = new QStyleAnimation(option->styleObject);
+                    anim->setFrameRate(QStyleAnimation::SixtyFps);
+                    d->startAnimation(anim);
+                }
                 constexpr auto loopDurationMSec = 4000;
                 const auto elapsedTime = std::chrono::time_point_cast<std::chrono::milliseconds>(
                         std::chrono::system_clock::now());
@@ -1399,14 +1415,20 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                 const auto handleCenter = (elapsed % loopDurationMSec) / float(loopDurationMSec);
                 const auto isLongHandle = (elapsed / loopDurationMSec) % 2 == 0;
                 const auto lengthFactor = (isLongHandle ? 33.0f : 25.0f) / 100.0f;
+#else
+                constexpr auto handleCenter = 0.5f;
+                constexpr auto lengthFactor = 1;
+#endif
                 const auto begin = qMax(handleCenter * (1 + lengthFactor) - lengthFactor, 0.0f);
                 const auto end = qMin(handleCenter * (1 + lengthFactor), 1.0f);
                 const auto barBegin = begin * rect.width();
                 const auto barEnd = end * rect.width();
                 rect = QRectF(QPointF(rect.left() + barBegin, rect.top()),
                               QPointF(rect.left() + barEnd, rect.bottom()));
-                const_cast<QWidget *>(widget)->update();
             } else {
+#if QT_CONFIG(animation)
+                d->stopAnimation(option->styleObject);
+#endif
                 const auto fillPercentage = (float(baropt->progress - baropt->minimum))
                         / (float(baropt->maximum - baropt->minimum));
                 rect.setWidth(rect.width() * fillPercentage);
@@ -1711,9 +1733,10 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
     }
     case CE_ItemViewItem: {
         if (const QStyleOptionViewItem *vopt = qstyleoption_cast<const QStyleOptionViewItem *>(option)) {
-            QRect checkRect = proxy()->subElementRect(SE_ItemViewItemCheckIndicator, vopt, widget);
-            QRect iconRect = proxy()->subElementRect(SE_ItemViewItemDecoration, vopt, widget);
-            QRect textRect = proxy()->subElementRect(SE_ItemViewItemText, vopt, widget);
+            const auto p = proxy();
+            QRect checkRect = p->subElementRect(SE_ItemViewItemCheckIndicator, vopt, widget);
+            QRect iconRect = p->subElementRect(SE_ItemViewItemDecoration, vopt, widget);
+            QRect textRect = p->subElementRect(SE_ItemViewItemText, vopt, widget);
 
             // draw the background
             proxy()->drawPrimitive(PE_PanelItemViewItem, option, painter, widget);
@@ -1814,16 +1837,17 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
             d->viewItemDrawText(painter, vopt, textRect);
 
             // paint a vertical marker for QListView
-            if (vopt->state & State_Selected) {
+            if (vopt->state & State_Selected && !highContrastTheme) {
                 if (const QListView *lv = qobject_cast<const QListView *>(widget);
-                    lv && lv->viewMode() != QListView::IconMode && !highContrastTheme) {
-                    painter->setPen(vopt->palette.accent().color());
-                    const auto xPos = isRtl ? rect.right() - 1 : rect.left();
-                    const QLineF lines[2] = {
-                        QLineF(xPos, rect.y() + 2, xPos, rect.y() + rect.height() - 2),
-                        QLineF(xPos + 1, rect.y() + 2, xPos + 1, rect.y() + rect.height() - 2),
-                    };
-                    painter->drawLines(lines, 2);
+                    lv && lv->viewMode() != QListView::IconMode) {
+                    const auto col = vopt->palette.accent().color();
+                    painter->setBrush(col);
+                    painter->setPen(col);
+                    const auto xPos = isRtl ? rect.right() - 4.5f : rect.left() + 3.5f;
+                    const auto yOfs = rect.height() / 4.;
+                    QRectF r(QPointF(xPos, rect.y() + yOfs),
+                             QPointF(xPos + 1, rect.y() + rect.height() - yOfs));
+                    painter->drawRoundedRect(r, 1, 1);
                 }
             }
         }
@@ -1863,7 +1887,7 @@ QRect QWindows11Style::subElementRect(QStyle::SubElement element, const QStyleOp
     case QStyle::SE_RadioButtonIndicator:
     case QStyle::SE_CheckBoxIndicator:
         ret = QWindowsVistaStyle::subElementRect(element, option, widget);
-        ret.moveLeft(contentItemHMargin);
+        ret.moveLeft(ret.left() + contentItemHMargin);
         break;
     case QStyle::SE_ComboBoxFocusRect:
     case QStyle::SE_CheckBoxFocusRect:
@@ -1874,22 +1898,29 @@ QRect QWindows11Style::subElementRect(QStyle::SubElement element, const QStyleOp
     case QStyle::SE_LineEditContents:
         ret = option->rect.adjusted(4,0,-4,0);
         break;
-    case QStyle::SE_ItemViewItemText:
-        if (const auto *item = qstyleoption_cast<const QStyleOptionViewItem *>(option)) {
-            const int decorationOffset = item->features.testFlag(QStyleOptionViewItem::HasDecoration) ? item->decorationSize.width() : 0;
-            const int checkboxOffset = item->features.testFlag(QStyleOptionViewItem::HasCheckIndicator) ? 16 : 0;
-            if (widget && qobject_cast<QComboBoxPrivateContainer *>(widget->parentWidget())) {
-                if (option->direction == Qt::LeftToRight)
-                    ret = option->rect.adjusted(decorationOffset + checkboxOffset + 5, 0, -5, 0);
-                else
-                    ret = option->rect.adjusted(5, 0, decorationOffset - checkboxOffset - 5, 0);
+    case SE_ItemViewItemCheckIndicator:
+    case SE_ItemViewItemDecoration:
+    case SE_ItemViewItemText: {
+        ret = QWindowsVistaStyle::subElementRect(element, option, widget);
+        if (!ret.isValid() || highContrastTheme)
+            return ret;
+
+        if (const QListView *lv = qobject_cast<const QListView *>(widget);
+            lv && lv->viewMode() != QListView::IconMode) {
+            const int xOfs = contentHMargin;
+            const bool isRtl = option->direction == Qt::RightToLeft;
+            if (isRtl) {
+                ret.moveRight(ret.right() - xOfs);
+                if (ret.left() < option->rect.left())
+                    ret.setLeft(option->rect.left());
             } else {
-                ret = QWindowsVistaStyle::subElementRect(element, option, widget);
+                ret.moveLeft(ret.left() + xOfs);
+                if (ret.right() > option->rect.right())
+                    ret.setRight(option->rect.right());
             }
-        } else {
-            ret = QWindowsVistaStyle::subElementRect(element, option, widget);
         }
         break;
+    }
 #if QT_CONFIG(progressbar)
     case SE_ProgressBarGroove:
     case SE_ProgressBarContents:
@@ -2082,6 +2113,19 @@ QRect QWindows11Style::subControlRect(ComplexControl control, const QStyleOption
         }
         break;
     }
+#if QT_CONFIG(groupbox)
+    case CC_GroupBox: {
+        ret = QWindowsVistaStyle::subControlRect(control, option, subControl, widget);
+        switch (subControl) {
+        case SC_GroupBoxCheckBox:
+            ret.moveTop(1);
+            break;
+        default:
+            break;
+        }
+        break;
+    }
+#endif // QT_CONFIG(groupbox)
     default:
         ret = QWindowsVistaStyle::subControlRect(control, option, subControl, widget);
     }
@@ -2225,6 +2269,25 @@ QSize QWindows11Style::sizeFromContents(ContentsType type, const QStyleOption *o
         contentSize.rwidth() += 2 * contentHMargin - oldMargin;
         break;
     }
+    case CT_ItemViewItem: {
+        if (const auto *viewItemOpt = qstyleoption_cast<const QStyleOptionViewItem *>(option)) {
+            if (const QListView *lv = qobject_cast<const QListView *>(widget);
+                lv && lv->viewMode() != QListView::IconMode) {
+                QStyleOptionViewItem vOpt(*viewItemOpt);
+                // viewItemSize only takes PM_FocusFrameHMargin into account but no additional
+                // margin, therefore adjust it here for a correct width during layouting when
+                // WrapText is enabled
+                vOpt.rect.setRight(vOpt.rect.right() - contentHMargin);
+                contentSize = QWindowsVistaStyle::sizeFromContents(type, &vOpt, size, widget);
+                contentSize.rwidth() += contentHMargin;
+                contentSize.rheight() += 2 * contentHMargin;
+
+            } else {
+                contentSize = QWindowsVistaStyle::sizeFromContents(type, option, size, widget);
+            }
+        }
+        break;
+    }
     default:
         contentSize = QWindowsVistaStyle::sizeFromContents(type, option, size, widget);
         break;
@@ -2318,6 +2381,15 @@ void QWindows11Style::polish(QWidget* widget)
 
     const bool isScrollBar = qobject_cast<QScrollBar *>(widget);
     const auto comboBoxContainer = qobject_cast<const QComboBoxPrivateContainer *>(widget);
+#if QT_CONFIG(menubar)
+    if (qobject_cast<QMenuBar *>(widget)) {
+        constexpr int itemHeight = 32;
+        if (widget->maximumHeight() < itemHeight) {
+            widget->setProperty("_q_original_menubar_maxheight", widget->maximumHeight());
+            widget->setMaximumHeight(itemHeight);
+        }
+    }
+#endif
     if (isScrollBar || qobject_cast<QMenu *>(widget) || comboBoxContainer) {
         bool wasCreated = widget->testAttribute(Qt::WA_WState_Created);
         bool layoutDirection = widget->testAttribute(Qt::WA_RightToLeft);
@@ -2373,6 +2445,20 @@ void QWindows11Style::unpolish(QWidget *widget)
     if (!qobject_cast<QCommandLinkButton *>(widget))
 #endif // QT_CONFIG(commandlinkbutton)
         QWindowsVistaStyle::unpolish(widget);
+
+#if QT_CONFIG(menubar)
+    if (qobject_cast<QMenuBar *>(widget) && !widget->property("_q_original_menubar_maxheight").isNull()) {
+        widget->setMaximumHeight(widget->property("_q_original_menubar_maxheight").toInt());
+        widget->setProperty("_q_original_menubar_maxheight", QVariant());
+    }
+#endif
+    const auto comboBoxContainer = qobject_cast<const QComboBoxPrivateContainer *>(widget);
+    if (comboBoxContainer) {
+        widget->setAttribute(Qt::WA_OpaquePaintEvent, true);
+        widget->setAttribute(Qt::WA_TranslucentBackground, false);
+        widget->setWindowFlag(Qt::FramelessWindowHint, false);
+        widget->setWindowFlag(Qt::NoDropShadowWindowHint, false);
+    }
 
     if (const auto *scrollarea = qobject_cast<QAbstractScrollArea *>(widget);
         scrollarea
@@ -2574,7 +2660,7 @@ void QWindows11Style::drawLineEditFrame(QPainter *p, const QRectF &rect, const Q
             : winUI3Color(frameColorLight);
     drawRoundedRect(p, rect, frameCol, Qt::NoBrush);
 
-    if (!isEditable)
+    if (!isEditable || StyleOptionHelper::isDisabled(o))
         return;
 
     QPainterStateGuard psg(p);

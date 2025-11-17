@@ -1121,8 +1121,12 @@ ReturnedValue QObjectWrapper::virtualResolveLookupGetter(const Object *object, E
     QQmlData *ddata = QQmlData::get(qobj, false);
     if (auto methodValue = getDestroyOrToStringMethod(engine, name, This->d())) {
         Scoped<QObjectMethod> method(scope, *methodValue);
-        setupQObjectMethodLookup(
-                    lookup, ddata ? ddata : QQmlData::get(qobj, true), nullptr, This, method->d());
+        if (!ddata)
+            ddata = QQmlData::get(qobj, true);
+        const QQmlPropertyCache::ConstPtr propertyCache = (ddata && ddata->propertyCache)
+                ? ddata->propertyCache
+                : QQmlMetaType::propertyCacheForType(QMetaType::fromType<QObject *>());
+        setupQObjectMethodLookup(lookup, propertyCache, nullptr, This, method->d());
         lookup->call = Lookup::Call::GetterQObjectMethod;
         return method.asReturnedValue();
     }
@@ -1152,7 +1156,7 @@ ReturnedValue QObjectWrapper::virtualResolveLookupGetter(const Object *object, E
             && !property->isVMEFunction() // Handled by QObjectLookup
             && !property->isSignalHandler()) { // TODO: Optimize SignalHandler, too
         QV4::Heap::QObjectMethod *method = nullptr;
-        setupQObjectMethodLookup(lookup, ddata, property, This, method);
+        setupQObjectMethodLookup(lookup, ddata->propertyCache, property, This, method);
         lookup->call = Lookup::Call::GetterQObjectMethod;
         return lookup->getter(engine, *object);
     }

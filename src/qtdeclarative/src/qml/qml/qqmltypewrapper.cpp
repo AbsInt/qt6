@@ -641,7 +641,8 @@ ReturnedValue QQmlTypeWrapper::virtualResolveLookupGetter(const Object *object, 
                                 if (qualifiesForMethodLookup(property)) {
                                     QV4::Heap::QObjectMethod *method = nullptr;
                                     setupQObjectMethodLookup(
-                                                lookup, ddata, property, val->objectValue(), method);
+                                            lookup, ddata->propertyCache, property,
+                                            val->objectValue(), method);
                                     lookup->call = QV4::Lookup::Call::GetterSingletonMethod;
                                 } else {
                                     setupQObjectLookup(

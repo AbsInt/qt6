@@ -2920,7 +2920,16 @@ void QQmlJSCodeGenerator::generate_DefineObjectLiteral(int internalClassId, int 
     const QQmlJSScope::ConstPtr contained = m_state.accumulatorOut().containedType();
 
     const int classSize = m_jsUnitGenerator->jsClassSize(internalClassId);
-    Q_ASSERT(argc >= classSize);
+
+    // This is not implemented because we cannot statically determine the type of the value and we
+    // don't want to rely on QVariant::convert() since that may give different results than
+    // the JavaScript coercion. We might still make it work by querying the QMetaProperty
+    // for its type at run time and runtime coercing to that, but we don't know whether that
+    // still pays off.
+    if (argc > classSize)
+        REJECT(u"non-literal keys of object literals"_s);
+
+    Q_ASSERT(argc == classSize);
 
     const auto createVariantMap = [&]() {
         QString result;
@@ -2936,22 +2945,6 @@ void QQmlJSCodeGenerator::generate_DefineObjectLiteral(int internalClassId, int 
             result += convertStored(argType, propType, consumedArg) + u" },\n";
         }
 
-        for (int i = classSize; i < argc; i += 3) {
-            const int nameArg = args + i + 1;
-            result += u"{ "_s
-                    + conversion(
-                              registerType(nameArg),
-                              m_typeResolver->stringType(),
-                              consumedRegisterVariable(nameArg))
-                    + u", "_s;
-
-            const int valueArg = args + i + 2;
-            result += convertStored(
-                              registerType(valueArg).storedType(),
-                              propType,
-                              consumedRegisterVariable(valueArg))
-                    + u" },\n";
-        }
 
         result += u"}";
         return result;
@@ -3032,14 +3025,6 @@ void QQmlJSCodeGenerator::generate_DefineObjectLiteral(int internalClassId, int 
         m_body += u"), QMetaObject::WriteProperty, " + indexString + u", argv);\n";
         m_body += u"    }\n";
     }
-
-    // This is not implemented because we cannot statically determine the type of the value and we
-    // don't want to rely on QVariant::convert() since that may give different results than
-    // the JavaScript coercion. We might still make it work by querying the QMetaProperty
-    // for its type at run time and runtime coercing to that, but we don't know whether that
-    // still pays off.
-    if (argc > classSize)
-        REJECT(u"non-literal keys of object literals"_s);
 
     m_body += u"}\n";
 

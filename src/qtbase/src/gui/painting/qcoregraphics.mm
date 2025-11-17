@@ -11,6 +11,7 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qoperatingsystemversion.h>
 #include <QtGui/qcolorspace.h>
+#include <QtGui/private/qicon_p.h>
 
 #if defined(Q_OS_MACOS)
 # include <AppKit/AppKit.h>
@@ -87,6 +88,26 @@ QImage qt_mac_toQImage(CGImageRef image)
     ret.setColorSpace(QColorSpace::fromIccProfile(QByteArray::fromRawCFData(iccData)));
 
     return ret;
+}
+
+QImage qt_mac_padToSquareImage(const QImage &image)
+{
+    if (image.width() == image.height())
+        return image;
+
+    const int size = std::max(image.width(), image.height());
+    QImage squareImage(size, size, image.format());
+    squareImage.setDevicePixelRatio(image.devicePixelRatio());
+    squareImage.fill(Qt::transparent);
+
+    QPoint pos((size - image.width()) / (2.0 * image.devicePixelRatio()),
+               (size - image.height()) / (2.0 * image.devicePixelRatio()));
+
+    QPainter painter(&squareImage);
+    painter.drawImage(pos, image);
+    painter.end();
+
+    return squareImage;
 }
 
 #ifdef Q_OS_MACOS
@@ -169,6 +190,19 @@ QT_END_NAMESPACE
 
     return nsImage;
 }
+
++ (instancetype)internalImageFromQIcon:(const QT_PREPEND_NAMESPACE(QIcon) &)icon
+{
+    if (icon.isNull())
+        return nil;
+
+    // Check if the icon is backed by an NSImage. If so, we can use that directly.
+    auto *iconPrivate = QIconPrivate::get(&icon);
+    NSImage *iconImage = nullptr;
+    iconPrivate->engine->virtual_hook(QIconPrivate::PlatformIconHook, &iconImage);
+    return iconImage;
+}
+
 @end
 
 QT_BEGIN_NAMESPACE

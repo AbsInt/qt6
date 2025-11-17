@@ -60,6 +60,14 @@ Q_STATIC_LOGGING_CATEGORY(lcContextMenu, "qt.quick.controls.contextmenu")
     If a \c Menu is opened via e.g. a \l TapHandler or other means, ContextMenu
     will not open at the same time. This allows legacy applications that were
     written before ContextMenu was introduced to continue working as expected.
+
+    \section1 Native menu support
+
+    ContextMenu is backed by a native menu on iOS.
+
+    \note if you assign your own \l menu, you must set
+    \l {Popup::popupType}{popupType} to \c {Popup.Native} to ensure native menu
+    support.
 */
 
 /*!

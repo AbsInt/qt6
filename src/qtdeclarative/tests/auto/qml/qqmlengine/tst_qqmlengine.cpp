@@ -625,6 +625,9 @@ QT_WARNING_POP
 
     QQmlEngine engine;
 
+    const QObject *qtObject = engine.globalObject().property("Qt").toQObject();
+    QVERIFY(qtObject != nullptr);
+
     QCOMPARE(engine.singletonInstance<ObjectCaller *>(cppInstance), &objectCaller1);
 #if QT_DEPRECATED_SINCE(6, 3)
     QCOMPARE(engine.singletonInstance<ObjectCaller *>(deprecatedCppInstance), &objectCaller2);
@@ -655,6 +658,7 @@ QT_WARNING_POP
               "    property int c: JsValue\n"
               "    property QtObject d: JsObject\n"
               "    property QtObject e: QmlSingleton\n"
+              "    property QtObject g: Qt\n"
               "}", QUrl());
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> singletonUser(c.create());
@@ -666,6 +670,7 @@ QT_WARNING_POP
     QCOMPARE(singletonUser->property("c").toUInt(), 13u);
     QCOMPARE(qvariant_cast<QObject *>(singletonUser->property("d")), oldJsSingleton);
     QCOMPARE(qvariant_cast<QObject *>(singletonUser->property("e")), oldQmlSingleton);
+    QVERIFY(qvariant_cast<QObject *>(singletonUser->property("g")) != nullptr);
 
     engine.clearSingletons();
     QCOMPARE(CppSingleton::instantiations, oldCppSingletonId);
@@ -714,8 +719,14 @@ QT_WARNING_POP
     QCOMPARE(qvariant_cast<QObject *>(singletonUser->property("d")), nullptr);
     QCOMPARE(qvariant_cast<QObject *>(singletonUser->property("e")), nullptr);
 
+    // The Qt object is not deleted because it's explicitly C++-owned.
+    QVERIFY(qvariant_cast<QObject *>(singletonUser->property("g")) != nullptr);
+
     // Value types are unaffected as they are copied.
     QCOMPARE(singletonUser->property("c").toUInt(), 13u);
+
+    // The "Qt" object still exists as part of the global object.
+    QCOMPARE(engine.globalObject().property("Qt").toQObject(), qtObject);
 }
 
 void tst_qqmlengine::repeatedCompilation()

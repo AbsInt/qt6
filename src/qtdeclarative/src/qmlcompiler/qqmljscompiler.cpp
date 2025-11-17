@@ -5,6 +5,7 @@
 #include "qqmljscompiler_p.h"
 
 #include <private/qqmlirbuilder_p.h>
+#include <private/qqmljsaotirbuilder_p.h>
 #include <private/qqmljsbasicblocks_p.h>
 #include <private/qqmljscodegenerator_p.h>
 #include <private/qqmljscompilerstats_p.h>
@@ -203,9 +204,11 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
     }
 
     {
-        QmlIR::IRBuilder irBuilder;
-        if (!irBuilder.generateFromQml(sourceCode, inputFileName, &irDocument)) {
-            error->appendDiagnostics(inputFileName, irBuilder.errors);
+        // For now, only use the AOT IRBuilder when linting
+        std::unique_ptr<QmlIR::IRBuilder> irBuilder = aotCompiler && aotCompiler->isLintCompiler()
+                ? std::make_unique<QQmlJSAOTIRBuilder>() : std::make_unique<QmlIR::IRBuilder>();
+        if (!irBuilder->generateFromQml(sourceCode, inputFileName, &irDocument)) {
+            error->appendDiagnostics(inputFileName, irBuilder->errors);
             return false;
         }
     }
@@ -320,6 +323,9 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
                                            << irDocument.stringAt(binding->propertyNameIndex);
                     result = aotCompiler->compileBinding(context, *binding, node);
                 } else if (const auto *function = bindingOrFunction.function()) {
+                    if (!aotCompiler->isLintCompiler() && !function->isQmlFunction)
+                        return;
+
                     Q_ASSERT(quint32(functionsToCompile.size()) > function->index);
                     auto *node = functionsToCompile[function->index].node;
                     Q_ASSERT(node);

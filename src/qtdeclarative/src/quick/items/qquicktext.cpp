@@ -2719,7 +2719,7 @@ void QQuickText::geometryChange(const QRectF &newGeometry, const QRectF &oldGeom
         goto geomChangeDone;
     }
 
-    if (widthMaximum && heightMaximum && !d->isLineLaidOutConnected() && !verticalPositionChanged)  // Size is sufficient and growing.
+    if (widthMaximum && heightMaximum && !d->isLineLaidOutConnected() && !verticalPositionChanged && !elide)  // Size is sufficient and growing.
         goto geomChangeDone;
 
     if (!(widthChanged || widthMaximum) && !d->isLineLaidOutConnected()) { // only height has changed
@@ -2742,7 +2742,7 @@ void QQuickText::geometryChange(const QRectF &newGeometry, const QRectF &oldGeom
                 }
             }
         }
-    } else if (!heightChanged && widthMaximum) {
+    } else if (!heightChanged && widthMaximum && !elide) {
         if (oldGeometry.width() > 0) {
             // no change to height, width is adequate and wasn't 0 before
             // (old width could also be negative if it was 0 and the margins

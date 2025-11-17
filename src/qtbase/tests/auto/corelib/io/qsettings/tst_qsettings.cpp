@@ -183,7 +183,6 @@ private slots:
     void testIniParsing_data();
     void testIniParsing();
 
-    void testEscapes();
     void testEscapedKeys_data();
     void testEscapedKeys();
     void testUnescapedKeys_data();
@@ -192,6 +191,11 @@ private slots:
     void testEscapedStringList();
     void testUnescapedStringList_data();
     void testUnescapedStringList();
+    void testEscapedVariant_data();
+    void testEscapedVariant();
+    void testBadEscape();
+    void testBadEscape_data();
+
     void testNormalizedKey_data();
     void testNormalizedKey();
     void testVariantTypes_data() { populateWithFormats(); }
@@ -2834,48 +2838,6 @@ QString escapeWeirdChars(const QString &s)
 }
 
 #ifdef QT_BUILD_INTERNAL
-void tst_QSettings::testEscapes()
-{
-    QSettings settings(QSettings::UserScope, "software.org", "KillerAPP");
-
-#define testVariant(val, escStr, func) \
-    { \
-        QVariant v(val); \
-        QString s = QSettingsPrivate::variantToString(v); \
-        QCOMPARE(s, escStr); \
-        QCOMPARE(QVariant(QSettingsPrivate::stringToVariant(escStr)), v); \
-        QVERIFY((val) == v.func());                                     \
-    }
-
-#define testBadEscape(escStr, vStr) \
-    { \
-        QVariant v = QSettingsPrivate::stringToVariant(QString(escStr)); \
-        QCOMPARE(v.toString(), QString(vStr)); \
-    }
-
-    // streaming qvariant into a string
-    testVariant(QString("Hello World!"), QString("Hello World!"), toString);
-    testVariant(QString("Hello, World!"), QString("Hello, World!"), toString);
-    testVariant(QString("@Hello World!"), QString("@@Hello World!"), toString);
-    testVariant(QString("@@Hello World!"), QString("@@@Hello World!"), toString);
-    testVariant(QVariant(100), QString("100"), toString);
-    testVariant(QStringList() << "ene" << "due" << "rike", QString::fromLatin1("@Variant(\x0\x0\x0\xb\x0\x0\x0\x3\x0\x0\x0\x6\x0\x65\x0n\x0\x65\x0\x0\x0\x6\x0\x64\x0u\x0\x65\x0\x0\x0\x8\x0r\x0i\x0k\x0\x65)", 50), toStringList);
-    testVariant(QRect(1, 2, 3, 4), QString("@Rect(1 2 3 4)"), toRect);
-    testVariant(QSize(5, 6), QString("@Size(5 6)"), toSize);
-    testVariant(QPoint(7, 8), QString("@Point(7 8)"), toPoint);
-
-    testBadEscape("", "");
-    testBadEscape("@", "@");
-    testBadEscape("@@", "@");
-    testBadEscape("@@@", "@@");
-    testBadEscape(" ", " ");
-    testBadEscape("@Rect", "@Rect");
-    testBadEscape("@Rect(", "@Rect(");
-    testBadEscape("@Rect()", "@Rect()");
-    testBadEscape("@Rect)", "@Rect)");
-    testBadEscape("@Rect(1 2 3)", "@Rect(1 2 3)");
-    testBadEscape("@@Rect(1 2 3)", "@Rect(1 2 3)");
-}
 
 void tst_QSettings::testEscapedKeys_data()
 {
@@ -3060,6 +3022,71 @@ void tst_QSettings::testUnescapedStringList()
     QCOMPARE(iniUnescapedStringList(reescStrList), plainStrList);
 }
 
+void tst_QSettings::testEscapedVariant_data()
+{
+    QTest::addColumn<QVariant>("val");
+    QTest::addColumn<QString>("escStr");
+
+    // streaming qvariant into a string
+
+    QTest::newRow("Hello World!")   << QVariant{u"Hello World!"_s}   << u"Hello World!"_s;
+    QTest::newRow("Hello, World!")  << QVariant{u"Hello, World!"_s}  << u"Hello, World!"_s;
+    QTest::newRow("@Hello World!")  << QVariant{u"@Hello World!"_s}  << u"@@Hello World!"_s;
+    QTest::newRow("@@Hello World!") << QVariant{u"@@Hello World!"_s} << u"@@@Hello World!"_s;
+    QTest::newRow("int-100")        << QVariant{100}                 << u"100"_s;
+    QTest::newRow("qrect")          << QVariant{QRect(1, 2, 3, 4)}   << u"@Rect(1 2 3 4)"_s;
+    QTest::newRow("qsize")          << QVariant{QSize(5, 6)}         << u"@Size(5 6)"_s;
+    QTest::newRow("qpoint")         << QVariant{QPoint(7, 8)}        << u"@Point(7 8)"_s;
+
+    auto expected = QString::fromLatin1("@Variant(\x0\x0\x0\xb\x0\x0\x0\x3\x0\x0\x0\x6\x0\x65\x0n"
+                                        "\x0\x65\x0\x0\x0\x6\x0\x64\x0u\x0\x65\x0\x0\x0\x8\x0r\x0"
+                                        "i\x0k\x0\x65)", 50);
+    QTest::newRow("stringlist") << QVariant{QStringList{u"ene"_s, u"due"_s, u"rike"_s}} << expected;
+}
+
+void tst_QSettings::testEscapedVariant()
+{
+    QFETCH(QVariant, val);
+    QFETCH(QString, escStr);
+
+    QSettings settings(QSettings::UserScope, "example.org", "KillerAPP");
+
+    QString variantAsString = QSettingsPrivate::variantToString(val);
+    QCOMPARE(variantAsString, escStr);
+
+    QVariant stringAsVariant = QSettingsPrivate::stringToVariant(escStr);
+    QCOMPARE(stringAsVariant, val);
+}
+
+void tst_QSettings::testBadEscape_data()
+{
+    QTest::addColumn<QString>("escStr");
+    QTest::addColumn<QString>("variantStr");
+
+    QTest::newRow("empty")   << u""_s        << u""_s;
+    QTest::newRow("space")   << u" "_s       << u" "_s;
+    QTest::newRow("@")       << u"@"_s       << u"@"_s;
+    QTest::newRow("@@")      << u"@@"_s      << u"@"_s;
+    QTest::newRow("@@@")     << u"@@@"_s     << u"@@"_s;
+    QTest::newRow("@Rect")   << u"@Rect"_s   << u"@Rect"_s;
+    QTest::newRow("@Rect(")  << u"@Rect("_s  << u"@Rect("_s;
+    QTest::newRow("@Rect()") << u"@Rect()"_s << u"@Rect()"_s;
+    QTest::newRow("@Rect)")  << u"@Rect)"_s  << u"@Rect)"_s;
+
+    QTest::newRow("@Rect(1 2 3)")  << u"@Rect(1 2 3)"_s  << u"@Rect(1 2 3)"_s;
+    QTest::newRow("@@Rect(1 2 3)") << u"@@Rect(1 2 3)"_s << u"@Rect(1 2 3)"_s;
+}
+
+void tst_QSettings::testBadEscape()
+{
+    QFETCH(QString, escStr);
+    QFETCH(QString, variantStr);
+
+    QSettings settings(QSettings::UserScope, "example.org", "KillerAPP");
+
+    QVariant v = QSettingsPrivate::stringToVariant(escStr);
+    QCOMPARE(v.toString(), variantStr);
+}
 #endif
 
 void tst_QSettings::testCaseSensitivity()
