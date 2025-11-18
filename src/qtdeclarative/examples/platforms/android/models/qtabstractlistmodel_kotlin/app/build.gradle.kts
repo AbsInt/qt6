@@ -7,7 +7,7 @@ plugins {
 //! [build.gradle QtBuild config]
 QtBuild {
     // Relative for Qt (Installer or MaintenanceTool) installations.
-    qtPath = file("../../../../../../../6.10.1")
+    qtPath = file("../../../../../../../6.10.2")
     projectPath = file("../../qtabstractlistmodel")
 }
 //! [build.gradle QtBuild config]

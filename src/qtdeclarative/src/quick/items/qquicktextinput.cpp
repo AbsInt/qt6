@@ -3096,7 +3096,7 @@ qreal QQuickTextInputPrivate::calculateImplicitWidthForText(const QString &text)
     layout.beginLayout();
 
     QTextLine line = layout.createLine();
-    line.setLineWidth(INT_MAX);
+    line.setLineWidth(qreal(INT_MAX));
     const qreal theImplicitWidth = qCeil(line.naturalTextWidth()) + q->leftPadding() + q->rightPadding();
 
     layout.endLayout();
@@ -3211,7 +3211,7 @@ void QQuickTextInputPrivate::updateLayout()
 
     QTextLine line = m_textLayout.createLine();
     if (requireImplicitWidth) {
-        line.setLineWidth(INT_MAX);
+        line.setLineWidth(qreal(INT_MAX));
         const bool wasInLayout = inLayout;
         inLayout = true;
         if (isImplicitResizeEnabled())
@@ -3220,7 +3220,7 @@ void QQuickTextInputPrivate::updateLayout()
         if (inLayout)       // probably the result of a binding loop, but by letting it
             return;         // get this far we'll get a warning to that effect.
     }
-    qreal lineWidth = q->widthValid() || !isImplicitResizeEnabled() ? q->width() - q->leftPadding() - q->rightPadding() : INT_MAX;
+    qreal lineWidth = q->widthValid() || !isImplicitResizeEnabled() ? q->width() - q->leftPadding() - q->rightPadding() : qreal(INT_MAX);
     qreal height = 0;
     qreal width = 0;
     do {

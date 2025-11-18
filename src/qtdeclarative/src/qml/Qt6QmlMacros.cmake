@@ -1356,11 +1356,10 @@ function(_qt_internal_write_deferred_qmlls_build_ini_file qt_cmake_export_namesp
         )
     endif()
 
-    _qt_internal_get_main_qt_qml_import_paths(installation_paths)
     foreach(current_target IN LISTS _qmlls_build_ini_targets)
         # prepare import paths
-        get_target_property(_import_paths "${current_target}" QT_QML_IMPORT_PATH)
-        list(APPEND _import_paths ${installation_paths})
+        _qt_internal_collect_qml_import_paths(_import_paths ${current_target})
+
         # Note that standalone builds will have the installation path twice in _import_paths: _qt_internal_list_to_ini
         # takes care of removing these duplicates.
         _qt_internal_list_to_ini(_import_paths)
@@ -1595,48 +1594,12 @@ function(_qt_internal_target_enable_qmllint target)
     endif()
 
     _qt_internal_genex_getproperty(qmllint_files ${target} QT_QML_LINT_FILES)
-    _qt_internal_genex_getjoinedproperty(import_args ${target}
-        QT_QML_IMPORT_PATH "-I$<SEMICOLON>" "$<SEMICOLON>"
-    )
     _qt_internal_genex_getjoinedproperty(qrc_args ${target}
         _qt_generated_qrc_files "--resource$<SEMICOLON>" "$<SEMICOLON>"
     )
 
-    # Facilitate self-import so it can find the qmldir file. We also try to walk
-    # back up the directory structure to find a base path under which this QML
-    # module is located. Such a base path is likely to be used for other QML
-    # modules that we might need to find, so add it to the import path if we
-    # find a compatible directory structure. It doesn't make sense to do this
-    # for an executable though, since it can never be found as a QML module for
-    # a different QML module/target.
-    get_target_property(target_type ${target} TYPE)
-    get_target_property(android_type ${target} _qt_android_target_type)
-    if(target_type STREQUAL "EXECUTABLE" OR android_type STREQUAL "APPLICATION")
-        # The executable's own QML module's qmldir file will usually be under a
-        # subdirectory (matching the module's target path) below the target's
-        # build directory.
-        list(APPEND import_args -I "$<TARGET_PROPERTY:${target},BINARY_DIR>")
-    elseif(target_type MATCHES "LIBRARY")
-        get_target_property(output_dir  ${target} QT_QML_MODULE_OUTPUT_DIRECTORY)
-        get_target_property(target_path ${target} QT_QML_MODULE_TARGET_PATH)
-        if(output_dir MATCHES "${target_path}$")
-            string(REGEX REPLACE "(.*)/${target_path}" "\\1" base_dir "${output_dir}")
-            list(APPEND import_args -I "${base_dir}")
-        else()
-            message(WARNING
-                "The ${target} target is a QML module with target path ${target_path}. "
-                "It uses an OUTPUT_DIRECTORY of ${output_dir}, which should end in the "
-                "same target path, but doesn't. Tooling such as qmllint may not work "
-                "correctly."
-            )
-        endif()
-    endif()
-
-    if(NOT "${QT_QML_OUTPUT_DIRECTORY}" STREQUAL "")
-        list(APPEND import_args -I "${QT_QML_OUTPUT_DIRECTORY}")
-    endif()
-
-    _qt_internal_extend_qml_import_paths(import_args)
+    _qt_internal_collect_qml_import_paths(import_args ${target})
+    list(TRANSFORM import_args PREPEND "-I\n")
 
     _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
 
@@ -4350,6 +4313,40 @@ function(_qt_internal_collect_target_qml_import_paths out_var target)
     get_target_property(qml_import_path ${target} QT_QML_IMPORT_PATH)
     if(qml_import_path)
         list(APPEND qml_import_paths ${qml_import_path})
+    endif()
+
+    # Facilitate self-import so it can find the qmldir file. We also try to walk
+    # back up the directory structure to find a base path under which this QML
+    # module is located. Such a base path is likely to be used for other QML
+    # modules that we might need to find, so add it to the import path if we
+    # find a compatible directory structure. It doesn't make sense to do this
+    # for an executable though, since it can never be found as a QML module for
+    # a different QML module/target.
+    get_target_property(target_type ${target} TYPE)
+    get_target_property(android_type ${target} _qt_android_target_type)
+    if(target_type STREQUAL "EXECUTABLE" OR android_type STREQUAL "APPLICATION")
+        # The executable's own QML module's qmldir file will usually be under a
+        # subdirectory (matching the module's target path) below the target's
+        # build directory.
+
+        get_target_property(qml_import_path ${target} BINARY_DIR)
+        if (qml_import_path)
+            list(APPEND qml_import_paths ${qml_import_path})
+        endif()
+    elseif(target_type MATCHES "LIBRARY")
+        get_target_property(output_dir  ${target} QT_QML_MODULE_OUTPUT_DIRECTORY)
+        get_target_property(target_path ${target} QT_QML_MODULE_TARGET_PATH)
+        if(output_dir MATCHES "${target_path}$")
+            string(REGEX REPLACE "(.*)/${target_path}" "\\1" base_dir "${output_dir}")
+            list(APPEND qml_import_paths "${base_dir}")
+        else()
+            message(WARNING
+                "The ${target} target is a QML module with target path ${target_path}. "
+                "It uses an OUTPUT_DIRECTORY of ${output_dir}, which should end in the "
+                "same target path, but doesn't. Tooling such as qmllint may not work "
+                "correctly."
+            )
+        endif()
     endif()
 
     # Facilitate self-import so we can find the qmldir file

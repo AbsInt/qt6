@@ -319,16 +319,6 @@ Item {
         }
     }
 
-    // Workaround for QTBUG-137025, allow the Android UI thread to loop.
-    TestCase {
-        name: "aDelayToAllowProcessing"
-        when: windowShown
-        function test_a() {
-            wait(1000)
-            verify(true)
-        }
-    }
-
     readonly property string veryLongString: "Lorem ipsum odor amet, consectetuer adipiscing elit. Finibus pretium lobortis nibh platea congue luctus eros eget. Nam neque senectus ligula tristique diam hac. Nam lorem imperdiet arcu morbi imperdiet nulla penatibus elit nibh. Fusce habitasse facilisi lacinia vivamus enim. Neque mauris etiam nulla inceptos cursus. Pharetra diam sapien amet urna dis. Quam nullam rhoncus ad et augue. Lectus hendrerit velit interdum sollicitudin facilisis suspendisse platea vivamus.
 
 Nec euismod neque quis, hendrerit ultricies congue. Conubia habitant inceptos purus fermentum, lobortis vestibulum mus. Habitasse habitasse parturient nullam neque potenti; consequat quis turpis. Neque a enim litora lacus facilisis primis arcu justo? Nisl semper ultricies tortor tristique gravida mollis. Vehicula euismod iaculis ultricies ligula eros dictumst aliquet sagittis. Himenaeos rhoncus ac fusce proin ullamcorper fusce. Efficitur facilisi parturient est orci non pulvinar? Platea eu ante ex montes sociosqu ornare ligula nibh. Nascetur orci justo egestas dis turpis.

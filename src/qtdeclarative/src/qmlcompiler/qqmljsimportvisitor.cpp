@@ -1165,24 +1165,21 @@ void QQmlJSImportVisitor::checkRequiredProperties()
         return false;
     };
 
-    const auto requiredUsedInRootAlias = [&](const QQmlJSScope::ConstPtr &defScope,
-                                             const QQmlJSScope::ConstPtr &requiredScope,
+    const auto requiredUsedInRootAlias = [&](const QQmlJSScope::ConstPtr &requiredScope,
                                              const QString &propName) {
-        if (defScope->filePath() == requiredScope->filePath()) {
-            QQmlJSScope::ConstPtr fileRootScope = requiredScope;
-            while (fileRootScope->parentScope() != m_globalScope)
-                fileRootScope = fileRootScope->parentScope();
+        const Property target(requiredScope, propName);
+        // m_propertyAliases contains all aliases that points to target, either directly or
+        // indirectly.
+        const auto allAliasesToTargetIt = m_propertyAliases.constFind(target);
+        if (allAliasesToTargetIt == m_propertyAliases.constEnd())
+            return false;
 
-            const auto &rootProperties = fileRootScope->ownProperties();
-            for (const auto &p : rootProperties) {
-                if (p.isAlias() && p.aliasTargetScope() == requiredScope
-                    && p.aliasTargetName() == propName) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        // If one alias is in the file root component, than the required property can be fulfilled
+        // by the alias when it is instantiated, and we shouldn't warn in the current QML component
+        // about the unsatisfied required property.
+        return std::any_of(
+                allAliasesToTargetIt->constBegin(), allAliasesToTargetIt->constEnd(),
+                [](const Property &property) { return property.scope->isFileRootComponent(); });
     };
 
     const auto requiredSetThroughAlias = [&](const QList<QQmlJSScope::ConstPtr> &scopesToSearch,
@@ -1277,7 +1274,7 @@ void QQmlJSImportVisitor::checkRequiredProperties()
                         if (requiredHasBinding(scopesToSearch, descendant, propName))
                             continue;
 
-                        if (requiredUsedInRootAlias(defScope, requiredScope, propName))
+                        if (requiredUsedInRootAlias(requiredScope, propName))
                             continue;
 
                         if (requiredSetThroughAlias(scopesToSearch, requiredScope, propName))

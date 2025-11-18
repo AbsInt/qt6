@@ -707,7 +707,7 @@ void QQuickTextPrivate::setupCustomLineGeometry(QTextLine &line, qreal &height, 
                             q->effectiveHAlign() != QQuickText::AlignLeft))
         textLine->setWidth(availableWidth());
     else
-        textLine->setWidth(INT_MAX);
+        textLine->setWidth(qreal(INT_MAX));
     if (lineHeight() != 1.0)
         textLine->setHeight((lineHeightMode() == QQuickText::FixedHeight) ? lineHeight() : line.height() * lineHeight());
 

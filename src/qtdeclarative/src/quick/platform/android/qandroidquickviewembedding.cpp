@@ -13,6 +13,7 @@
 #include <QtCore/qjnitypes.h>
 #include <QtQml/qqmlengine.h>
 #include <QtQuick/qquickitem.h>
+#include <functional>
 
 QT_BEGIN_NAMESPACE
 
@@ -24,6 +25,16 @@ Q_DECLARE_JNI_CLASS(View, "android/view/View");
 namespace QtAndroidQuickViewEmbedding
 {
     constexpr const char *uninitializedViewMessage = "because QtQuickView is not loaded or ready yet.";
+
+    static void onQQuickViewStatusChanged(const QJniObject &qtViewObject,
+                                          QAndroidQuickView::Status status)
+    {
+        auto future = QNativeInterface::QAndroidApplication::runOnAndroidMainThread(
+                [qtViewObject, status] {
+                    qtViewObject.callMethod<void>("handleStatusChange", status);
+                }, QDeadlineTimer(1000));
+        future.waitForFinished(); // Wait for the user to handle status change.
+    }
 
     void createQuickView(JNIEnv *, jobject nativeWindow, jstring qmlUri, jint width, jint height,
                          jlong parentWindowReference, jlong viewReference,
@@ -47,10 +58,9 @@ namespace QtAndroidQuickViewEmbedding
             if (!view) {
                 QWindow *parentWindow = reinterpret_cast<QWindow *>(parentWindowReference);
                 view = new QAndroidQuickView(parentWindow);
-                QObject::connect(view, &QAndroidQuickView::statusChanged, view,
-                                 [qtViewObject](QAndroidQuickView::Status status) {
-                                     qtViewObject.callMethod<void>("handleStatusChange", status);
-                                 });
+                QObject::connect(
+                        view, &QAndroidQuickView::statusChanged,
+                        std::bind(&onQQuickViewStatusChanged, qtViewObject, std::placeholders::_1));
                 view->setResizeMode(QAndroidQuickView::SizeRootObjectToView);
                 view->setColor(QColor(Qt::transparent));
                 view->setWidth(width);

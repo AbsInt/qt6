@@ -1499,6 +1499,68 @@ void TestQmllint::dirtyQmlSnippet_data()
             << Result{ { { "Component is missing required property bla from Foo"_L1, 2, 1 },
                          { "Component is missing required property bla from Foo"_L1, 3, 1 } } }
             << defaultOptions;
+    QTest::newRow("requiredPropertyInChild")
+            << u"Item { required property var r1 }"_s
+            << Result{ { { "Component is missing required property r1 from Item"_L1, 1, 1 } } }
+            << defaultOptions;
+    QTest::newRow("requiredPropertyInRoot")
+            << u"component Foo: Item { required property var bla }\n"_s
+               u"Foo { Item { property int bla: 43 } }\n"_s
+               u"Foo {}\n"_s
+            << Result{ { { "Component is missing required property bla from Foo"_L1, 2, 1 },
+                         { "Component is missing required property bla from Foo"_L1, 3, 1 } } }
+            << defaultOptions;
+    QTest::newRow("requiredPropertyUnsatisfiedByAlias")
+            << u"component Foo: Item { required property var r1; }\n"
+               "Item {\n"
+               "property alias r1: foo.r1;\n"
+               "Foo { id: foo }\n"
+               "}"_s
+            << Result{ { { "Component is missing required property r1 from Foo"_L1, 4, 1 } } }
+            << defaultOptions;
+    QTest::newRow("requiredUnsatisfiedByAlias2")
+            << u"component Foo: Item { required property var r1; }\n"
+               u"Item {\n"
+               "property alias r1: foo.r1;\n"
+               u"Item{ Item{ Item{ Item {Foo { id: foo }}}}}\n"
+               "}"_s
+            << Result{ { { "Component is missing required property r1 from Foo"_L1, 4, 25 } } }
+            << defaultOptions;
+    QTest::newRow("requiredUnsatisfiedByAlias3")
+            << u"component Foo: Item { required property var r1; }\n"
+               u"Item{ id: i1; property alias r1: i2.r2;\n"
+               u"Item{ id: i2; property alias r2: i3.r3;\n"
+               u"Item{ id: i3; property alias r3: foo.r1;\n"
+               u"Foo { id: foo }\n"
+               u"}\n"
+               u"}\n"
+               u"}"_s
+            << Result{ { { "Component is missing required property r1 from Foo"_L1, 5, 1 } } }
+            << defaultOptions;
+    QTest::newRow("requiredFromBaseUnsatisfiedByAlias")
+            << u"component Base: Item { required property var r1; }\n"
+               u"component Foo: Base {}\n"
+               u"Foo { id: foo }"_s
+            << Result{ { { "Component is missing required property r1 from Base"_L1, 3, 1 } } }
+            << defaultOptions;
+    QTest::newRow("requiredFromBaseUnsatisfiedByAlias2")
+            << u"component Base: Item { required property var r1; }\n"
+               u"component Foo: Base {}\n"
+               u"Item{ Item{ Item{ Item {Foo { id: foo }}}}}"_s
+            << Result{ { { "Component is missing required property r1 from Base"_L1, 3, 25 } } }
+            << defaultOptions;
+    QTest::newRow("requiredFromBaseUnsatisfiedByAlias3")
+            << u"component Base: Item { required property var r1; }\n"
+               u"component Foo: Base {}\n"
+               u"Item{ id: i1; property alias r1: i2.r2;\n"
+               u"Item{ id: i2; property alias r2: i3.r3;\n"
+               u"Item{ id: i3; property alias r3: foo.r1;\n"
+               u"Foo { id: foo }\n"
+               u"}\n"
+               u"}\n"
+               u"}"_s
+            << Result{ { { "Component is missing required property r1 from Base"_L1, 6, 1 } } }
+            << defaultOptions;
     QTest::newRow("testSnippet")
             << u"property int qwer: \"Hello\""_s
             << Result{ { { "Cannot assign literal of type string to int"_L1 } } }
@@ -1584,6 +1646,46 @@ void TestQmllint::cleanQmlSnippet_data()
             << defaultOptions;
     QTest::newRow("requiredInInlineComponent")
             << u"Item { component Foo: Item { required property var bla; } }"_s << defaultOptions;
+    QTest::newRow("requiredInRoot") << u"required property var r1"_s << defaultOptions;
+    QTest::newRow("requiredSatisfiedByAlias")
+            << u"component Foo: Item { required property var r1; }\n"
+               "property alias r1: foo.r1;\n"
+               "Foo { id: foo }"_s << defaultOptions;
+    QTest::newRow("requiredSatisfiedByAlias2")
+            << u"component Foo: Item { required property var r1; }\n"
+               u"property alias r1: foo.r1;\n"
+               u"Item{ Item{ Item{ Item {Foo { id: foo }}}}}"_s << defaultOptions;
+    QTest::newRow("requiredSatisfiedByAlias3")
+            << u"component Foo: Item { required property var r1; }\n"
+               u"property alias r1: i1.r1;\n"
+               u"Item{ id: i1; property alias r1: i2.r2;\n"
+               u"Item{ id: i2; property alias r2: i3.r3;\n"
+               u"Item{ id: i3; property alias r3: foo.r1;\n"
+               u"Foo { id: foo }\n"
+               u"}\n"
+               u"}\n"
+               u"}"_s << defaultOptions;
+    QTest::newRow("requiredFromBaseSatisfiedByAlias")
+            << u"component Base: Item { required property var r1; }\n"
+               u"component Foo: Base {}\n"
+               u"property alias r1: foo.r1;\n"
+               u"Foo { id: foo }"_s << defaultOptions;
+    QTest::newRow("requiredFromBaseSatisfiedByAlias2")
+            << u"component Base: Item { required property var r1; }\n"
+               u"component Foo: Base {}\n"
+               u"property alias r1: foo.r1;\n"
+               u"Item{ Item{ Item{ Item {Foo { id: foo }}}}}"_s << defaultOptions;
+    QTest::newRow("requiredFromBaseSatisfiedByAlias3")
+            << u"component Base: Item { required property var r1; }\n"
+               u"component Foo: Base {}\n"
+               u"property alias r1: i1.r1;\n"
+               u"Item{ id: i1; property alias r1: i2.r2;\n"
+               u"Item{ id: i2; property alias r2: i3.r3;\n"
+               u"Item{ id: i3; property alias r3: foo.r1;\n"
+               u"Foo { id: foo }\n"
+               u"}\n"
+               u"}\n"
+               u"}"_s << defaultOptions;
     QTest::newRow("testSnippet") << u"property int qwer: 123"_s << defaultOptions;
     QTest::newRow("underScoreId") << u"id: _Root"_s << defaultOptions;
     QTest::newRow("unintentionalEmptyBlock-clean")
@@ -2135,6 +2237,7 @@ void TestQmllint::cleanQmlCode_data()
     QTest::addRow("regExp") << u"regExp.qml"_s;
     QTest::newRow("requiredPropertyInGroupedPropertyScope") << QStringLiteral("requiredPropertyInGroupedPropertyScope.qml");
     QTest::newRow("requiredPropertySetViaOnBinding") << QStringLiteral("requiredPropertySetViaOnBinding.qml");
+    QTest::newRow("RequiredPropertyBaseWithAlias") << QStringLiteral("RequiredPropertyBaseWithAlias.qml");
     QTest::newRow("requiredWithRootLevelAlias") << QStringLiteral("RequiredWithRootLevelAlias.qml");
     QTest::newRow("required_property_in_Component") << QStringLiteral("requiredPropertyInComponent.qml");
     QTest::newRow("retrieveFunction") << QStringLiteral("retrieveFunction.qml");

@@ -2002,7 +2002,7 @@ int QMacStyle::pixelMetric(PixelMetric metric, const QStyleOption *opt) const
     case PM_SpinBoxFocusFrameRadius:
     case PM_TextAreaFocusFrameRadius:
     case PM_TextFieldFocusFrameRadius:
-        ret = 0;
+        ret = qt_apple_runningWithLiquidGlass() ? 6 : 0;
         break;
     default:
         ret = QCommonStyle::pixelMetric(metric, opt);

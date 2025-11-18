@@ -318,15 +318,12 @@ public class QtQuickView extends QtView {
 
     private void sendStatusChanged(QtQmlStatus status)
     {
-        QtNative.runAction(() -> {
-            if (m_statusChangeListener != null) {
-                QtQuickViewContent content = m_loadedComponent != null ?
-                    m_loadedComponent.get() : null;
-                if (content == null)
-                    m_statusChangeListener.onStatusChanged(status);
-                else
-                    m_statusChangeListener.onStatusChanged(status, content);
-            }
-        });
+        if (m_statusChangeListener != null) {
+            QtQuickViewContent content = m_loadedComponent != null ? m_loadedComponent.get() : null;
+            if (content == null)
+                m_statusChangeListener.onStatusChanged(status);
+            else
+                m_statusChangeListener.onStatusChanged(status, content);
+        }
     }
 }

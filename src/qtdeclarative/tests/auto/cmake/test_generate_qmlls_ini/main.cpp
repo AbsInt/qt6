@@ -160,14 +160,18 @@ void tst_generate_qmlls_ini::qmllsBuildIni()
     }
 
     const QString content = contentOf(build.filePath(qmllsBuildIniPath));
+    const QString pathOfCurrentModule = build.absolutePath();
 
     QVERIFY(source.cd("QmllsBuildIni"_L1));
     QVERIFY(build.cd("QmllsBuildIni"_L1));
 
     const QString escapedSource = source.absolutePath().replace("/"_L1, "<SLASH>"_L1);
     const QString importPaths =
-            QStringList{ build.absoluteFilePath("qml2"_L1), build.absoluteFilePath("qml"_L1),
+            QStringList{ build.absoluteFilePath("qml2"_L1),
+                         build.absoluteFilePath("qml"_L1),
                          build.absoluteFilePath("qml3/MyModule3"_L1),
+                         pathOfCurrentModule,
+                         build.absolutePath(),
                          build.absoluteFilePath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath)) }
                     .join(QDir::listSeparator());
 
