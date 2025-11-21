@@ -1686,6 +1686,11 @@ void TestQmllint::cleanQmlSnippet_data()
                u"}\n"
                u"}\n"
                u"}"_s << defaultOptions;
+    QTest::newRow("requiredFromBaseShadowedAndSatisfiedByBinding")
+            << u"component Base: Item { property var r1; }\n"
+               u"component Foo: Base { required property var r1; }\n"
+               u"Foo { r1: 42 }"_s
+            << defaultOptions;
     QTest::newRow("testSnippet") << u"property int qwer: 123"_s << defaultOptions;
     QTest::newRow("underScoreId") << u"id: _Root"_s << defaultOptions;
     QTest::newRow("unintentionalEmptyBlock-clean")

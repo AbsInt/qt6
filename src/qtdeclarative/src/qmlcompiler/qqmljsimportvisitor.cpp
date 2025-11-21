@@ -1143,6 +1143,17 @@ void QQmlJSImportVisitor::checkRequiredProperties()
         return false;
     };
 
+    const auto scopeRequiresProperty = [&](const QQmlJSScope::ConstPtr &requiredScope,
+                                           const QString &propName,
+                                           const QQmlJSScope::ConstPtr &descendant) {
+        if (!requiredScope->isPropertyLocallyRequired(propName))
+            return false;
+
+        // check if property owners are the same: the owners can be different in case of shadowing.
+        return QQmlJSScope::ownerOfProperty(requiredScope, propName).scope
+                == QQmlJSScope::ownerOfProperty(descendant, propName).scope;
+    };
+
     const auto requiredHasBinding = [](const QList<QQmlJSScope::ConstPtr> &scopesToSearch,
                                        const QQmlJSScope::ConstPtr &owner,
                                        const QString &propName) {
@@ -1266,7 +1277,7 @@ void QQmlJSImportVisitor::checkRequiredProperties()
                         if (isInComponent(requiredScope))
                             continue;
 
-                        if (!requiredScope->isPropertyLocallyRequired(propName)) {
+                        if (!scopeRequiresProperty(requiredScope, propName, descendant)) {
                             prevRequiredScope = requiredScope;
                             continue;
                         }

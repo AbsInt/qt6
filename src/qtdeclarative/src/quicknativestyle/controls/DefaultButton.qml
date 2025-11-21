@@ -32,6 +32,8 @@ T.Button {
         readonly property bool __ignoreNotCustomizable: true
     }
 
+    spacing: 6
+
     icon.width: 24
     icon.height: 24
     icon.color: control.palette.buttonText

@@ -1,5 +1,263 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <tagfile>
+    <compound kind="namespace">
+        <name>QColorConstants</name>
+        <filename>qcolorconstants.html</filename>
+    </compound>
+    <compound kind="namespace">
+        <name>QNativeInterface</name>
+        <filename>qnativeinterface-sub-qtgui.html</filename>
+        <class>QNativeInterface::QAndroidOffscreenSurface</class>
+        <class>QNativeInterface::QAndroidScreen</class>
+        <class>QNativeInterface::QCocoaGLContext</class>
+        <class>QNativeInterface::QEGLContext</class>
+        <class>QNativeInterface::QGLXContext</class>
+        <class>QNativeInterface::QWGLContext</class>
+        <class>QNativeInterface::QWaylandApplication</class>
+        <class>QNativeInterface::QWaylandScreen</class>
+        <class>QNativeInterface::QWindowsScreen</class>
+        <class>QNativeInterface::QX11Application</class>
+    </compound>
+    <compound kind="class">
+        <name>QNativeInterface::QAndroidOffscreenSurface</name>
+        <filename>qnativeinterface-qandroidoffscreensurface.html</filename>
+    </compound>
+    <compound kind="class">
+        <name>QNativeInterface::QAndroidScreen</name>
+        <filename>qnativeinterface-qandroidscreen.html</filename>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual int</type>
+            <name>displayId</name>
+            <anchorfile>qnativeinterface-qandroidscreen.html</anchorfile>
+            <anchor>displayId</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QNativeInterface::QCocoaGLContext</name>
+        <filename>qnativeinterface-qcocoaglcontext.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QOpenGLContext *</type>
+            <name>fromNative</name>
+            <anchorfile>qnativeinterface-qcocoaglcontext.html</anchorfile>
+            <anchor>fromNative</anchor>
+            <arglist>(NSOpenGLContext *context, QOpenGLContext *shareContext)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual NSOpenGLContext *</type>
+            <name>nativeContext</name>
+            <anchorfile>qnativeinterface-qcocoaglcontext.html</anchorfile>
+            <anchor>nativeContext</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QNativeInterface::QEGLContext</name>
+        <filename>qnativeinterface-qeglcontext.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QOpenGLContext *</type>
+            <name>fromNative</name>
+            <anchorfile>qnativeinterface-qeglcontext.html</anchorfile>
+            <anchor>fromNative</anchor>
+            <arglist>(EGLContext context, EGLDisplay display, QOpenGLContext *shareContext)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual void</type>
+            <name>invalidateContext</name>
+            <anchorfile>qnativeinterface-qeglcontext.html</anchorfile>
+            <anchor>invalidateContext</anchor>
+            <arglist>() = 0</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual EGLConfig</type>
+            <name>config</name>
+            <anchorfile>qnativeinterface-qeglcontext.html</anchorfile>
+            <anchor>config</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual EGLContext</type>
+            <name>nativeContext</name>
+            <anchorfile>qnativeinterface-qeglcontext.html</anchorfile>
+            <anchor>nativeContext</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual EGLDisplay</type>
+            <name>display</name>
+            <anchorfile>qnativeinterface-qeglcontext.html</anchorfile>
+            <anchor>display</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QNativeInterface::QGLXContext</name>
+        <filename>qnativeinterface-qglxcontext.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QOpenGLContext *</type>
+            <name>fromNative</name>
+            <anchorfile>qnativeinterface-qglxcontext.html</anchorfile>
+            <anchor>fromNative</anchor>
+            <arglist>(int configBasedContext, QOpenGLContext *shareContext)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QOpenGLContext *</type>
+            <name>fromNative</name>
+            <anchorfile>qnativeinterface-qglxcontext.html</anchorfile>
+            <anchor>fromNative-1</anchor>
+            <arglist>(int visualBasedContext, void *visualInfo, QOpenGLContext *shareContext)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>int</type>
+            <name>nativeContext</name>
+            <anchorfile>qnativeinterface-qglxcontext.html</anchorfile>
+            <anchor>nativeContext</anchor>
+            <arglist>() const const</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QNativeInterface::QWGLContext</name>
+        <filename>qnativeinterface-qwglcontext.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>HMODULE</type>
+            <name>openGLModuleHandle</name>
+            <anchorfile>qnativeinterface-qwglcontext.html</anchorfile>
+            <anchor>openGLModuleHandle</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QOpenGLContext *</type>
+            <name>fromNative</name>
+            <anchorfile>qnativeinterface-qwglcontext.html</anchorfile>
+            <anchor>fromNative</anchor>
+            <arglist>(HGLRC context, HWND window, QOpenGLContext *shareContext)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual HGLRC</type>
+            <name>nativeContext</name>
+            <anchorfile>qnativeinterface-qwglcontext.html</anchorfile>
+            <anchor>nativeContext</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QNativeInterface::QWaylandApplication</name>
+        <filename>qnativeinterface-qwaylandapplication.html</filename>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual uint</type>
+            <name>lastInputSerial</name>
+            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
+            <anchor>lastInputSerial</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual wl_compositor *</type>
+            <name>compositor</name>
+            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
+            <anchor>compositor</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual wl_display *</type>
+            <name>display</name>
+            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
+            <anchor>display</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual wl_keyboard *</type>
+            <name>keyboard</name>
+            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
+            <anchor>keyboard</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual wl_pointer *</type>
+            <name>pointer</name>
+            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
+            <anchor>pointer</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual wl_seat *</type>
+            <name>lastInputSeat</name>
+            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
+            <anchor>lastInputSeat</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual wl_seat *</type>
+            <name>seat</name>
+            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
+            <anchor>seat</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual wl_touch *</type>
+            <name>touch</name>
+            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
+            <anchor>touch</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QNativeInterface::QWaylandScreen</name>
+        <filename>qnativeinterface-qwaylandscreen.html</filename>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual wl_output *</type>
+            <name>output</name>
+            <anchorfile>qnativeinterface-qwaylandscreen.html</anchorfile>
+            <anchor>output</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QNativeInterface::QWindowsScreen</name>
+        <filename>qnativeinterface-qwindowsscreen.html</filename>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual HMONITOR</type>
+            <name>handle</name>
+            <anchorfile>qnativeinterface-qwindowsscreen.html</anchorfile>
+            <anchor>handle</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QNativeInterface::QX11Application</name>
+        <filename>qnativeinterface-qx11application.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>int *</type>
+            <name>connection</name>
+            <anchorfile>qnativeinterface-qx11application.html</anchorfile>
+            <anchor>connection</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>int *</type>
+            <name>display</name>
+            <anchorfile>qnativeinterface-qx11application.html</anchorfile>
+            <anchor>display</anchor>
+            <arglist>() const const</arglist>
+        </member>
+    </compound>
+    <compound kind="namespace">
+        <name>Qt</name>
+        <filename>qt-sub-qtgui.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QString</type>
+            <name>convertFromPlainText</name>
+            <anchorfile>qt-sub-qtgui.html</anchorfile>
+            <anchor>convertFromPlainText</anchor>
+            <arglist>(const QString &amp;plain, Qt::WhiteSpaceMode mode)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>mightBeRichText</name>
+            <anchorfile>qt-sub-qtgui.html</anchorfile>
+            <anchor>mightBeRichText</anchor>
+            <arglist>(QAnyStringView text)</arglist>
+        </member>
+    </compound>
     <compound kind="class">
         <name>QAbstractFileIconProvider</name>
         <filename>qabstractfileiconprovider.html</filename>
@@ -5470,10 +5728,6 @@
             <anchor>QRgb-typedef</anchor>
             <arglist></arglist>
         </member>
-    </compound>
-    <compound kind="namespace">
-        <name>QColorConstants</name>
-        <filename>qcolorconstants.html</filename>
     </compound>
     <compound kind="class">
         <name>QColorSpace</name>
@@ -19389,242 +19643,6 @@
             <name>value</name>
             <anchorfile>qnativegestureevent.html</anchorfile>
             <anchor>value</anchor>
-            <arglist>() const const</arglist>
-        </member>
-    </compound>
-    <compound kind="namespace">
-        <name>QNativeInterface</name>
-        <filename>qnativeinterface-sub-qtgui.html</filename>
-        <class>QNativeInterface::QAndroidOffscreenSurface</class>
-        <class>QNativeInterface::QAndroidScreen</class>
-        <class>QNativeInterface::QCocoaGLContext</class>
-        <class>QNativeInterface::QEGLContext</class>
-        <class>QNativeInterface::QGLXContext</class>
-        <class>QNativeInterface::QWGLContext</class>
-        <class>QNativeInterface::QWaylandApplication</class>
-        <class>QNativeInterface::QWaylandScreen</class>
-        <class>QNativeInterface::QWindowsScreen</class>
-        <class>QNativeInterface::QX11Application</class>
-    </compound>
-    <compound kind="class">
-        <name>QNativeInterface::QAndroidOffscreenSurface</name>
-        <filename>qnativeinterface-qandroidoffscreensurface.html</filename>
-    </compound>
-    <compound kind="class">
-        <name>QNativeInterface::QAndroidScreen</name>
-        <filename>qnativeinterface-qandroidscreen.html</filename>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual int</type>
-            <name>displayId</name>
-            <anchorfile>qnativeinterface-qandroidscreen.html</anchorfile>
-            <anchor>displayId</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QNativeInterface::QCocoaGLContext</name>
-        <filename>qnativeinterface-qcocoaglcontext.html</filename>
-        <member kind="function" protection="public" virtualness="non" static="yes">
-            <type>QOpenGLContext *</type>
-            <name>fromNative</name>
-            <anchorfile>qnativeinterface-qcocoaglcontext.html</anchorfile>
-            <anchor>fromNative</anchor>
-            <arglist>(NSOpenGLContext *context, QOpenGLContext *shareContext)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual NSOpenGLContext *</type>
-            <name>nativeContext</name>
-            <anchorfile>qnativeinterface-qcocoaglcontext.html</anchorfile>
-            <anchor>nativeContext</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QNativeInterface::QEGLContext</name>
-        <filename>qnativeinterface-qeglcontext.html</filename>
-        <member kind="function" protection="public" virtualness="non" static="yes">
-            <type>QOpenGLContext *</type>
-            <name>fromNative</name>
-            <anchorfile>qnativeinterface-qeglcontext.html</anchorfile>
-            <anchor>fromNative</anchor>
-            <arglist>(EGLContext context, EGLDisplay display, QOpenGLContext *shareContext)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual void</type>
-            <name>invalidateContext</name>
-            <anchorfile>qnativeinterface-qeglcontext.html</anchorfile>
-            <anchor>invalidateContext</anchor>
-            <arglist>() = 0</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual EGLConfig</type>
-            <name>config</name>
-            <anchorfile>qnativeinterface-qeglcontext.html</anchorfile>
-            <anchor>config</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual EGLContext</type>
-            <name>nativeContext</name>
-            <anchorfile>qnativeinterface-qeglcontext.html</anchorfile>
-            <anchor>nativeContext</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual EGLDisplay</type>
-            <name>display</name>
-            <anchorfile>qnativeinterface-qeglcontext.html</anchorfile>
-            <anchor>display</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QNativeInterface::QGLXContext</name>
-        <filename>qnativeinterface-qglxcontext.html</filename>
-        <member kind="function" protection="public" virtualness="non" static="yes">
-            <type>QOpenGLContext *</type>
-            <name>fromNative</name>
-            <anchorfile>qnativeinterface-qglxcontext.html</anchorfile>
-            <anchor>fromNative</anchor>
-            <arglist>(int configBasedContext, QOpenGLContext *shareContext)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="yes">
-            <type>QOpenGLContext *</type>
-            <name>fromNative</name>
-            <anchorfile>qnativeinterface-qglxcontext.html</anchorfile>
-            <anchor>fromNative-1</anchor>
-            <arglist>(int visualBasedContext, void *visualInfo, QOpenGLContext *shareContext)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>int</type>
-            <name>nativeContext</name>
-            <anchorfile>qnativeinterface-qglxcontext.html</anchorfile>
-            <anchor>nativeContext</anchor>
-            <arglist>() const const</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QNativeInterface::QWGLContext</name>
-        <filename>qnativeinterface-qwglcontext.html</filename>
-        <member kind="function" protection="public" virtualness="non" static="yes">
-            <type>HMODULE</type>
-            <name>openGLModuleHandle</name>
-            <anchorfile>qnativeinterface-qwglcontext.html</anchorfile>
-            <anchor>openGLModuleHandle</anchor>
-            <arglist>()</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="yes">
-            <type>QOpenGLContext *</type>
-            <name>fromNative</name>
-            <anchorfile>qnativeinterface-qwglcontext.html</anchorfile>
-            <anchor>fromNative</anchor>
-            <arglist>(HGLRC context, HWND window, QOpenGLContext *shareContext)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual HGLRC</type>
-            <name>nativeContext</name>
-            <anchorfile>qnativeinterface-qwglcontext.html</anchorfile>
-            <anchor>nativeContext</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QNativeInterface::QWaylandApplication</name>
-        <filename>qnativeinterface-qwaylandapplication.html</filename>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual uint</type>
-            <name>lastInputSerial</name>
-            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
-            <anchor>lastInputSerial</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual wl_compositor *</type>
-            <name>compositor</name>
-            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
-            <anchor>compositor</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual wl_display *</type>
-            <name>display</name>
-            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
-            <anchor>display</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual wl_keyboard *</type>
-            <name>keyboard</name>
-            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
-            <anchor>keyboard</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual wl_pointer *</type>
-            <name>pointer</name>
-            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
-            <anchor>pointer</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual wl_seat *</type>
-            <name>lastInputSeat</name>
-            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
-            <anchor>lastInputSeat</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual wl_seat *</type>
-            <name>seat</name>
-            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
-            <anchor>seat</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual wl_touch *</type>
-            <name>touch</name>
-            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
-            <anchor>touch</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QNativeInterface::QWaylandScreen</name>
-        <filename>qnativeinterface-qwaylandscreen.html</filename>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual wl_output *</type>
-            <name>output</name>
-            <anchorfile>qnativeinterface-qwaylandscreen.html</anchorfile>
-            <anchor>output</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QNativeInterface::QWindowsScreen</name>
-        <filename>qnativeinterface-qwindowsscreen.html</filename>
-        <member kind="function" protection="public" virtualness="pure" static="no">
-            <type>virtual HMONITOR</type>
-            <name>handle</name>
-            <anchorfile>qnativeinterface-qwindowsscreen.html</anchorfile>
-            <anchor>handle</anchor>
-            <arglist>() const const = 0</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QNativeInterface::QX11Application</name>
-        <filename>qnativeinterface-qx11application.html</filename>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>int *</type>
-            <name>connection</name>
-            <anchorfile>qnativeinterface-qx11application.html</anchorfile>
-            <anchor>connection</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>int *</type>
-            <name>display</name>
-            <anchorfile>qnativeinterface-qx11application.html</anchorfile>
-            <anchor>display</anchor>
             <arglist>() const const</arglist>
         </member>
     </compound>
@@ -34252,31 +34270,6 @@
         </member>
     </compound>
     <compound kind="class">
-        <name>QRhiD3D11InitParams</name>
-        <filename>qrhid3d11initparams.html</filename>
-        <base>QRhiInitParams</base>
-    </compound>
-    <compound kind="class">
-        <name>QRhiD3D11NativeHandles</name>
-        <filename>qrhid3d11nativehandles.html</filename>
-        <base>QRhiNativeHandles</base>
-    </compound>
-    <compound kind="class">
-        <name>QRhiD3D12CommandBufferNativeHandles</name>
-        <filename>qrhid3d12commandbuffernativehandles.html</filename>
-        <base>QRhiNativeHandles</base>
-    </compound>
-    <compound kind="class">
-        <name>QRhiD3D12InitParams</name>
-        <filename>qrhid3d12initparams.html</filename>
-        <base>QRhiInitParams</base>
-    </compound>
-    <compound kind="class">
-        <name>QRhiD3D12NativeHandles</name>
-        <filename>qrhid3d12nativehandles.html</filename>
-        <base>QRhiNativeHandles</base>
-    </compound>
-    <compound kind="class">
         <name>QRhiDepthStencilClearValue</name>
         <filename>qrhidepthstencilclearvalue.html</filename>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -34342,75 +34335,6 @@
             <anchor>stencilClearValue</anchor>
             <arglist>() const const</arglist>
         </member>
-    </compound>
-    <compound kind="class">
-        <name>QRhiDriverInfo</name>
-        <filename>qrhidriverinfo.html</filename>
-        <member kind="enumeration">
-            <name>DeviceType</name>
-            <anchorfile>qrhidriverinfo.html</anchorfile>
-            <anchor>DeviceType-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>UnknownDevice</name>
-            <anchorfile>qrhidriverinfo.html</anchorfile>
-            <anchor>DeviceType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>IntegratedDevice</name>
-            <anchorfile>qrhidriverinfo.html</anchorfile>
-            <anchor>DeviceType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DiscreteDevice</name>
-            <anchorfile>qrhidriverinfo.html</anchorfile>
-            <anchor>DeviceType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>ExternalDevice</name>
-            <anchorfile>qrhidriverinfo.html</anchorfile>
-            <anchor>DeviceType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>VirtualDevice</name>
-            <anchorfile>qrhidriverinfo.html</anchorfile>
-            <anchor>DeviceType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>CpuDevice</name>
-            <anchorfile>qrhidriverinfo.html</anchorfile>
-            <anchor>DeviceType-enum</anchor>
-            <arglist></arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QRhiGles2InitParams</name>
-        <filename>qrhigles2initparams.html</filename>
-        <base>QRhiInitParams</base>
-        <member kind="function" protection="public" virtualness="non" static="yes">
-            <type>QOffscreenSurface *</type>
-            <name>newFallbackSurface</name>
-            <anchorfile>qrhigles2initparams.html</anchorfile>
-            <anchor>newFallbackSurface</anchor>
-            <arglist>(const QSurfaceFormat &amp;format)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type></type>
-            <name>QRhiGles2InitParams</name>
-            <anchorfile>qrhigles2initparams.html</anchorfile>
-            <anchor>QRhiGles2InitParams</anchor>
-            <arglist>()</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QRhiGles2NativeHandles</name>
-        <filename>qrhigles2nativehandles.html</filename>
-        <base>QRhiNativeHandles</base>
     </compound>
     <compound kind="class">
         <name>QRhiGraphicsPipeline</name>
@@ -35274,39 +35198,6 @@
         <filename>qrhigraphicspipeline-targetblend.html</filename>
     </compound>
     <compound kind="class">
-        <name>QRhiInitParams</name>
-        <filename>qrhiinitparams.html</filename>
-    </compound>
-    <compound kind="class">
-        <name>QRhiMetalCommandBufferNativeHandles</name>
-        <filename>qrhimetalcommandbuffernativehandles.html</filename>
-        <base>QRhiNativeHandles</base>
-    </compound>
-    <compound kind="class">
-        <name>QRhiMetalInitParams</name>
-        <filename>qrhimetalinitparams.html</filename>
-        <base>QRhiInitParams</base>
-    </compound>
-    <compound kind="class">
-        <name>QRhiMetalNativeHandles</name>
-        <filename>qrhimetalnativehandles.html</filename>
-        <base>QRhiNativeHandles</base>
-    </compound>
-    <compound kind="class">
-        <name>QRhiNativeHandles</name>
-        <filename>qrhinativehandles.html</filename>
-    </compound>
-    <compound kind="class">
-        <name>QRhiNullInitParams</name>
-        <filename>qrhinullinitparams.html</filename>
-        <base>QRhiInitParams</base>
-    </compound>
-    <compound kind="class">
-        <name>QRhiNullNativeHandles</name>
-        <filename>qrhinullnativehandles.html</filename>
-        <base>QRhiNativeHandles</base>
-    </compound>
-    <compound kind="class">
         <name>QRhiReadbackDescription</name>
         <filename>qrhireadbackdescription.html</filename>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -35379,10 +35270,6 @@
             <anchor>level</anchor>
             <arglist>() const const</arglist>
         </member>
-    </compound>
-    <compound kind="class">
-        <name>QRhiReadbackResult</name>
-        <filename>qrhireadbackresult.html</filename>
     </compound>
     <compound kind="class">
         <name>QRhiRenderBuffer</name>
@@ -36597,10 +36484,6 @@
         <filename>qrhishadingratemap-nativeshadingratemap.html</filename>
     </compound>
     <compound kind="class">
-        <name>QRhiStats</name>
-        <filename>qrhistats.html</filename>
-    </compound>
-    <compound kind="class">
         <name>QRhiSwapChain</name>
         <filename>qrhiswapchain.html</filename>
         <base>QRhiResource</base>
@@ -36879,48 +36762,6 @@
             <anchor>Flag-enum</anchor>
             <arglist></arglist>
         </member>
-    </compound>
-    <compound kind="class">
-        <name>QRhiSwapChainHdrInfo</name>
-        <filename>qrhiswapchainhdrinfo.html</filename>
-        <member kind="enumeration">
-            <name>LimitsType</name>
-            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
-            <anchor>LimitsType-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>LuminanceInNits</name>
-            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
-            <anchor>LimitsType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>ColorComponentValue</name>
-            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
-            <anchor>LimitsType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumeration">
-            <name>LuminanceBehavior</name>
-            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
-            <anchor>LuminanceBehavior-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>SceneReferred</name>
-            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
-            <anchor>LuminanceBehavior-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DisplayReferred</name>
-            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
-            <anchor>LuminanceBehavior-enum</anchor>
-            <arglist></arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QRhiSwapChainProxyData</name>
-        <filename>qrhiswapchainproxydata.html</filename>
     </compound>
     <compound kind="class">
         <name>QRhiSwapChainRenderTarget</name>
@@ -38659,45 +38500,6 @@
             <anchor>viewport</anchor>
             <arglist>() const const</arglist>
         </member>
-    </compound>
-    <compound kind="class">
-        <name>QRhiVulkanCommandBufferNativeHandles</name>
-        <filename>qrhivulkancommandbuffernativehandles.html</filename>
-        <base>QRhiNativeHandles</base>
-    </compound>
-    <compound kind="class">
-        <name>QRhiVulkanInitParams</name>
-        <filename>qrhivulkaninitparams.html</filename>
-        <base>QRhiInitParams</base>
-        <member kind="function" protection="public" virtualness="non" static="yes">
-            <type>QByteArrayList</type>
-            <name>preferredExtensionsForImportedDevice</name>
-            <anchorfile>qrhivulkaninitparams.html</anchorfile>
-            <anchor>preferredExtensionsForImportedDevice</anchor>
-            <arglist>()</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="yes">
-            <type>QByteArrayList</type>
-            <name>preferredInstanceExtensions</name>
-            <anchorfile>qrhivulkaninitparams.html</anchorfile>
-            <anchor>preferredInstanceExtensions</anchor>
-            <arglist>()</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QRhiVulkanNativeHandles</name>
-        <filename>qrhivulkannativehandles.html</filename>
-        <base>QRhiNativeHandles</base>
-    </compound>
-    <compound kind="class">
-        <name>QRhiVulkanQueueSubmitParams</name>
-        <filename>qrhivulkanqueuesubmitparams.html</filename>
-        <base>QRhiNativeHandles</base>
-    </compound>
-    <compound kind="class">
-        <name>QRhiVulkanRenderPassNativeHandles</name>
-        <filename>qrhivulkanrenderpassnativehandles.html</filename>
-        <base>QRhiNativeHandles</base>
     </compound>
     <compound kind="class">
         <name>QScreen</name>
@@ -53908,31 +53710,6 @@
         <filename>qvulkandevicefunctions.html</filename>
     </compound>
     <compound kind="class">
-        <name>QVulkanExtension</name>
-        <filename>qvulkanextension.html</filename>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>bool</type>
-            <name>operator!=</name>
-            <anchorfile>qvulkanextension.html</anchorfile>
-            <anchor>operator-not-eq</anchor>
-            <arglist>(const QVulkanExtension &amp;lhs, const QVulkanExtension &amp;rhs)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>bool</type>
-            <name>operator==</name>
-            <anchorfile>qvulkanextension.html</anchorfile>
-            <anchor>operator-eq-eq</anchor>
-            <arglist>(const QVulkanExtension &amp;lhs, const QVulkanExtension &amp;rhs)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>size_t</type>
-            <name>qHash</name>
-            <anchorfile>qvulkanextension.html</anchorfile>
-            <anchor>qHash</anchor>
-            <arglist>(const QVulkanExtension &amp;key, size_t seed)</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
         <name>QVulkanFunctions</name>
         <filename>qvulkanfunctions.html</filename>
     </compound>
@@ -54273,31 +54050,6 @@
             <anchorfile>qvulkaninstance.html</anchorfile>
             <anchor>DebugUtilsFilter-typedef</anchor>
             <arglist></arglist>
-        </member>
-    </compound>
-    <compound kind="class">
-        <name>QVulkanLayer</name>
-        <filename>qvulkanlayer.html</filename>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>bool</type>
-            <name>operator!=</name>
-            <anchorfile>qvulkanlayer.html</anchorfile>
-            <anchor>operator-not-eq</anchor>
-            <arglist>(const QVulkanLayer &amp;lhs, const QVulkanLayer &amp;rhs)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>bool</type>
-            <name>operator==</name>
-            <anchorfile>qvulkanlayer.html</anchorfile>
-            <anchor>operator-eq-eq</anchor>
-            <arglist>(const QVulkanLayer &amp;lhs, const QVulkanLayer &amp;rhs)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>size_t</type>
-            <name>qHash</name>
-            <anchorfile>qvulkanlayer.html</anchorfile>
-            <anchor>qHash</anchor>
-            <arglist>(const QVulkanLayer &amp;key, size_t seed)</arglist>
         </member>
     </compound>
     <compound kind="class">
@@ -56146,22 +55898,270 @@
             <arglist>(const FORMATETC &amp;formatetc, const QMimeData *mimeData, STGMEDIUM *pmedium) const const = 0</arglist>
         </member>
     </compound>
-    <compound kind="namespace">
-        <name>Qt</name>
-        <filename>qt-sub-qtgui.html</filename>
+    <compound kind="class">
+        <name>QRhiD3D11InitParams</name>
+        <filename>qrhid3d11initparams.html</filename>
+        <base>QRhiInitParams</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiD3D11NativeHandles</name>
+        <filename>qrhid3d11nativehandles.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiD3D12CommandBufferNativeHandles</name>
+        <filename>qrhid3d12commandbuffernativehandles.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiD3D12InitParams</name>
+        <filename>qrhid3d12initparams.html</filename>
+        <base>QRhiInitParams</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiD3D12NativeHandles</name>
+        <filename>qrhid3d12nativehandles.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiDriverInfo</name>
+        <filename>qrhidriverinfo.html</filename>
+        <member kind="enumeration">
+            <name>DeviceType</name>
+            <anchorfile>qrhidriverinfo.html</anchorfile>
+            <anchor>DeviceType-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>UnknownDevice</name>
+            <anchorfile>qrhidriverinfo.html</anchorfile>
+            <anchor>DeviceType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>IntegratedDevice</name>
+            <anchorfile>qrhidriverinfo.html</anchorfile>
+            <anchor>DeviceType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DiscreteDevice</name>
+            <anchorfile>qrhidriverinfo.html</anchorfile>
+            <anchor>DeviceType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>ExternalDevice</name>
+            <anchorfile>qrhidriverinfo.html</anchorfile>
+            <anchor>DeviceType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>VirtualDevice</name>
+            <anchorfile>qrhidriverinfo.html</anchorfile>
+            <anchor>DeviceType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>CpuDevice</name>
+            <anchorfile>qrhidriverinfo.html</anchorfile>
+            <anchor>DeviceType-enum</anchor>
+            <arglist></arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QRhiGles2InitParams</name>
+        <filename>qrhigles2initparams.html</filename>
+        <base>QRhiInitParams</base>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QOffscreenSurface *</type>
+            <name>newFallbackSurface</name>
+            <anchorfile>qrhigles2initparams.html</anchorfile>
+            <anchor>newFallbackSurface</anchor>
+            <arglist>(const QSurfaceFormat &amp;format)</arglist>
+        </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QString</type>
-            <name>convertFromPlainText</name>
-            <anchorfile>qt-sub-qtgui.html</anchorfile>
-            <anchor>convertFromPlainText</anchor>
-            <arglist>(const QString &amp;plain, Qt::WhiteSpaceMode mode)</arglist>
+            <type></type>
+            <name>QRhiGles2InitParams</name>
+            <anchorfile>qrhigles2initparams.html</anchorfile>
+            <anchor>QRhiGles2InitParams</anchor>
+            <arglist>()</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QRhiGles2NativeHandles</name>
+        <filename>qrhigles2nativehandles.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiInitParams</name>
+        <filename>qrhiinitparams.html</filename>
+    </compound>
+    <compound kind="class">
+        <name>QRhiMetalCommandBufferNativeHandles</name>
+        <filename>qrhimetalcommandbuffernativehandles.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiMetalInitParams</name>
+        <filename>qrhimetalinitparams.html</filename>
+        <base>QRhiInitParams</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiMetalNativeHandles</name>
+        <filename>qrhimetalnativehandles.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiNativeHandles</name>
+        <filename>qrhinativehandles.html</filename>
+    </compound>
+    <compound kind="class">
+        <name>QRhiNullInitParams</name>
+        <filename>qrhinullinitparams.html</filename>
+        <base>QRhiInitParams</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiNullNativeHandles</name>
+        <filename>qrhinullnativehandles.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiReadbackResult</name>
+        <filename>qrhireadbackresult.html</filename>
+    </compound>
+    <compound kind="class">
+        <name>QRhiStats</name>
+        <filename>qrhistats.html</filename>
+    </compound>
+    <compound kind="class">
+        <name>QRhiSwapChainHdrInfo</name>
+        <filename>qrhiswapchainhdrinfo.html</filename>
+        <member kind="enumeration">
+            <name>LimitsType</name>
+            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
+            <anchor>LimitsType-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>LuminanceInNits</name>
+            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
+            <anchor>LimitsType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>ColorComponentValue</name>
+            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
+            <anchor>LimitsType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
+            <name>LuminanceBehavior</name>
+            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
+            <anchor>LuminanceBehavior-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>SceneReferred</name>
+            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
+            <anchor>LuminanceBehavior-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DisplayReferred</name>
+            <anchorfile>qrhiswapchainhdrinfo.html</anchorfile>
+            <anchor>LuminanceBehavior-enum</anchor>
+            <arglist></arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QRhiSwapChainProxyData</name>
+        <filename>qrhiswapchainproxydata.html</filename>
+    </compound>
+    <compound kind="class">
+        <name>QRhiVulkanCommandBufferNativeHandles</name>
+        <filename>qrhivulkancommandbuffernativehandles.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiVulkanInitParams</name>
+        <filename>qrhivulkaninitparams.html</filename>
+        <base>QRhiInitParams</base>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QByteArrayList</type>
+            <name>preferredExtensionsForImportedDevice</name>
+            <anchorfile>qrhivulkaninitparams.html</anchorfile>
+            <anchor>preferredExtensionsForImportedDevice</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QByteArrayList</type>
+            <name>preferredInstanceExtensions</name>
+            <anchorfile>qrhivulkaninitparams.html</anchorfile>
+            <anchor>preferredInstanceExtensions</anchor>
+            <arglist>()</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QRhiVulkanNativeHandles</name>
+        <filename>qrhivulkannativehandles.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiVulkanQueueSubmitParams</name>
+        <filename>qrhivulkanqueuesubmitparams.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QRhiVulkanRenderPassNativeHandles</name>
+        <filename>qrhivulkanrenderpassnativehandles.html</filename>
+        <base>QRhiNativeHandles</base>
+    </compound>
+    <compound kind="class">
+        <name>QVulkanExtension</name>
+        <filename>qvulkanextension.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>operator!=</name>
+            <anchorfile>qvulkanextension.html</anchorfile>
+            <anchor>operator-not-eq</anchor>
+            <arglist>(const QVulkanExtension &amp;lhs, const QVulkanExtension &amp;rhs)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
-            <name>mightBeRichText</name>
-            <anchorfile>qt-sub-qtgui.html</anchorfile>
-            <anchor>mightBeRichText</anchor>
-            <arglist>(QAnyStringView text)</arglist>
+            <name>operator==</name>
+            <anchorfile>qvulkanextension.html</anchorfile>
+            <anchor>operator-eq-eq</anchor>
+            <arglist>(const QVulkanExtension &amp;lhs, const QVulkanExtension &amp;rhs)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>size_t</type>
+            <name>qHash</name>
+            <anchorfile>qvulkanextension.html</anchorfile>
+            <anchor>qHash</anchor>
+            <arglist>(const QVulkanExtension &amp;key, size_t seed)</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QVulkanLayer</name>
+        <filename>qvulkanlayer.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>operator!=</name>
+            <anchorfile>qvulkanlayer.html</anchorfile>
+            <anchor>operator-not-eq</anchor>
+            <arglist>(const QVulkanLayer &amp;lhs, const QVulkanLayer &amp;rhs)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>operator==</name>
+            <anchorfile>qvulkanlayer.html</anchorfile>
+            <anchor>operator-eq-eq</anchor>
+            <arglist>(const QVulkanLayer &amp;lhs, const QVulkanLayer &amp;rhs)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>size_t</type>
+            <name>qHash</name>
+            <anchorfile>qvulkanlayer.html</anchorfile>
+            <anchor>qHash</anchor>
+            <arglist>(const QVulkanLayer &amp;key, size_t seed)</arglist>
         </member>
     </compound>
 </tagfile>

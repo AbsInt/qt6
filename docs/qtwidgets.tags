@@ -45599,24 +45599,6 @@
         <filename>qtextedit-extraselection.html</filename>
     </compound>
     <compound kind="class">
-        <name>QTileRules</name>
-        <filename>qtilerules.html</filename>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type></type>
-            <name>QTileRules</name>
-            <anchorfile>qtilerules.html</anchorfile>
-            <anchor>QTileRules-1</anchor>
-            <arglist>(Qt::TileRule horizontalRule, Qt::TileRule verticalRule)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type></type>
-            <name>QTileRules</name>
-            <anchorfile>qtilerules.html</anchorfile>
-            <anchor>QTileRules</anchor>
-            <arglist>(Qt::TileRule rule)</arglist>
-        </member>
-    </compound>
-    <compound kind="class">
         <name>QTimeEdit</name>
         <filename>qtimeedit.html</filename>
         <base>QDateTimeEdit</base>
@@ -52275,6 +52257,24 @@
             <anchorfile>qwizardpage.html</anchorfile>
             <anchor>title-prop</anchor>
             <arglist></arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QTileRules</name>
+        <filename>qtilerules.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QTileRules</name>
+            <anchorfile>qtilerules.html</anchorfile>
+            <anchor>QTileRules-1</anchor>
+            <arglist>(Qt::TileRule horizontalRule, Qt::TileRule verticalRule)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QTileRules</name>
+            <anchorfile>qtilerules.html</anchorfile>
+            <anchor>QTileRules</anchor>
+            <arglist>(Qt::TileRule rule)</arglist>
         </member>
     </compound>
 </tagfile>

@@ -1,5 +1,599 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <tagfile>
+    <compound kind="namespace">
+        <name>QPasswordDigestor</name>
+        <filename>qpassworddigestor.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QByteArray</type>
+            <name>deriveKeyPbkdf1</name>
+            <anchorfile>qpassworddigestor.html</anchorfile>
+            <anchor>deriveKeyPbkdf1</anchor>
+            <arglist>(QCryptographicHash::Algorithm algorithm, const QByteArray &amp;data, const QByteArray &amp;salt, int iterations, quint64 dkLen)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QByteArray</type>
+            <name>deriveKeyPbkdf2</name>
+            <anchorfile>qpassworddigestor.html</anchorfile>
+            <anchor>deriveKeyPbkdf2</anchor>
+            <arglist>(QCryptographicHash::Algorithm algorithm, const QByteArray &amp;data, const QByteArray &amp;salt, int iterations, quint64 dkLen)</arglist>
+        </member>
+    </compound>
+    <compound kind="namespace">
+        <name>QSsl</name>
+        <filename>qssl.html</filename>
+        <member kind="enumeration">
+            <name>AlertLevel</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertLevel-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>Warning</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertLevel-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Fatal</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertLevel-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Unknown</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertLevel-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
+            <name>AlertType</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>CloseNotify</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>UnexpectedMessage</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>BadRecordMac</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>RecordOverflow</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DecompressionFailure</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>HandshakeFailure</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>NoCertificate</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>BadCertificate</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>UnsupportedCertificate</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>CertificateRevoked</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>CertificateExpired</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>CertificateUnknown</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>IllegalParameter</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>UnknownCa</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>AccessDenied</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DecodeError</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DecryptError</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>ExportRestriction</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>ProtocolVersion</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>InsufficientSecurity</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>InternalError</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>InappropriateFallback</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>UserCancelled</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>NoRenegotiation</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>MissingExtension</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>UnsupportedExtension</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>CertificateUnobtainable</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>UnrecognizedName</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>BadCertificateStatusResponse</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>BadCertificateHashValue</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>UnknownPskIdentity</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>CertificateRequired</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>NoApplicationProtocol</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>UnknownAlertMessage</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>AlertType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
+            <name>AlternativeNameEntryType</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>AlternativeNameEntryType-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>EmailEntry</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>AlternativeNameEntryType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DnsEntry</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>AlternativeNameEntryType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>IpAddressEntry</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>AlternativeNameEntryType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
+            <name>EncodingFormat</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>EncodingFormat-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>Pem</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>EncodingFormat-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Der</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>EncodingFormat-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
+            <name>ImplementedClass</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>ImplementedClass-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>Key</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>ImplementedClass-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Certificate</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>ImplementedClass-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Socket</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>ImplementedClass-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DiffieHellman</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>ImplementedClass-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>EllipticCurve</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>ImplementedClass-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Dtls</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>ImplementedClass-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DtlsCookie</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>ImplementedClass-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
+            <name>KeyAlgorithm</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>KeyAlgorithm-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>Opaque</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>KeyAlgorithm-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Rsa</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>KeyAlgorithm-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Dsa</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>KeyAlgorithm-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Ec</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>KeyAlgorithm-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Dh</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>KeyAlgorithm-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
+            <name>KeyType</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>KeyType-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>PrivateKey</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>KeyType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>PublicKey</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>KeyType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
+            <name>SslOption</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslOption-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>SslOptionDisableEmptyFragments</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>SslOptionDisableSessionTickets</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>SslOptionDisableCompression</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>SslOptionDisableServerNameIndication</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>SslOptionDisableLegacyRenegotiation</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>SslOptionDisableSessionSharing</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>SslOptionDisableSessionPersistence</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>SslOptionDisableServerCipherPreference</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
+            <name>SslProtocol</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>TlsV1_0</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>TlsV1_1</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>TlsV1_2</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>AnyProtocol</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>SecureProtocols</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>TlsV1_0OrLater</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>TlsV1_1OrLater</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>TlsV1_2OrLater</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DtlsV1_0</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DtlsV1_0OrLater</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DtlsV1_2</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DtlsV1_2OrLater</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>TlsV1_3</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>TlsV1_3OrLater</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>UnknownProtocol</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslProtocol-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumeration">
+            <name>SupportedFeature</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>SupportedFeature-enum</anchor>
+        </member>
+        <member kind="enumvalue">
+            <name>CertificateVerification</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>SupportedFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>ClientSideAlpn</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>SupportedFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>ServerSideAlpn</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>SupportedFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Ocsp</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>SupportedFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Psk</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>SupportedFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>SessionTicket</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>SupportedFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Alerts</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>SupportedFeature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="typedef" type="QSsl::SslOption">
+            <name>SslOptions</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>SslOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+    </compound>
     <compound kind="class">
         <name>QAbstractNetworkCache</name>
         <filename>qabstractnetworkcache.html</filename>
@@ -10078,24 +10672,6 @@
             <arglist>() const const</arglist>
         </member>
     </compound>
-    <compound kind="namespace">
-        <name>QPasswordDigestor</name>
-        <filename>qpassworddigestor.html</filename>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QByteArray</type>
-            <name>deriveKeyPbkdf1</name>
-            <anchorfile>qpassworddigestor.html</anchorfile>
-            <anchor>deriveKeyPbkdf1</anchor>
-            <arglist>(QCryptographicHash::Algorithm algorithm, const QByteArray &amp;data, const QByteArray &amp;salt, int iterations, quint64 dkLen)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QByteArray</type>
-            <name>deriveKeyPbkdf2</name>
-            <anchorfile>qpassworddigestor.html</anchorfile>
-            <anchor>deriveKeyPbkdf2</anchor>
-            <arglist>(QCryptographicHash::Algorithm algorithm, const QByteArray &amp;data, const QByteArray &amp;salt, int iterations, quint64 dkLen)</arglist>
-        </member>
-    </compound>
     <compound kind="class">
         <name>QRestAccessManager</name>
         <filename>qrestaccessmanager.html</filename>
@@ -10519,582 +11095,6 @@
             <anchorfile>qsctpsocket.html</anchorfile>
             <anchor>maximumChannelCount</anchor>
             <arglist>() const const</arglist>
-        </member>
-    </compound>
-    <compound kind="namespace">
-        <name>QSsl</name>
-        <filename>qssl.html</filename>
-        <member kind="enumeration">
-            <name>AlertLevel</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertLevel-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>Warning</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertLevel-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Fatal</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertLevel-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Unknown</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertLevel-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumeration">
-            <name>AlertType</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>CloseNotify</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>UnexpectedMessage</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>BadRecordMac</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>RecordOverflow</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DecompressionFailure</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>HandshakeFailure</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>NoCertificate</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>BadCertificate</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>UnsupportedCertificate</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>CertificateRevoked</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>CertificateExpired</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>CertificateUnknown</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>IllegalParameter</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>UnknownCa</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>AccessDenied</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DecodeError</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DecryptError</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>ExportRestriction</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>ProtocolVersion</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>InsufficientSecurity</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>InternalError</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>InappropriateFallback</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>UserCancelled</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>NoRenegotiation</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>MissingExtension</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>UnsupportedExtension</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>CertificateUnobtainable</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>UnrecognizedName</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>BadCertificateStatusResponse</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>BadCertificateHashValue</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>UnknownPskIdentity</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>CertificateRequired</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>NoApplicationProtocol</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>UnknownAlertMessage</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>AlertType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumeration">
-            <name>AlternativeNameEntryType</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>AlternativeNameEntryType-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>EmailEntry</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>AlternativeNameEntryType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DnsEntry</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>AlternativeNameEntryType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>IpAddressEntry</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>AlternativeNameEntryType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumeration">
-            <name>EncodingFormat</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>EncodingFormat-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>Pem</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>EncodingFormat-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Der</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>EncodingFormat-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumeration">
-            <name>ImplementedClass</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>ImplementedClass-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>Key</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>ImplementedClass-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Certificate</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>ImplementedClass-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Socket</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>ImplementedClass-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DiffieHellman</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>ImplementedClass-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>EllipticCurve</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>ImplementedClass-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Dtls</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>ImplementedClass-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DtlsCookie</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>ImplementedClass-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumeration">
-            <name>KeyAlgorithm</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>KeyAlgorithm-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>Opaque</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>KeyAlgorithm-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Rsa</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>KeyAlgorithm-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Dsa</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>KeyAlgorithm-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Ec</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>KeyAlgorithm-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Dh</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>KeyAlgorithm-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumeration">
-            <name>KeyType</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>KeyType-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>PrivateKey</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>KeyType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>PublicKey</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>KeyType-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumeration">
-            <name>SslOption</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslOption-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>SslOptionDisableEmptyFragments</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslOption-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>SslOptionDisableSessionTickets</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslOption-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>SslOptionDisableCompression</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslOption-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>SslOptionDisableServerNameIndication</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslOption-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>SslOptionDisableLegacyRenegotiation</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslOption-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>SslOptionDisableSessionSharing</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslOption-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>SslOptionDisableSessionPersistence</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslOption-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>SslOptionDisableServerCipherPreference</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslOption-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumeration">
-            <name>SslProtocol</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>TlsV1_0</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>TlsV1_1</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>TlsV1_2</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>AnyProtocol</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>SecureProtocols</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>TlsV1_0OrLater</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>TlsV1_1OrLater</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>TlsV1_2OrLater</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DtlsV1_0</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DtlsV1_0OrLater</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DtlsV1_2</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>DtlsV1_2OrLater</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>TlsV1_3</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>TlsV1_3OrLater</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>UnknownProtocol</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslProtocol-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumeration">
-            <name>SupportedFeature</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>SupportedFeature-enum</anchor>
-        </member>
-        <member kind="enumvalue">
-            <name>CertificateVerification</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>SupportedFeature-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>ClientSideAlpn</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>SupportedFeature-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>ServerSideAlpn</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>SupportedFeature-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Ocsp</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>SupportedFeature-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Psk</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>SupportedFeature-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>SessionTicket</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>SupportedFeature-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="enumvalue">
-            <name>Alerts</name>
-            <anchorfile>qsslsocket.html</anchorfile>
-            <anchor>SupportedFeature-enum</anchor>
-            <arglist></arglist>
-        </member>
-        <member kind="typedef" type="QSsl::SslOption">
-            <name>SslOptions</name>
-            <anchorfile>qssl.html</anchorfile>
-            <anchor>SslOption-enum</anchor>
-            <arglist></arglist>
         </member>
     </compound>
     <compound kind="class">

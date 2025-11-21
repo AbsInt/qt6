@@ -61,6 +61,8 @@ private slots:
     void scopedConvertToObjectFromValueDoesNotAccessGarbageOnTheStackOnAllocation();
 
     void dontCrashOnScopedStackFrame();
+    void sweepTriggeringChunkAllocation_data();
+    void sweepTriggeringChunkAllocation();
 };
 
 tst_qv4mm::tst_qv4mm()
@@ -1056,6 +1058,82 @@ void tst_qv4mm::dontCrashOnScopedStackFrame()
     QV4::ScopedStackFrame frame(scope, engine->rootContext());
 
     jsengine.collectGarbage();
+}
+
+void tst_qv4mm::sweepTriggeringChunkAllocation_data()
+{
+    QTest::addColumn<bool>("doInitalAlloc");
+    QTest::addRow("without_inital")  << true;
+    QTest::addRow("with_inital")  << false;
+}
+
+QT_BEGIN_NAMESPACE
+
+namespace QV4 {
+
+namespace Heap {
+
+struct AllocatingDestroy : Object {
+    void init(bool *wasDestroyed, QV4::PersistentValue *pval) {
+        Object::init();
+        m_wasDestroyed = wasDestroyed;
+        m_pval = pval;
+    }
+    void destroy() {
+        auto v4 = internalClass->engine;
+        for (int i = 0; i != 4096; ++i) {
+            v4->newArrayObject(100);
+        }
+        m_pval->set(v4, v4->newString(QLatin1String("foobar"))->asReturnedValue());
+        *m_wasDestroyed = true;
+        Object::destroy();
+    }
+
+    QV4::PersistentValue *m_pval;
+    bool *m_wasDestroyed;
+};
+
+} // Heap
+
+
+struct AllocatingDestroy : Object {
+    V4_OBJECT2(AllocatingDestroy, Object)
+    V4_NEEDS_DESTROY
+};
+
+DEFINE_OBJECT_VTABLE(AllocatingDestroy);
+}
+
+QT_END_NAMESPACE
+
+
+
+void tst_qv4mm::sweepTriggeringChunkAllocation()
+{
+    QFETCH(bool, doInitalAlloc);
+    QJSEngine jsEngine;
+    QV4::ExecutionEngine &engine = *jsEngine.handle();
+    QV4::PersistentValue pval;
+
+
+    bool wasDestroyed = false;
+
+    engine.memoryManager->gcBlocked = QV4::MemoryManager::InCriticalSection;
+    if (doInitalAlloc) {
+        // ensure that we end up with an empty Chunk,
+        // so that with a "dead" first chunk which doesn't allocate
+        for (int i = 0; i != 1024; ++i) {
+            engine.newArrayObject(100);
+        }
+    }
+
+    engine.memoryManager->allocate<QV4::AllocatingDestroy>(&wasDestroyed, &pval);
+    engine.memoryManager->gcBlocked = QV4::MemoryManager::Unblocked;
+    gc(engine);
+    QVERIFY(wasDestroyed);
+    QVERIFY(!pval.isEmpty());
+    QVERIFY(pval.asManaged()->inUse());
+    QCOMPARE(pval.asManaged()->toQStringNoThrow(), QLatin1String("foobar"));
 }
 
 QTEST_MAIN(tst_qv4mm)

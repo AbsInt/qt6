@@ -19,6 +19,9 @@ T.SwitchDelegate {
     padding: 6
     spacing: 6
 
+    icon.width: 16
+    icon.height: 16
+
     readonly property bool __notCustomizable: true
     readonly property Item __focusFrameTarget: indicator
     readonly property Item __focusFrameStyleItem: indicator

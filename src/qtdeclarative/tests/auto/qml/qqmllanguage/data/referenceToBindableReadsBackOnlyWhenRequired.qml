@@ -22,7 +22,9 @@ ReadCounter {
             --accesses;
         }
 
-        // 2 accesses
+        // 3 accesses: getLength, virtualPut, setLength
+        //   We don't connect here since it's the same statement.
+        //   In dev, QV4::Sequence is optimized to avoid this.
         bindable.push("foo");
         // 1 accesses
         finalLength = bindableReference.length;

@@ -22,6 +22,8 @@
 
 QT_BEGIN_NAMESPACE
 
+QT_ENABLE_P0846_SEMANTICS_FOR(get_if)
+
 struct QQQmlJSDeprecation
 {
     QString reason;
@@ -37,16 +39,18 @@ struct QQmlJSAnnotation
     bool isDeprecation() const;
     QQQmlJSDeprecation deprecation() const;
 
-    friend bool operator==(const QQmlJSAnnotation &a, const QQmlJSAnnotation &b) {
+    friend bool operator==(const QQmlJSAnnotation &a, const QQmlJSAnnotation &b) noexcept
+    {
         return a.name == b.name &&
                a.bindings == b.bindings;
     }
 
-    friend bool operator!=(const QQmlJSAnnotation &a, const QQmlJSAnnotation &b) {
+    friend bool operator!=(const QQmlJSAnnotation &a, const QQmlJSAnnotation &b) noexcept
+    {
         return !(a == b);
     }
 
-    friend size_t qHash(const QQmlJSAnnotation &annotation, size_t seed = 0)
+    friend size_t qHash(const QQmlJSAnnotation &annotation, size_t seed = 0) noexcept
     {
         QtPrivate::QHashCombine combine(seed);
         seed = combine(seed, annotation.name);
@@ -57,13 +61,13 @@ struct QQmlJSAnnotation
 
             const auto &var = it.value();
 
-            if (var.index() == std::variant_npos)
+            if (var.valueless_by_exception())
                 continue;
 
-            if (std::holds_alternative<double>(var))
-                seed += combine(h, std::get<double>(var));
-            else if (std::holds_alternative<QString>(var))
-                seed += combine(h, std::get<QString>(var));
+            if (auto v = get_if<double>(&var))
+                seed += combine(h, *v);
+            else if (auto v = get_if<QString>(&var))
+                seed += combine(h, *v);
             else
                 Q_UNREACHABLE();
         }

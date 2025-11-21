@@ -1,18 +1,30 @@
 # Copyright (C) 2022 The Qt Company Ltd.
 # SPDX-License-Identifier: BSD-3-Clause
 
+cmake_minimum_required(VERSION 3.16)
+
 if (NOT QT_BUILD_STANDALONE_TESTS AND NOT QT_BUILDING_QT)
-    cmake_minimum_required(VERSION 3.16)
     project(testbench LANGUAGES C CXX)
     find_package(Qt6BuildInternals COMPONENTS STANDALONE_TEST)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
+find_package(Qt6 REQUIRED COMPONENTS
+    Core CorePrivate Gui Qml Quick QuickControls2 QuickControls2Private)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
-qt_add_executable(testbench
-    main.cpp
+qt_internal_add_manual_test(testbench
+    GUI
+    SOURCES
+        main.cpp
+    LIBRARIES
+        Qt::Core
+        Qt::CorePrivate
+        Qt::Gui
+        Qt::Qml
+        Qt::Quick
+        Qt::QuickControls2
+        Qt::QuickControls2Private
 )
 
 target_compile_definitions(testbench PRIVATE
@@ -86,13 +98,4 @@ qt_add_qml_module(testbench
     RESOURCES
         "qtquickcontrols2.conf"
         "fonts/fontello.ttf"
-)
-
-target_link_libraries(testbench PUBLIC
-    Qt::CorePrivate
-    Qt::Gui
-    Qt::Qml
-    Qt::Quick
-    Qt::QuickControls2
-    Qt::QuickControls2Private
 )

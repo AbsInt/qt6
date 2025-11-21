@@ -488,4 +488,138 @@ void QQmlDirtyReferenceObject_callback(QQmlNotifierEndpoint *e, void **) {
     static_cast<QV4::Heap::ReferenceObjectEndpoint*>(e)->reference->setDirty(true);
 }
 
+namespace QV4 {
+
+void Heap::ReferenceObject::connectToNotifySignal(QObject *obj, int property, QQmlEngine *engine)
+{
+    Q_ASSERT(obj);
+    Q_ASSERT(engine);
+
+    Q_ASSERT(!referenceEndpoint);
+    Q_ASSERT(!bindableNotifier);
+
+    referenceEndpoint = new ReferenceObjectEndpoint(this);
+
+    // Connect and signal emission work on "signal indexes". Those are different from "method
+    // indexes".
+    // The public MetaObject interface can, generally, give us the "method index" of the notify
+    // signal.
+    // Quite unintuitively, this is true for "notifySignalIndex". As the "method index" and the
+    // "signal index" can be different, connecting the "method index" of the notify signal can
+    // incur in issues when the signal is being emitted and checking for connected endpoints.
+    // For example, we might be connected to the "method index" of the notify signal for the
+    // property and end up checking for the subscribers of a different signal when the notify
+    // signal is emitted, due to the different meaning of the same index.
+    // Thus we pass by the private interface to ensure that we are connecting based on the "signal
+    // index" instead.
+    const int index = QMetaObjectPrivate::signalIndex(obj->metaObject()->property(property)
+                                                                    .notifySignal());
+    referenceEndpoint->connect(obj, index, engine);
+
+    // When the object that is being referenced is destroyed, we
+    // need to ensure that one additional read is performed to
+    // invalidate the data we hold.
+    // As the object might be destroyed in a way that doesn't
+    // trigger the notify signal for the relevant property, we react
+    // directly to the destruction itself.
+    // We use a plain connection instead of a QQmlNotifierEndpoint
+    // based connection as, currently, declarative-side signals are
+    // always discarded during destruction (see
+    // QQmlData::signalEmitted).
+    // In theory it should be possible to relax that condition for
+    // the destroy signal specifically, which should allow a more
+    // optimized way of connecting.
+    // Nonetheless this seems to be the only place where we have
+    // this kind of need, and thus go for the simpler solution,
+    // which can be changed later if the need arises.
+    new (onDelete) QMetaObject::Connection(
+            QObject::connect(obj, &QObject::destroyed, [this](){ setDirty(true); }));
+}
+
+void Heap::ReferenceObject::connectToBindable(QObject *obj, int property, QQmlEngine *engine)
+{
+    Q_ASSERT(obj);
+    Q_ASSERT(engine);
+
+    Q_ASSERT(!referenceEndpoint);
+    Q_ASSERT(!bindableNotifier);
+
+    bindableNotifier = new QPropertyNotifier(obj->metaObject()->property(property).bindable(obj)
+                                                     .addNotifier([this](){ setDirty(true); }));
+    new (onDelete) QMetaObject::Connection(
+            QObject::connect(obj, &QObject::destroyed, [this]() { setDirty(true); }));
+}
+
+bool ReferenceObject::shouldConnect(Heap::ReferenceObject *ref)
+{
+    if (ref->isAlwaysDirty())
+        return false;
+
+    // We want to connect when we are reading the reference object from a statement that is not
+    // its creation statement. In other words, when first storing it in a variable and then
+    // reusing it, potentially multiple times. This ensures that the cost of the connection itself
+    // is only paid when the user separated the declaration from the usage in their code, in the
+    // hope that this catches more complex and frequent uses, like accesses in a loop, where
+    // unnecessary copies would impact performance more significantly, and not one time accesses.
+    if (CppStackFrame *frame = ref->internalClass->engine->currentStackFrame) {
+        const auto *refObject = static_cast<Heap::ReferenceObject *>(ref);
+        if (frame->v4Function && frame->v4Function == refObject->function()
+            && frame->statementNumber() == refObject->statementIndex()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void ReferenceObject::connect(Heap::ReferenceObject *ref)
+{
+    int property = ref->property();
+    Heap::Object *object = ref->object();
+
+    while (object
+           && object->internalClass->vtable->type != Managed::Type_V4QObjectWrapper
+           && object->internalClass->vtable->type != Managed::Type_QMLTypeWrapper)
+    {
+        const auto type = object->internalClass->vtable->type;
+        if (type != Managed::Type_V4ReferenceObject
+            && type != Managed::Type_V4Sequence
+            && type != Managed::Type_DateObject
+            && type != Managed::Type_QMLValueTypeWrapper) {
+            break;
+        }
+
+        property = static_cast<QV4::Heap::ReferenceObject *>(object)->property();
+        object = static_cast<QV4::Heap::ReferenceObject *>(object)->object();
+    }
+
+    const auto doConnect = [&](auto wrapper) {
+        // The object may be valid on the first read but not on the second, check for that.
+        if (QObject *obj = wrapper->object()) {
+            auto *refObject = static_cast<Heap::ReferenceObject *>(ref);
+
+            auto *qmlEngine = object->internalClass->engine->qmlEngine();
+            if (qmlEngine && obj->metaObject()->property(property).isBindable())
+                refObject->connectToBindable(obj, property, qmlEngine);
+            else if (qmlEngine && obj->metaObject()->property(property).hasNotifySignal())
+                refObject->connectToNotifySignal(obj, property, qmlEngine);
+        }
+    };
+
+    if (object && object->internalClass->vtable->type == Managed::Type_V4QObjectWrapper) {
+        doConnect(static_cast<QV4::Heap::QObjectWrapper *>(object));
+    } else if (object && object->internalClass->vtable->type == Managed::Type_QMLTypeWrapper) {
+        auto wrapper = static_cast<QV4::Heap::QQmlTypeWrapper *>(object);
+        Scope scope(object->internalClass->engine);
+        Scoped<QV4::QQmlTypeWrapper> scopedWrapper(scope, wrapper);
+        doConnect(scopedWrapper);
+    }
+
+    if (!ref->isConnected()) {
+        // Mark AlwaysDirty to prevent further connection failures on every read
+        ref->setAlwaysDirty(true);
+    }
+}
+
+} // namespace QV4
+
 QT_END_NAMESPACE

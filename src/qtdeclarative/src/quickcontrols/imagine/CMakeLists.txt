@@ -38,6 +38,7 @@ set(qml_files
     "ScrollView.qml"
     "ScrollBar.qml"
     "ScrollIndicator.qml"
+    "SearchField.qml"
     "SelectionRectangle.qml"
     "Slider.qml"
     "SpinBox.qml"

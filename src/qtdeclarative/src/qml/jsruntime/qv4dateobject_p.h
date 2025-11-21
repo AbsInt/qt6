@@ -224,6 +224,9 @@ DECLARE_HEAP_OBJECT(DateObject, ReferenceObject) {
         QV4::Scope scope(internalClass->engine);
         QV4::ScopedObject o(scope, object());
 
+        if (!isConnected() && QV4::ReferenceObject::shouldConnect(this))
+            QV4::ReferenceObject::connect(this);
+
         bool wasRead = false;
         if (isVariant()) {
             QVariant variant;

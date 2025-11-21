@@ -47,126 +47,22 @@ DECLARE_HEAP_OBJECT(ReferenceObject, Object) {
         CanWriteBack     = 1 << 0,
         IsVariant        = 1 << 1,
         EnforcesLocation = 1 << 2,
-        IsDirty = 1 << 3,
+        IsDirty          = 1 << 3,
+        IsAlwaysDirty    = 1 << 4,
     };
     Q_DECLARE_FLAGS(Flags, Flag);
 
     void init(Object *object, int property, Flags flags)
     {
-        auto connectToNotifySignal = [this](QObject* obj, int property, QQmlEngine* engine) {
-            Q_ASSERT(obj);
-            Q_ASSERT(engine);
-
-            Q_ASSERT(!referenceEndpoint);
-            Q_ASSERT(!bindableNotifier);
-
-            referenceEndpoint = new ReferenceObjectEndpoint(this);
-            referenceEndpoint->connect(
-                obj,
-                // Connect and signal emission work on "signal
-                // indexe"s. Those are different from "method
-                // indexes".
-                // The public MetaObject interface can, generally,
-                // give us the "method index" of the notify
-                // signal.
-                // Quite unintuitively, this is true for
-                // "notifySignalIndex".
-                // As the "method index" and the "signal index"
-                // can be different, connecting the "method index"
-                // of the notify signal can incur in issues when
-                // the signal is being emitted and checking for
-                // connected endpoints.
-                // For example, we might be connected to the
-                // "method index" of the notify signal for the
-                // property and end up checking for the
-                // subscribers of a different signal when the
-                // notify signal is emitted, due to the different
-                // meaning of the same index.
-                // Thus we pass by the private interface to ensure
-                // that we are connecting based on the "signal
-                // index" instead.
-                QMetaObjectPrivate::signalIndex(obj->metaObject()->property(property).notifySignal()),
-                engine);
-            // When the object that is being referenced is destroyed, we
-            // need to ensure that one additional read is performed to
-            // invalidate the data we hold.
-            // As the object might be destroyed in a way that doesn't
-            // trigger the notify signal for the relevant property, we react
-            // directly to the destruction itself.
-            // We use a plain connection instead of a QQmlNotifierEndpoint
-            // based connection as, currently, declarative-side signals are
-            // always discarded during destruction (see
-            // QQmlData::signalEmitted).
-            // In theory it should be possible to relax that condition for
-            // the destroy signal specifically, which should allow a more
-            // optimized way of connecting.
-            // Nonetheless this seems to be the only place where we have
-            // this kind of need, and thus go for the simpler solution,
-            // which can be changed later if the need arise.
-            new(onDelete) QMetaObject::Connection(QObject::connect(obj, &QObject::destroyed, [this](){ setDirty(true); }));
-        };
-
-        auto connectToBindable = [this](QObject* obj, int property, QQmlEngine* engine) {
-            Q_ASSERT(obj);
-            Q_ASSERT(engine);
-
-            Q_ASSERT(!referenceEndpoint);
-            Q_ASSERT(!bindableNotifier);
-
-            bindableNotifier = new QPropertyNotifier(obj->metaObject()->property(property).bindable(obj).addNotifier([this](){ setDirty(true); }));
-            new(onDelete) QMetaObject::Connection(QObject::connect(obj, &QObject::destroyed, [this](){ setDirty(true); }));
-        };
-
         setObject(object);
         m_property = property;
         m_flags = flags;
 
-        while (object &&
-               object->internalClass->vtable->type != Managed::Type_V4QObjectWrapper &&
-               object->internalClass->vtable->type != Managed::Type_QMLTypeWrapper)
-        {
-            if (!(object->internalClass->vtable->type == Managed::Type_V4ReferenceObject) &&
-                !(object->internalClass->vtable->type == Managed::Type_V4Sequence) &&
-                !(object->internalClass->vtable->type == Managed::Type_DateObject) &&
-                !(object->internalClass->vtable->type == Managed::Type_QMLValueTypeWrapper))
-            {
-                break;
-            }
-
-            property = static_cast<QV4::Heap::ReferenceObject*>(object)->property();
-            object = static_cast<QV4::Heap::ReferenceObject*>(object)->object();
-        }
-
-        if (object && object->internalClass->vtable->type == Managed::Type_V4QObjectWrapper)
-        {
-            auto wrapper = static_cast<QV4::Heap::QObjectWrapper*>(object);
-            QObject* obj = wrapper->object();
-
-            if (obj->metaObject()->property(property).isBindable() && internalClass->engine->qmlEngine())
-                connectToBindable(obj, property, internalClass->engine->qmlEngine());
-            else if (obj->metaObject()->property(property).hasNotifySignal() && internalClass->engine->qmlEngine())
-                connectToNotifySignal(obj, property, internalClass->engine->qmlEngine());
-        }
-
-        if (object && object->internalClass->vtable->type == Managed::Type_QMLTypeWrapper) {
-            auto wrapper = static_cast<QV4::Heap::QQmlTypeWrapper*>(object);
-
-            Scope scope(internalClass->engine);
-            Scoped<QV4::QQmlTypeWrapper> scopedWrapper(scope, wrapper);
-            QObject* obj = scopedWrapper->object();
-
-            if (obj->metaObject()->property(property).isBindable() && internalClass->engine->qmlEngine())
-                connectToBindable(obj, property, internalClass->engine->qmlEngine());
-            else if (obj->metaObject()->property(property).hasNotifySignal() && internalClass->engine->qmlEngine())
-                connectToNotifySignal(obj, property, internalClass->engine->qmlEngine());
-        }
-
-        // If we could not connect to anything we don't have a way to
-        // dirty on-demand and thus should be in an always dirty state
-        // to ensure that reads go through.
-        if (!isConnected())
-            setDirty(true);
-
+        setDirty(true);
+        if (CppStackFrame *frame = internalClass->engine->currentStackFrame)
+            setLocation(frame->v4Function, frame->statementNumber());
+        else
+            setLocation(nullptr, -1);
         Object::init();
     }
 
@@ -208,6 +104,10 @@ DECLARE_HEAP_OBJECT(ReferenceObject, Object) {
 
     bool isDirty() const { return hasFlag(IsDirty); }
     void setDirty(bool dirty) { setFlag(IsDirty, dirty); }
+
+    bool isAlwaysDirty() const { return hasFlag(IsAlwaysDirty); }
+    void setAlwaysDirty(bool alwaysDirty) { setFlag(IsAlwaysDirty, alwaysDirty); }
+
     bool isConnected() {
         return (referenceEndpoint && referenceEndpoint->isConnected()) || bindableNotifier;
     }
@@ -227,7 +127,10 @@ DECLARE_HEAP_OBJECT(ReferenceObject, Object) {
             delete bindableNotifier;
     }
 
-    private:
+    void connectToNotifySignal(QObject *obj, int property, QQmlEngine *engine);
+    void connectToBindable(QObject *obj, int property, QQmlEngine *engine);
+
+private:
 
         bool hasFlag(Flag flag) const
         {
@@ -268,6 +171,9 @@ DECLARE_HEAP_OBJECT(ReferenceObject, Object) {
     public:
         static constexpr const int AllProperties = -1;
 
+        static bool shouldConnect(Heap::ReferenceObject *ref);
+        static void connect(Heap::ReferenceObject *ref);
+
         template<typename HeapObject>
         static bool readReference(HeapObject *ref)
         {
@@ -279,6 +185,9 @@ DECLARE_HEAP_OBJECT(ReferenceObject, Object) {
 
             QV4::Scope scope(ref->internalClass->engine);
             QV4::ScopedObject object(scope, ref->object());
+
+            if (!ref->isConnected() && shouldConnect(ref))
+                connect(ref);
 
             bool wasRead = false;
             if (ref->isVariant()) {

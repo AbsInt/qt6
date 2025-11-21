@@ -25,6 +25,9 @@ T.CheckDelegate {
     spacing: 6
     padding: 6
 
+    icon.width: 16
+    icon.height: 16
+
     contentItem: NativeStyle.DefaultItemDelegateIconLabel {
         readonly property bool __ignoreNotCustomizable: true
     }
