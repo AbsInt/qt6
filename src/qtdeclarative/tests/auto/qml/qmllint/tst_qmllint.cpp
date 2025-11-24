@@ -972,7 +972,7 @@ void TestQmllint::dirtyQmlCode_data()
                            "Did you add all imports and dependencies?"_L1, 5, 5 } } };
     QTest::newRow("invalidAliasTarget1")
             << QStringLiteral("invalidAliasTarget.qml")
-            << Result{ { { "Invalid alias expression - an initalizer is needed."_L1, 6, 18 } } };
+            << Result{ { { "Invalid alias expression - an initializer is needed."_L1, 6, 18 } } };
     QTest::newRow("invalidAliasTarget2")
             << QStringLiteral("invalidAliasTarget.qml")
             << Result{ { { "Invalid alias expression. Only IDs and field member expressions can "

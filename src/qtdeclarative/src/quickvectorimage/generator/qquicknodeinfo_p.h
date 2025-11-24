@@ -26,6 +26,8 @@
 
 QT_BEGIN_NAMESPACE
 
+namespace QQuickVectorImageGenerator {
+
 struct NodeInfo
 {
     QString nodeId;
@@ -133,6 +135,7 @@ struct StructureNodeInfo : NodeInfo
     bool isPathContainer = false;
 };
 
+}
 
 QT_END_NAMESPACE
 
