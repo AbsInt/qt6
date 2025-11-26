@@ -1172,6 +1172,13 @@ void tst_QmlCppCodegen::collectGarbageDuringAotCode()
     QVERIFY(!o2.isNull());
 
     QTRY_COMPARE_GT(o2->objectName().toInt(), 10);
+
+    QQmlComponent c3(&engine, QUrl(u"qrc:/qt/qml/TestTypes/markJSValue.qml"_s));
+    QVERIFY2(c3.isReady(), qPrintable(c3.errorString()));
+    QScopedPointer<QObject> o3(c3.create());
+    QVERIFY(!o3.isNull());
+
+    QTRY_COMPARE_GT(o3->property("count").toInt(), 10);
 }
 
 void tst_QmlCppCodegen::colorAsVariant()

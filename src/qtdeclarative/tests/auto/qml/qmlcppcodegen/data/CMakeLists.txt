@@ -238,6 +238,7 @@ set(qml_files
     listPropertyAsModel.qml
     listToString.qml
     listlength.qml
+    markJSValue.qml
     markRecursive.qml
     math.qml
     mathMinMax.qml

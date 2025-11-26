@@ -166,6 +166,17 @@ static QtMetaContainerPrivate::QMetaSequenceInterface emptySequenceInterface()
     iface.destroyIteratorFn = [](const void *) {};
     iface.copyIteratorFn = [](void *, const void *) {};
     iface.diffIteratorFn = [](const void *, const void *) { return qsizetype(0); };
+
+    iface.createConstIteratorFn = [](const void *, QMetaSequenceInterface::Position) -> void * {
+        return nullptr;
+    };
+    iface.advanceConstIteratorFn = [](void *, qsizetype) {};
+    iface.compareConstIteratorFn = [](const void *, const void *) {
+        return true; /*all iterators are nullptr*/
+    };
+    iface.destroyConstIteratorFn = [](const void *) {};
+    iface.copyConstIteratorFn = [](void *, const void *) {};
+    iface.diffConstIteratorFn = [](const void *, const void *) { return qsizetype(0); };
     return iface;
 }
 

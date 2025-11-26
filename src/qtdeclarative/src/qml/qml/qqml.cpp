@@ -1218,7 +1218,8 @@ static void iterateVariant(const QVariant &element, std::vector<QVariant> *eleme
 #define ADD_CASE(Type, id, T) \
     case QMetaType::Type:
 
-    switch (element.metaType().id()) {
+    const QMetaType elementMetaType = element.metaType();
+    switch (elementMetaType.id()) {
     case QMetaType::QVariantMap:
         for (const QVariant &variant : *static_cast<const QVariantMap *>(element.constData()))
             elements->push_back(variant);
@@ -1239,6 +1240,14 @@ static void iterateVariant(const QVariant &element, std::vector<QVariant> *eleme
         return;
     default:
         break;
+    }
+
+    if (elementMetaType == QMetaType::fromType<QJSValue>()
+            || elementMetaType == QMetaType::fromType<QJSManagedValue>()
+            || elementMetaType == QMetaType::fromType<QJSPrimitiveValue>()) {
+        // QJSValue and QJSManagedValue effectively hold persistent values anyway.
+        // QJSPrimitiveValue can only hold primitives or QString.
+        return;
     }
 
     QSequentialIterable iterable;
