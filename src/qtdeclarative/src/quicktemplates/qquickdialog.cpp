@@ -28,6 +28,7 @@ QT_BEGIN_NAMESPACE
     into three sections: \l header, \l {Popup::}{contentItem}, and \l footer.
 
     \image qtquickcontrols-page-wireframe.webp
+           {Page wireframe with header, content area, and footer}
 
     The \l {Popup::}{padding} properties only affect the contentItem. Use the
     \l {Popup::}{spacing} property to affect the space between header,

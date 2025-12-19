@@ -20,6 +20,7 @@ QT_BEGIN_NAMESPACE
     menu by separating them with a line.
 
     \image qtquickcontrols-menuseparator.png
+           {Menu separator dividing menu items}
 
     \quotefromfile qtquickcontrols-menuseparator-custom.qml
     \skipto import QtQuick

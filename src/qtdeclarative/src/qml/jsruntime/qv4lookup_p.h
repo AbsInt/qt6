@@ -159,6 +159,10 @@ struct Q_QML_EXPORT Lookup {
             const QQmlPropertyData *propertyData;
         } qobjectMethodLookup;
         struct {
+            // NB: None of this is actually cache-able. The metaobject may change at any time.
+            //     We invalidate this data every time the lookup is invoked and thereby force a
+            //     re-initialization next time.
+
             quintptr isConstant; // This is a bool, encoded as 0 or 1. Both values are ignored by gc
             quintptr metaObject; // a (const QMetaObject* & 1) or nullptr
             int coreIndex;

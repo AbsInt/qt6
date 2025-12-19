@@ -33,6 +33,7 @@ QT_BEGIN_NAMESPACE
     touch interfaces to provide a central location for navigation.
 
     \image qtquickcontrols-drawer.gif
+           {Drawer sliding in from edge}
 
     Drawer can be positioned at any of the four edges of the content item.
     The drawer above is positioned against the left edge of the window. The

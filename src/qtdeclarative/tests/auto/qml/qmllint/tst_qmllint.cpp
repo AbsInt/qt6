@@ -600,13 +600,27 @@ void TestQmllint::dirtyQmlCode_data()
     QTest::newRow("DoubleAssignToDefaultProperty")
             << QStringLiteral("defaultPropertyWithDoubleAssignment.qml")
             << Result{ { { "Cannot assign multiple objects to a default non-list property"_L1 } } };
-    QTest::newRow(("ImportFileSelector")) << QStringLiteral("FileSelector/main.qml")
-                                          << Result{
-                                                     {
-                                                    { "Type ToolBar is ambiguous due to file selector usage, ignoring %1"_L1.
-                                                     arg(testFile("FileSelector/+Material/ToolBar.qml")), 1, 1, QtMsgType::QtInfoMsg}
-                                                 }
-                                             }.withFlags(Result::Flags(Result::UseSettings) | Result::ExitsNormally) ;
+    QTest::newRow(("ImportFileSelector"))
+            << QStringLiteral("FileSelector/main.qml")
+            << Result{
+                   { { "Type ToolBar is ambiguous due to file selector usage, ignoring %1"_L1.arg(
+                               testFile("FileSelector/+Material/ToolBar.qml")),
+                       1, 1, QtMsgType::QtInfoMsg } }
+               }.withFlags(Result::Flags(Result::UseSettings | Result::ExitsNormally));
+    QTest::newRow(("ImportFileSelector2"))
+            << QStringLiteral("FileSelector2/main.qml")
+            << Result{
+                   {
+                           { "Type ToolBar is ambiguous due to file selector usage, ignoring %1"_L1
+                                     .arg(testFile("FileSelector2/+Material/ToolBar.qml")),
+                             1, 1, QtMsgType::QtInfoMsg },
+                           { "Ambiguous type detected. Broken 1.0 is defined multiple times."_L1, 1,
+                             1, QtMsgType::QtWarningMsg },
+                   },
+                   { { "Type ToolBar is ambiguous due to file selector usage, ignoring %1"_L1.arg(
+                               testFile("FileSelector2/+Material/ToolBar.qml")),
+                       1, 1, QtMsgType::QtWarningMsg } }
+               }.withFlags(Result::Flags(Result::UseSettings));
     QTest::newRow("InvalidImport")
             << QStringLiteral("invalidImport.qml")
             << Result{ { { "Failed to import FooBar. Are your import paths set up properly?"_L1,
@@ -1466,6 +1480,10 @@ void TestQmllint::dirtyQmlSnippet_data()
             << Result{ { { "Enum entry should be named differently than the enum itself to avoid "
                            "confusion."_L1, 1, 10 } } }
             << defaultOptions;
+    QTest::newRow("functionDefinitionInGroupedProperty")
+            // should not crash for now, see QTBUG-142091 to get the actual warning
+            << u"Item { foo { bar: Array.from((i) => (1)) } }"_s << Result{} << defaultOptions;
+
     QTest::newRow("nonRootEnum1")
             << u"Item { enum E { A, B, C } }"_s
             << Result{ { { "Enum declared outside the root element. It won't be accessible."_L1,
@@ -1611,6 +1629,8 @@ void TestQmllint::cleanQmlSnippet_data()
     QTest::newRow("color-hex") << u"property color myColor: \"#123456\""_s << defaultOptions;
     QTest::newRow("color-hex2") << u"property color myColor: \"#FFFFFFFF\""_s << defaultOptions;
     QTest::newRow("color-hex3") << u"property color myColor: \"#A0AAff1f\""_s << defaultOptions;
+    QTest::newRow("color-hex4") << u"property color myColor: \"#A0A\""_s << defaultOptions;
+    QTest::newRow("color-hex5") << u"property color myColor: \"#A0AB\""_s << defaultOptions;
     QTest::newRow("color-name") << u"property color myColor: \"blue\""_s << defaultOptions;
     QTest::newRow("color-name2") << u"property color myColor\nmyColor: \"grEen\""_s
                                  << defaultOptions;
@@ -3385,6 +3405,8 @@ void TestQmllint::quickPlugin()
     runTest("pluginQuick_stateWithIllegalChildren.qml",
             Result{ { { "A State cannot have a child item of type Rectangle"_L1, 5, 9 },
                       { "A State cannot have a child item of type Item"_L1, 6, 9 } } });
+    runTest("pluginQuick_AccessibleOnAction.qml", Result::clean());
+    runTest("pluginQuick_AccessibleOnAction2.qml", Result::clean());
 }
 
 void TestQmllint::hasQdsPlugin()

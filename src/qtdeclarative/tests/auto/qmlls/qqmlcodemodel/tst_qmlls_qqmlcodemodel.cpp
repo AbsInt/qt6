@@ -9,6 +9,8 @@
 #include <QtQmlDom/private/qqmldomitem_p.h>
 #include <QtQmlDom/private/qqmldomtop_p.h>
 
+#include <QSignalSpy>
+
 tst_qmlls_qqmlcodemodel::tst_qmlls_qqmlcodemodel() : QQmlDataTest(QT_QQMLCODEMODEL_DATADIR) { }
 
 void tst_qmlls_qqmlcodemodel::buildPathsForFileUrl_data()
@@ -179,7 +181,10 @@ void tst_qmlls_qqmlcodemodel::openFiles()
         QCOMPARE(fileAComponents.size(), 1);
     }
 
-    model.newDocForOpenFile(fileAUrl, 1, readFile(u"FileA2.qml"_s));
+    QSignalSpy spy(&model, &QmlLsp::QQmlCodeModel::openUpdateThreadFinished);
+    model.newOpenFile(fileAUrl, 1, readFile(u"FileA2.qml"_s));
+    // wait for QQmlCodeModel to finish loading
+    QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 3000);
 
     {
         const DomItem fileAComponents = model.validEnv()
@@ -244,6 +249,7 @@ void tst_qmlls_qqmlcodemodel::importPathViaSettings()
 static void reloadLotsOfFileMethod()
 {
     QmlLsp::QQmlCodeModel model;
+    model.setImportPaths(QLibraryInfo::paths(QLibraryInfo::QmlImportsPath));
 
     QTemporaryDir folder;
     QVERIFY(folder.isValid());
@@ -285,9 +291,12 @@ static void reloadLotsOfFileMethod()
         file.write("\n\n");
     }
 
+    QSignalSpy spy(&model, &QmlLsp::QQmlCodeModel::openUpdateThreadFinished);
     // update one file
-    model.newDocForOpenFile(QUrl::fromLocalFile(fileNames.front()).toEncoded(), 1,
-                            content + "\n\n");
+    model.newOpenFile(QUrl::fromLocalFile(fileNames.front()).toEncoded(), 1, content + "\n\n");
+
+    // wait for QQmlCodeModel to finish loading before leaving the scope
+    QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 3000);
 }
 
 void tst_qmlls_qqmlcodemodel::reloadLotsOfFiles()

@@ -82,6 +82,7 @@ Q_STATIC_LOGGING_CATEGORY(lcQuickPopup, "qt.quick.controls.popup")
     The following diagram illustrates the layout of a popup within a window:
 
     \image qtquickcontrols-popup.png
+           {Popup window overlaying content}
 
     The \l implicitWidth and \l implicitHeight of a popup are typically based
     on the implicit sizes of the background and the content item plus any insets
@@ -318,8 +319,8 @@ Q_STATIC_LOGGING_CATEGORY(lcQuickPopup, "qt.quick.controls.popup")
 
     \section1 Popup Transitions
 
-    Since Qt 5.15.3 the following properties are restored to their original values from before
-    the enter transition after the exit transition is completed.
+    After the exit transition is finished, these properties will be reset to
+    their values before the enter transition is started.
 
     \list
     \li \l opacity
@@ -359,6 +360,7 @@ Q_STATIC_LOGGING_CATEGORY(lcQuickPopup, "qt.quick.controls.popup")
     \snippet qtquickcontrols-popup-property-propagation.qml file
 
     \image qtquickcontrols-basic-popup-property-propagation.png
+           {Diagram showing popup property inheritance}
 
     In addition, popups do not propagate their properties to child popups. This
     behavior is modelled on Qt Widgets, where a \c Qt::Popup widget is a
@@ -2645,6 +2647,7 @@ void QQuickPopup::resetClosePolicy()
     The default transform origin is \c Popup.Center.
 
     \image qtquickcontrols-popup-transformorigin.png
+           {Popup demonstrating transform origin points}
 
     \sa enter, exit, Item::transformOrigin
 */

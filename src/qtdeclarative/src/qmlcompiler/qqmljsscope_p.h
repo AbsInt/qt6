@@ -122,7 +122,6 @@ public:
         AssignedToUnknownProperty = 0x10000,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
-    Q_FLAGS(Flags);
 
     using Export = QQmlJS::Export;
     template <typename Pointer>

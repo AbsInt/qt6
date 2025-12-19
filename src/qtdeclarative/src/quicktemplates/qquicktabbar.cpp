@@ -22,6 +22,7 @@ QT_BEGIN_NAMESPACE
     TabBar provides a tab-based navigation model.
 
     \image qtquickcontrols-tabbar-wireframe.webp
+           {Tab bar wireframe showing tab navigation}
 
     TabBar is populated with TabButton controls, and can be used together with
     any layout or container control that provides \c currentIndex -property,
@@ -48,7 +49,8 @@ QT_BEGIN_NAMESPACE
     The following example illustrates how to keep each tab button at their
     implicit size instead of being resized to fit the tabbar:
 
-    \borderedimage qtquickcontrols-tabbar-explicit.png
+    \image qtquickcontrols-tabbar-explicit.png
+           {Tab bar with First, Second, Third tabs at implicit widths}
 
     \snippet qtquickcontrols-tabbar-explicit.qml 1
 
@@ -58,6 +60,7 @@ QT_BEGIN_NAMESPACE
     it automatically becomes flickable.
 
     \image qtquickcontrols-tabbar-flickable.png
+           {Tab bar in flickable for scrolling many tabs}
 
     \snippet qtquickcontrols-tabbar-flickable.qml 1
 

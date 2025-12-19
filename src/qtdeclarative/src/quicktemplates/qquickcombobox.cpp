@@ -44,6 +44,7 @@ Q_STATIC_LOGGING_CATEGORY(lcCalculateWidestTextWidth, "qt.quick.controls.combobo
     \brief Combined button and popup list for selecting options.
 
     \image qtquickcontrols-combobox.gif
+           {Combo box expanding to show dropdown list}
 
     ComboBox is a combined button and popup list. It provides a means of
     presenting a list of options to the user in a way that takes up the

@@ -42,6 +42,7 @@ Q_STATIC_LOGGING_CATEGORY(lcPane, "qt.quick.controls.pane")
     for use together with layouts.
 
     \image qtquickcontrols-pane.png
+           {Pane with styled background containing checkboxes}
 
     \snippet qtquickcontrols-pane.qml 1
 

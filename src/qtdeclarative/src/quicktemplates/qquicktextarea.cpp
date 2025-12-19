@@ -35,6 +35,7 @@ using namespace Qt::StringLiterals;
     a \l {placeholderText}{placeholder text} functionality, and adds decoration.
 
     \image qtquickcontrols-textarea.png
+           {Text area for multiline text input}
 
     \code
     TextArea {
@@ -55,6 +56,7 @@ using namespace Qt::StringLiterals;
     an entire application page, it can be placed inside a \l ScrollView.
 
     \image qtquickcontrols-textarea-scrollable.png
+           {Scrollable text area with scroll bars}
 
     \snippet qtquickcontrols-textarea-scrollable.qml 1
 

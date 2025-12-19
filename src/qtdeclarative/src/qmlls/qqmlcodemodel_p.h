@@ -112,7 +112,6 @@ public:
     // void updateDocument(const OpenDocument &doc);
     QString url2Path(const QByteArray &url, UrlLookup options = UrlLookup::Caching);
     void newOpenFile(const QByteArray &url, int version, const QString &docText);
-    void newDocForOpenFile(const QByteArray &url, int version, const QString &docText);
     void closeOpenFile(const QByteArray &url);
     void setRootUrls(const QList<QByteArray> &urls);
     QList<QByteArray> rootUrls() const;
@@ -140,13 +139,18 @@ public:
 Q_SIGNALS:
     void updatedSnapshot(const QByteArray &url);
     void documentationRootPathChanged(const QString &path);
+    void openUpdateThreadFinished();
 
 private:
     void addDirectory(const QString &path, int leftDepth);
+
+    // only to be called from the openUpdateThread
+    void newDocForOpenFile(const QByteArray &url, int version, const QString &docText);
     bool openUpdateSome();
+    void openUpdate(const QByteArray &);
+
     void openUpdateStart();
     void openUpdateEnd();
-    void openUpdate(const QByteArray &);
 
     static bool callCMakeBuild(const QStringList &buildPaths);
     void addFileWatches(const QQmlJS::Dom::DomItem &qmlFile);
@@ -156,6 +160,7 @@ private:
     mutable QMutex m_mutex;
     State m_state = State::Running;
     int m_nUpdateInProgress = 0;
+    QThread *m_openUpdateThread = nullptr; // needed for asserts
     QStringList m_importPaths;
     QQmlJS::Dom::DomItem m_currentEnv;
     QQmlJS::Dom::DomItem m_validEnv;

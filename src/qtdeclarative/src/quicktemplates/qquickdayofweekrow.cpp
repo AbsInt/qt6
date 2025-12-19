@@ -20,6 +20,7 @@ QT_BEGIN_NAMESPACE
     are ordered and formatted using the specified \l {Control::locale}{locale}.
 
     \image qtquickcontrols-dayofweekrow.webp
+           {Day of week row displaying weekday names}
     \snippet qtquickcontrols-dayofweekrow.qml 1
 
     DayOfWeekRow can be used as a standalone control, but it is most
@@ -27,6 +28,7 @@ QT_BEGIN_NAMESPACE
     positioning of the row is left to the user.
 
     \image qtquickcontrols-dayofweekrow-layout.webp
+           {Day of week row in calendar layout}
     \snippet qtquickcontrols-dayofweekrow-layout.qml 1
 
     The visual appearance of DayOfWeekRow can be changed by

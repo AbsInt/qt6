@@ -24,6 +24,7 @@ QT_BEGIN_NAMESPACE
     either replace a \l Flickable, or to decorate an existing one.
 
     \image qtquickcontrols-scrollview.png
+           {Scroll view containing scrollable content}
 
     The first example demonstrates the simplest usage of ScrollView.
 
@@ -75,11 +76,13 @@ QT_BEGIN_NAMESPACE
     On touch, ScrollView enables flicking and makes the scroll bars non-interactive.
 
     \image qtquickcontrols-scrollindicator.gif
+           {Scroll indicator showing scroll position}
 
     When interacted with a mouse device, flicking is disabled and the scroll bars
     are interactive.
 
     \image qtquickcontrols-scrollbar.gif
+           {Scroll bar handle moving along track}
 
     Scroll bars can be made interactive on touch, or non-interactive when interacted
     with a mouse device, by setting the \l {ScrollBar::}{interactive} property explicitly

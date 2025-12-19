@@ -29,6 +29,7 @@ static const int AUTO_REPEAT_INTERVAL = 100;
     \brief Allows the user to select from a set of preset values.
 
     \image qtquickcontrols-spinbox.png
+           {Spin box with numeric value and buttons}
 
     SpinBox allows the user to choose an integer value by clicking the up
     or down indicator buttons, or by pressing up or down on the keyboard.
@@ -43,6 +44,7 @@ static const int AUTO_REPEAT_INTERVAL = 100;
     \section2 Custom Values
 
     \image qtquickcontrols-spinbox-textual.png
+           {Spin box displaying textual values}
 
     Even though SpinBox works on integer values, it can be customized to
     accept arbitrary input values. The following snippet demonstrates how
@@ -55,6 +57,7 @@ static const int AUTO_REPEAT_INTERVAL = 100;
     numbers:
 
     \image qtquickcontrols-spinbox-double.png
+           {Spin box displaying decimal values}
 
     \snippet qtquickcontrols-spinbox-double.qml 1
 

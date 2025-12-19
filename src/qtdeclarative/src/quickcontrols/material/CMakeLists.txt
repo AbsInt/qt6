@@ -138,6 +138,7 @@ qt_internal_add_qml_module(QuickControls2Material
         Qt::QuickControls2Private
         Qt::QuickPrivate
         Qt::QuickTemplates2Private
+        Qt::QuickControls2BasicPrivate
 )
 
 target_sources(qtquickcontrols2materialstyleplugin

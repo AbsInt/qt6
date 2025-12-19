@@ -69,16 +69,11 @@ if(TARGET Qt::Gui AND TARGET Qt::qsb AND QT_FEATURE_qml_animation)
     add_subdirectory(quicktemplates)
     add_subdirectory(quickcontrolsimpl)
     add_subdirectory(quickcontrols)
-    if(QT_FEATURE_quicktemplates2_container)
-        add_subdirectory(quickdialogs)
-    endif()
+
     if (QT_FEATURE_quickcontrols2_macos OR QT_FEATURE_quickcontrols2_windows)
         add_subdirectory(quicknativestyle)
     endif()
 
-    if(QT_FEATURE_testlib AND QT_FEATURE_network AND QT_FEATURE_quick_itemview AND TARGET Qt::Test AND TARGET Qt::QuickControls2 AND NOT (WASM AND BUILD_SHARED_LIBS))
-        add_subdirectory(quickcontrolstestutils)
-    endif()
 else()
     qt_configure_add_summary_section(NAME "Qt Quick")
     qt_configure_add_summary_entry(TYPE "message" ARGS "Qt Quick support" MESSAGE "no")
@@ -89,6 +84,14 @@ else()
 endif()
 
 add_subdirectory(labs)
+
+if(TARGET Qt::QuickTemplates2 AND QT_FEATURE_quicktemplates2_container)
+    add_subdirectory(quickdialogs)
+endif()
+
+if(QT_FEATURE_testlib AND QT_FEATURE_network AND QT_FEATURE_quick_itemview AND TARGET Qt::Test AND TARGET Qt::QuickControls2 AND NOT (WASM AND BUILD_SHARED_LIBS))
+    add_subdirectory(quickcontrolstestutils)
+endif()
 
 # special case begin
 # These need to be included here since they have dependencies on the modules

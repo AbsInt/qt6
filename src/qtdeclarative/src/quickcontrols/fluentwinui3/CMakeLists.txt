@@ -95,6 +95,7 @@ qt_internal_add_qml_module(qtquickcontrols2fluentwinui3styleplugin
         Qt::QuickControls2Private
         Qt::QuickPrivate
         Qt::QuickTemplates2Private
+        Qt::QuickControls2FusionPrivate
 )
 
 _qt_internal_add_qml_static_plugin_dependency(qtquickcontrols2fluentwinui3styleplugin

@@ -23,6 +23,7 @@ QT_BEGIN_NAMESPACE
     \brief Used to select a range of values by sliding two handles along a track.
 
     \image qtquickcontrols-rangeslider.gif
+           {Range slider with two handles defining range}
 
     RangeSlider is used to select a range specified by two values, by sliding
     each handle along a track.

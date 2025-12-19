@@ -18,6 +18,7 @@ QT_BEGIN_NAMESPACE
     \brief A push-button control with rounded corners that can be clicked by the user.
 
     \image qtquickcontrols-roundbutton.png
+           {Round button control}
 
     RoundButton is identical to \l Button, except that it has a \l radius property
     which allows the corners to be rounded without having to customize the

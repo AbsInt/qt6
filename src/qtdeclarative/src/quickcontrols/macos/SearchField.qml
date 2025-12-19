@@ -29,7 +29,6 @@ NativeStyle.DefaultSearchField {
 
     NativeStyle.SearchField {
         id: search
-        visible: control.__nativeSearchIndicator
         control: control
         subControl: NativeStyle.SearchField.Search
         x: searchIndicator.indicator.x
@@ -47,7 +46,7 @@ NativeStyle.DefaultSearchField {
 
     NativeStyle.SearchField {
         id: clear
-        visible: control.__nativeClearIndicator
+        visible: control.text.length > 0
         control: control
         subControl: NativeStyle.SearchField.Clear
         x: clearIndicator.indicator.x

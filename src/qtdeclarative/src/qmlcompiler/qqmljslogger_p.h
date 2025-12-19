@@ -258,7 +258,7 @@ public:
         });
     }
 
-    void processMessages(const QList<QQmlJS::DiagnosticMessage> &messages,
+    void processMessages(QSpan<const QQmlJS::DiagnosticMessage> messages,
                          const QQmlJS::LoggerWarningId id,
                          const QQmlJS::SourceLocation &sourceLocation = QQmlJS::SourceLocation{});
 

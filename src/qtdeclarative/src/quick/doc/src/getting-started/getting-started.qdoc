@@ -20,7 +20,9 @@ C++ libraries.
 \section1 Qt Academy Courses
 
 The following Qt Academy courses are recommended for getting started with QML
-and Qt Quick:
+and Qt Quick.
+
+\section2 Basic courses
 
 \list
 \li \l {https://www.qt.io/academy/course-catalog#qml-for-beginners}{QML for Beginners}
@@ -28,9 +30,15 @@ and Qt Quick:
 \li \l {https://www.qt.io/academy/course-catalog#introduction-to-qt-quick}{Introduction to Qt Quick}
 \li \l {https://www.qt.io/academy/course-catalog#introduction-to-qt-quick-controls}{Introduction to Qt Quick Controls}
 \li \l {https://www.qt.io/academy/course-catalog#creating-a-simple-qt-quick-application-}{Creating a Simple Qt Quick Application}
+\endlist
+
+\section2 Intermediate courses
+
+\list
 \li \l {https://www.qt.io/academy/course-catalog#qml-dashboard:-main-ui}{QML Dashboard: Main UI}
 \li \l {https://www.qt.io/academy/course-catalog#qml-dashboard:-inbox}{QML Dashboard: Inbox}
 \li \l {https://www.qt.io/academy/course-catalog#qml-dashboard:-calendar}{QML Dashboard: Calendar}
+\li \l {https://www.qt.io/academy/course-catalog#qml-dashboard:-courses}{QML Dashboard: Courses}
 \endlist
 
 \section1 What is QML?

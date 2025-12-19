@@ -173,7 +173,7 @@ QQuickStackElement *QQuickStackViewPrivate::findElement(const QV4::Value &value)
 static QUrl resolvedUrl(const QUrl &url, const QQmlRefPointer<QQmlContextData> &context)
 {
     if (url.isRelative())
-        return context->resolvedUrl(url).toString();
+        return context->resolvedUrl(url);
     return url;
 }
 

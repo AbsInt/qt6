@@ -78,7 +78,7 @@ void QQuickCalendarModelPrivate::populate(QDate f, QDate t, bool force)
     if (!force && f == from && t == to)
         return;
 
-    int c = getCount(from, to);
+    int c = getCount(f, t);
     if (c != count) {
         q->beginResetModel();
         count = c;

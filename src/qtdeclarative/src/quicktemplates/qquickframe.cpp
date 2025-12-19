@@ -30,6 +30,7 @@ QT_BEGIN_NAMESPACE
     for use together with layouts.
 
     \image qtquickcontrols-frame.png
+           {Frame with visible border containing grouped controls}
 
     \snippet qtquickcontrols-frame.qml 1
 

@@ -95,7 +95,13 @@ public:
             if (append == qlist_append)
                 return *static_cast<QList<T *> *>(data);
         }
+        return toList_impl<List>();
+    }
 
+private:
+    template<typename List>
+    List toList_impl()
+    {
         const qsizetype size = count(this);
 
         List result;

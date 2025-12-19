@@ -830,10 +830,18 @@ void QQuickAbstractButton::setIcon(const QQuickIcon &icon)
 
     \table
     \header \li Display \li Result
-    \row \li \c AbstractButton.IconOnly \li \image qtquickcontrols-button-icononly.png
-    \row \li \c AbstractButton.TextOnly \li \image qtquickcontrols-button-textonly.png
-    \row \li \c AbstractButton.TextBesideIcon (default) \li \image qtquickcontrols-button-textbesideicon.png
-    \row \li \c AbstractButton.TextUnderIcon \li \image qtquickcontrols-button-textundericon.png
+    \row \li \c AbstractButton.IconOnly
+         \li \image qtquickcontrols-button-icononly.png
+                    {Button displaying only icon}
+    \row \li \c AbstractButton.TextOnly
+         \li \image qtquickcontrols-button-textonly.png
+                    {Button displaying only text}
+    \row \li \c AbstractButton.TextBesideIcon (default)
+         \li \image qtquickcontrols-button-textbesideicon.png
+                    {Button with text beside icon}
+    \row \li \c AbstractButton.TextUnderIcon
+         \li \image qtquickcontrols-button-textundericon.png
+                    {Button with text under icon}
     \endtable
 
     \sa {Control::}{spacing}, {Control::}{padding}

@@ -460,6 +460,8 @@ QAccessible::State QAccessibleQuickItem::state() const
         state.focusable = false;
         state.disabled = true;
     }
+    if (item()->property("readOnly").toBool() || role() == QAccessible::ProgressBar)
+        state.readOnly = true;
     return state;
 }
 

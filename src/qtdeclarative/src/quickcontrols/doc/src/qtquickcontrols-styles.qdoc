@@ -12,6 +12,7 @@
     \section2 Basic Style
 
     \image qtquickcontrols-basic.png
+           {Gallery of controls in Basic style}
 
     The \l {Basic Style} is a simple and light-weight all-round style that offers
     the maximum performance for Qt Quick Controls.
@@ -26,6 +27,7 @@
     \section2 Imagine Style
 
     \image qtquickcontrols-imagine.png
+           {Gallery of controls in Imagine style}
 
     The \l {Imagine Style} is based on image assets. The style comes with a default
     set of images which can easily be changed by providing a directory
@@ -65,6 +67,7 @@
     \section2 Windows Style
 
     \image qtquickcontrols-windows.png
+           {Gallery of controls in Windows style}
 
     The \l {Windows Style} is a native-looking style for Windows.
     \note this style is only available for applications running on Windows.

@@ -1978,7 +1978,8 @@ bool QQmlJSTypePropagator::propagateArrayMethod(
     }
 
     if (name == u"splice" && argc > 0) {
-        for (int i = 0; i < 2; ++i) {
+        const int startAndDeleteCount = std::min(argc, 2);
+        for (int i = 0; i < startAndDeleteCount; ++i) {
             if (!canConvertFromTo(m_state.registers[argv + i].content, intType))
                 return false;
         }
@@ -1988,7 +1989,7 @@ bool QQmlJSTypePropagator::propagateArrayMethod(
                 return false;
         }
 
-        for (int i = 0; i < 2; ++i)
+        for (int i = 0; i < startAndDeleteCount; ++i)
             addReadRegister(argv + i, intType);
 
         for (int i = 2; i < argc; ++i)

@@ -24,6 +24,7 @@ QT_BEGIN_NAMESPACE
     delegate items that present pages.
 
     \image qtquickcontrols-pageindicator.png
+           {Page indicator showing current page position}
 
     \code
     Column {

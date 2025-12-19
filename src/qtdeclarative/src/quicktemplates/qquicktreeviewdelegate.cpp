@@ -21,6 +21,7 @@ QT_BEGIN_NAMESPACE
     \brief A delegate that can be assigned to a TreeView.
 
     \image qtquickcontrols-treeviewdelegate.png
+           {Tree view displaying hierarchical data using a tree view delegate}
 
     A TreeViewDelegate is a delegate that can be assigned to the
     \l {TableView::delegate} {delegate property} of a \l TreeView.

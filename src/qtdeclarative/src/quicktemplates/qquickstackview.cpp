@@ -65,6 +65,7 @@ QDebug operator<<(QDebug debug, const QQuickStackViewArg &arg)
     \brief Provides a stack-based navigation model.
 
     \image qtquickcontrols-stackview-wireframe.webp
+           {Stack view wireframe showing page navigation}
 
     StackView can be used with a set of inter-linked information pages. For
     example, an email application with separate views to list the latest emails,
@@ -140,6 +141,7 @@ QDebug operator<<(QDebug debug, const QQuickStackViewArg &arg)
     stack view with the \l push() function:
 
     \image qtquickcontrols-stackview-push.gif
+           {Stack view pushing new page with transition}
 
     The stack now contains the following items: \c [A, B, C].
 
@@ -153,6 +155,7 @@ QDebug operator<<(QDebug debug, const QQuickStackViewArg &arg)
     removed with a call to \l pop():
 
     \image qtquickcontrols-stackview-pop.gif
+           {Stack view popping page with transition}
 
     The stack now contains the following items: \c [A, B].
 
@@ -174,6 +177,7 @@ QDebug operator<<(QDebug debug, const QQuickStackViewArg &arg)
     calling \c pop(null):
 
     \image qtquickcontrols-stackview-unwind.gif
+           {Stack view unwinding to deep page}
 
     The stack now contains a single item: \c [A].
 
@@ -182,6 +186,7 @@ QDebug operator<<(QDebug debug, const QQuickStackViewArg &arg)
     In the following animation, we \l replace the topmost item with \c D:
 
     \image qtquickcontrols-stackview-replace.gif
+           {Stack view replacing page with transition}
 
     The stack now contains the following items: \c [A, B, D].
 
@@ -1805,6 +1810,7 @@ QQuickStackView::Status QQuickStackViewAttached::status() const
           items underneath can be seen.
 
     \image qtquickcontrols-stackview-visible.png
+           {Stack view showing visibility behavior}
 
     \snippet qtquickcontrols-stackview-visible.qml 1
 */

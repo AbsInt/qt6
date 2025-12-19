@@ -86,6 +86,7 @@ private slots:
     void testMarker();
     void testPatternElement();
     void testMisplacedElement();
+    void testCycles_data();
     void testCycles();
     void testFeFlood();
     void testFeOffset();
@@ -94,7 +95,6 @@ private slots:
     void testFeComposite();
     void testFeGaussian();
     void testFeBlend();
-    void testUseCycles();
 
     void testOption_data();
     void testOption();
@@ -130,6 +130,8 @@ void tst_QSvgRenderer::getSetCheck()
     QCOMPARE(20, obj1.framesPerSecond());
     obj1.setFramesPerSecond(0);
     QCOMPARE(0, obj1.framesPerSecond());
+    QTest::ignoreMessage(QtWarningMsg,
+                         "QSvgRenderer::setFramesPerSecond: Cannot set negative value -2147483648");
     obj1.setFramesPerSecond(INT_MIN);
     QCOMPARE(0, obj1.framesPerSecond()); // Can't have a negative framerate
     obj1.setFramesPerSecond(INT_MAX);
@@ -169,7 +171,8 @@ void tst_QSvgRenderer::emptyRect()
 
 void tst_QSvgRenderer::inexistentUrl()
 {
-    const char *src = "<svg><g><path d=\"\" style=\"stroke:url(#inexistent)\"/></g></svg>";
+    const char *src = "<svg><g><path d=\"M0 0\" style=\"stroke:url(#inexistent)\"/></g></svg>";
+    QTest::ignoreMessage(QtWarningMsg, "<input>:1:66: Could not resolve property: #inexistent");
 
     QByteArray data(src);
     QSvgRenderer renderer(data);
@@ -180,6 +183,7 @@ void tst_QSvgRenderer::inexistentUrl()
 void tst_QSvgRenderer::emptyUrl()
 {
     const char *src = "<svg><text fill=\"url()\" /></svg>";
+    QTest::ignoreMessage(QtWarningMsg, "<input>:1:32: Could not resolve property: ");
 
     QByteArray data(src);
     QSvgRenderer renderer(data);
@@ -1755,6 +1759,7 @@ void tst_QSvgRenderer::smallFont()
         QByteArray data(svgs[i]);
         if (i == 0)
             QTest::ignoreMessage(QtWarningMsg, "QFont::setPointSizeF: Point size <= 0 (0.000000), must be greater than 0");
+        QTest::ignoreMessage(QtWarningMsg, "QFont::setPixelSize: Pixel size <= 0 (0)");
         QSvgRenderer renderer(data);
         images[i] = QImage(50, 50, QImage::Format_ARGB32_Premultiplied);
         images[i].fill(-1);
@@ -2238,29 +2243,28 @@ void tst_QSvgRenderer::testMisplacedElement()
     QCOMPARE(image, refImage);
 }
 
-void tst_QSvgRenderer::testCycles()
+void tst_QSvgRenderer::testCycles_data()
 {
-    QByteArray svgDoc(R"(<svg viewBox="0 0 200 200">
-                      <pattern id="pattern" patternUnits="userSpaceOnUse" width="20" height="20">
-                      <rect x="0" y="0" width="10" height="10" fill="url(#pattern) "/>
-                      </pattern>
-                      </svg>)");
+    QTest::addColumn<QByteArray>("svgDoc");
 
-    QSvgRenderer renderer(svgDoc);
-    QVERIFY(!renderer.isValid());
+    QTest::newRow("fill-pattern") << R"(<svg viewBox="0 0 200 200">
+                         <pattern id="pattern" patternUnits="userSpaceOnUse" width="20" height="20">
+                           <rect x="0" y="0" width="10" height="10" fill="url(#pattern) "/>
+                         </pattern>
+                       </svg>)"_ba;
+
+    QTest::newRow("use") << R"(<svg viewBox="0 0 200 200">
+                                 <g xml:id="group-1"><use xml:id="use-1" xlink:href="#group-2"/></g>
+                                 <g xml:id="group-2"><use xml:id="use-2" xlink:href="#group-1"/></g>
+                               </svg>)"_ba;
 }
 
-void tst_QSvgRenderer::testUseCycles()
+void tst_QSvgRenderer::testCycles()
 {
-    QByteArray svgDoc(R"(<svg viewBox="0 0 200 200">
-        <g xml:id="group-1">
-          <use xml:id="use-1" xlink:href="#group-2" />
-        </g>
-        <g xml:id="group-2">
-          <use xml:id="use-2" xlink:href="#group-1" />
-        </g>
-    </svg>)");
-
+    QFETCH(QByteArray, svgDoc);
+#if QT_CONFIG(regularexpression)
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("Cycles detected in SVG"));
+#endif
     QSvgRenderer renderer(svgDoc);
     QVERIFY(!renderer.isValid());
 }

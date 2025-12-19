@@ -26,6 +26,7 @@ Q_STATIC_LOGGING_CATEGORY(lcTumbler, "qt.quick.controls.tumbler")
     \brief Spinnable wheel of items that can be selected.
 
     \image qtquickcontrols-tumbler-wrap.gif
+           {Tumbler with wrap, looping continuously}
 
     \code
     Tumbler {

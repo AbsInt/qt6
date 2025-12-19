@@ -20,6 +20,7 @@ QT_BEGIN_NAMESPACE
     \brief Exclusive item delegate with a radio indicator that can be toggled on or off.
 
     \image qtquickcontrols-radiodelegate.gif
+           {Radio delegates showing exclusive selection behavior}
 
     RadioDelegate presents an item delegate that can be toggled on (checked) or
     off (unchecked). Radio delegates are typically used to select one option

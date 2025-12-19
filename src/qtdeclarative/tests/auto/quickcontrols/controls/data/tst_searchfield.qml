@@ -48,7 +48,10 @@ TestCase {
         compare(control.textRole, "")
         compare(control.live, true)
         verify(control.delegate)
-        verify(control.popup)
+        if (StyleInfo.styleName !== "iOS")
+            verify(control.popup)
+        else
+            compare(StyleInfo.styleName, "iOS")
     }
 
     // TO-DO: Implement SFPM logic after 6.10
@@ -105,7 +108,9 @@ TestCase {
     }
 
     function test_textRole() {
-        ignoreWarning(/Unable to assign QQmlDMAbstractItemModelData to QString/)
+        if (StyleInfo.styleName !== "iOS")
+            ignoreWarning(/Unable to assign QQmlDMAbstractItemModelData to QString/)
+
         let control = createTemporaryObject(searchField, testCase)
         verify(control)
 
@@ -117,7 +122,10 @@ TestCase {
 
         compare(control.text, "a")
         compare(control.suggestionCount, 5)
-        compare(control.popup.visible,true)
+        if (StyleInfo.styleName !== "iOS")
+            compare(control.popup.visible,true)
+        else
+            compare(StyleInfo.styleName, "iOS")
 
         control.textRole = "color"
 
@@ -125,7 +133,10 @@ TestCase {
 
         compare(control.text, "r")
         compare(control.suggestionCount, 5)
-        compare(control.popup.visible,true)
+        if (StyleInfo.styleName !== "iOS")
+            compare(control.popup.visible,true)
+        else
+            compare(StyleInfo.styleName, "iOS")
     }
 
     Component {
@@ -142,6 +153,9 @@ TestCase {
     }
 
     function test_suggestionPopup() {
+        if (StyleInfo.styleName === "iOS")
+            skip("iOS style does not provide a popup for SearchField.")
+
         let control = createTemporaryObject(suggestion, testCase)
         verify(control)
 
@@ -184,7 +198,11 @@ TestCase {
     }
 
     function test_currentIndexResetsOnEdit() {
+        if (StyleInfo.styleName === "iOS")
+            skip("iOS style does not provide a popup for SearchField.")
+
         ignoreWarning(/Unable to assign QQmlDMAbstractItemModelData to QString/)
+
         let control = createTemporaryObject(searchField, testCase)
         verify(control)
 
@@ -215,7 +233,11 @@ TestCase {
     }
 
     function test_arrowKeys() {
+        if (StyleInfo.styleName === "iOS")
+            skip("iOS style does not provide a popup for SearchField.")
+
         ignoreWarning(/Unable to assign QQmlDMAbstractItemModelData to QString/)
+
         let control = createTemporaryObject(searchField, testCase)
         verify(control)
 

@@ -16,6 +16,7 @@
     \ingroup qtquickcontrols-delegates
 
     \image qtquickcontrols-headerviewdelegate.png
+           {Header view delegate in table column header}
 
     The HorizontalHeaderViewDelegate serves as the default delegate
     automatically assigned to the \l HorizontalHeaderView's
@@ -39,6 +40,7 @@
     \ingroup qtquickcontrols-delegates
 
     \image qtquickcontrols-headerviewdelegate.png
+           {Header view delegate in table column header}
 
      The VerticalHeaderViewDelegate serves as the default delegate
      automatically assigned to the \l VerticalHeaderView's

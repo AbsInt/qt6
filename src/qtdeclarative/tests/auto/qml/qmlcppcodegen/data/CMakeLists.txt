@@ -26,6 +26,7 @@ set(cpp_sources
     multiforeign.h
     objectwithmethod.h
     person.cpp person.h
+    propertymap.h
     qmlusing.h
     recursiveObject.h
     refuseWrite.h
@@ -250,6 +251,7 @@ set(qml_files
     methodOnListLookup.qml
     methods.qml
     modulePrefix.qml
+    moveAliasedRegister.qml
     moveRegVoid.qml
     multiAdjust.qml
     multiRedirect.qml
@@ -281,6 +283,7 @@ set(qml_files
     popContextAfterRet.qml
     prefixedMetaType.qml
     pressAndHoldButton.qml
+    propertyMap.qml
     qmlUsing.qml
     qtbug113150.qml
     qtfont.qml
@@ -315,6 +318,7 @@ set(qml_files
     signalsWithLists.qml
     signatureIgnored.qml
     specificParent.qml
+    splice.qml
     storeElementSideEffects.qml
     stringArg.qml
     stringLength.qml

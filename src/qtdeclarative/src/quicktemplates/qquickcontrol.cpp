@@ -46,6 +46,7 @@ Q_LOGGING_CATEGORY(lcItemManagement, "qt.quick.controls.control.itemmanagement")
     The following diagram illustrates the layout of a typical control:
 
     \image qtquickcontrols-control.png
+           {Basic control showing structure}
 
     The \l {Item::}{implicitWidth} and \l {Item::}{implicitHeight} of a control
     are typically based on the implicit sizes of the background and the content

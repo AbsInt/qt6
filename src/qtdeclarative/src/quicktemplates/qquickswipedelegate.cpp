@@ -56,11 +56,13 @@ QT_BEGIN_NAMESPACE
     occur:
 
     \image qtquickcontrols-swipedelegate.gif
+           {Swipe delegate revealing actions on swipe gesture}
 
     If \c swipe.left and \c swipe.right are anchored to the left and
     right of the \l {Control::}{background} item (respectively), they'll behave like this:
 
     \image qtquickcontrols-swipedelegate-leading-trailing.gif
+           {Swipe delegate showing leading and trailing actions}
 
     When using \c swipe.left and \c swipe.right, the control cannot be
     swiped past the left and right edges. To achieve this type of "wrapping"
@@ -70,6 +72,7 @@ QT_BEGIN_NAMESPACE
     control repeatedly in both directions:
 
     \image qtquickcontrols-swipedelegate-behind.gif
+           {Swipe delegate showing behind swipe action}
 
     \sa {Customizing SwipeDelegate}, {Delegate Controls}, {Qt Quick Controls 2 - Gallery}{Gallery Example}
 */

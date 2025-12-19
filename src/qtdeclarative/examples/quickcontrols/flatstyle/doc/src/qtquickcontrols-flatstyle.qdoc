@@ -16,7 +16,8 @@
     declarative parts of the UI, \c .ui.qml files are used. These can be edited
     visually in Qt Quick Designer.
 
-    \borderedimage qtquickcontrols-flatstyle.png
+    \image qtquickcontrols-flatstyle.png
+       {Application with customized flat style controls and theme options}
 
     \section1 QML Module for Theming
 
@@ -58,7 +59,8 @@
     To edit the indicator of a switch in Qt Quick Designer we can open Switch.qml and then enter the implementation
     of the indicator called \c switchHandle using the combo box on the top next to the combo box for the open documents.
 
-    \borderedimage qtquickcontrols-flatstyle-creator.png
+    \image qtquickcontrols-flatstyle-creator.png
+       {Qt Quick Designer showing switch handle states and properties}
 
     The application itself is just a simple form that allows the user to adjust a couple of parameters of the custom controls.
     The user can choose another main color, set the font to bold or underline, and increase the size of the controls by

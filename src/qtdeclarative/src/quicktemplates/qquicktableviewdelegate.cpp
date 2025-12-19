@@ -22,6 +22,7 @@ QT_BEGIN_NAMESPACE
     \brief A delegate that can be assigned to a TableView.
 
     \image qtquickcontrols-tableviewdelegate.png
+           {Table view displaying addresses using a table view delegate}
 
     A TableViewDelegate is a delegate that can be assigned to the
     \l {TableView::delegate} {delegate property} of a \l TableView.

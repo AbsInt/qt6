@@ -20,6 +20,7 @@ QT_BEGIN_NAMESPACE
     \brief Button with a look suitable for a TabBar.
 
     \image qtquickcontrols-tabbutton.png
+           {Tab button in tab bar}
 
     TabButton is used in conjunction with a \l TabBar.
 

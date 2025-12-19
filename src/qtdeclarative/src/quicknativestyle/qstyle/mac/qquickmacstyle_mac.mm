@@ -4158,9 +4158,9 @@ QRect QMacStyle::subElementRect(SubElement sr, const QStyleOption *opt) const
     case SE_SearchFieldLayoutItem:
       if (qstyleoption_cast<const QStyleOptionSearchField *>(opt)) {
         rect = LargeSmallMini(opt,
-                              opt->rect.adjusted(4, 6, -4, -7),
-                              opt->rect.adjusted(4, 7, -4, -7),
-                              opt->rect.adjusted(3, 6, -3, -6));
+                              opt->rect.adjusted(2, 3, -2, -2),
+                              opt->rect.adjusted(2, 3, -2, -2),
+                              opt->rect.adjusted(2, 3, -2, -2));
       }
       break;
     case SE_ComboBoxLayoutItem:
@@ -4789,6 +4789,24 @@ void QMacStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComplex 
             auto *cell = static_cast<NSSearchFieldCell *>(searchField.cell);
 
             searchField.enabled = isEnabled;
+
+            // QTBUG-141776
+            // macOS 26 (Tahoe) changed NSSearchFieldCell: the magnifying glass icon is taller.
+            // Drawing it at the button’s full rect causes the top to be clipped by the bezel,
+            // though the clear icon remains fine. To avoid this, on 26.0+ we render the search
+            // icon at a fixed, smaller size to prevent upscaling and eliminate clipping.
+            #if QT_MACOS_PLATFORM_SDK_EQUAL_OR_ABOVE(260000)
+                if (__builtin_available(macOS 26, *)) {
+                    NSButtonCell *btn = cell.searchButtonCell;
+                    NSImageSymbolConfiguration *imgCfg =
+                        [NSImageSymbolConfiguration configurationWithPointSize:11
+                                                                        weight:NSFontWeightMedium
+                                                                         scale:NSImageSymbolScaleMedium];
+                    btn.image = [btn.image imageWithSymbolConfiguration:imgCfg];
+                    [btn.image setTemplate:YES];
+                    btn.imageScaling = NSImageScaleNone;
+                }
+            #endif
 
             if (sf->subControls == QStyle::SC_SearchFieldSearch) {
                 // Draw only the search icon
@@ -5454,7 +5472,7 @@ QRect QMacStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex *op
           QRectF editRect;
           switch (cs) {
           case QStyleHelper::SizeLarge:
-              editRect = sf->rect.adjusted(16, 7, -22, -6);
+              editRect = sf->rect.adjusted(16, 0, -22, 0);
               break;
           case QStyleHelper::SizeSmall:
               editRect = sf->rect.adjusted(16, 5, -22, -7);
@@ -5473,11 +5491,19 @@ QRect QMacStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex *op
               break;
           }
           case SC_SearchFieldClear: {
-              ret = QRectF::fromCGRect([cell cancelButtonRectForBounds:searchField.bounds]).toAlignedRect();
+              const CGRect r = [cell cancelButtonRectForBounds:ret.toCGRect()];
+              ret = QRectF::fromCGRect(r).toRect();
+              ret.translate(0, -1);
+              ret = visualRect(sf->direction, sf->rect, ret);
+              ret.adjust(-3, -3, 3, 3);
               break;
           }
           case SC_SearchFieldSearch: {
-              ret = QRectF::fromCGRect([cell searchButtonRectForBounds:searchField.bounds]).toAlignedRect();
+              const CGRect r = [cell searchButtonRectForBounds:ret.toCGRect()];
+              ret = QRectF::fromCGRect(r).toRect();
+              ret.translate(0, -1);
+              ret = visualRect(sf->direction, sf->rect, ret);
+              ret.adjust(-3, -3, 3, 3);
               break;
           }
           case SC_SearchFieldPopup: {

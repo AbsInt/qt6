@@ -20,6 +20,7 @@ QT_BEGIN_NAMESPACE
     \brief Item delegate with a switch indicator that can be toggled on or off.
 
     \image qtquickcontrols-switchdelegate.gif
+           {Switch delegates showing on and off states}
 
     SwitchDelegate presents an item delegate that can be toggled on (checked) or
     off (unchecked). Switch delegates are typically used to select one or more

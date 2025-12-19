@@ -21,6 +21,7 @@ QT_BEGIN_NAMESPACE
     \brief Check button that triggers when held down long enough.
 
     \image qtquickcontrols-delaybutton.gif
+           {Delay button with progress indicator filling on long press}
 
     DelayButton is a checkable button that incorporates a delay before the
     button becomes \l {AbstractButton::}{checked} and the \l activated()

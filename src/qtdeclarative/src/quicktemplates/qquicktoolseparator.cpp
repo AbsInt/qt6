@@ -23,6 +23,7 @@ QT_BEGIN_NAMESPACE
     or \c Qt.Horizontal, respectively.
 
     \image qtquickcontrols-toolseparator.png
+           {Tool separator dividing toolbar buttons}
 
     \snippet qtquickcontrols-toolseparator.qml 1
 

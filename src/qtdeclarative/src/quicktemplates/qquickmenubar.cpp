@@ -28,6 +28,7 @@ QT_BEGIN_NAMESPACE
     \brief Provides a window menu bar.
 
     \image qtquickcontrols-menubar.png
+           {Menu bar with File, Edit, and View menus}
 
     MenuBar consists of drop-down menus, and is normally located at the top
     edge of the window.

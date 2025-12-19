@@ -29,6 +29,7 @@ QT_BEGIN_NAMESPACE
     for use together with layouts.
 
     \image qtquickcontrols-toolbar.png
+           {Toolbar containing buttons and other controls}
 
     \code
     ApplicationWindow {

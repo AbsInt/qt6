@@ -17,6 +17,7 @@ QT_BEGIN_NAMESPACE
     \brief Indicates background activity, for example, while content is being loaded.
 
     \image qtquickcontrols-busyindicator.gif
+           {Spinning busy indicator showing activity in progress}
 
     The busy indicator should be used to indicate activity while content is
     being loaded or the UI is blocked waiting for a resource to become available.

@@ -26,6 +26,7 @@ QT_BEGIN_NAMESPACE
     \brief Used to select table cells inside a TableView.
 
     \image qtquickcontrols-selectionrectangle.png
+           {Selection rectangle for selecting table items}
 
     SelectionRectangle is used for selecting table cells in a TableView. It lets
     the user start a selection by doing a pointer drag inside the viewport, or by

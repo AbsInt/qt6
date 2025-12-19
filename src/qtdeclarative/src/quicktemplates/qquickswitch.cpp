@@ -24,6 +24,7 @@ QT_BEGIN_NAMESPACE
     \brief Switch button that can be toggled on or off.
 
     \image qtquickcontrols-switch.gif
+           {Switch control in on and off states}
 
     Switch is an option button that can be dragged or toggled on (checked) or
     off (unchecked). Switches are typically used to select between two states.

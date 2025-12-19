@@ -209,7 +209,9 @@ void QQmlCodeModel::openNeedUpdate()
             openUpdateStart();
     }
     QThreadPool::globalInstance()->start([this]() {
+        QScopedValueRollback thread(m_openUpdateThread, QThread::currentThread());
         while (openUpdateSome()) { }
+        emit openUpdateThreadFinished();
     });
 }
 
@@ -219,6 +221,8 @@ bool QQmlCodeModel::openUpdateSome()
     QByteArray toUpdate;
     {
         QMutexLocker l(&m_mutex);
+        Q_ASSERT(QThread::currentThread() == m_openUpdateThread);
+
         if (m_openDocumentsToUpdate.isEmpty()) {
             if (--m_nUpdateInProgress == 0)
                 openUpdateEnd();
@@ -441,6 +445,7 @@ void QQmlCodeModel::onCppFileChanged(const QString &)
 
 void QQmlCodeModel::newDocForOpenFile(const QByteArray &url, int version, const QString &docText)
 {
+    Q_ASSERT(QThread::currentThread() == m_openUpdateThread);
     qCDebug(codeModelLog) << "updating doc" << url << "to version" << version << "("
                           << docText.size() << "chars)";
 
@@ -715,6 +720,7 @@ void QQmlCodeModel::openUpdate(const QByteArray &url)
     std::shared_ptr<Utils::TextDocument> document;
     {
         QMutexLocker l(&m_mutex);
+        Q_ASSERT(QThread::currentThread() == m_openUpdateThread);
         OpenDocument &doc = m_openDocuments[url];
         document = doc.textDocument;
         if (!document)

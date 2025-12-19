@@ -3261,7 +3261,7 @@ function(_qt_internal_setup_deploy_support)
 
     list(JOIN candidate_paths "\n    " candidate_paths_joined)
 
-    if(NOT QT_NO_QTPATHS_DEPLOYMENT_WARNING AND NOT target_qtpaths_path)
+    if(WIN32 AND NOT QT_NO_QTPATHS_DEPLOYMENT_WARNING AND NOT target_qtpaths_path)
         message(WARNING
             "No qtpaths executable found for deployment purposes. Candidates searched: \n    "
             "${candidate_paths_joined}"
@@ -3673,21 +3673,6 @@ macro(qt6_standard_project_setup)
         endif()
         if(NOT DEFINED QT_I18N_SOURCE_LANGUAGE)
             set(QT_I18N_SOURCE_LANGUAGE ${__qt_sps_arg_I18N_SOURCE_LANGUAGE})
-        endif()
-
-        if(CMAKE_GENERATOR STREQUAL "Xcode")
-            # Ensure we always use device SDK for Xcode for single-arch Qt builds
-            set(qt_osx_arch_count 0)
-            if(QT_OSX_ARCHITECTURES)
-                list(LENGTH QT_OSX_ARCHITECTURES qt_osx_arch_count)
-            endif()
-            if(NOT qt_osx_arch_count GREATER 1 AND "${CMAKE_OSX_SYSROOT}" MATCHES "^[a-z]+simulator$")
-                # Xcode expects the base SDK to be the device SDK
-                set(simulator_sysroot "${CMAKE_OSX_SYSROOT}")
-                string(REGEX REPLACE "simulator" "os" CMAKE_OSX_SYSROOT "${CMAKE_OSX_SYSROOT}")
-                set(CMAKE_OSX_SYSROOT "${CMAKE_OSX_SYSROOT}" CACHE STRING "" FORCE)
-                set(CMAKE_XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS "${simulator_sysroot}")
-            endif()
         endif()
     endif()
 endmacro()

@@ -34,10 +34,13 @@ using namespace Qt::StringLiterals;
 
     \table
     \row \li \image qtquickcontrols-textfield-normal.png
+                    {Text field in normal state}
          \li A text field in its normal state.
     \row \li \image qtquickcontrols-textfield-focused.png
+                    {Text field in focused state with highlight}
          \li A text field that has active focus.
     \row \li \image qtquickcontrols-textfield-disabled.png
+                    {Text field in disabled state}
          \li A text field that is disabled.
     \endtable
 

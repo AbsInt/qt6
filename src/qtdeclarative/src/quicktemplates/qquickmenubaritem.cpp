@@ -22,6 +22,7 @@ QT_BEGIN_NAMESPACE
     is shown when a MenuBarItem is \l triggered via keyboard, mouse, or touch.
 
     \image qtquickcontrols-menubar.png
+           {Menu bar with File, Edit, and View menus}
 
     MenuBarItem is used as a default \l {MenuBar::}{delegate} type for MenuBar.
     Notice that it is not necessary to declare MenuBarItem instances by hand when

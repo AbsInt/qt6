@@ -56,6 +56,7 @@ set(qml_files
     "ToolTip.qml"
     "ToolSeparator.qml"
     "ApplicationWindow.qml"
+    "SearchField.qml"
 )
 
 set_source_files_properties(Slider.qml PROPERTIES
@@ -95,6 +96,7 @@ qt_internal_add_qml_module(qtquickcontrols2iosstyleplugin
         Qt::QuickControls2Private
         Qt::QuickPrivate
         Qt::QuickTemplates2Private
+        Qt::QuickControls2BasicPrivate
 )
 
 qt_internal_extend_target(qtquickcontrols2iosstyleplugin CONDITION APPLE AND IOS

@@ -23,6 +23,7 @@ QT_BEGIN_NAMESPACE
     is more suitable within a \l ToolBar.
 
     \image qtquickcontrols-toolbar.png
+           {Toolbar containing tool buttons}
 
     \snippet qtquickcontrols-toolbar.qml 1
 

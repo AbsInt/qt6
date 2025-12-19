@@ -20,6 +20,7 @@ QT_BEGIN_NAMESPACE
     \brief Exclusive radio button that can be toggled on or off.
 
     \image qtquickcontrols-radiobutton.gif
+           {Radio buttons showing exclusive selection behavior}
 
     RadioButton presents an option button that can be toggled on (checked) or
     off (unchecked). Radio buttons are typically used to select one option

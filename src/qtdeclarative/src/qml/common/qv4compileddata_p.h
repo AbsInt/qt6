@@ -52,7 +52,7 @@ QT_BEGIN_NAMESPACE
 // Also change the comment behind the number to describe the latest change. This has the added
 // benefit that if another patch changes the version too, it will result in a merge conflict, and
 // not get removed silently.
-#define QV4_DATA_STRUCTURE_VERSION 0x47 // Removed various counts
+#define QV4_DATA_STRUCTURE_VERSION 0x48 // Hotfix 6.10 - meta object change
 
 class QIODevice;
 class QQmlTypeNameCache;

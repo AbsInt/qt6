@@ -26,6 +26,7 @@ QT_BEGIN_NAMESPACE
     a \l header and \l footer item to a page.
 
     \image qtquickcontrols-page-wireframe.webp
+           {Page layout showing header, content area, and footer}
 
     Items declared as children of a Page are:
     \list

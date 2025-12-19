@@ -179,7 +179,7 @@ public:
                         *reinterpret_cast<const QJSPrimitiveValue *>(value.constData()));
         }
 
-        {
+        return [&] {
             T t{};
             if (value.metaType() == QMetaType::fromType<QString>()) {
                 if (convertString(value.toString(), targetType, &t))
@@ -190,7 +190,7 @@ public:
 
             QMetaType::convert(value.metaType(), value.constData(), targetType, &t);
             return t;
-        }
+        }();
     }
 
     template<typename From, typename To>
@@ -282,7 +282,7 @@ public:
                 return QJSNumberCoercion::toInteger(from);
         }
 
-        {
+        return [&] {
             const QMetaType sourceType = QMetaType::fromType<From>();
             const QMetaType targetType = QMetaType::fromType<To>();
             To to{};
@@ -295,7 +295,7 @@ public:
 
             QMetaType::convert(sourceType, &from, targetType, &to);
             return to;
-        }
+        }();
     }
 
     void collectGarbage();

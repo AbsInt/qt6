@@ -182,6 +182,9 @@ inline bool isPathContainer(const QSvgStructureNode *node)
         case QSvgNode::Polygon:
         case QSvgNode::Polyline:
         {
+            if (!child->style().opacity.isDefault())
+                return false;
+
             if (!child->style().transform.isDefault()) {
                 //qCDebug(lcQuickVectorGraphics) << "NOT path container because local transform";
                 return false;
@@ -514,7 +517,8 @@ namespace {
 
     glyph_t QSvgFontEngine::glyphIndex(uint ucs4) const
     {
-        if (ucs4 < USHRT_MAX && m_font->m_glyphs.contains(QChar(ushort(ucs4))))
+        const ushort c(ucs4);
+        if (ucs4 < USHRT_MAX && m_font->findFirstGlyphFor(QStringView(&c, 1)))
             return glyph_t(ucs4);
 
         return 0;
@@ -561,7 +565,13 @@ namespace {
             glyph_t index = glyphs[i];
             if (index > 0) {
                 QPointF position = positions[i].toPointF();
-                QPainterPath glyphPath = m_font->m_glyphs.value(QChar(ushort(index))).m_path;
+                const ushort c(index);
+                const QSvgGlyph *foundGlyph = m_font->findFirstGlyphFor(QStringView(&c, 1));
+
+                if (!foundGlyph)
+                    continue;
+
+                QPainterPath glyphPath = foundGlyph->m_path;
 
                 QTransform xform;
                 xform.translate(position.x(), position.y());
@@ -578,8 +588,9 @@ namespace {
         ret.x = 0; // left bearing
         ret.y = -ascent();
         const qreal scale = fontDef.pixelSize / m_font->m_unitsPerEm;
-        const QSvgGlyph &svgGlyph = m_font->m_glyphs.value(QChar(ushort(glyph)));
-        ret.width = QFixed::fromReal(svgGlyph.m_horizAdvX * scale);
+        const ushort c(glyph);
+        const QSvgGlyph *svgGlyph = m_font->findFirstGlyphFor(QStringView(&c, 1));
+        ret.width = QFixed::fromReal(svgGlyph ? svgGlyph->m_horizAdvX * scale : 0.);
         ret.height = ascent() + descent();
         return ret;
     }
@@ -594,9 +605,9 @@ namespace {
     {
         const qreal scale = fontDef.pixelSize / m_font->m_unitsPerEm;
         for (int i = 0; i < glyphLayout->numGlyphs; i++) {
-            glyph_t glyph = glyphLayout->glyphs[i];
-            const QSvgGlyph &svgGlyph = m_font->m_glyphs.value(QChar(ushort(glyph)));
-            glyphLayout->advances[i] = QFixed::fromReal(svgGlyph.m_horizAdvX * scale);
+            const ushort c(glyphLayout->glyphs[i]);
+            const QSvgGlyph *svgGl = m_font->findFirstGlyphFor(QStringView(&c, 1));
+            glyphLayout->advances[i] = QFixed::fromReal(svgGl ? svgGl->m_horizAdvX * scale : 0.);
         }
     }
 
@@ -755,7 +766,7 @@ void QSvgVisitorImpl::visitTextNode(const QSvgText *node)
 
         needsRichText = needsRichText || !styleTagContent.isEmpty();
         if (!styleTagContent.isEmpty())
-            text += QStringLiteral("<span style=\"%1\">").arg(styleTagContent);
+            text += QStringLiteral("<span style=\"%1\">").arg(styleTagContent.toHtmlEscaped());
 
         if (font.resolveMask() & QFont::WeightResolved && font.bold())
             text += QStringLiteral("<b>");
@@ -1101,9 +1112,27 @@ void QSvgVisitorImpl::visitDocumentNodeEnd(const QSvgTinyDocument *node)
     m_generator->generateRootNode(info);
 }
 
+static QString scrub(const QString &raw)
+{
+    QString res(raw.left(80));
+
+    if (!res.isEmpty()) {
+        constexpr QLatin1StringView legalSymbols("_-.:"); // Only valid SVG id characters
+        qsizetype i = 0;
+        do {
+            if (res.at(i).isLetterOrNumber() || legalSymbols.contains(res.at(i)))
+                i++;
+            else
+                res.remove(i, 1);
+        } while (i < res.size());
+    }
+
+    return res;
+}
+
 void QSvgVisitorImpl::fillCommonNodeInfo(const QSvgNode *node, NodeInfo &info)
 {
-    info.nodeId = node->nodeId();
+    info.nodeId = scrub(node->nodeId());
     info.typeName = node->typeName();
     info.isDefaultTransform = node->style().transform.isDefault();
     info.transform.setDefaultValue(QVariant::fromValue(!info.isDefaultTransform

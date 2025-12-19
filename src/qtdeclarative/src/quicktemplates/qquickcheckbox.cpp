@@ -20,6 +20,7 @@ QT_BEGIN_NAMESPACE
     \brief Check button that can be toggled on or off.
 
     \image qtquickcontrols-checkbox.gif
+           {Checkbox in unchecked, checked, and partially checked states}
 
     CheckBox presents an option button that can be toggled on (checked) or
     off (unchecked). Check boxes are typically used to select one or more
@@ -56,6 +57,7 @@ QT_BEGIN_NAMESPACE
     \l ButtonGroup.
 
     \image qtquickcontrols-checkbox-group.png
+           {Group of checkboxes for multiple selection}
 
     The following example illustrates how the combined check state of
     children can be bound to the check state of the parent checkbox:
@@ -91,6 +93,7 @@ QQuickCheckBox::QQuickCheckBox(QQuickItem *parent)
     In the animation below, the first checkbox is tri-state:
 
     \image qtquickcontrols-checkbox-tristate.gif
+           {Checkbox cycling through three states}
 
     The default is \c false, i.e., the checkbox has only two states.
 */

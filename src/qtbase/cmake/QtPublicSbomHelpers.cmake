@@ -30,6 +30,7 @@ function(_qt_internal_sbom_begin_project)
     set(opt_args
         USE_GIT_VERSION
         __QT_INTERNAL_HANDLE_QT_REPO
+        NO_AUTO_DOCUMENT_NAMESPACE_INFIX
     )
     set(single_args
         INSTALL_PREFIX
@@ -39,6 +40,9 @@ function(_qt_internal_sbom_begin_project)
         SUPPLIER_URL
         DOWNLOAD_LOCATION
         DOCUMENT_NAMESPACE
+        DOCUMENT_NAMESPACE_INFIX
+        DOCUMENT_NAMESPACE_SUFFIX
+        DOCUMENT_NAMESPACE_URL_PREFIX
         VERSION
         SBOM_PROJECT_NAME
         QT_REPO_PROJECT_NAME
@@ -110,13 +114,72 @@ function(_qt_internal_sbom_begin_project)
     )
     _qt_internal_handle_sbom_project_version(${sbom_project_version_args})
 
+    if(arg___QT_INTERNAL_HANDLE_QT_REPO)
+        _qt_internal_sbom_compute_qt_uniqueish_document_namespace_infix(
+            OUT_VAR_UUID_INFIX_MERGED document_namespace_infix
+        )
+        if(document_namespace_infix)
+            set(arg_DOCUMENT_NAMESPACE_INFIX "-${document_namespace_infix}")
+        endif()
+    endif()
+
     if(arg_DOCUMENT_NAMESPACE)
         set(repo_spdx_namespace "${arg_DOCUMENT_NAMESPACE}")
+
+        if(QT_SBOM_DOCUMENT_NAMESPACE_INFIX)
+            string(APPEND repo_spdx_namespace "${QT_SBOM_DOCUMENT_NAMESPACE_INFIX}")
+        elseif(arg_DOCUMENT_NAMESPACE_INFIX)
+            string(APPEND repo_spdx_namespace "${arg_DOCUMENT_NAMESPACE_INFIX}")
+        elseif(NOT arg_NO_AUTO_DOCUMENT_NAMESPACE_INFIX
+                AND NOT QT_SBOM_NO_AUTO_DOCUMENT_NAMESPACE_INFIX)
+            _qt_internal_sbom_compute_uniqueish_document_namespace_infix(
+                OUT_VAR_UUID_INFIX_MERGED document_namespace_infix
+            )
+            string(APPEND repo_spdx_namespace "-${document_namespace_infix}")
+        endif()
+
+        if(QT_SBOM_DOCUMENT_NAMESPACE_SUFFIX)
+            string(APPEND repo_spdx_namespace "${QT_SBOM_DOCUMENT_NAMESPACE_SUFFIX}")
+        elseif(arg_DOCUMENT_NAMESPACE_SUFFIX)
+            string(APPEND repo_spdx_namespace "${arg_DOCUMENT_NAMESPACE_SUFFIX}")
+        endif()
     else()
         set(compute_project_namespace_args "")
         if(repo_supplier_url)
             list(APPEND compute_project_namespace_args SUPPLIER_URL "${repo_supplier_url}")
         endif()
+
+        if(QT_SBOM_DOCUMENT_NAMESPACE_INFIX)
+            list(APPEND compute_project_namespace_args
+                DOCUMENT_NAMESPACE_INFIX "${QT_SBOM_DOCUMENT_NAMESPACE_INFIX}")
+        elseif(arg_DOCUMENT_NAMESPACE_INFIX)
+            list(APPEND compute_project_namespace_args
+                DOCUMENT_NAMESPACE_INFIX "${arg_DOCUMENT_NAMESPACE_INFIX}")
+        elseif(NOT arg_NO_AUTO_DOCUMENT_NAMESPACE_INFIX
+                AND NOT QT_SBOM_NO_AUTO_DOCUMENT_NAMESPACE_INFIX)
+            _qt_internal_sbom_compute_uniqueish_document_namespace_infix(
+                OUT_VAR_UUID_INFIX_MERGED document_namespace_infix
+            )
+            list(APPEND compute_project_namespace_args
+                DOCUMENT_NAMESPACE_INFIX "-${document_namespace_infix}")
+        endif()
+
+        if(QT_SBOM_DOCUMENT_NAMESPACE_SUFFIX)
+            list(APPEND compute_project_namespace_args
+                DOCUMENT_NAMESPACE_SUFFIX "${QT_SBOM_DOCUMENT_NAMESPACE_SUFFIX}")
+        elseif(arg_DOCUMENT_NAMESPACE_SUFFIX)
+            list(APPEND compute_project_namespace_args
+                DOCUMENT_NAMESPACE_SUFFIX "${arg_DOCUMENT_NAMESPACE_SUFFIX}")
+        endif()
+
+        if(QT_SBOM_DOCUMENT_NAMESPACE_URL_PREFIX)
+            list(APPEND compute_project_namespace_args
+                DOCUMENT_NAMESPACE_URL_PREFIX "${QT_SBOM_DOCUMENT_NAMESPACE_URL_PREFIX}")
+        elseif(arg_DOCUMENT_NAMESPACE_URL_PREFIX)
+            list(APPEND compute_project_namespace_args
+                DOCUMENT_NAMESPACE_URL_PREFIX "${arg_DOCUMENT_NAMESPACE_URL_PREFIX}")
+        endif()
+
         _qt_internal_sbom_compute_project_namespace(repo_spdx_namespace
             PROJECT_NAME "${repo_project_name_lowercase}"
             ${compute_project_namespace_args}
@@ -2330,48 +2393,6 @@ function(_qt_internal_get_configure_line out_var)
     string(STRIP "${content}" content)
 
     set(${out_var} "${content}" PARENT_SCOPE)
-endfunction()
-
-function(_qt_internal_sbom_compute_project_namespace out_var)
-    set(opt_args "")
-    set(single_args
-        SUPPLIER_URL
-        PROJECT_NAME
-        VERSION_SUFFIX
-    )
-    set(multi_args "")
-
-    cmake_parse_arguments(PARSE_ARGV 1 arg "${opt_args}" "${single_args}" "${multi_args}")
-    _qt_internal_validate_all_args_are_parsed(arg)
-
-    if(NOT arg_PROJECT_NAME)
-        message(FATAL_ERROR "PROJECT_NAME must be set")
-    endif()
-
-    if(NOT arg_SUPPLIER_URL)
-        message(FATAL_ERROR "SUPPLIER_URL must be set")
-    endif()
-
-    string(TOLOWER "${arg_PROJECT_NAME}" project_name_lowercase)
-
-    set(version_suffix "")
-
-    if(arg_VERSION_SUFFIX)
-        set(version_suffix "-${arg_VERSION_SUFFIX}")
-    else()
-        _qt_internal_sbom_get_git_version_vars()
-        if(QT_SBOM_GIT_VERSION)
-            set(version_suffix "-${QT_SBOM_GIT_VERSION}")
-        endif()
-    endif()
-
-    # Used in external refs, it should be either aa URI + UUID or a URI + checksum.
-    # We currently use a URI + git version, which is probably not conformant to the spec.
-    set(repo_name_and_version "${project_name_lowercase}${version_suffix}")
-    set(repo_spdx_namespace
-        "${arg_SUPPLIER_URL}/spdxdocs/${repo_name_and_version}")
-
-    set(${out_var} "${repo_spdx_namespace}" PARENT_SCOPE)
 endfunction()
 
 function(_qt_internal_sbom_compute_project_file_name out_var)

@@ -24,15 +24,19 @@
 # Mode B:
 #
 # If invoked without any argument, it runs the tests listed in the
-# variable QT_MOCK_TEST_FAIL_LIST. If variable is empty it just runs
+# variable QT_MOCK_TEST_RUN_LIST. If variable is empty it just runs
 # the always_pass test. It also understands qtestlib's `-o outfile.xml,xml`
 # option for writing a mock testlog in a file. Requires environment variables:
 #   + QT_MOCK_TEST_STATE_FILE :: See above
 #   + QT_MOCK_TEST_XML_TEMPLATE_FILE :: may point to the template XML file
 #     located in the same source directory. Without this variable, the
 #     option `-o outfile.xml,xml` will be ignored.
-#   + QT_MOCK_TEST_FAIL_LIST :: may contain a comma-separated list of test
+#   + QT_MOCK_TEST_RUN_LIST :: may contain a comma-separated list of test
 #     that should run.
+#   + QT_MOCK_TEST_CRASH_CLEANLY :: if set to 1, then the executable will
+#     crash (exit with a high exit code)
+#     after successfully running the given tests and writing the XML logfile.
+
 
 
 import sys
@@ -45,7 +49,11 @@ MY_NAME         = os.path.basename(sys.argv[0])
 STATE_FILE      = None
 XML_TEMPLATE    = None
 XML_OUTPUT_FILE = None
+CRASH_CLEANLY   = False
 
+
+def crash():
+    sys.exit(131)
 
 def put_failure(test_name):
     with open(STATE_FILE, "a") as f:
@@ -107,7 +115,14 @@ def run_test(testname):
     elif testname == "always_fail":
         exit_code = 1
     elif testname == "always_crash":
-        exit_code = 130
+        exit_code = 131
+    elif testname == "fail_then_crash":
+        previous_fails = get_failures(testname)
+        if previous_fails == 0:
+            put_failure(testname)
+            exit_code = 1
+        else:
+            exit_code = 131
     elif testname.startswith("fail_then_pass"):
         wanted_fails   = int(testname.partition(":")[2])
         previous_fails = get_failures(testname)
@@ -139,13 +154,22 @@ def no_args_run():
     for test in run_list:
         test_exit_code = run_test(test)
         if test_exit_code not in (0, 1):
-            sys.exit(130)                                       # CRASH!
+            crash()
         if test_exit_code != 0:
             fail_list.append(test)
         total_result = total_result and (test_exit_code == 0)
 
-    if XML_TEMPLATE and XML_OUTPUT_FILE:
-        write_xml_log(XML_OUTPUT_FILE, failure=fail_list)
+    if XML_OUTPUT_FILE:
+        if XML_TEMPLATE:
+            write_xml_log(XML_OUTPUT_FILE, failure=fail_list)
+        # If the template is an empty file, then write an empty output file
+        elif XML_TEMPLATE == "":
+            with open(XML_OUTPUT_FILE, "w"):
+                pass
+
+    if CRASH_CLEANLY:
+        # Crash despite all going well and writing all output files cleanly.
+        crash()
 
     if total_result:
         sys.exit(0)
@@ -162,6 +186,12 @@ def main():
     if "QT_MOCK_TEST_XML_TEMPLATE_FILE" in os.environ:
         with open(os.environ["QT_MOCK_TEST_XML_TEMPLATE_FILE"]) as f:
             XML_TEMPLATE = f.read()
+
+    global CRASH_CLEANLY
+    if ("QT_MOCK_TEST_CRASH_CLEANLY" in os.environ
+        and os.environ["QT_MOCK_TEST_CRASH_CLEANLY"] == "1"
+    ):
+        CRASH_CLEANLY = True
 
     args = clean_cmdline()
 

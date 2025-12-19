@@ -116,6 +116,7 @@ qt_internal_add_qml_module(QuickDialogs2QuickImpl
         Qt::QuickPrivate
         Qt::QuickTemplates2
         Qt::QuickTemplates2Private
+        Qt::LabsFolderListModelPrivate
     PUBLIC_LIBRARIES
         Qt::Core
         Qt::Gui

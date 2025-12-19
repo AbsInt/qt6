@@ -62,8 +62,10 @@ static const int SUBMENU_DELAY = 225;
     \table
         \row
           \li \image qtquickcontrols-menu-native.png
+                     {Menu with New, Open, Save in native style}
              \caption Native macOS menu.
           \li \image qtquickcontrols-menu.png
+                     {Menu with New, Open, Save in Material style}
              \caption Non-native \l {Material Style}{Material style} menu.
    \endtable
 
@@ -91,8 +93,7 @@ static const int SUBMENU_DELAY = 225;
 
     \snippet qtquickcontrols-menu-closepolicy.qml closePolicy
 
-    Since QtQuick.Controls 2.3 (Qt 5.10), it is also possible to create sub-menus
-    and declare Action objects inside Menu:
+    You can create sub-menus and declare Action objects inside Menu:
 
     \snippet qtquickcontrols-menu-submenus-and-actions.qml root
 

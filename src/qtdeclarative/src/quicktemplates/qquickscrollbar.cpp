@@ -24,6 +24,7 @@ QT_BEGIN_NAMESPACE
     \brief Vertical or horizontal interactive scroll bar.
 
     \image qtquickcontrols-scrollbar.gif
+           {Scroll bar handle moving along track}
 
     ScrollBar is an interactive bar that can be used to scroll to a specific
     position. A scroll bar can be either \l vertical or \l horizontal, and can
@@ -108,6 +109,7 @@ QT_BEGIN_NAMESPACE
     \snippet qtquickcontrols-scrollbar-non-attached.qml 1
 
     \image qtquickcontrols-scrollbar-non-attached.png
+           {Scroll bar used standalone without attached property}
 
     When using a non-attached ScrollBar, the following must be done manually:
 
@@ -604,9 +606,15 @@ void QQuickScrollBar::setOrientation(Qt::Orientation orientation)
     \table
     \header
         \row \li \b Value \li \b Example
-        \row \li \c ScrollBar.NoSnap \li \image qtquickcontrols-scrollbar-nosnap.gif
-        \row \li \c ScrollBar.SnapAlways \li \image qtquickcontrols-scrollbar-snapalways.gif
-        \row \li \c ScrollBar.SnapOnRelease \li \image qtquickcontrols-scrollbar-snaponrelease.gif
+        \row \li \c ScrollBar.NoSnap
+             \li \image qtquickcontrols-scrollbar-nosnap.gif
+                        {Scroll bar without snap mode, sliding freely}
+        \row \li \c ScrollBar.SnapAlways
+             \li \image qtquickcontrols-scrollbar-snapalways.gif
+                        {Scroll bar snapping to items while dragging}
+        \row \li \c ScrollBar.SnapOnRelease
+             \li \image qtquickcontrols-scrollbar-snaponrelease.gif
+                        {Scroll bar snapping to items on release}
     \endtable
 
     \sa stepSize

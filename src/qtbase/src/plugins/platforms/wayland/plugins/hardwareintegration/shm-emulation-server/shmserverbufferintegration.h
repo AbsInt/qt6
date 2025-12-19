@@ -1,14 +1,12 @@
 // Copyright (C) 2017 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
-#ifndef SHMSERVERBUFFERINTEGRATION_H
-#define SHMSERVERBUFFERINTEGRATION_H
+#pragma once
 
 #include <QtWaylandClient/private/qwayland-wayland.h>
 #include "qwayland-shm-emulation-server-buffer.h"
 #include <QtWaylandClient/private/qwaylandserverbufferintegration_p.h>
 
-#include "shmserverbufferintegration.h"
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
 #include <QtCore/QTextStream>
 
@@ -51,5 +49,3 @@ private:
 }
 
 QT_END_NAMESPACE
-
-#endif

@@ -33,6 +33,7 @@ QT_BEGIN_NAMESPACE
     for use together with layouts.
 
     \image qtquickcontrols-groupbox.png
+           {Group box with title and border containing checkboxes}
 
     \snippet qtquickcontrols-groupbox.qml 1
 
@@ -42,6 +43,7 @@ QT_BEGIN_NAMESPACE
     to create a checkable GroupBox by pairing it with a CheckBox.
 
     \image qtquickcontrols-groupbox-checkable.png
+           {Checkable group box with checkbox in title}
 
     It is a common pattern to enable or disable the groupbox's children when
     its checkbox is toggled on or off, but it is up to the application to decide

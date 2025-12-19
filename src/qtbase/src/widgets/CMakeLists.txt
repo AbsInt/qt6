@@ -338,12 +338,12 @@ set(qstyle_resource_fusion_files
     "styles/images/fusion_closedock-32.png"
     "styles/images/fusion_closedock-48.png"
     "styles/images/fusion_closedock-64.png"
-    "styles/images/fusion_normalizedockup_10.png"
+    "styles/images/fusion_normalizedockup-10.png"
     "styles/images/fusion_normalizedockup-16.png"
-    "styles/images/fusion_normalizedockup_20.png"
+    "styles/images/fusion_normalizedockup-20.png"
     "styles/images/fusion_normalizedockup-32.png"
-    "styles/images/fusion_normalizedockup_48.png"
-    "styles/images/fusion_normalizedockup_64.png"
+    "styles/images/fusion_normalizedockup-48.png"
+    "styles/images/fusion_normalizedockup-64.png"
     "styles/images/fusion_titlebar-min-10.png"
     "styles/images/fusion_titlebar-min-16.png"
     "styles/images/fusion_titlebar-min-20.png"
@@ -411,7 +411,7 @@ qt_internal_extend_target(Widgets CONDITION QT_FEATURE_shortcut
 
 qt_internal_extend_target(Widgets CONDITION QT_FEATURE_tooltip
     SOURCES
-        kernel/qtooltip.cpp kernel/qtooltip.h
+        kernel/qtooltip.cpp kernel/qtooltip.h kernel/qtooltip_p.h
 )
 
 qt_internal_extend_target(Widgets CONDITION QT_FEATURE_whatsthis

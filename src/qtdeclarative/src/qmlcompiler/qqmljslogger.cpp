@@ -326,7 +326,7 @@ void QQmlJSLogger::countMessage(const Message &message)
     }
 }
 
-void QQmlJSLogger::processMessages(const QList<QQmlJS::DiagnosticMessage> &messages,
+void QQmlJSLogger::processMessages(QSpan<const QQmlJS::DiagnosticMessage> messages,
                                    QQmlJS::LoggerWarningId id,
                                    const QQmlJS::SourceLocation &sourceLocation)
 {

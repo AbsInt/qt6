@@ -82,6 +82,7 @@ private slots:
     void panMenuBar_data();
     void panMenuBar();
     void clearMenus();
+    void popupWindowsKeyboardNavigation();
 
 private:
     bool nativeMenuBarSupported = false;
@@ -1881,6 +1882,132 @@ void tst_qquickmenubar::clearMenus()
     QVERIFY(!o.isNull());
     QTRY_COMPARE(o->property("v").toInt(), 2);
 }
+
+void tst_qquickmenubar::popupWindowsKeyboardNavigation()
+{
+    if (!arePopupWindowsSupported())
+        QSKIP("The platform doesn't support popup windows. Skipping test.");
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuBar, true);
+    QQuickApplicationHelper helper(this, "popupWindowMenus.qml");
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickApplicationWindow *window = qobject_cast<QQuickApplicationWindow *>(helper.window);
+    QVERIFY(window);
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    QQuickMenuBar *menuBar = window->property("menuBar").value<QQuickMenuBar *>();
+    QVERIFY(menuBar);
+    QTRY_VERIFY(menuBar->hasActiveFocus());
+    QQuickMenuBarItem *menuBarItem1 = qobject_cast<QQuickMenuBarItem *>(menuBar->itemAt(0));
+    QVERIFY(menuBarItem1);
+    QVERIFY(!menuBarItem1->hasActiveFocus());
+    QTest::keyClick(window, Qt::Key_Right, Qt::NoModifier);
+    QTRY_VERIFY(menuBarItem1->isHighlighted());
+    QVERIFY(QQuickTest::qWaitForPolish(window));
+    QGuiApplication::processEvents();
+
+    QQuickMenu *menu1 = menuBar->menuAt(0);
+    QVERIFY(menu1);
+    const auto menu1Private = QQuickMenuPrivate::get(menu1);
+
+    // Open the "File" menu
+    QTest::keyClick(window, Qt::Key_Down, Qt::NoModifier);
+    QTRY_VERIFY(menu1Private->popupWindow);
+    QCOMPARE(menu1Private->popupWindow->transientParent(), window);
+    QTRY_VERIFY(menu1->isOpened());
+    QVERIFY(QTest::qWaitForWindowExposed(menu1Private->popupWindow));
+    QTRY_VERIFY(!menu1Private->transitionManager.isRunning());
+    QVERIFY(QQuickTest::qWaitForPolish(menu1Private->popupWindow));
+
+    const QQuickMenuItem *menuItem1 = qobject_cast<QQuickMenuItem *>(menu1->itemAt(0));
+    QVERIFY(menuItem1);
+
+    // Popup windows don't become focus windows, so the focus window should still be the ApplicationWindow.
+    // TODO: On wayland, the popup window will sometimes becomes the focus window. Why?
+    if (!QGuiApplication::platformName().startsWith(QStringLiteral("wayland")))
+        QTRY_COMPARE(QGuiApplication::focusWindow(), window);
+    QTRY_VERIFY_ACTIVE_FOCUS(menuItem1);
+
+    QTest::keyClick(window, Qt::Key_Down, Qt::NoModifier);
+
+    const QQuickMenuItem *menuItem2 = qobject_cast<QQuickMenuItem *>(menu1->itemAt(1));
+
+    QVERIFY(menuItem2);
+    QTRY_VERIFY_ACTIVE_FOCUS(menuItem2);
+
+    QTest::keyClick(window, Qt::Key_Down, Qt::NoModifier);
+
+    const QQuickItem *menuItem3 = qobject_cast<QQuickItem *>(menu1->itemAt(2));
+    QVERIFY(menuItem3);
+    QTRY_VERIFY_ACTIVE_FOCUS(menuItem3);
+
+    QTest::keyClick(window, Qt::Key_Right, Qt::NoModifier);
+
+    // Open the submenu
+    QQuickMenu *subMenu = window->property("subMenu").value<QQuickMenu *>();
+    QVERIFY(subMenu);
+    const auto *subMenuPrivate = QQuickMenuPrivate::get(subMenu);
+    QTRY_VERIFY(subMenuPrivate->popupWindow);
+    QCOMPARE(subMenuPrivate->popupWindow->transientParent(), menu1Private->popupWindow);
+    QTRY_VERIFY(subMenu->isOpened());
+    QVERIFY(QTest::qWaitForWindowExposed(subMenuPrivate->popupWindow));
+    QTRY_VERIFY(!subMenuPrivate->transitionManager.isRunning());
+    QVERIFY(QQuickTest::qWaitForPolish(subMenuPrivate->popupWindow));
+
+    const auto *subMenuItem1 = subMenu->itemAt(0);
+    QVERIFY(subMenuItem1);
+    QTRY_VERIFY_ACTIVE_FOCUS(subMenuItem1);
+    QGuiApplication::processEvents();
+
+    QTest::keyClick(window, Qt::Key_Down, Qt::NoModifier);
+    const auto *subMenuItem2 = subMenu->itemAt(1);
+    QVERIFY(subMenuItem2);
+    QTRY_VERIFY_ACTIVE_FOCUS(subMenuItem2);
+    QGuiApplication::processEvents();
+
+    // Close submenu
+    QTest::keyClick(window, Qt::Key_Escape, Qt::NoModifier);
+    QTRY_VERIFY(!subMenu->isVisible());
+    QTRY_VERIFY_ACTIVE_FOCUS(menuItem3);
+    QGuiApplication::processEvents();
+
+    // Move back to the menubar
+    QTest::keyClick(window, Qt::Key_Up, Qt::NoModifier);
+    QTRY_VERIFY_ACTIVE_FOCUS(menuItem2);
+
+    QTest::keyClick(window, Qt::Key_Up, Qt::NoModifier);
+    QTRY_VERIFY_ACTIVE_FOCUS(menuItem1);
+
+    QTest::keyClick(window, Qt::Key_Up, Qt::NoModifier);
+    QTRY_VERIFY(!menu1->isVisible());
+    QTRY_VERIFY_ACTIVE_FOCUS(menuBar);
+    QCOMPARE(window->activeFocusItem(), menuBar);
+    QVERIFY(menuBarItem1->isHighlighted());
+
+    QTest::keyClick(window, Qt::Key_Right, Qt::NoModifier);
+    QQuickMenuBarItem *menuBarItem2 = qobject_cast<QQuickMenuBarItem *>(menuBar->itemAt(1));
+    QVERIFY(menuBarItem2);
+    QTRY_VERIFY(menuBarItem2->isHighlighted());
+
+    // Open the "Edit" menu
+    QTest::keyClick(window, Qt::Key_Down, Qt::NoModifier);
+    QQuickMenu *menu2 = menuBarItem2->menu();
+    QVERIFY(menu2);
+    const auto menu2Private = QQuickMenuPrivate::get(menu2);
+    QTRY_VERIFY(menu2Private->popupWindow);
+    QCOMPARE(menu2Private->popupWindow->transientParent(), window);
+    QTRY_VERIFY(menu2->isOpened());
+    QVERIFY(QTest::qWaitForWindowExposed(menu2Private->popupWindow));
+    QTRY_VERIFY(!menu2Private->transitionManager.isRunning());
+    QVERIFY(QQuickTest::qWaitForPolish(menu2Private->popupWindow));
+
+    const auto *menu2item1 = qobject_cast<QQuickItem *>(menu2->itemAt(0));
+    QTRY_VERIFY_ACTIVE_FOCUS(menu2item1);
+    QTest::keyClick(window, Qt::Key_Enter, Qt::NoModifier);
+    QTRY_VERIFY(!menu2->isVisible());
+    QTRY_VERIFY_ACTIVE_FOCUS(menuBar);
+    QVERIFY(!menuBarItem2->isHighlighted());
+}
+
 
 QTEST_QUICKCONTROLS_MAIN(tst_qquickmenubar)
 

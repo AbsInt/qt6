@@ -10,6 +10,7 @@
 #include <data/getOptionalLookup.h>
 #include <data/listprovider.h>
 #include <data/objectwithmethod.h>
+#include <data/propertymap.h>
 #include <data/qmlusing.h>
 #include <data/refuseWrite.h>
 #include <data/resettable.h>
@@ -180,6 +181,7 @@ private slots:
     void jsArrayMethods();
     void jsArrayMethodsWithParams();
     void jsArrayMethodsWithParams_data();
+    void jsArraySplice();
     void jsImport();
     void jsMathObject();
     void jsmoduleImport();
@@ -203,6 +205,7 @@ private slots:
     void methodOnListLookup();
     void methods();
     void modulePrefix();
+    void moveAliasedRegister();
     void multiAdjust();
     void multiDirectory_data();
     void multiDirectory();
@@ -235,6 +238,7 @@ private slots:
     void parentProperty();
     void popContextAfterRet();
     void prefixedType();
+    void propertyMap();
     void propertyOfParent();
     void qmlUsing();
     void qtfont();
@@ -3440,6 +3444,16 @@ void tst_QmlCppCodegen::jsArrayMethodsWithParams_data()
     }
 }
 
+void tst_QmlCppCodegen::jsArraySplice()
+{
+    QQmlEngine engine;
+    QQmlComponent splice(&engine, QUrl(u"qrc:/qt/qml/TestTypes/splice.qml"_s));
+    QVERIFY2(splice.isReady(), qPrintable(splice.errorString()));
+    QScopedPointer<QObject> spliceObject(splice.create());
+    QCOMPARE(spliceObject->property("intList").value<QList<int>>(), QList<int>({0, 1}));
+    QCOMPARE(spliceObject->property("spliced").value<QList<int>>(), QList<int>({2, 3}));
+}
+
 void tst_QmlCppCodegen::jsImport()
 {
     QQmlEngine engine;
@@ -4144,6 +4158,22 @@ void tst_QmlCppCodegen::modulePrefix()
     QCOMPARE(rootObject->property("foo").toDateTime(), QDateTime(QDate(1911, 3, 4), QTime()));
     QCOMPARE(rootObject->property("bar").toDateTime(), QDateTime(QDate(1911, 3, 4), QTime()));
     QCOMPARE(rootObject->property("baz").toString(), QStringLiteral("ItIsTheSingleton"));
+}
+
+void tst_QmlCppCodegen::moveAliasedRegister()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/moveAliasedRegister.qml"_s));
+
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> rootObject(component.create());
+    QVERIFY(rootObject);
+
+    const auto &hash = rootObject->property("layout").toHash();
+    QCOMPARE(hash["a"_L1].typeName(), "bool");
+    QCOMPARE(hash["a"_L1].toBool(), false);
+    QCOMPARE(hash["b"_L1].typeName(), "bool");
+    QCOMPARE(hash["b"_L1].toBool(), false);
 }
 
 void tst_QmlCppCodegen::multiAdjust()
@@ -4878,6 +4908,47 @@ void tst_QmlCppCodegen::prefixedType()
 
     QCOMPARE(o->property("countG").toInt(), 11);
     QCOMPARE(o->property("countH").toInt(), 11);
+}
+
+void tst_QmlCppCodegen::propertyMap()
+{
+    QQmlEngine engine;
+
+    const QUrl document(u"qrc:/qt/qml/TestTypes/propertyMap.qml"_s);
+    QQmlComponent c(&engine, document);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(
+                document.toString()
+                + u":5:5: QML WithPropertyMap: Unable to assign [undefined] to \"objectName\""));
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
+
+    WithPropertyMap *w = qobject_cast<WithPropertyMap *>(o.data());
+    QVERIFY(w);
+
+    QVERIFY(w->objectName().isEmpty());
+
+    w->setProperties({
+        { u"foo"_s, u"aaa"_s },
+        { u"bar"_s, u"bbb"_s },
+    });
+
+    QCOMPARE(w->objectName(), u"aaa"_s);
+
+    w->setProperties({
+        { u"foo"_s, u"ccc"_s },
+    });
+
+    QCOMPARE(w->objectName(), u"ccc"_s);
+
+    w->setProperties({
+        { u"foo"_s, 24.25 },
+    });
+
+    QCOMPARE(w->objectName(), u"24.25"_s);
 }
 
 void tst_QmlCppCodegen::propertyOfParent()
@@ -5662,6 +5733,7 @@ void tst_QmlCppCodegen::stringLength()
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
     QCOMPARE(object->property("stringLength").toInt(), 8);
+    QCOMPARE(object->property("a"), u"astringb"_s);
 }
 
 void tst_QmlCppCodegen::stringToByteArray()

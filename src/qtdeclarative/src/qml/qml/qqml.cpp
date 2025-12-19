@@ -1386,16 +1386,16 @@ struct FallbackPropertyQmlData
 
 static FallbackPropertyQmlData findFallbackPropertyQmlData(QV4::Lookup *lookup, QObject *object)
 {
-    QQmlData *qmlData = QQmlData::get(object);
-    if (qmlData && qmlData->isQueuedForDeletion)
-        return {qmlData, nullptr, PropertyResult::Deleted};
+    // We've just initialized the lookup. So everything must be fine here.
 
+    QQmlData *qmlData = QQmlData::get(object);
+
+    Q_ASSERT(!qmlData || !qmlData->isQueuedForDeletion);
     Q_ASSERT(!QQmlData::wasDeleted(object));
 
     const QMetaObject *metaObject
             = reinterpret_cast<const QMetaObject *>(lookup->qobjectFallbackLookup.metaObject - 1);
-    if (!metaObject || metaObject != object->metaObject())
-        return {qmlData, nullptr, PropertyResult::NeedsInit};
+    Q_ASSERT(metaObject == object->metaObject());
 
     return {qmlData, metaObject, PropertyResult::OK};
 }
@@ -2585,6 +2585,7 @@ bool AOTCompiledContext::loadScopeObjectPropertyLookup(uint index, void *target)
         break;
     case QV4::Lookup::Call::ContextGetterScopeObjectPropertyFallback:
         result = loadFallbackProperty(lookup, qmlScopeObject, target, this);
+        lookup->call = QV4::Lookup::Call::ContextGetterGeneric;
         break;
     default:
         return false;
@@ -2616,6 +2617,7 @@ bool AOTCompiledContext::writeBackScopeObjectPropertyLookup(uint index, void *so
         break;
     case QV4::Lookup::Call::ContextGetterScopeObjectPropertyFallback:
         result = writeBackFallbackProperty(lookup, qmlScopeObject, source);
+        lookup->call = QV4::Lookup::Call::ContextGetterGeneric;
         break;
     default:
         return false;
@@ -2816,6 +2818,7 @@ bool AOTCompiledContext::getObjectLookup(uint index, QObject *object, void *targ
         result = lookup->asVariant
                 ? loadFallbackAsVariant(lookup, object, target, this)
                 : loadFallbackProperty(lookup, object, target, this);
+        lookup->call = QV4::Lookup::Call::GetterGeneric;
         break;
     default:
         return false;
@@ -2850,6 +2853,7 @@ bool AOTCompiledContext::writeBackObjectLookup(uint index, QObject *object, void
         result = lookup->asVariant
                 ? writeBackFallbackAsVariant(lookup, object, source)
                 : writeBackFallbackProperty(lookup, object, source);
+        lookup->call = QV4::Lookup::Call::GetterGeneric;
         break;
     default:
         return false;
@@ -3010,6 +3014,7 @@ bool AOTCompiledContext::setObjectLookup(uint index, QObject *object, void *valu
         result = lookup->asVariant
                 ? storeFallbackAsVariant(engine->handle(), lookup, object, value)
                 : storeFallbackProperty(lookup, object, value);
+        lookup->call = QV4::Lookup::Call::SetterGeneric;
         break;
     default:
         return false;

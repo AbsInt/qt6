@@ -77,6 +77,7 @@ qt_internal_add_qml_module(qtquickcontrols2windowsstyleplugin
         Qt::QuickControls2WindowsStyleImpl
         Qt::QuickPrivate
         Qt::QuickTemplates2Private
+        Qt::QuickControls2FusionPrivate
 )
 
 # Native style is a dependency of the Windows style.

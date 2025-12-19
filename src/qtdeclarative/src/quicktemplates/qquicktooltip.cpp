@@ -30,6 +30,7 @@ QT_BEGIN_NAMESPACE
     tip text can be any \l{Rich Text Processing}{rich text} formatted string.
 
     \image qtquickcontrols-tooltip.png
+           {Tooltip displaying helpful text}
 
     \section2 Attached Tool Tips
 
@@ -83,6 +84,7 @@ QT_BEGIN_NAMESPACE
     the value of a slider when the handle is dragged.
 
     \image qtquickcontrols-tooltip-slider.png
+           {Tooltip attached to slider showing current value}
 
     \snippet qtquickcontrols-tooltip-slider.qml 1
 

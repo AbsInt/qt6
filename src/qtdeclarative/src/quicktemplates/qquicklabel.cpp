@@ -31,6 +31,7 @@ QT_BEGIN_NAMESPACE
     can also have a visual \l background item.
 
     \image qtquickcontrols-label.png
+           {Label displaying text with styling}
 
     \snippet qtquickcontrols-label.qml 1
 
