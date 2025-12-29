@@ -344,18 +344,25 @@ QAbstractEventDispatcher *QThreadPrivate::createEventDispatcher(QThreadData *dat
 
 #if QT_CONFIG(thread)
 
-#if (defined(Q_OS_LINUX) || defined(Q_OS_DARWIN) || defined(Q_OS_QNX))
-static void setCurrentThreadName(const char *name)
+template <typename String>
+static void setCurrentThreadName(QThread *thr, String &objectName)
 {
+    auto setit = [](const char *name) {
 #  if defined(Q_OS_LINUX) && !defined(QT_LINUXBASE)
-    prctl(PR_SET_NAME, (unsigned long)name, 0, 0, 0);
+        prctl(PR_SET_NAME, (unsigned long)name, 0, 0, 0);
 #  elif defined(Q_OS_DARWIN)
-    pthread_setname_np(name);
+        pthread_setname_np(name);
 #  elif defined(Q_OS_QNX)
-    pthread_setname_np(pthread_self(), name);
+        pthread_setname_np(pthread_self(), name);
+#  else
+        Q_UNUSED(name)
 #  endif
+    };
+    if (Q_LIKELY(objectName.isEmpty()))
+        setit(thr->metaObject()->className());
+    else
+        setit(std::exchange(objectName, {}).toLocal8Bit());
 }
-#endif
 
 namespace {
 #if defined(__GLIBCXX__) && !defined(QT_NO_EXCEPTIONS)
@@ -382,18 +389,34 @@ void terminate_on_exception(T &&t) noexcept
 #endif // defined(__GLIBCXX__) && !defined(QT_NO_EXCEPTIONS)
 } // unnamed namespace
 
-void *QThreadPrivate::start(void *arg)
+static void setCancellationEnabled(bool enable)
 {
 #ifdef PTHREAD_CANCEL_DISABLE
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, nullptr);
+    if (enable) {
+        // may unwind the stack, see above
+        pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, nullptr);
+        pthread_testcancel();
+    } else {
+        // this doesn't unwind the stack
+        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, nullptr);
+    }
+#else
+    Q_UNUSED(enable)
 #endif
+}
+
+void *QThreadPrivate::start(void *arg)
+{
+    setCancellationEnabled(false);
+
     QThread *thr = reinterpret_cast<QThread *>(arg);
     QThreadData *data = QThreadData::get2(thr);
-    // If a QThread is restarted, reuse the QBindingStatus, too
-    data->reuseBindingStatusForNewNativeThread();
 
     // this ensures the thread-local is created as early as possible
     set_thread_data(data);
+
+    // If a QThread is restarted, reuse the QBindingStatus, too
+    data->reuseBindingStatusForNewNativeThread();
 
     pthread_cleanup_push([](void *arg) { static_cast<QThread *>(arg)->d_func()->finish(); }, arg);
     terminate_on_exception([&] {
@@ -404,10 +427,6 @@ void *QThreadPrivate::start(void *arg)
             if (thr->d_func()->priority & ThreadPriorityResetFlag) {
                 thr->d_func()->setPriority(QThread::Priority(thr->d_func()->priority & ~ThreadPriorityResetFlag));
             }
-#ifndef Q_OS_DARWIN // For Darwin we set it as an attribute when starting the thread
-            if (thr->d_func()->serviceLevel != QThread::QualityOfService::Auto)
-                thr->d_func()->setQualityOfServiceLevel(thr->d_func()->serviceLevel);
-#endif
 
             // threadId is set in QThread::start()
             Q_ASSERT(data->threadId.loadRelaxed() == QThread::currentThreadId());
@@ -416,26 +435,16 @@ void *QThreadPrivate::start(void *arg)
             data->quitNow = thr->d_func()->exited;
         }
 
+        // Sets the name of the current thread. We can only do this
+        // when the thread is starting, as we don't have a cross
+        // platform way of setting the name of an arbitrary thread.
+        setCurrentThreadName(thr, thr->d_func()->objectName);
+
         data->ensureEventDispatcher();
         data->eventDispatcher.loadRelaxed()->startingUp();
 
-#if (defined(Q_OS_LINUX) || defined(Q_OS_DARWIN) || defined(Q_OS_QNX))
-        {
-            // Sets the name of the current thread. We can only do this
-            // when the thread is starting, as we don't have a cross
-            // platform way of setting the name of an arbitrary thread.
-            if (Q_LIKELY(thr->d_func()->objectName.isEmpty()))
-                setCurrentThreadName(thr->metaObject()->className());
-            else
-                setCurrentThreadName(std::exchange(thr->d_func()->objectName, {}).toLocal8Bit());
-        }
-#endif
-
         emit thr->started(QThread::QPrivateSignal());
-#ifdef PTHREAD_CANCEL_DISABLE
-        pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, nullptr);
-        pthread_testcancel();
-#endif
+        setCancellationEnabled(true);
         thr->run();
     });
 
@@ -454,9 +463,7 @@ void QThreadPrivate::finish()
         // Disable cancellation; we're already in the finishing touches of this
         // thread, and we don't want cleanup to be disturbed by
         // abi::__forced_unwind being thrown from all kinds of functions.
-#ifdef PTHREAD_CANCEL_DISABLE
-        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, nullptr);
-#endif
+        setCancellationEnabled(false);
 
         QMutexLocker locker(&d->mutex);
 
@@ -479,9 +486,7 @@ void QThreadPrivate::cleanup()
 
         // Disable cancellation again: we did it above, but some user code
         // running between finish() and cleanup() may have turned them back on.
-#ifdef PTHREAD_CANCEL_DISABLE
-        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, nullptr);
-#endif
+        setCancellationEnabled(false);
 
         QMutexLocker locker(&d->mutex);
         d->priority = QThread::InheritPriority;
@@ -770,10 +775,14 @@ void QThread::start(Priority priority)
     pthread_attr_init(&attr);
     if constexpr (!UsingPThreadTimedJoin)
         pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (d->serviceLevel != QThread::QualityOfService::Auto) {
 #ifdef Q_OS_DARWIN
-    if (d->serviceLevel != QThread::QualityOfService::Auto)
         pthread_attr_set_qos_class_np(&attr, d->nativeQualityOfServiceClass(), 0);
+#else
+        // No such functionality on other OSes. We promise "no effect", so don't
+        // print a warning either.
 #endif
+    }
 
     d->priority = priority;
 
@@ -995,13 +1004,7 @@ void QThread::setTerminationEnabled(bool enabled)
                "Current thread was not started with QThread.");
 
     Q_UNUSED(thr);
-#if defined(Q_OS_ANDROID)
-    Q_UNUSED(enabled);
-#else
-    pthread_setcancelstate(enabled ? PTHREAD_CANCEL_ENABLE : PTHREAD_CANCEL_DISABLE, nullptr);
-    if (enabled)
-        pthread_testcancel();
-#endif
+    setCancellationEnabled(enabled);
 }
 
 // Caller must lock the mutex

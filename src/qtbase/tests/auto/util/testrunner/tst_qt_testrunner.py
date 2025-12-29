@@ -14,7 +14,8 @@ from tempfile   import TemporaryDirectory, mkstemp
 
 MY_NAME          = os.path.basename(__file__)
 my_dir           = os.path.dirname(__file__)
-testrunner       = os.path.join(my_dir, "..", "qt-testrunner.py")
+testrunner       = os.path.join(my_dir, "..", "..", "..", "..",
+                                "util", "testrunner", "qt-testrunner.py")
 mock_test        = os.path.join(my_dir, "qt_mock_test.py")
 xml_log_template = os.path.join(my_dir, "qt_mock_test-log.xml")
 
@@ -26,7 +27,7 @@ import unittest
 
 def setUpModule():
     global TEMPDIR
-    TEMPDIR = TemporaryDirectory(prefix="tst_testrunner-")
+    TEMPDIR = TemporaryDirectory(prefix="tst_qt_testrunner-")
 
     global EMPTY_FILE
     EMPTY_FILE = os.path.join(TEMPDIR.name, "EMPTY")
@@ -40,6 +41,7 @@ def setUpModule():
 
     os.environ["QT_MOCK_TEST_STATE_FILE"]        = filename
     os.environ["QT_MOCK_TEST_XML_TEMPLATE_FILE"] = xml_log_template
+    os.environ["QT_TESTRUNNER_TESTING"] = "1"
 
 def tearDownModule():
     print("\ntearDownModule(): Cleaning up temporary directory:",
@@ -49,22 +51,32 @@ def tearDownModule():
 
 
 # Helper to run a command and always capture output
-def run(*args, **kwargs):
+def run(args : list, **kwargs):
+    if args[0].endswith(".py"):
+        # Make sure we run python executables with the same python version.
+        # It also helps on Windows, that .py files are not directly executable.
+        args = [ sys.executable, *args ]
     if DEBUG:
         print("Running: ", args, flush=True)
-    proc = subprocess.run(*args, stdout=PIPE, stderr=STDOUT, **kwargs)
+    proc = subprocess.run(args, stdout=PIPE, stderr=STDOUT, **kwargs)
     if DEBUG and proc.stdout:
         print(proc.stdout.decode(), flush=True)
     return proc
 
 # Helper to run qt-testrunner.py with proper testing arguments.
-def run_testrunner(xml_filename=None, testrunner_args=None,
+# Always append --log-dir=TEMPDIR unless specifically told not to.
+def run_testrunner(xml_filename=None, log_dir=None,
+                   testrunner_args=None,
                    wrapper_script=None, wrapper_args=None,
                    qttest_args=None, env=None):
 
     args = [ testrunner ]
     if xml_filename:
         args += [ "--parse-xml-testlog", xml_filename ]
+    if log_dir == None:
+        args += [ "--log-dir", TEMPDIR.name ]
+    elif log_dir != "":
+        args += [ "--log-dir", log_dir ]
     if testrunner_args:
         args += testrunner_args
 
@@ -156,7 +168,7 @@ class Test_qt_mock_test(unittest.TestCase):
     # Test it will write an empty XML file if template is empty
     def test_empty_xml_file_is_written(self):
         my_env = {
-            "QT_MOCK_TEST_STATE_FILE": os.environ["QT_MOCK_TEST_STATE_FILE"],
+            **os.environ,
             "QT_MOCK_TEST_XML_TEMPLATE_FILE": EMPTY_FILE
         }
         filename = os.path.join(TEMPDIR.name, "testlog.xml")
@@ -167,12 +179,25 @@ class Test_qt_mock_test(unittest.TestCase):
         self.assertEqual(os.path.getsize(filename), 0)
         os.remove(filename)
     def test_crash_cleanly(self):
-        proc = run(mock_test,
-                   env= os.environ | {"QT_MOCK_TEST_CRASH_CLEANLY":"1"} )
+        proc = run([mock_test],
+                   env={ **os.environ, "QT_MOCK_TEST_CRASH_CLEANLY":"1" })
         if DEBUG:
             print("returncode:", proc.returncode)
         self.assertProcessCrashed(proc)
 
+
+# Find in @path, files that start with @testname and end with @pattern,
+# where @pattern is a glob-like string.
+def find_test_logs(testname=None, path=None, pattern="-*[0-9].xml"):
+    if testname is None:
+        testname = os.path.basename(mock_test)
+    if path is None:
+        path = TEMPDIR.name
+    pattern = os.path.join(path, testname + pattern)
+    logfiles = glob.glob(pattern)
+    if DEBUG:
+        print(f"Test ({testname}) logfiles found: ", logfiles)
+    return logfiles
 
 # Test regular invocations of qt-testrunner.
 class Test_testrunner(unittest.TestCase):
@@ -181,14 +206,11 @@ class Test_testrunner(unittest.TestCase):
         if os.path.exists(state_file):
             os.remove(state_file)
         # The mock_test honors only the XML output arguments, the rest are ignored.
-        old_logfiles = glob.glob(os.path.basename(mock_test) + "*.xml",
-                                 root_dir=TEMPDIR.name)
+        old_logfiles = find_test_logs(pattern="*.xml")
         for fname in old_logfiles:
             os.remove(os.path.join(TEMPDIR.name, fname))
-        self.env = dict()
-        self.env["QT_MOCK_TEST_XML_TEMPLATE_FILE"] = os.environ["QT_MOCK_TEST_XML_TEMPLATE_FILE"]
-        self.env["QT_MOCK_TEST_STATE_FILE"]        = state_file
-        self.testrunner_args = [ "--log-dir", TEMPDIR.name ]
+        self.env = dict(os.environ)
+        self.testrunner_args = []
     def prepare_env(self, run_list=None):
         if run_list is not None:
             self.env['QT_MOCK_TEST_RUN_LIST'] = ",".join(run_list)
@@ -205,11 +227,7 @@ class Test_testrunner(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
     def test_output_files_are_generated(self):
         proc = self.run2()
-        xml_output_files = glob.glob(os.path.basename(mock_test) + "-*[0-9].xml",
-                                     root_dir=TEMPDIR.name)
-        if DEBUG:
-            print("Output files found: ",
-                  xml_output_files)
+        xml_output_files = find_test_logs()
         self.assertEqual(len(xml_output_files), 1)
     def test_always_fail(self):
         self.prepare_env(run_list=["always_fail"])
@@ -403,10 +421,7 @@ class Test_testrunner(unittest.TestCase):
         self.assertEqual(proc.returncode, 3)
         # Verify that a full executable re-run happened that re-runs 2 times,
         # instead of individual functions that re-run 5 times.
-        xml_output_files = glob.glob(os.path.basename(mock_test) + "-*[0-9].xml",
-                                     root_dir=TEMPDIR.name)
-        if DEBUG:
-            print("XML output files found: ", xml_output_files)
+        xml_output_files = find_test_logs()
         self.assertEqual(len(xml_output_files), 2)
 
     # Test that qt-testrunner detects the correct executable name even if we
@@ -415,13 +430,9 @@ class Test_testrunner(unittest.TestCase):
     def test_wrapper(self):
         self.create_wrapper("coin_vxworks_qemu_runner.sh")
         proc = run_testrunner(wrapper_script=self.wrapper_script,
-                              testrunner_args=["--log-dir",TEMPDIR.name],
                               env=self.env)
         self.assertEqual(proc.returncode, 0)
-        xml_output_files = glob.glob(os.path.basename(mock_test) + "-*[0-9].xml",
-                                     root_dir=TEMPDIR.name)
-        if DEBUG:
-            print("XML output files found: ", xml_output_files)
+        xml_output_files = find_test_logs()
         self.assertEqual(len(xml_output_files), 1)
 
     # The "androidtestrunner" wrapper is special. It expects the QTest arguments after "--".
@@ -445,45 +456,36 @@ class Test_testrunner(unittest.TestCase):
             '--bundletool', '/opt/bundletool/bundletool', '--timeout', '1425'
         ]
         # In COIN CI, TESTRUNNER="qt-testrunner.py --". That's why we append "--".
-        proc = run_testrunner(testrunner_args=["--log-dir", TEMPDIR.name, "--"],
+        proc = run_testrunner(testrunner_args=["--"],
                               wrapper_script=self.wrapper_script,
                               wrapper_args=androidtestrunner_args,
                               env=self.env)
         self.assertEqual(proc.returncode, 0)
-        xml_output_files = glob.glob("tst_qquickpopup-*[0-9].xml",
-                                     root_dir=TEMPDIR.name)
-        if DEBUG:
-            print("XML output files found: ", xml_output_files)
+        xml_output_files = find_test_logs("tst_qquickpopup")
         self.assertEqual(len(xml_output_files), 1)
     # similar to above but with "--apk"
     @unittest.skipUnless(os.name == "posix", "Wrapper script needs POSIX shell")
     def test_androidtestrunner_with_apk(self):
         self.create_mock_anroidtestrunner_wrapper()
         androidtestrunner_args= ['--blah', '--apk', '/whatever/waza.apk', 'blue']
-        proc = run_testrunner(testrunner_args=["--log-dir", TEMPDIR.name, "--"],
+        proc = run_testrunner(testrunner_args=["--"],
                               wrapper_script=self.wrapper_script,
                               wrapper_args=androidtestrunner_args,
                               env=self.env)
         self.assertEqual(proc.returncode, 0)
-        xml_output_files = glob.glob("waza-*[0-9].xml",
-                                     root_dir=TEMPDIR.name)
-        if DEBUG:
-            print("XML output files found: ", xml_output_files)
+        xml_output_files = find_test_logs("waza")
         self.assertEqual(len(xml_output_files), 1)
     # similar to above but with neither "--apk" nor "--aab". qt-testrunner throws error.
     @unittest.skipUnless(os.name == "posix", "Wrapper script needs POSIX shell")
     def test_androidtestrunner_fail_to_detect_filename(self):
         self.create_mock_anroidtestrunner_wrapper()
         androidtestrunner_args= ['--blah', '--argh', '/whatever/waza.apk', 'waza.aab']
-        proc = run_testrunner(testrunner_args=["--log-dir", TEMPDIR.name, "--"],
+        proc = run_testrunner(testrunner_args=["--"],
                               wrapper_script=self.wrapper_script,
                               wrapper_args=androidtestrunner_args,
                               env=self.env)
         self.assertEqual(proc.returncode, 1)
-        xml_output_files = glob.glob("waza-*[0-9].xml",
-                                     root_dir=TEMPDIR.name)
-        if DEBUG:
-            print("XML output files found: ", xml_output_files)
+        xml_output_files = find_test_logs("waza")
         self.assertEqual(len(xml_output_files), 0)
 
 
@@ -507,28 +509,32 @@ class Test_testrunner_with_xml_logfile(unittest.TestCase):
         (_handle, self.xml_file) = mkstemp(
             suffix=".xml", prefix="qt_mock_test-log-",
             dir=TEMPDIR.name)
+        os.close(_handle)
         if os.path.exists(os.environ["QT_MOCK_TEST_STATE_FILE"]):
             os.remove(os.environ["QT_MOCK_TEST_STATE_FILE"])
     def tearDown(self):
         os.remove(self.xml_file)
         del self.xml_file
+    # Run testrunner specifically for the tests here, with --parse-xml-testlog.
+    def run3(self, testrunner_args=None):
+        return run_testrunner(self.xml_file,
+                              testrunner_args=testrunner_args)
 
     def test_no_failure(self):
         write_xml_log(self.xml_file, failure=None)
-        proc = run_testrunner(self.xml_file)
+        proc = self.run3()
         self.assertEqual(proc.returncode, 0)
     def test_always_pass_failed(self):
         write_xml_log(self.xml_file, failure="always_pass")
-        proc = run_testrunner(self.xml_file)
+        proc = self.run3()
         self.assertEqual(proc.returncode, 0)
     def test_always_pass_failed_max_repeats_0(self):
         write_xml_log(self.xml_file, failure="always_pass")
-        proc = run_testrunner(self.xml_file,
-                              testrunner_args=["--max-repeats", "0"])
+        proc = self.run3(testrunner_args=["--max-repeats", "0"])
         self.assertEqual(proc.returncode, 2)
     def test_always_fail_failed(self):
         write_xml_log(self.xml_file, failure="always_fail")
-        proc = run_testrunner(self.xml_file)
+        proc = self.run3()
         self.assertEqual(proc.returncode, 2)
         # Assert that one of the re-runs was in verbose mode
         matches = re.findall("VERBOSE RUN",
@@ -538,20 +544,20 @@ class Test_testrunner_with_xml_logfile(unittest.TestCase):
         self.assertIn("QT_LOGGING_RULES", proc.stdout.decode())
     def test_always_crash_crashed(self):
         write_xml_log(self.xml_file, failure="always_crash")
-        proc = run_testrunner(self.xml_file)
+        proc = self.run3()
         self.assertEqual(proc.returncode, 3)
     def test_fail_then_pass_2_failed(self):
         write_xml_log(self.xml_file, failure="fail_then_pass:2")
-        proc = run_testrunner(self.xml_file)
+        proc = self.run3()
         self.assertEqual(proc.returncode, 0)
     def test_fail_then_pass_5_failed(self):
         write_xml_log(self.xml_file, failure="fail_then_pass:5")
-        proc = run_testrunner(self.xml_file)
+        proc = self.run3()
         self.assertEqual(proc.returncode, 2)
     def test_with_two_failures(self):
         write_xml_log(self.xml_file,
                       failure=["always_pass", "fail_then_pass:2"])
-        proc = run_testrunner(self.xml_file)
+        proc = self.run3()
         self.assertEqual(proc.returncode, 0)
         # Check that test output is properly interleaved with qt-testrunner's logging.
         matches = re.findall(r"(PASS|FAIL!).*\n.*Test process exited with code",
@@ -559,7 +565,7 @@ class Test_testrunner_with_xml_logfile(unittest.TestCase):
         self.assertEqual(len(matches), 4)
     def test_initTestCase_fail_crash(self):
         write_xml_log(self.xml_file, failure="initTestCase")
-        proc = run_testrunner(self.xml_file)
+        proc = self.run3()
         self.assertEqual(proc.returncode, 3)
 
 

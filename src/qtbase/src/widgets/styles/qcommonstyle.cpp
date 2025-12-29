@@ -1200,7 +1200,7 @@ void QCommonStylePrivate::tabLayout(const QStyleOptionTab *opt, const QWidget *w
     int vpadding = proxyStyle->pixelMetric(QStyle::PM_TabBarTabVSpace, opt, widget) / 2;
     if (opt->shape == QTabBar::RoundedSouth || opt->shape == QTabBar::TriangularSouth)
         verticalShift = -verticalShift;
-    tr.adjust(hpadding, verticalShift - vpadding, horizontalShift - hpadding, vpadding);
+    tr.adjust(hpadding, verticalShift + vpadding, horizontalShift - hpadding, -vpadding);
     bool selected = opt->state & QStyle::State_Selected;
     if (selected) {
         tr.setTop(tr.top() - verticalShift);
@@ -2846,7 +2846,6 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
             int verticalShift = proxy()->pixelMetric(QStyle::PM_TabBarTabShiftVertical, tab, widget);
             int horizontalShift = proxy()->pixelMetric(QStyle::PM_TabBarTabShiftHorizontal, tab, widget);
             int hpadding = proxy()->pixelMetric(QStyle::PM_TabBarTabHSpace, opt, widget) / 2;
-            hpadding = qMax(hpadding, 4); //workaround KStyle returning 0 because they workaround an old bug in Qt
 
             bool verticalTabs = tab->shape == QTabBar::RoundedEast
                     || tab->shape == QTabBar::RoundedWest
@@ -2874,8 +2873,6 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
             QSize size = (sr == SE_TabBarTabLeftButton) ? tab->leftButtonSize : tab->rightButtonSize;
             int w = size.width();
             int h = size.height();
-            int midHeight = static_cast<int>(qCeil(float(tr.height() - h) / 2));
-            int midWidth = ((tr.width() - w) / 2);
 
             bool atTheTop = true;
             switch (tab->shape) {
@@ -2887,14 +2884,19 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
             case QTabBar::TriangularEast:
                 atTheTop = (sr == SE_TabBarTabRightButton);
                 break;
-            default:
+            default: {
+                const int midHeight =
+                        tr.y() + static_cast<int>(qCeil(float(tr.height() - h) / 2));
                 if (sr == SE_TabBarTabLeftButton)
                     r = QRect(tab->rect.x() + hpadding, midHeight, w, h);
                 else
                     r = QRect(tab->rect.right() - w - hpadding, midHeight, w, h);
                 r = visualRect(tab->direction, tab->rect, r);
+                break;
+            }
             }
             if (verticalTabs) {
+                const int midWidth = tr.x() + ((tr.width() - w) / 2);
                 if (atTheTop)
                     r = QRect(midWidth, tr.y() + tab->rect.height() - hpadding - h, w, h);
                 else
@@ -4217,20 +4219,19 @@ QRect QCommonStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex 
 #if QT_CONFIG(toolbutton)
     case CC_ToolButton:
         if (const QStyleOptionToolButton *tb = qstyleoption_cast<const QStyleOptionToolButton *>(opt)) {
-            int mbi = proxy()->pixelMetric(PM_MenuButtonIndicator, tb, widget);
             ret = tb->rect;
             switch (sc) {
             case SC_ToolButton:
-                if ((tb->features
-                     & (QStyleOptionToolButton::MenuButtonPopup | QStyleOptionToolButton::PopupDelay))
-                    == QStyleOptionToolButton::MenuButtonPopup)
+                if (tb->features.testFlag(QStyleOptionToolButton::MenuButtonPopup)) {
+                    const int mbi = proxy()->pixelMetric(PM_MenuButtonIndicator, tb, widget);
                     ret.adjust(0, 0, -mbi, 0);
+                }
                 break;
             case SC_ToolButtonMenu:
-                if ((tb->features
-                     & (QStyleOptionToolButton::MenuButtonPopup | QStyleOptionToolButton::PopupDelay))
-                    == QStyleOptionToolButton::MenuButtonPopup)
+                if (tb->features.testFlag(QStyleOptionToolButton::MenuButtonPopup)) {
+                    const int mbi = proxy()->pixelMetric(PM_MenuButtonIndicator, tb, widget);
                     ret.adjust(ret.width() - mbi, 0, 0, 0);
+                }
                 break;
             default:
                 break;

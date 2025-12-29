@@ -1144,8 +1144,12 @@ QRectF QMacStylePrivate::CocoaControl::adjustedControlFrame(const QRectF &rect) 
 QMarginsF QMacStylePrivate::CocoaControl::titleMargins() const
 {
     if (type == QMacStylePrivate::Button_PushButton) {
-        if (size == QStyleHelper::SizeLarge)
-            return QMarginsF(12, 5, 12, 9);
+        if (size == QStyleHelper::SizeLarge) {
+            if (qt_apple_runningWithLiquidGlass())
+                return QMarginsF(10, 5, 10, 5);
+            else
+                return QMarginsF(12, 5, 12, 7);
+        }
         if (size == QStyleHelper::SizeSmall)
             return QMarginsF(12, 4, 12, 9);
         if (size == QStyleHelper::SizeMini)
@@ -1986,7 +1990,10 @@ int QMacStyle::pixelMetric(PixelMetric metric, const QStyleOption *opt) const
         break;
     case PM_SearchFieldFocusFrameRadius:
     case PM_ComboBoxFocusFrameRadius:
-        ret = LargeSmallMini(opt, 5, 4, 1);
+        if (qt_apple_runningWithLiquidGlass())
+            ret = LargeSmallMini(opt, 8, 4, 1);
+        else
+            ret = LargeSmallMini(opt, 5, 4, 1);
         break;
     case PM_RadioButtonFocusFrameRadius:
         ret = 7;
@@ -4156,12 +4163,19 @@ QRect QMacStyle::subElementRect(SubElement sr, const QStyleOption *opt) const
         }
         break;
     case SE_SearchFieldLayoutItem:
-      if (qstyleoption_cast<const QStyleOptionSearchField *>(opt)) {
-        rect = LargeSmallMini(opt,
-                              opt->rect.adjusted(2, 3, -2, -2),
-                              opt->rect.adjusted(2, 3, -2, -2),
-                              opt->rect.adjusted(2, 3, -2, -2));
-      }
+        if (qstyleoption_cast<const QStyleOptionSearchField *>(opt)) {
+            if (qt_apple_runningWithLiquidGlass()) {
+                rect = LargeSmallMini(opt,
+                                      opt->rect.adjusted(2, 4, -2, -4),
+                                      opt->rect.adjusted(2, 3, -2, -2),
+                                      opt->rect.adjusted(2, 3, -2, -2));
+            } else {
+                rect = LargeSmallMini(opt,
+                                      opt->rect.adjusted(2, 6, -2, -6),
+                                      opt->rect.adjusted(2, 3, -2, -2),
+                                      opt->rect.adjusted(2, 3, -2, -2));
+            }
+        }
       break;
     case SE_ComboBoxLayoutItem:
         if (const auto *combo = qstyleoption_cast<const QStyleOptionComboBox *>(opt)) {
@@ -4173,16 +4187,31 @@ QRect QMacStyle::subElementRect(SubElement sr, const QStyleOption *opt) const
             //            // all the hassle.
             //        } else
             //#endif
-            if (combo->editable)
-                rect = LargeSmallMini(opt,
-                                        opt->rect.adjusted(5, 6, -6, -7),
-                                        opt->rect.adjusted(4, 4, -5, -7),
-                                        opt->rect.adjusted(5, 4, -4, -6));
-            else
-                rect = LargeSmallMini(opt,
-                                        opt->rect.adjusted(6, 4, -7, -7),
-                                        opt->rect.adjusted(6, 7, -6, -5),
-                                        opt->rect.adjusted(9, 5, -5, -7));
+            if (combo->editable) {
+                if (qt_apple_runningWithLiquidGlass()) {
+                    rect = LargeSmallMini(opt,
+                                          opt->rect.adjusted(4, 4, -4, -4),
+                                          opt->rect.adjusted(4, 4, -5, -7),
+                                          opt->rect.adjusted(5, 4, -4, -6));
+                } else {
+                    rect = LargeSmallMini(opt,
+                                          opt->rect.adjusted(5, 6, -6, -7),
+                                          opt->rect.adjusted(4, 4, -5, -7),
+                                          opt->rect.adjusted(5, 4, -4, -6));
+                }
+            } else {
+                if (qt_apple_runningWithLiquidGlass()) {
+                    rect = LargeSmallMini(opt,
+                                          opt->rect.adjusted(4, 4, -4, -4),
+                                          opt->rect.adjusted(6, 7, -6, -5),
+                                          opt->rect.adjusted(9, 5, -5, -7));
+                } else {
+                    rect = LargeSmallMini(opt,
+                                          opt->rect.adjusted(6, 4, -7, -7),
+                                          opt->rect.adjusted(6, 7, -6, -5),
+                                          opt->rect.adjusted(9, 5, -5, -7));
+                }
+            }
         }
         break;
     case SE_LabelLayoutItem:
@@ -4207,10 +4236,17 @@ QRect QMacStyle::subElementRect(SubElement sr, const QStyleOption *opt) const
             if ((buttonOpt->features & QStyleOptionButton::Flat))
                 break;
         }
-        rect = LargeSmallMini(opt,
-                                opt->rect.adjusted(7, 5, -7, -7),
-                                opt->rect.adjusted(6, 6, -6, -6),
-                                opt->rect.adjusted(6, 5, -6, -6));
+        if (qt_apple_runningWithLiquidGlass()) {
+            rect = LargeSmallMini(opt,
+                                  opt->rect.adjusted(2, 5, -2, -7),
+                                  opt->rect.adjusted(6, 6, -6, -6),
+                                  opt->rect.adjusted(6, 5, -6, -6));
+        } else {
+            rect = LargeSmallMini(opt,
+                                  opt->rect.adjusted(7, 5, -7, -7),
+                                  opt->rect.adjusted(6, 6, -6, -6),
+                                  opt->rect.adjusted(6, 5, -6, -6));
+        }
         break;
     case SE_SpinBoxLayoutItem:
         rect = LargeSmallMini(opt,
@@ -5252,7 +5288,10 @@ QRect QMacStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex *op
             QRectF editRect;
             switch (cs) {
             case QStyleHelper::SizeLarge:
-                editRect = combo->rect.adjusted(15, 7, -25, -9);
+                if (qt_apple_runningWithLiquidGlass())
+                    editRect = combo->rect.adjusted(15, 7, -25, -7);
+                else
+                    editRect = combo->rect.adjusted(15, 7, -25, -9);
                 break;
             case QStyleHelper::SizeSmall:
                 if (combo->editable)
