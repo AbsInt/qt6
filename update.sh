@@ -18,6 +18,11 @@ cd .. || exit 1
 rm -rf src || exit 1
 mv qt5 src || exit 1
 
+# apply our patches
+
+# bug 36602
+git apply blockWithMarkerAt.patch || exit 1
+
 # Download some tag files. Not 100% accurate because of the version mismatch, but much simpler.
 # Generating these tag files ourselves would require building qdoc, which depends on clang, etc.
 rm -rf docs || exit 1

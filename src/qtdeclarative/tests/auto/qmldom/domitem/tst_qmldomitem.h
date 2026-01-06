@@ -2885,6 +2885,8 @@ private slots:
 
         QTest::addRow("bracketsInBinding")
                 << baseDir + u"/crashes/bracketsInBinding.qml"_s;
+
+        QTest::addRow("varInObject") << baseDir + u"/crashes/varInObject.qml"_s;
     }
     void crashes()
     {

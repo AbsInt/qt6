@@ -1,0 +1,20 @@
+--- a/src/qtbase/src/widgets/widgets/qwidgettextcontrol.cpp	
++++ a/src/qtbase/src/widgets/widgets/qwidgettextcontrol.cpp	
+@@ -38,6 +38,7 @@ 
+ #include "qtextdocumentwriter.h"
+ #include "qstylehints.h"
+ #include "private/qtextcursor_p.h"
++#include "qplaintextedit.h"
+ 
+ #include <qtextformat.h>
+ #include <qdatetime.h>
+@@ -2465,6 +2466,9 @@ QString QWidgetTextControl::anchorAtCursor() const
+ QTextBlock QWidgetTextControl::blockWithMarkerAt(const QPointF &pos) const
+ {
+     Q_D(const QWidgetTextControl);
++    if (qobject_cast<QPlainTextDocumentLayout *>(d->doc->documentLayout())) {
++        return QTextBlock();
++    }
+     return d->doc->documentLayout()->blockWithMarkerAt(pos);
+ }
+ 
