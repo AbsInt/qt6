@@ -152,6 +152,8 @@ set(qml_files
     dateConstruction.qml
     dateConversions.qml
     deadContext.qml
+    deadContext2.qml
+    deadContext3.qml
     deadShoeSize.qml
     deadStoreLoop.qml
     destroyAndToString.qml
@@ -324,6 +326,7 @@ set(qml_files
     stringLength.qml
     stringToByteArray.qml
     structuredValueType.qml
+    multiEnginePropertyCache.qml
     takenumber.qml
     testlogger.js
     text.qml

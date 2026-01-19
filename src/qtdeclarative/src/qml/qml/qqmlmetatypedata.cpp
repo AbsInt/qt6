@@ -241,7 +241,7 @@ QQmlPropertyCache::ConstPtr QQmlMetaTypeData::propertyCache(
     return raw;
 }
 
-static QQmlPropertyCache::ConstPtr propertyCacheForPotentialInlineComponentType(
+QQmlPropertyCache::ConstPtr QQmlMetaTypeData::propertyCacheForPotentialInlineComponentType(
         QMetaType t, const QQmlMetaTypeData::CompositeTypes::const_iterator &iter) {
     if (t != (*iter)->metaType()) {
         // this is an inline component, and what we have in the iterator is currently the parent compilation unit
@@ -254,6 +254,7 @@ static QQmlPropertyCache::ConstPtr propertyCacheForPotentialInlineComponentType(
 
 QQmlPropertyCache::ConstPtr QQmlMetaTypeData::findPropertyCacheInCompositeTypes(QMetaType t) const
 {
+    // Last inserted
     auto iter = compositeTypes.constFind(t.iface());
     return (iter == compositeTypes.constEnd())
             ? QQmlPropertyCache::ConstPtr()

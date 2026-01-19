@@ -98,6 +98,7 @@ enum class Icon : ushort
     CaretDownSolid8 = 0xEDDC,
     ChevronDown = 0xE70D,
     ChevronUp = 0xE70E,
+    ChevronUpMed = 0xE971,
     ChevronDownMed = 0xE972,
     ChevronLeftMed = 0xE973,
     ChevronRightMed = 0xE974,
@@ -296,7 +297,8 @@ QWindows11Style::QWindows11Style() : QWindows11Style(*new QWindows11StylePrivate
 QWindows11Style::QWindows11Style(QWindows11StylePrivate &dd) : QWindowsVistaStyle(dd)
 {
     Q_D(QWindows11Style);
-    d->assetFont = QFont("Segoe Fluent Icons");
+    const QStringList assetFontFamilies{ "Segoe Fluent Icons"_L1, "Segoe MDL2 Assets"_L1 };
+    d->assetFont = QFont(assetFontFamilies);
     d->assetFont.setStyleStrategy(QFont::NoFontMerging);
     highContrastTheme = QGuiApplicationPrivate::styleHints->colorScheme() == Qt::ColorScheme::Unknown;
     colorSchemeIndex = QGuiApplicationPrivate::styleHints->colorScheme() == Qt::ColorScheme::Light ? 0 : 1;
@@ -596,7 +598,7 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
             if (sub & SC_ComboBoxArrow) {
                 QRectF rect = proxy()->subControlRect(CC_ComboBox, option, SC_ComboBoxArrow, widget);
                 painter->setFont(d->assetFont);
-                painter->setPen(controlTextColor(option));
+                painter->setPen(controlTextColor(option, true));
                 painter->drawText(rect, Qt::AlignCenter, fluentIcon(Icon::ChevronDownMed));
             }
             if (state & State_KeyboardFocusChange && hasFocus) {
@@ -811,6 +813,43 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
     }
 
     switch (element) {
+    case PE_IndicatorArrowUp:
+    case PE_IndicatorArrowDown:
+    case PE_IndicatorArrowRight:
+    case PE_IndicatorArrowLeft: {
+        const QRect &r = option->rect;
+        if (r.width() <= 1 || r.height() <= 1)
+            break;
+        Icon ico = Icon::Help;
+        switch (element) {
+        case PE_IndicatorArrowUp:
+            ico = Icon::ChevronUpMed;
+            break;
+        case PE_IndicatorArrowDown:
+            ico = Icon::ChevronDownMed;
+            break;
+        case PE_IndicatorArrowLeft:
+            ico = Icon::ChevronLeftMed;
+            break;
+        case PE_IndicatorArrowRight:
+            ico = Icon::ChevronRightMed;
+            break;
+        default:
+            break;
+        }
+        QPainterStateGuard psg(painter);
+        if (option->state.testFlag(State_Sunken)) {
+            const auto bsx = proxy()->pixelMetric(PM_ButtonShiftHorizontal, option, widget);
+            const auto bsy = proxy()->pixelMetric(PM_ButtonShiftVertical, option, widget);
+            if (bsx != 0 || bsy != 0)
+                painter->translate(bsx, bsy);
+        }
+        painter->setFont(d->assetFont);
+        painter->setPen(option->palette.buttonText().color());
+        painter->setBrush(option->palette.buttonText());
+        painter->drawText(option->rect, Qt::AlignCenter, fluentIcon(ico));
+        break;
+    }
     case PE_FrameFocusRect: {
         if (const QStyleOptionFocusRect *fropt = qstyleoption_cast<const QStyleOptionFocusRect *>(option)) {
             if (!(fropt->state & State_KeyboardFocusChange))
@@ -887,7 +926,7 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
 
             if (isOn) {
                 painter->setFont(d->assetFont);
-                painter->setPen(controlTextColor(option, QPalette::Window));
+                painter->setPen(controlTextColor(option));
                 qreal clipWidth = 1.0;
                 const QString str = fluentIcon(Icon::AcceptMedium);
                 QFontMetrics fm(d->assetFont);
@@ -904,8 +943,10 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
                 clipRect.setWidth(clipWidth * clipRect.width());
                 painter->drawText(clipRect, Qt::AlignVCenter | Qt::AlignLeft, str);
             } else if (isPartial) {
-                painter->setFont(d->assetFont);
-                painter->setPen(controlTextColor(option, QPalette::Window));
+                QFont f(d->assetFont);
+                f.setPointSize(6);
+                painter->setFont(f);
+                painter->setPen(controlTextColor(option));
                 painter->drawText(rect, Qt::AlignCenter, fluentIcon(Icon::Dash12));
             }
         }
@@ -1205,7 +1246,7 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
     case QStyle::CE_ComboBoxLabel:
 #if QT_CONFIG(combobox)
         if (const QStyleOptionComboBox *cb = qstyleoption_cast<const QStyleOptionComboBox *>(option)) {
-            painter->setPen(controlTextColor(option));
+            painter->setPen(controlTextColor(option, true));
             QStyleOptionComboBox newOption = *cb;
             newOption.rect.adjust(4,0,-4,0);
             QCommonStyle::drawControl(element, &newOption, painter, widget);
@@ -1498,7 +1539,6 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
             if (btn->features.testFlag(QStyleOptionButton::HasMenu)) {
                 QPainterStateGuard psg(painter);
 
-                const bool isEnabled = !isDisabled(option);
                 QRect textRect = btn->rect.marginsRemoved(QMargins(contentHMargin, 0, contentHMargin, 0));
                 const auto indSize = proxy()->pixelMetric(PM_MenuButtonIndicator, btn, widget);
                 const auto indRect =
@@ -1511,11 +1551,7 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                 QFont f(d->assetFont);
                 f.setPointSize(qRound(fontSize * 0.9f)); // a little bit smaller
                 painter->setFont(f);
-                QColor penColor = option->palette.color(
-                        isEnabled ? QPalette::Active : QPalette::Disabled, QPalette::Text);
-                if (isEnabled)
-                    penColor.setAlpha(percentToAlpha(60.63)); // fillColorTextSecondary
-                painter->setPen(penColor);
+                painter->setPen(controlTextColor(option));
                 painter->drawText(vindRect, Qt::AlignCenter, fluentIcon(Icon::ChevronDownMed));
             }
         }
@@ -1619,6 +1655,15 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                 QRect textRect(tl, br);
                 QRect vRect(visualMenuRect(textRect));
 
+                QColor penColor;
+                if (highContrastTheme) {
+                    penColor = menuitem->palette.color(act ? QPalette::HighlightedText
+                                                           : QPalette::Text);
+                } else {
+                    penColor = controlTextColor(option);
+                }
+                painter->setPen(penColor);
+
                 qsizetype t = s.indexOf(u'\t');
                 int text_flags = Qt::AlignVCenter | Qt::TextShowMnemonic | Qt::TextDontClip | Qt::TextSingleLine;
                 if (!proxy()->styleHint(SH_UnderlineShortcut, menuitem, widget))
@@ -1629,17 +1674,6 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                     QRect shortcutRect(QPoint(textRect.right(), textRect.top()),
                                        QPoint(rect.right(), textRect.bottom()));
                     QRect vShortcutRect(visualMenuRect(shortcutRect));
-                    QColor penColor;
-                    if (highContrastTheme) {
-                        penColor = menuitem->palette.color(act ? QPalette::HighlightedText
-                                                               : QPalette::Text);
-                    } else {
-                        penColor = menuitem->palette.color(dis ? QPalette::Disabled
-                                                               : QPalette::Active, QPalette::Text);
-                        if (!dis)
-                            penColor.setAlpha(percentToAlpha(60.63));   // fillColorTextSecondary
-                    }
-                    painter->setPen(penColor);
                     const QString textToDraw = s.mid(t + 1).toString();
                     painter->drawText(vShortcutRect, text_flags, textToDraw);
                     s = s.left(t);
@@ -1648,13 +1682,6 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                 if (menuitem->menuItemType == QStyleOptionMenuItem::DefaultItem)
                     font.setBold(true);
                 painter->setFont(font);
-                QColor penColor;
-                if (highContrastTheme && act)
-                    penColor = menuitem->palette.color(QPalette::HighlightedText);
-                else
-                    penColor = menuitem->palette.color(dis ? QPalette::Disabled
-                                                           : QPalette::Current, QPalette::Text);
-                painter->setPen(penColor);
                 const QString textToDraw = s.left(t).toString();
                 painter->drawText(vRect, text_flags, textToDraw);
             }
@@ -1862,10 +1889,13 @@ QRect QWindows11Style::subElementRect(QStyle::SubElement element, const QStyleOp
     QRect ret;
     switch (element) {
     case QStyle::SE_RadioButtonIndicator:
-    case QStyle::SE_CheckBoxIndicator:
+    case QStyle::SE_CheckBoxIndicator: {
         ret = QWindowsVistaStyle::subElementRect(element, option, widget);
-        ret.moveLeft(ret.left() + contentItemHMargin);
+        const auto ofs =
+                QCommonStylePrivate::rtl(option) ? -contentItemHMargin : +contentItemHMargin;
+        ret.moveLeft(ret.left() + ofs);
         break;
+    }
     case QStyle::SE_ComboBoxFocusRect:
     case QStyle::SE_CheckBoxFocusRect:
     case QStyle::SE_RadioButtonFocusRect:
@@ -2101,6 +2131,7 @@ QRect QWindows11Style::subControlRect(ComplexControl control, const QStyleOption
                     ret = ret.marginsRemoved(QMargins(fw, fw, fw, fw));
                 }
                 ret.setWidth(ret.width() - indicatorWidth - contentHMargin * 2);
+                ret = visualRect(option->direction, option->rect, ret);
                 break;
             }
             default:
@@ -2370,6 +2401,9 @@ int QWindows11Style::pixelMetric(PixelMetric metric, const QStyleOption *option,
         break;
     case PM_TreeViewIndentation:
         res = 30;
+        break;
+    case PM_ProgressBarChunkWidth:
+        res = 0;    // no chunks on windows11
         break;
     default:
         res = QWindowsVistaStyle::pixelMetric(metric, option, widget);
@@ -2653,7 +2687,7 @@ QBrush QWindows11Style::inputFillBrush(const QStyleOption *option, const QWidget
     return winUI3Color(fillControlDefault);
 }
 
-QColor QWindows11Style::controlTextColor(const QStyleOption *option, QPalette::ColorRole role) const
+QColor QWindows11Style::controlTextColor(const QStyleOption *option, bool ignoreIsChecked) const
 {
     using namespace StyleOptionHelper;
     static constexpr WINUI3Color colorEnums[2][4] = {
@@ -2666,12 +2700,9 @@ QColor QWindows11Style::controlTextColor(const QStyleOption *option, QPalette::C
     if (option->palette.isBrushSet(QPalette::Current, QPalette::ButtonText))
         return option->palette.buttonText().color();
 
-    const int colorIndex = isChecked(option) ? 1 : 0;
+    const int colorIndex = !ignoreIsChecked && isChecked(option) ? 1 : 0;
     const auto state = calcControlState(option);
-    const auto alpha = winUI3Color(colorEnums[colorIndex][int(state)]);
-    QColor col = option->palette.color(role);
-    col.setAlpha(alpha.alpha());
-    return col;
+    return winUI3Color(colorEnums[colorIndex][int(state)]);
 }
 
 void QWindows11Style::drawLineEditFrame(QPainter *p, const QRectF &rect, const QStyleOption *o, bool isEditable) const

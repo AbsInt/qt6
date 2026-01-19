@@ -100,6 +100,7 @@ private slots:
     void cppValueTypeList();
     void dateConstruction();
     void dateConversions();
+    void deadContext_data();
     void deadContext();
     void deadShoeSize();
     void deduplicateConversionOrigins();
@@ -279,6 +280,7 @@ private slots:
     void stringLength();
     void stringToByteArray();
     void structuredValueType();
+    void multiEnginePropertyCache();
     void takeNumbers();
     void takeNumbers_data();
     void testIsnan();
@@ -1715,10 +1717,26 @@ void tst_QmlCppCodegen::dateConversions()
 
 }
 
+void tst_QmlCppCodegen::deadContext_data()
+{
+    QTest::addColumn<QUrl>("url");
+    QTest::addColumn<int>("end");
+
+    QTest::addRow("Unqualified lookups in dead context")
+            << QUrl(u"qrc:/qt/qml/TestTypes/deadContext.qml"_s) << 4;
+    QTest::addRow("Qualified lookups in dead context")
+            << QUrl(u"qrc:/qt/qml/TestTypes/deadContext2.qml"_s) << 4;
+    QTest::addRow("Alternating lookups in live and dead contexts")
+            << QUrl(u"qrc:/qt/qml/TestTypes/deadContext3.qml"_s) << 8;
+}
+
 void tst_QmlCppCodegen::deadContext()
 {
+    QFETCH(QUrl, url);
+    QFETCH(int, end);
+
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/deadContext.qml"_s));
+    QQmlComponent c(&engine, url);
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1726,15 +1744,15 @@ void tst_QmlCppCodegen::deadContext()
     const char *vmeError = "QQmlVMEMetaObject: Internal error "
                            "- attempted to evaluate a function in an invalid context";
     static const QRegularExpression timerError(
-                u"qrc:/qt/qml/TestTypes/deadContext\\.qml:[0-9]+: TypeError: Property 'doit' of "
-                 "object QQmlTimer_QML_[0-9]+\\(0x[0-9a-f]+\\) is not a function"_s);
+                u"qrc:/qt/qml/TestTypes/deadContext[0-9]*\\.qml:[0-9]+: TypeError: Property 'doit' "
+                "of object QQmlTimer_QML_[0-9]+\\(0x[0-9a-f]+\\) is not a function"_s);
 
     for (int i = 0; i < 4; ++i) {
         QTest::ignoreMessage(QtWarningMsg,  vmeError);
         QTest::ignoreMessage(QtWarningMsg,  timerError);
     }
 
-    QTRY_COMPARE(o->property("choice").toInt(), 4);
+    QTRY_COMPARE(o->property("choice").toInt(), end);
 }
 
 void tst_QmlCppCodegen::deadShoeSize()
@@ -2757,7 +2775,7 @@ void tst_QmlCppCodegen::globals()
 {
     QQmlEngine engine;
     int exitCode = -1;
-    QObject::connect(&engine, &QQmlEngine::exit, [&](int code) { exitCode = code; });
+    QObject::connect(&engine, &QQmlEngine::exit, this, [&exitCode](int code) { exitCode = code; });
     QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/globals.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
 
@@ -5775,6 +5793,26 @@ void tst_QmlCppCodegen::structuredValueType()
     WeatherModelUrl w2;
     w2.setStrings(QStringList({u"three"_s, u"two"_s, u"one"_s}));
     QCOMPARE(o->property("w2").value<WeatherModelUrl>(), w2);
+}
+
+void tst_QmlCppCodegen::multiEnginePropertyCache()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/multiEnginePropertyCache.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    std::unique_ptr<QObject> o(c.create());
+    QVERIFY(o);
+
+    {
+        QJSEngine other;
+        other.newQObject(o.get());
+    }
+
+    QTest::ignoreMessage(QtDebugMsg, "close1");
+    o->setProperty("foo", 1);
+
+    QTest::ignoreMessage(QtDebugMsg, "close2");
+    o->setProperty("bar", 2);
 }
 
 void tst_QmlCppCodegen::takeNumbers()

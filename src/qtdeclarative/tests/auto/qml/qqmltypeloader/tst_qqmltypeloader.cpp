@@ -55,7 +55,7 @@ private slots:
     void signalHandlersAreCompatible();
     void loadTypeOnShutdown();
     void floodTypeLoaderEventQueue();
-    void retainQmlTypeAcrossEngines();
+    void doNotRetainQmlTypeAcrossEngines();
     void loadLocalTypesAfterRemoteFails();
 
 private:
@@ -399,7 +399,8 @@ public:
     QNetworkAccessManager *create(QObject *parent) override
     {
         NetworkAccessManager *manager = new NetworkAccessManager(parent);
-        QObject::connect(manager, &NetworkAccessManager::loaded, [this](const QString &filename) {
+        QObject::connect(manager, &NetworkAccessManager::loaded,
+                         manager, [this](const QString &filename) {
             loadedFiles.append(filename);
         });
         return manager;
@@ -870,7 +871,7 @@ void tst_QQMLTypeLoader::floodTypeLoaderEventQueue()
     }
 }
 
-void tst_QQMLTypeLoader::retainQmlTypeAcrossEngines()
+void tst_QQMLTypeLoader::doNotRetainQmlTypeAcrossEngines()
 {
     QQmlEngine engine1;
     QQmlComponent component1(&engine1, testFileUrl("B.qml"));
@@ -908,7 +909,8 @@ void tst_QQMLTypeLoader::retainQmlTypeAcrossEngines()
     const auto base2 = cu2->baseCompilationUnit();
     const auto base3 = cu3->baseCompilationUnit();
 
-    QCOMPARE(base1, base2);
+    // Each engine has its own base CU, too
+    QVERIFY(base1 != base2);
     QVERIFY(base1 != base3);
     QVERIFY(base2 != base3);
 
@@ -922,8 +924,8 @@ void tst_QQMLTypeLoader::retainQmlTypeAcrossEngines()
 
     QVERIFY(mo1 != mo3);
 
-    // The base classes are all the same.
-    QCOMPARE(mo1->superClass(), mo3->superClass());
+    // The base classes are also different.
+    QVERIFY(mo1->superClass() != mo3->superClass());
 }
 
 class SingletonTypeExample : public QObject

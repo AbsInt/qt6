@@ -1159,7 +1159,7 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)"_L1, 16, 27 } },
             << Result{ { { "TypeDoesNotExist was not found."_L1 } } };
     QTest::newRow("unresolvedArrayBinding")
             << QStringLiteral("unresolvedArrayBinding.qml")
-            << Result{ { { "Declaring an object which is not an Qml object as a list member."_L1 } } };
+            << Result{ { { "Declaring an object which is not a Qml object as a list member."_L1 } } };
     QTest::newRow("unresolvedAttachedType")
             << QStringLiteral("unresolvedAttachedType.qml")
             << Result{ { { "unknown attached property scope UnresolvedAttachedType."_L1 } },
@@ -1609,9 +1609,13 @@ void TestQmllint::dirtyQmlSnippet()
     QFETCH(Result, result);
     QFETCH(CallQmllintOptions, options);
 
-    QString qmlCode = "import QtQuick\nItem {\n%1}"_L1.arg(code);
-
-    addLocationOffsetTo(&result, 2);
+    QString qmlCode;
+    if (code.startsWith("import"_L1) || code.startsWith("pragma"_L1)) {
+        qmlCode = code;
+    } else {
+        qmlCode = "import QtQuick\nItem {\n%1}"_L1.arg(code);
+        addLocationOffsetTo(&result, 2);
+    }
 
     const QJsonArray warnings =
             callQmllintOnSnippet(qmlCode, options, fromResultFlags(result.flags));

@@ -3,7 +3,7 @@
 <db:info>
 <db:title>Overloaded Signals Slots Test Module</db:title>
 <db:productname>OverloadedSignalsSlots</db:productname>
-<db:titleabbrev>Test for overloaded signals and slots using overload command</db:titleabbrev>
+<db:titleabbrev>Test for overloaded signals and slots documentation</db:titleabbrev>
 <db:abstract>
 <db:para>Test module for overloaded signals and slots.</db:para>
 </db:abstract>

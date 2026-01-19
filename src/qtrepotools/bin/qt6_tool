@@ -592,6 +592,8 @@ def configure_arguments():
         batch_size = read_int_config(UNITY_BATCH_SIZE_KEY, 32)
         result.extend(['-DQT_UNITY_BUILD=ON',
                        f'-DQT_UNITY_BUILD_BATCH_SIZE={batch_size}'])
+    else:
+        result.append('-DQT_UNITY_BUILD=OFF')
     if mkspec:
         result.append(f'-DQT_QMAKE_TARGET_MKSPEC={mkspec}')
 

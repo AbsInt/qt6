@@ -99,6 +99,10 @@ Q_LOGGING_CATEGORY (lcSortFilterProxyModel, "qt.qml.sortfilterproxymodel")
 
     \snippet qml/sortfilterproxymodel/qml-sortfilterproxymodel.qml sfpm-usage
 
+    The AgeFilter in the above code snippet can be declared as follows
+
+    \snippet qml/sortfilterproxymodel/AgeFilter.qml age-filter
+
     \note This API is considered tech preview and may change or be removed in
     future versions of Qt.
 */
@@ -936,10 +940,10 @@ void QQmlSortFilterProxyModelPrivate::sort_source_rows(
 {
     if (m_primarySortColumn >= 0) {
         if (m_sortOrder == Qt::AscendingOrder) {
-            QSortFilterProxyModelLessThan lt(m_primarySortColumn, source_parent, model, this);
+            QQmlSortFilterProxyModelLessThan lt(m_primarySortColumn, source_parent, model, this);
             std::stable_sort(source_rows.begin(), source_rows.end(), lt);
         } else {
-            QSortFilterProxyModelGreaterThan gt(m_primarySortColumn, source_parent, model, this);
+            QQmlSortFilterProxyModelGreaterThan gt(m_primarySortColumn, source_parent, model, this);
             std::stable_sort(source_rows.begin(), source_rows.end(), gt);
         }
     } else if (m_sortOrder == Qt::AscendingOrder) {

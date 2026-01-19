@@ -465,7 +465,7 @@ void QQuickMenuBarPrivate::insertMenu(int index, QQuickMenu *menu, QQuickMenuBar
     auto menuPrivate = QQuickMenuPrivate::get(menu);
     menuPrivate->menuBar = q;
 
-    QObject::connect(menuBarItem, &QQuickMenuBarItem::visibleChanged, [this, menuBarItem]{
+    QObject::connect(menuBarItem, &QQuickMenuBarItem::visibleChanged, q, [this, menuBarItem]{
         syncMenuBarItemVisibilty(menuBarItem);
     });
 
@@ -771,32 +771,6 @@ QQuickMenu *QQuickMenuBar::takeMenu(int index)
 }
 
 /*!
-    \since QtQuick.Controls 2.3 (Qt 5.10)
-    \qmlproperty real QtQuick.Controls::MenuBar::contentWidth
-
-    This property holds the content width. It is used for calculating the total
-    implicit width of the menu bar.
-
-    \note This property is available in MenuBar since QtQuick.Controls 2.3 (Qt 5.10),
-    but it was promoted to the Container base type in QtQuick.Controls 2.5 (Qt 5.12).
-
-    \sa Container::contentWidth
-*/
-
-/*!
-    \since QtQuick.Controls 2.3 (Qt 5.10)
-    \qmlproperty real QtQuick.Controls::MenuBar::contentHeight
-
-    This property holds the content height. It is used for calculating the total
-    implicit height of the menu bar.
-
-    \note This property is available in MenuBar since QtQuick.Controls 2.3 (Qt 5.10),
-    but it was promoted to the Container base type in QtQuick.Controls 2.5 (Qt 5.12).
-
-    \sa Container::contentHeight
-*/
-
-/*!
     \qmlproperty list<Menu> QtQuick.Controls::MenuBar::menus
 
     This property holds the list of menus.
@@ -992,7 +966,8 @@ void QQuickMenuBar::itemAdded(int index, QQuickItem *item)
         QObjectPrivate::connect(menuBarItem, &QQuickControl::hoveredChanged, d, &QQuickMenuBarPrivate::onItemHovered);
         QObjectPrivate::connect(menuBarItem, &QQuickMenuBarItem::triggered, d, &QQuickMenuBarPrivate::onItemTriggered);
         if (QQuickMenu *menu = menuBarItem->menu())
-            connect(menu, &QQuickPopup::aboutToHide, [this, menu]{ d_func()->onMenuAboutToHide(menu); });
+            connect(menu, &QQuickPopup::aboutToHide, this,
+                    [this, menu] { d_func()->onMenuAboutToHide(menu); });
     }
     d->updateImplicitContentSize();
     emit menusChanged();

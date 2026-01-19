@@ -1433,7 +1433,9 @@ QImage QWindowsFontEngineDirectWrite::renderColorGlyph(DWRITE_GLYPH_RUN *glyphRu
                 }
 
                 if (colorGlyphRun->glyphImageFormat == DWRITE_GLYPH_IMAGE_FORMATS_NONE) {
-                    break;
+                    // On some older platforms, we get a glyph run with format NONE before
+                    // the actual ones
+                    continue;
                 } else if (colorGlyphRun->glyphImageFormat == DWRITE_GLYPH_IMAGE_FORMATS_COLR) {
                     if (ret.isNull()) {
                         ret = QImage(boundingRect.width() - 1,
@@ -1442,15 +1444,15 @@ QImage QWindowsFontEngineDirectWrite::renderColorGlyph(DWRITE_GLYPH_RUN *glyphRu
                         ret.fill(0);
                     }
 
-                    if (!renderColr0GlyphRun(&ret,
-                                             reinterpret_cast<const DWRITE_COLOR_GLYPH_RUN *>(colorGlyphRun), // Broken inheritance in MinGW
-                                             transform,
-                                             renderMode,
-                                             measureMode,
-                                             gridFitMode,
-                                             color,
-                                             boundingRect)) {
-                        return QImage{};
+                    if (renderColr0GlyphRun(&ret,
+                                            reinterpret_cast<const DWRITE_COLOR_GLYPH_RUN *>(colorGlyphRun), // Broken inheritance in MinGW
+                                            transform,
+                                            renderMode,
+                                            measureMode,
+                                            gridFitMode,
+                                            color,
+                                            boundingRect)) {
+                        break;
                     }
                 } else if (colorGlyphRun->glyphImageFormat & supportedBitmapFormats) {
                     ComPtr<IDWriteFontFace4> face4;
@@ -1469,34 +1471,49 @@ QImage QWindowsFontEngineDirectWrite::renderColorGlyph(DWRITE_GLYPH_RUN *glyphRu
                             return QImage{};
                         }
 
-                        const char *format;
-                        switch (colorGlyphRun->glyphImageFormat) {
-                        case DWRITE_GLYPH_IMAGE_FORMATS_JPEG:
-                            format = "JPEG";
+                        auto fnc = qScopeGuard([&]() {
+                            if (data.imageData != nullptr)
+                                face4->ReleaseGlyphImageData(ctx);
+                        });
+
+                        if (data.pixelsPerEm == 0 || data.imageData == nullptr || data.imageDataSize == 0) {
+                            qCWarning(lcQpaFonts) << __FUNCTION__
+                                                  << "Failed to retrieve image data for glyph"
+                                                  << glyphRun->glyphIndices[0]
+                                                  << "in font:"
+                                                  << fontDef.families
+                                                  << "with formats:"
+                                                  << colorGlyphRun->glyphImageFormat;
+                        } else {
+                            const char *format;
+                            switch (colorGlyphRun->glyphImageFormat) {
+                            case DWRITE_GLYPH_IMAGE_FORMATS_JPEG:
+                                format = "JPEG";
+                                break;
+                            case DWRITE_GLYPH_IMAGE_FORMATS_TIFF:
+                                format = "TIFF";
+                                break;
+                            default:
+                                format = "PNG";
+                                break;
+                            };
+
+                            ret = QImage::fromData(reinterpret_cast<const uchar *>(data.imageData),
+                                                   data.imageDataSize,
+                                                   format);
+
+                            QTransform matrix(transform.m11, transform.m12,
+                                              transform.m21, transform.m22,
+                                              transform.dx, transform.dy);
+
+                            const qreal scale = fontDef.pixelSize / data.pixelsPerEm;
+                            matrix.scale(scale, scale);
+
+                            if (!matrix.isIdentity())
+                                ret = ret.transformed(matrix, Qt::SmoothTransformation);
+
                             break;
-                        case DWRITE_GLYPH_IMAGE_FORMATS_TIFF:
-                            format = "TIFF";
-                            break;
-                        default:
-                            format = "PNG";
-                            break;
-                        };
-
-                        ret = QImage::fromData(reinterpret_cast<const uchar *>(data.imageData),
-                                               data.imageDataSize,
-                                               format);
-
-                        QTransform matrix(transform.m11, transform.m12,
-                                          transform.m21, transform.m22,
-                                          transform.dx, transform.dy);
-
-                        const qreal scale = fontDef.pixelSize / data.pixelsPerEm;
-                        matrix.scale(scale, scale);
-
-                        if (!matrix.isIdentity())
-                            ret = ret.transformed(matrix, Qt::SmoothTransformation);
-
-                        face4->ReleaseGlyphImageData(ctx);
+                        }
                     }
 
                 } else {
@@ -1967,6 +1984,14 @@ QRect QWindowsFontEngineDirectWrite::colorBitmapBounds(glyph_t glyph, const DWRI
                 return QRect{};
             }
 
+            auto fnc = qScopeGuard([&]() {
+                if (data.imageData != nullptr)
+                    face4->ReleaseGlyphImageData(ctx);
+            });
+
+            if (data.pixelsPerEm == 0 || data.imageData == nullptr || data.imageDataSize == 0)
+                return QRect{};
+
             QRect rect(-data.horizontalLeftOrigin.x,
                        -data.horizontalLeftOrigin.y,
                        data.pixelSize.width,
@@ -1979,9 +2004,7 @@ QRect QWindowsFontEngineDirectWrite::colorBitmapBounds(glyph_t glyph, const DWRI
             // GetGlyphImageData returns the closest matching size, which we need to scale down
             const qreal scale = fontDef.pixelSize / data.pixelsPerEm;
             matrix.scale(scale, scale);
-
             rect = matrix.mapRect(rect);
-            face4->ReleaseGlyphImageData(ctx);
 
             return rect;
         }

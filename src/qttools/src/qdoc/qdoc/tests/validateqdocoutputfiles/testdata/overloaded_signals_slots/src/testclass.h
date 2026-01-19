@@ -4,24 +4,23 @@
 #ifndef TESTCLASS_H
 #define TESTCLASS_H
 
-class String;
+#include <QtCore/QObject>
+#include <QtCore/QString>
 
-class TestClass
+class TestClass : public QObject
 {
+    Q_OBJECT
+
 public:
-    TestClass();
+    explicit TestClass(QObject *parent = nullptr);
 
-    void regularFunction(int value);
-    void regularFunction(const String &value);
-
-    // Mock signals (just function declarations for documentation purposes)
+signals:
     void dataChanged(int value);
-    void dataChanged(const String &value);
+    void dataChanged(const QString &value);
 
-    // Mock slots (just function declarations for documentation purposes)
+public slots:
     void process(int value);
-    void process(const String &value);
+    void process(const QString &value);
 };
 
 #endif // TESTCLASS_H
-
