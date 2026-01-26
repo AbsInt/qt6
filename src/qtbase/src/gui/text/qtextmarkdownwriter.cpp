@@ -5,6 +5,7 @@
 #include "qtextdocumentlayout_p.h"
 #include "qfontinfo.h"
 #include "qfontmetrics.h"
+#include "qguiapplication.h"
 #include "qtextdocument_p.h"
 #include "qtextlist.h"
 #include "qtexttable.h"
@@ -598,10 +599,11 @@ int QTextMarkdownWriter::writeBlock(const QTextBlock &block, bool wrap, bool ign
             m_stream << s;
             col += s.size();
         } else {
-            QFontInfo fontInfo(fmt.font());
-            bool monoFrag = fontInfo.fixedPitch() || fmt.fontFixedPitch();
             QString markers;
-            if (!ignoreFormat) {
+            // skip formatting if not wanted or it is too late as the application is not there anymore
+            if (!ignoreFormat && qGuiApp && QGuiApplicationPrivate::platformIntegration()) {
+                QFontInfo fontInfo(fmt.font());
+                bool monoFrag = fontInfo.fixedPitch() || fmt.fontFixedPitch();
                 if (monoFrag != mono && !m_indentedCodeBlock && !m_fencedCodeBlock) {
                     if (monoFrag)
                         backticks =
