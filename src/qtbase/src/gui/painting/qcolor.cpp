@@ -2200,27 +2200,30 @@ QColor QColor::toHsv() const noexcept
     const ushort r = ct.argb.red;
     const ushort g = ct.argb.green;
     const ushort b = ct.argb.blue;
+
+    // cf. https://en.wikipedia.org/wiki/HSL_and_HSV#From_RGB
     const auto [min, max] = std::minmax({r, g, b});
-    color.ct.ahsv.value = max;
+    const auto value = max;
+    color.ct.ahsv.value = value;
     if (max == min) {
         // achromatic case, hue is undefined
         color.ct.ahsv.hue = USHRT_MAX;
         color.ct.ahsv.saturation = 0;
     } else {
         // chromatic case
-        const float delta = max - min; // cannot overflow
+        const float chroma = max - min; // cannot overflow
         float hue;
-        color.ct.ahsv.saturation = qRound((delta / max) * USHRT_MAX);
-        if (max == r) {
-            hue = 0 + (g - b) / delta;
+        color.ct.ahsv.saturation = qRound((chroma / value) * USHRT_MAX);
+        if (value == r) {
+            hue = 0 + (g - b) / chroma;
             // hue = hue mod 6:
             if (hue < 0)
                 hue += 6;
-        } else if (max == g) {
-            hue = 2 + (b - r) / delta;
+        } else if (value == g) {
+            hue = 2 + (b - r) / chroma;
         } else {
-            Q_ASSERT(max == b); // max({r,g,b}) must be one of r, g, and b!
-            hue = 4 + (r - g) / delta;
+            Q_ASSERT(value == b); // by construction, `value` is one of r, g, and b!
+            hue = 4 + (r - g) / chroma;
         }
         color.ct.ahsv.hue = qRound(hue * (60 * 100));
     }
@@ -2251,11 +2254,11 @@ QColor QColor::toHsl() const noexcept
     const float b = ct.argb.blue  / float(USHRT_MAX);
     const float max = Q_MAX_3(r, g, b);
     const float min = Q_MIN_3(r, g, b);
-    const float delta = max - min;
+    const float chroma = max - min;
     const float delta2 = max + min;
     const float lightness = 0.5f * delta2;
     color.ct.ahsl.lightness = qRound(lightness * USHRT_MAX);
-    if (qFuzzyIsNull(delta)) {
+    if (qFuzzyIsNull(chroma)) {
         // achromatic case, hue is undefined
         color.ct.ahsl.hue = USHRT_MAX;
         color.ct.ahsl.saturation = 0;
@@ -2263,15 +2266,15 @@ QColor QColor::toHsl() const noexcept
         // chromatic case
         float hue = 0;
         if (lightness < 0.5f)
-            color.ct.ahsl.saturation = qRound((delta / delta2) * USHRT_MAX);
+            color.ct.ahsl.saturation = qRound(chroma / delta2 * USHRT_MAX);
         else
-            color.ct.ahsl.saturation = qRound((delta / (2.0f - delta2)) * USHRT_MAX);
+            color.ct.ahsl.saturation = qRound(chroma / (2.0f - delta2) * USHRT_MAX);
         if (qFuzzyCompare(r, max)) {
-            hue = ((g - b) /delta);
+            hue = 0 + (g - b) / chroma;
         } else if (qFuzzyCompare(g, max)) {
-            hue = (2.0f + (b - r) / delta);
+            hue = 2 + (b - r) / chroma;
         } else if (qFuzzyCompare(b, max)) {
-            hue = (4.0f + (r - g) / delta);
+            hue = 4 + (r - g) / chroma;
         } else {
             Q_ASSERT_X(false, "QColor::toHsv", "internal error");
         }

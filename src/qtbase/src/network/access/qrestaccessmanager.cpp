@@ -765,7 +765,7 @@ QNetworkReply *QRestAccessManagerPrivate::createActiveRequest(QNetworkReply *rep
     Q_Q(QRestAccessManager);
     Q_ASSERT(reply);
     QtPrivate::SlotObjSharedPtr slotPtr(std::move(slot)); // adopts
-    activeRequests.insert(reply, CallerInfo{contextObject, slotPtr});
+    activeRequests.emplace(reply, CallerInfo{contextObject, std::move(slotPtr)});
     // The signal connections below are made to 'q' to avoid stray signal
     // handling upon its destruction while requests were still in progress
 
@@ -798,7 +798,8 @@ void QRestAccessManagerPrivate::verifyThreadAffinity(const QObject *contextObjec
     }
 }
 
-QNetworkReply* QRestAccessManagerPrivate::warnNoAccessManager()
+Q_DECL_COLD_FUNCTION
+static QNetworkReply* warnNoAccessManager()
 {
     qCWarning(lcQrest, "QRestAccessManager: QNetworkAccessManager not set");
     return nullptr;
@@ -812,7 +813,7 @@ void QRestAccessManagerPrivate::handleReplyFinished(QNetworkReply *reply)
         return;
     }
 
-    CallerInfo caller = request.value();
+    CallerInfo caller = std::move(request.value());
     activeRequests.erase(request);
 
     if (caller.slot) {
@@ -824,6 +825,38 @@ void QRestAccessManagerPrivate::handleReplyFinished(QNetworkReply *reply)
                 ? const_cast<QObject*>(caller.contextObject.get()) : nullptr;
         caller.slot->call(context, argv);
     }
+}
+
+QNetworkReply *
+QRestAccessManagerPrivate::executeRequest(ReqOpRef requestOperation, const QObject *context,
+                                          QtPrivate::QSlotObjectBase *rawSlot)
+{
+    QtPrivate::SlotObjUniquePtr slot(rawSlot);
+    if (!qnam)
+        return warnNoAccessManager();
+    verifyThreadAffinity(context);
+    QNetworkReply *reply = requestOperation(qnam);
+    return createActiveRequest(reply, context, std::move(slot));
+}
+
+QNetworkReply *
+QRestAccessManagerPrivate::executeRequest(ReqOpRefJson requestOperation, const QJsonDocument &jsonDoc,
+                                          const QNetworkRequest &request, const QObject *context,
+                                          QtPrivate::QSlotObjectBase *rawSlot)
+{
+    QtPrivate::SlotObjUniquePtr slot(rawSlot);
+    if (!qnam)
+        return warnNoAccessManager();
+    verifyThreadAffinity(context);
+    QNetworkRequest req(request);
+    auto h = req.headers();
+    if (!h.contains(QHttpHeaders::WellKnownHeader::ContentType)) {
+        h.append(QHttpHeaders::WellKnownHeader::ContentType,
+                 QLatin1StringView{"application/json"});
+    }
+    req.setHeaders(std::move(h));
+    QNetworkReply *reply = requestOperation(qnam, req, jsonDoc.toJson(QJsonDocument::Compact));
+    return createActiveRequest(reply, context, std::move(slot));
 }
 
 QT_END_NAMESPACE
