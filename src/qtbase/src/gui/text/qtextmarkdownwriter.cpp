@@ -5,7 +5,6 @@
 #include "qtextdocumentlayout_p.h"
 #include "qfontinfo.h"
 #include "qfontmetrics.h"
-#include "qguiapplication.h"
 #include "qtextdocument_p.h"
 #include "qtextlist.h"
 #include "qtexttable.h"
@@ -17,6 +16,7 @@
 #if QT_CONFIG(itemmodel)
 #include "qabstractitemmodel.h"
 #endif
+#include "private/qguiapplication_p.h"
 
 QT_BEGIN_NAMESPACE
 
