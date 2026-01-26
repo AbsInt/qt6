@@ -1,0 +1,27 @@
+diff --git a/src/qtbase/src/gui/text/qtextmarkdownwriter.cpp b/src/qtbase/src/gui/text/qtextmarkdownwriter.cpp
+index 7a6a43d205..ed87073c3d 100644
+--- a/src/qtbase/src/gui/text/qtextmarkdownwriter.cpp
++++ b/src/qtbase/src/gui/text/qtextmarkdownwriter.cpp
+@@ -16,6 +16,7 @@
+ #if QT_CONFIG(itemmodel)
+ #include "qabstractitemmodel.h"
+ #endif
++#include "private/qguiapplication_p.h"
+ 
+ QT_BEGIN_NAMESPACE
+ 
+@@ -598,10 +599,11 @@ int QTextMarkdownWriter::writeBlock(const QTextBlock &block, bool wrap, bool ign
+             m_stream << s;
+             col += s.size();
+         } else {
+-            QFontInfo fontInfo(fmt.font());
+-            bool monoFrag = fontInfo.fixedPitch() || fmt.fontFixedPitch();
+             QString markers;
+-            if (!ignoreFormat) {
++            // skip formatting if not wanted or it is too late as the application is not there anymore
++            if (!ignoreFormat && qGuiApp && QGuiApplicationPrivate::platformIntegration()) {
++                QFontInfo fontInfo(fmt.font());
++                bool monoFrag = fontInfo.fixedPitch() || fmt.fontFixedPitch();
+                 if (monoFrag != mono && !m_indentedCodeBlock && !m_fencedCodeBlock) {
+                     if (monoFrag)
+                         backticks =
