@@ -139,6 +139,9 @@ private Q_SLOTS:
 
     void maxWarnings();
 
+    void useProperFunction_data();
+    void useProperFunction();
+
 #if QT_CONFIG(library)
     void hasTestPlugin();
     void testPlugin_data();
@@ -660,9 +663,6 @@ void TestQmllint::dirtyQmlCode_data()
     QTest::newRow("NonExistentListProperty")
             << QStringLiteral("nonExistentListProperty.qml")
             << Result{ { { "Could not find property \"objs\"."_L1 } } };
-    QTest::newRow("NotScopedEnumCpp")
-            << QStringLiteral("NotScopedEnumCpp.qml")
-            << Result{ { { "You cannot access unscoped enum \"TheEnum\" from here."_L1, 5, 49 } } };
     QTest::newRow("OnAssignment")
             << QStringLiteral("onAssignment.qml")
             << Result{ { { "Member \"loops\" not found on type \"bool\""_L1 } } };
@@ -841,14 +841,6 @@ void TestQmllint::dirtyQmlCode_data()
                        { { "Cannot assign binding of type QQuickItem to QObject"_L1 } },
                        {},
                        Result::ExitsNormally };
-    QTest::newRow("callJSValue")
-            << QStringLiteral("callJSValueProp.qml")
-            << Result{ { { "Property \"jsValue\" is a QJSValue property. It may or may not be "
-                           "a method. Use a regular Q_INVOKABLE instead."_L1 } } };
-    QTest::newRow("callVarProp")
-            << QStringLiteral("callVarProp.qml")
-            << Result{ { { "Property \"foo\" is a var property. It may or may not be a "
-                           "method. Use a regular function instead."_L1 } } };
     QTest::newRow("connectionsBinding")
             << QStringLiteral("autofix/ConnectionsHandler.qml")
             << Result{ { { "Implicitly defining \"onWidthChanged\" as signal handler in "
@@ -942,11 +934,9 @@ void TestQmllint::dirtyQmlCode_data()
             << QStringLiteral("enumInvalid.qml")
             << Result{ { { "Member \"red\" not found on type \"QtObject\""_L1, 5, 25 },
                          { "Member \"red\" not found on type \"QtObject\""_L1, 6, 25 },
-                         { "You cannot access unscoped enum \"Unscoped\" from here."_L1, 8, 32 },
-                         { "You cannot access unscoped enum \"Unscoped\" from here."_L1, 9, 38 },
-                         { "Member \"S2\" not found on type \"EnumTesterScoped\""_L1, 10, 38 }, },
-                       { { "Did you mean \"S2\"?"_L1, 0, 0, QtInfoMsg } },
-                       { { "Did you mean \"U2\"?"_L1, 10, 38, QtInfoMsg } } };
+                         { "Member \"S2\" not found on type \"EnumTesterScoped\""_L1, 8, 38 }, },
+                       { },
+                       { { "Did you mean \"U2\"?"_L1, 8 } } };
     QTest::newRow("enumsAreNotTypes_functionAnnotations")
             << QStringLiteral("EnumsAreNotTypes_functionAnnotations.qml")
             << Result{ { { "QML enumerations are not types. Use underlying type "
@@ -1119,18 +1109,6 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)"_L1, 16, 27 } },
     QTest::newRow("segFault (bad)")
             << QStringLiteral("SegFault.bad.qml")
             << Result{ { { "Member \"foobar\" not found on type \"QQuickScreenAttached\""_L1 } } };
-    QTest::newRow("shadowedMethod")
-            << QStringLiteral("shadowedMethod.qml")
-            << Result{ { { "Method \"foo\" is shadowed by a property."_L1 } } };
-    QTest::newRow("shadowedSignal")
-            << QStringLiteral("shadowedSignal.qml")
-            << Result{ { { "Signal \"pressed\" is shadowed by a property."_L1 } } };
-    QTest::newRow("shadowedSignalWithId")
-            << QStringLiteral("shadowedSignalWithId.qml")
-            << Result{ { { "Signal \"pressed\" is shadowed by a property"_L1 } } };
-    QTest::newRow("shadowedSlot")
-            << QStringLiteral("shadowedSlot.qml")
-            << Result{ { { "Slot \"move\" is shadowed by a property"_L1 } } };
     {
         const auto msgGen = [](const QString &name, quint32 line, quint32 col) {
             return Message{ "Reading non-constant and non-notifiable property %1. Binding might "_L1
@@ -1484,6 +1462,11 @@ void TestQmllint::dirtyQmlSnippet_data()
     QTest::newRow("functionDefinitionInGroupedProperty")
             // should not crash for now, see QTBUG-142091 to get the actual warning
             << u"Item { foo { bar: Array.from((i) => (1)) } }"_s << Result{} << defaultOptions;
+    QTest::newRow("invalidLint")
+            << u"Item {} // qmllint disable ThisCategoryDoesNotExist\n"_s
+            << Result{ { { "qmllint directive on unknown category \"ThisCategoryDoesNotExist\""_L1,
+                           1, 11 } } }
+            << defaultOptions;
 
     QTest::newRow("nonRootEnum1")
             << u"Item { enum E { A, B, C } }"_s
@@ -1648,6 +1631,9 @@ void TestQmllint::cleanQmlSnippet_data()
                 << u"required property int myContextProperty1: 42; property var a: myContextProperty1"_s
                 << options;
     }
+    QTest::newRow("disableInvalidLint")
+            << u" // qmllint disable ThisCategoryDoesNotExist invalid-lint-directive\n"_s
+            << defaultOptions;
     QTest::newRow("duplicateList") << u"Item {} Item {}"_s << defaultOptions;
     QTest::newRow("duplicateList2")
             << u"property list<Item> myList; myList: Item {} myList: Item {}"_s << defaultOptions;
@@ -3658,6 +3644,52 @@ void TestQmllint::errorCategory()
         QVERIFY(output.startsWith("Warning: "));
     }
 
+}
+
+void TestQmllint::useProperFunction_data()
+{
+    // note: use the same column as dirtyQmlSnippet_data() to reuse dirtyQmlSnippet() in shadow().
+    QTest::addColumn<QString>("code");
+    QTest::addColumn<Result>("result");
+    QTest::addColumn<CallQmllintOptions>("options");
+
+    CallQmllintOptions defaultOptions;
+    defaultOptions.enableCategories.append(qmlUseProperFunction.name().toString());
+
+    QTest::newRow("shadowedMethod") << u"function foo() {}\n property bool foo: false"_s
+                                    << Result::clean() << defaultOptions;
+    QTest::newRow("shadowedSignal")
+            << u"MouseArea { Component.onCompleted: pressed(); }"_s
+            << Result{ { { "Signal \"pressed\" is shadowed by a property." } } } << defaultOptions;
+    QTest::newRow("shadowedSignalWithId")
+            << u"MouseArea { id: mouseArea; Component.onCompleted: mouseArea.pressed() }"_s
+            << Result{ { { "Signal \"pressed\" is shadowed by a property." } } } << defaultOptions;
+    QTest::newRow("shadowedSlot")
+            << u"ObjectModel { property bool move: false; Component.onCompleted: move(); }"_s
+            << Result{ { { "Slot \"move\" is shadowed by a property." } } } << defaultOptions;
+    QTest::newRow("callJSValue")
+            << u"import CallJSValue\n"
+               u"TypeWithQJSValue {\n"
+               u"     Component.onCompleted: jsValue(42);\n"
+               u"}\n"_s
+            << Result{ { { "Property \"jsValue\" is a QJSValue property. It may or may not be "
+                           "a method. Use a regular Q_INVOKABLE instead."_L1 } } }
+            << defaultOptions;
+    QTest::newRow("callVarProp")
+            << u"import QtQml\n"
+               u"QtObject {\n"
+               u"    property var foo: () => {}\n"
+               u"    Component.onCompleted: foo()\n"
+               u"}\n"_s
+            << Result{ { { "Property \"foo\" is a var property. It may or may not be a "
+                           "method. Use a regular function instead."_L1 } } }
+            << defaultOptions;
+}
+
+void TestQmllint::useProperFunction()
+{
+    // reuse testing logic from dirtyQmlSnippet
+    dirtyQmlSnippet();
 }
 
 void TestQmllint::noSettingsPollution()

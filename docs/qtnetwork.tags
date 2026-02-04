@@ -9168,6 +9168,13 @@
             <anchor>QNetworkReply</anchor>
             <arglist>(QObject *parent)</arglist>
         </member>
+        <member kind="function" protection="protected" virtualness="virtual" static="no">
+            <type>virtual qint64</type>
+            <name>writeData</name>
+            <anchorfile>qnetworkreply.html</anchorfile>
+            <anchor>writeData</anchor>
+            <arglist>(const char *data, qint64 len) override</arglist>
+        </member>
         <member kind="function" protection="public" virtualness="pure" static="no">
             <type>virtual void</type>
             <name>abort</name>
@@ -9489,6 +9496,13 @@
             <anchorfile>qnetworkreply.html</anchorfile>
             <anchor>isRunning</anchor>
             <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="virtual" static="no">
+            <type>virtual bool</type>
+            <name>isSequential</name>
+            <anchorfile>qnetworkreply.html</anchorfile>
+            <anchor>isSequential</anchor>
+            <arglist>() const const override</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>const QList&lt;QNetworkReply::RawHeaderPair&gt; &amp;</type>
@@ -13624,6 +13638,13 @@
             <anchor>close</anchor>
             <arglist>() override</arglist>
         </member>
+        <member kind="function" protection="public" virtualness="virtual" static="no">
+            <type>virtual void</type>
+            <name>connectToHost</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>connectToHost</anchor>
+            <arglist>(const QString &amp;hostName, quint16 port, QIODeviceBase::OpenMode openMode, QAbstractSocket::NetworkLayerProtocol protocol) override</arglist>
+        </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
             <name>connectToHostEncrypted</name>
@@ -13644,6 +13665,13 @@
             <anchorfile>qsslsocket.html</anchorfile>
             <anchor>continueInterruptedHandshake</anchor>
             <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="virtual" static="no">
+            <type>virtual void</type>
+            <name>disconnectFromHost</name>
+            <anchorfile>qsslsocket.html</anchorfile>
+            <anchor>disconnectFromHost</anchor>
+            <arglist>() override</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>

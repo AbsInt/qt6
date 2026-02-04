@@ -26832,27 +26832,34 @@
             <name>QDebug</name>
             <anchorfile>qdebug.html</anchorfile>
             <anchor>QDebug</anchor>
-            <arglist>(QIODevice *device)</arglist>
+            <arglist>(QByteArray *byteArray)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QDebug</name>
             <anchorfile>qdebug.html</anchorfile>
             <anchor>QDebug-1</anchor>
-            <arglist>(QString *string)</arglist>
+            <arglist>(QIODevice *device)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QDebug</name>
             <anchorfile>qdebug.html</anchorfile>
             <anchor>QDebug-2</anchor>
-            <arglist>(QtMsgType t)</arglist>
+            <arglist>(QString *string)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QDebug</name>
             <anchorfile>qdebug.html</anchorfile>
             <anchor>QDebug-3</anchor>
+            <arglist>(QtMsgType t)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QDebug</name>
+            <anchorfile>qdebug.html</anchorfile>
+            <anchor>QDebug-4</anchor>
             <arglist>(const QDebug &amp;o)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">

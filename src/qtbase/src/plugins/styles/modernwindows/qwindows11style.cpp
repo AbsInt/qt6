@@ -927,17 +927,12 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
             if (isOn) {
                 painter->setFont(d->assetFont);
                 painter->setPen(controlTextColor(option));
-                qreal clipWidth = 1.0;
+                const auto *animation =
+                        qobject_cast<QNumberStyleAnimation *>(d->animation(option->styleObject));
+                const qreal clipWidth = animation ? animation->currentValue() : 1.0;
                 const QString str = fluentIcon(Icon::AcceptMedium);
                 QFontMetrics fm(d->assetFont);
                 QRectF clipRect = fm.boundingRect(str);
-                if (d->transitionsEnabled() && option->styleObject) {
-                    QNumberStyleAnimation *animation = qobject_cast<QNumberStyleAnimation *>(
-                            d->animation(option->styleObject));
-                    if (animation)
-                        clipWidth = animation->currentValue();
-                }
-
                 clipRect.moveCenter(center);
                 clipRect.setLeft(rect.x() + (rect.width() - clipRect.width()) / 2.0 + 0.5);
                 clipRect.setWidth(clipWidth * clipRect.width());
@@ -968,22 +963,18 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
         }
         break;
     case PE_IndicatorRadioButton: {
-            const bool isOn = option->state & State_On;
-            qreal innerRadius = radioButtonInnerRadius(state);
-            if (d->transitionsEnabled() && option->styleObject) {
-                if (option->styleObject->property("_q_end_radius").isNull())
-                    option->styleObject->setProperty("_q_end_radius", innerRadius);
-                QNumberStyleAnimation *animation = qobject_cast<QNumberStyleAnimation *>(d->animation(option->styleObject));
-                innerRadius = animation ? animation->currentValue() : option->styleObject->property("_q_end_radius").toFloat();
-                option->styleObject->setProperty("_q_inner_radius", innerRadius);
-            }
-
+            const auto *animation =
+                    qobject_cast<QNumberStyleAnimation *>(d->animation(option->styleObject));
+            const qreal innerRadius =
+                    animation ? animation->currentValue() : radioButtonInnerRadius(state);
             const QRectF rect = option->rect;
             const QPointF center = rect.center();
 
+            if (option->styleObject)
+                option->styleObject->setProperty("_q_inner_radius", innerRadius);
             painter->setPen(borderPenControlAlt(option));
             painter->setBrush(controlFillBrush(option, ControlType::ControlAlt));
-            if (isOn) {
+            if (option->state.testFlag(State_On)) {
                 QPainterPath path;
                 path.addEllipse(center, 7.5, 7.5);
                 path.addEllipse(center, innerRadius, innerRadius);

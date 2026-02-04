@@ -727,14 +727,18 @@ void QDockWidgetGroupWindow::destroyIfSingleItemLeft()
 
     // Unplug the last remaining dock widget and hide the group window, to avoid flickering
     mwLayout->unplug(lastDockWidget, QDockWidgetPrivate::DragScope::Widget);
-    lastDockWidget->setGeometry(geometry());
+    const QPoint position = pos();
     hide();
 
     // Re-parent last dock widget
     reparentToMainWindow(lastDockWidget);
 
+    // setVisible() might have restored it's last docked position.
+    // => If the last dock widget is floating, move it to the group window's position.
+    if (lastDockWidget->isFloating())
+        lastDockWidget->move(position);
+
     // the group window could still have placeholder items => clear everything
-    layoutInfo()->deleteAllLayoutItems();
     layoutInfo()->item_list.clear();
 
     destroyOrHideIfEmpty();
@@ -743,17 +747,17 @@ void QDockWidgetGroupWindow::destroyIfSingleItemLeft()
 void QDockWidgetGroupWindow::reparentToMainWindow(QDockWidget *dockWidget)
 {
     // reparent a dockWidget to the main window
+    // - abort ongoing animations
     // - remove it from the floating dock's layout info
     // - insert it to the main dock's layout info
-    // Finally, set draggingDock to nullptr, since the drag is finished.
     Q_ASSERT(qobject_cast<QMainWindow *>(parentWidget()));
     auto *mainWindow = static_cast<QMainWindow *>(parentWidget());
     QMainWindowLayout *mwLayout = qt_mainwindow_layout(mainWindow);
     Q_ASSERT(mwLayout);
+    mwLayout->widgetAnimator.abort(dockWidget);
     QDockAreaLayoutInfo &parentInfo = mwLayout->layoutState.dockAreaLayout.docks[layoutInfo()->dockPos];
     dockWidget->removeEventFilter(this);
     parentInfo.add(dockWidget);
-    std::unique_ptr<QLayoutItem> cleanup = layoutInfo()->takeWidgetItem(dockWidget);
     layoutInfo()->remove(dockWidget);
     const bool wasFloating = dockWidget->isFloating();
     const bool wasVisible = dockWidget->isVisible();
@@ -2130,7 +2134,7 @@ bool QMainWindowLayout::isDockWidgetTabbed(const QDockWidget *dockWidget) const
 void QMainWindowLayout::unuseTabBar(QTabBar *bar)
 {
     Q_ASSERT(qobject_cast<QMainWindowTabBar *>(bar));
-    delete bar;
+    bar->deleteLater();
 }
 
 QTabBar *QMainWindowLayout::getTabBar()
