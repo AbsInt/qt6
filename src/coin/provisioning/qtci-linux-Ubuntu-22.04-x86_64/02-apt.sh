@@ -69,7 +69,9 @@ installPackages+=(libvpx-dev)
 installPackages+=(libxkbfile-dev)
 installPackages+=(libxshmfence-dev)
 installPackages+=(libxss-dev)
-# installPackages+=(nodejs) too old
+installPackages+=(rustc)
+installPackages+=(bindgen)
+installPackages+=(clang)
 installPackages+=(python3-html5lib)
 
 # Common event loop handling
@@ -234,9 +236,8 @@ installPackages+=(cifs-utils)
 installPackages+=(uml-utilities)
 # To save iptables rules
 installPackages+=(iptables-persistent)
-
+# Fix dependencies in shared ffmpeg libs
 installPackages+=(patchelf)
-
 # For Firebird in RTA
 installPackages+=(libtommath-dev)
 # For tst_license.pl with all the machines generating SBOM

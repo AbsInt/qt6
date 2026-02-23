@@ -160,6 +160,7 @@ private Q_SLOTS:
 
     void replayImportWarnings();
     void errorCategory();
+    void noSettingsPollution_data();
     void noSettingsPollution();
 
 private:
@@ -1235,6 +1236,11 @@ void TestQmllint::dirtyQmlSnippet_data()
 
     const CallQmllintOptions defaultOptions;
 
+    QTest::newRow("assignLhsLocation")
+            << u"id: root; property int i; Item { Component.onCompleted: i = root.i + 5 }"_s
+            << Result{ { { "Unqualified access"_L1, 1, 57 } },
+                       { { "Unqualified access"_L1, 1, 66 } } }
+            << defaultOptions;
     QTest::newRow("color-hex")
             << u"property color myColor: \"#12345\""_s
             << Result{ { { "Invalid color"_L1, 1, 25 } } }
@@ -3171,7 +3177,7 @@ void TestQmllint::testPlugin_data()
                      Message{ u"Saw binding on Item property onXChanged with value function (and type 8) in scope Item"_s, 18, 21 },
                      Message{ u"Saw read on ObjectPrototype property log in scope Item"_s, 21, 36 },
                      Message{ u"Saw binding on Item property onXChanged with value QVariant (and type 8) in scope Item"_s, 22, 21 },
-                     Message{ u"Saw write on Item property x with value double in scope Item"_s, 30, 17 },
+                     Message{ u"Saw write on Item property x with value double in scope Item"_s, 30, 13 },
                      Message{ u"Saw write on Item property x with value int in scope Item"_s, 35, 31 },
                      Message{ u"Saw read on Item property x in scope Item"_s, 35, 46 },
                    },
@@ -3692,26 +3698,36 @@ void TestQmllint::useProperFunction()
     dirtyQmlSnippet();
 }
 
-void TestQmllint::noSettingsPollution()
+void TestQmllint::noSettingsPollution_data()
 {
     const QString aFile = testFile(u"NoSettingsPollution/A.qml"_s);
     const QString bFile = testFile(u"NoSettingsPollution/folder/B.qml"_s);
 
-    const auto run = [&](const QStringList &args) {
-        QProcess qmllint;
-        qmllint.setProgram(m_qmllintPath);
-        qmllint.setArguments(args);
-        qmllint.setProcessChannelMode(QProcess::MergedChannels);
-        qmllint.start();
-        QVERIFY(qmllint.waitForFinished());
-        const QString output = qmllint.readAllStandardOutput();
-        QVERIFY(output.contains("[comma]"_L1));
-        QVERIFY(output.contains(aFile.toUtf8()));
-        QVERIFY(!output.contains(bFile.toUtf8()));
-    };
+    QTest::addColumn<QStringList>("args");
+    QTest::addColumn<QString>("expectedOutput");
 
-    run({ aFile, bFile });
-    run({ bFile, aFile });
+    const QString warning =
+            "Warning: %1:5:10: Do not use comma expressions. [comma]\n        1, 1\n         ^\n"_L1
+                    .arg(aFile);
+
+    QTest::addRow("a-then-b") << QStringList{ aFile, bFile } << warning;
+    QTest::addRow("b-then-a") << QStringList{ bFile, aFile } << warning;
+    QTest::addRow("same-file-twice") << QStringList{ bFile, bFile } << u""_s;
+}
+
+void TestQmllint::noSettingsPollution()
+{
+    QFETCH(QStringList, args);
+    QFETCH(QString, expectedOutput);
+
+    QProcess qmllint;
+    qmllint.setProgram(m_qmllintPath);
+    qmllint.setArguments(args);
+    qmllint.setProcessChannelMode(QProcess::MergedChannels);
+    qmllint.start(QProcess::ReadWrite | QProcess::Text);
+    QVERIFY(qmllint.waitForFinished());
+    const QString output = qmllint.readAllStandardOutput();
+    QCOMPARE(output, expectedOutput);
 }
 
 QTEST_GUILESS_MAIN(TestQmllint)

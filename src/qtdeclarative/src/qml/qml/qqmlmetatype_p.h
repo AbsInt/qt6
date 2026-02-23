@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
 
 #ifndef QQMLMETATYPE_P_H
 #define QQMLMETATYPE_P_H
@@ -159,7 +160,9 @@ public:
     static QQmlPropertyCache::ConstPtr rawPropertyCacheForType(QMetaType metaType);
     static QQmlPropertyCache::ConstPtr rawPropertyCacheForType(
             QMetaType metaType, QTypeRevision version);
+
     static bool canConvert(QObject *o, QMetaType metaType);
+    static bool canConvert(const QQmlPropertyCache::ConstPtr &from, QMetaType metaType);
 
     static void freeUnusedTypesAndCaches();
 

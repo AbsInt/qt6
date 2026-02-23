@@ -635,11 +635,26 @@ void tst_QHttp2Connection::testBadFrameSize_data()
     QTest::addColumn<int>("loadsize");
     QTest::addColumn<bool>("rst_received");
     QTest::addColumn<int>("goaway_received");
+    QTest::addColumn<bool>("use_stream_id");
 
-    QTest::newRow("priority_correct") << uchar(Http2::FrameType::PRIORITY) << 5 << false << 0;
-    QTest::newRow("priority_bad") << uchar(Http2::FrameType::PRIORITY) << 6 << true << 0;
-    QTest::newRow("ping_correct") << uchar(Http2::FrameType::PING) << 8 << false << 0;
-    QTest::newRow("ping_bad") << uchar(Http2::FrameType::PING) << 13 << false << 1;
+    QTest::newRow("priority_correct")
+            << uchar(Http2::FrameType::PRIORITY) << 5 << false << 0 << true;
+    QTest::newRow("priority_too_long")
+            << uchar(Http2::FrameType::PRIORITY) << 6 << true << 0 << true;
+    QTest::newRow("priority_no_payload")
+            << uchar(Http2::FrameType::PRIORITY) << 0 << true << 0 << true;
+    QTest::newRow("priority_bad_on_stream0")
+            << uchar(Http2::FrameType::PRIORITY) << 6 << false << 1 << false;
+    QTest::newRow("ping_correct") << uchar(Http2::FrameType::PING) << 8 << false << 0 << false;
+    QTest::newRow("ping_bad") << uchar(Http2::FrameType::PING) << 13 << false << 1 << false;
+    QHttp2Configuration configuration;
+    const int longerThanMaxFrameSize = (int)configuration.maxFrameSize() + 1;
+    QTest::newRow("data_too_long")
+            << uchar(Http2::FrameType::DATA) << longerThanMaxFrameSize << true << 0 << true;
+    QTest::newRow("headers_too_long")
+            << uchar(Http2::FrameType::HEADERS) << longerThanMaxFrameSize << false << 1 << true;
+    QTest::newRow("continuation_too_long") << uchar(Http2::FrameType::CONTINUATION)
+                                           << longerThanMaxFrameSize << false << 1 << true;
 }
 
 void tst_QHttp2Connection::testBadFrameSize()
@@ -648,6 +663,7 @@ void tst_QHttp2Connection::testBadFrameSize()
     QFETCH(int, loadsize);
     QFETCH(bool, rst_received);
     QFETCH(int, goaway_received);
+    QFETCH(bool, use_stream_id);
 
     auto [client, server] = makeFakeConnectedSockets();
     auto connection = makeHttp2Connection(client.get(), {}, Client);
@@ -675,6 +691,32 @@ void tst_QHttp2Connection::testBadFrameSize()
     QCOMPARE(clientStream->state(), QHttp2Stream::State::Open);
     QCOMPARE(serverStream->state(), QHttp2Stream::State::Open);
 
+    if (Http2::FrameType(frametype) == Http2::FrameType::CONTINUATION) {
+        // Send an empty HEADERS frame to be able to send a CONTINUATION frame later
+        auto type = uchar(Http2::FrameType::HEADERS);
+        auto flags = uchar(Http2::FrameFlag::EMPTY);
+        quint32 streamID = clientStream->streamID();
+        std::vector<uchar> buffer;
+        buffer.resize(Http2::frameHeaderSize);
+        buffer[3] = type;
+        buffer[4] = flags;
+        qToBigEndian(streamID, &buffer[5]);
+        // RFC9113 4.1: The 9 octets of the frame header are not included in this value.
+        quint32 size = quint32(buffer.size() - Http2::frameHeaderSize);
+        buffer[0] = size >> 16;
+        buffer[1] = size >> 8;
+        buffer[2] = size;
+
+        auto writtenN = connection->getSocket()->write(reinterpret_cast<const char *>(&buffer[0]),
+                                                       buffer.size());
+        QCOMPARE(writtenN, qint64(buffer.size()));
+        QCOMPARE(clientStream->state(), QHttp2Stream::State::Open);
+        QCOMPARE(serverStream->state(), QHttp2Stream::State::Open);
+        QCOMPARE(rstClientSpy.wait(), false);
+        QCOMPARE(rstServerSpy.count(), 0);
+        QCOMPARE(goawayClientSpy.count(), 0);
+    }
+
     {
         auto type = frametype;
         auto flags = uchar(Http2::FrameFlag::EMPTY);
@@ -690,7 +732,7 @@ void tst_QHttp2Connection::testBadFrameSize()
         //5   Stream Identifier (31),
         buffer[3] = type;
         buffer[4] = flags;
-        qToBigEndian(type == uchar(Http2::FrameType::PING) ? 0 : streamID, &buffer[5]);
+        qToBigEndian(use_stream_id ? streamID : 0, &buffer[5]);
 
         buffer.resize(buffer.size() + loadsize);
         // RFC9113 4.1: The 9 octets of the frame header are not included in this value.
@@ -706,6 +748,21 @@ void tst_QHttp2Connection::testBadFrameSize()
     QCOMPARE(rstClientSpy.wait(), rst_received);
     QCOMPARE(rstServerSpy.count(), 0);
     QCOMPARE(goawayClientSpy.count(), goaway_received);
+
+    if (goaway_received)
+        return; // Connection is closed
+
+    // Reuse the connection
+    // This caused an assertion in QTBUG-141207
+    QHttp2Stream *clientStream2 = connection->createStream().unwrap();
+    QVERIFY(clientStream2);
+    clientStream2->sendHEADERS(headers, false);
+
+    QVERIFY(newIncomingStreamSpy.wait());
+    auto *serverStream2 = newIncomingStreamSpy.back().front().value<QHttp2Stream *>();
+    QCOMPARE(clientStream2->streamID(), serverStream2->streamID());
+    QCOMPARE(clientStream2->state(), QHttp2Stream::State::Open);
+    QCOMPARE(serverStream2->state(), QHttp2Stream::State::Open);
 }
 
 void tst_QHttp2Connection::testDataFrameAfterRSTIncoming()

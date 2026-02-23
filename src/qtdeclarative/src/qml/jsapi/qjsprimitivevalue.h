@@ -1,5 +1,6 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
 
 #ifndef QJSPRIMITIVEVALUE_H
 #define QJSPRIMITIVEVALUE_H
@@ -104,7 +105,17 @@ class QJSPrimitiveValue
     };
 
     struct DivOperators : private StringNaNOperators<DivOperators> {
-        static constexpr double op(double lhs, double rhs)  { return lhs / rhs; }
+        static constexpr double op(double lhs, double rhs)  {
+            // Without is_iec559, we don't get proper JS semantics
+#ifndef Q_OS_INTEGRITY
+            static_assert(std::numeric_limits<double>::is_iec559);
+#endif
+            QT_WARNING_PUSH
+            // divide by zero: not an issue with iec559
+            QT_WARNING_DISABLE_MSVC(4723)
+            return lhs / rhs;
+            QT_WARNING_POP
+        }
         static constexpr bool opOverflow(int, int, int *)
         {
             return true;

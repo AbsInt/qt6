@@ -69,7 +69,9 @@ installPackages+=(libvpx-dev)
 installPackages+=(libxkbfile-dev)
 installPackages+=(libxshmfence-dev)
 installPackages+=(libxss-dev)
-# installPackages+=(nodejs) too old
+installPackages+=(rustc)
+installPackages+=(bindgen)
+installPackages+=(clang)
 installPackages+=(python3-html5lib)
 
 # Common event loop handling
@@ -243,7 +245,7 @@ installPackages+=(keyutils)
 installPackages+=(cifs-utils)
 # VxWorks QEMU network setup (tunctl)
 installPackages+=(uml-utilities)
-
+# Fix dependencies in shared ffmpeg libs
 installPackages+=(patchelf)
 
 echo "Running update for apt"

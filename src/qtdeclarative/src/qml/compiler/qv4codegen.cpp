@@ -1,5 +1,6 @@
 // Copyright (C) 2017 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant
 
 #include "qv4codegen_p.h"
 
@@ -1523,6 +1524,8 @@ bool Codegen::visit(BinaryExpression *ast)
         if (hasError())
             return false;
         r.loadInAccumulator();
+        // The location saved above may have been overwritten when evaluating the rhs expression
+        bytecodeGenerator->setLocation(ast->left->firstSourceLocation());
         if (exprAccept(nx))
             setExprResult(left.storeConsumeAccumulator());
         else
