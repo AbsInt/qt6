@@ -155,10 +155,13 @@ static std::optional<qlonglong> qConvertToNumber(const QVariant::Private *d, boo
     case QMetaType::UShort:
     case QMetaType::ULong:
         return qlonglong(qMetaTypeUNumber(d));
+    case QMetaType::QCborSimpleType:
+        return qToUnderlying(d->get<QCborSimpleType>());
     }
 
-    if (d->typeInterface()->flags & QMetaType::IsEnumeration
-        || d->typeInterface()->typeId == QMetaType::QCborSimpleType)
+    if (d->typeInterface()->flags & QMetaType::IsUnsignedEnumeration)
+        return qMetaTypeUNumber(d);
+    if (d->typeInterface()->flags & QMetaType::IsEnumeration)
         return qMetaTypeNumberBySize(d);
 
     return std::nullopt;
@@ -923,66 +926,68 @@ QVariant::QVariant(QMetaType type, const void *copy)
 {
 }
 
-QVariant::QVariant(int val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(uint val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(qlonglong val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(qulonglong val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(bool val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(double val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(float val) noexcept : d(std::piecewise_construct_t{}, val) {}
+#define MAKE_CTOR_BY_VALUE(...) \
+    QVariant::QVariant(__VA_ARGS__ val) \
+        noexcept(QVariant::Private::CanUseInternalSpace<__VA_ARGS__>) \
+        : d{std::in_place, std::move(val)} {} \
+    static_assert(std::is_nothrow_copy_constructible_v<__VA_ARGS__>) \
+    /* end */
 
-QVariant::QVariant(const QByteArray &val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(const QBitArray &val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(const QString &val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(QChar val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(const QStringList &val) noexcept : d(std::piecewise_construct_t{}, val) {}
+MAKE_CTOR_BY_VALUE(int);
+MAKE_CTOR_BY_VALUE(uint);
+MAKE_CTOR_BY_VALUE(qlonglong);
+MAKE_CTOR_BY_VALUE(qulonglong);
+MAKE_CTOR_BY_VALUE(bool);
+MAKE_CTOR_BY_VALUE(double);
+MAKE_CTOR_BY_VALUE(float);
 
-QVariant::QVariant(QDate val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(QTime val) noexcept : d(std::piecewise_construct_t{}, val) {}
-QVariant::QVariant(const QDateTime &val) noexcept : d(std::piecewise_construct_t{}, val) {}
+QVariant::QVariant(const QByteArray &val) noexcept : d{std::in_place, val} {}
+QVariant::QVariant(const QBitArray &val) noexcept : d{std::in_place, val} {}
+QVariant::QVariant(const QString &val) noexcept : d{std::in_place, val} {}
+MAKE_CTOR_BY_VALUE(QChar);
+QVariant::QVariant(const QStringList &val) noexcept : d{std::in_place, val} {}
 
-QVariant::QVariant(const QList<QVariant> &list) noexcept : d(std::piecewise_construct_t{}, list) {}
-QVariant::QVariant(const QMap<QString, QVariant> &map) noexcept : d(std::piecewise_construct_t{}, map) {}
-QVariant::QVariant(const QHash<QString, QVariant> &hash) noexcept : d(std::piecewise_construct_t{}, hash) {}
+MAKE_CTOR_BY_VALUE(QDate);
+MAKE_CTOR_BY_VALUE(QTime);
+QVariant::QVariant(const QDateTime &val) noexcept : d{std::in_place, val} {}
+
+QVariant::QVariant(const QList<QVariant> &list) noexcept : d{std::in_place, list} {}
+QVariant::QVariant(const QMap<QString, QVariant> &map) noexcept : d{std::in_place, map} {}
+QVariant::QVariant(const QHash<QString, QVariant> &hash) noexcept : d{std::in_place, hash} {}
 
 QVariant::QVariant(QLatin1StringView val) : QVariant(QString(val)) {}
 
 #if QT_CONFIG(easingcurve)
-QVariant::QVariant(const QEasingCurve &val) : d(std::piecewise_construct_t{}, val) {}
+QVariant::QVariant(const QEasingCurve &val) : d{std::in_place, val} {}
 #endif
-QVariant::QVariant(QPoint pt) noexcept
-    : d(std::piecewise_construct_t{}, pt) {}
-QVariant::QVariant(QPointF pt) noexcept(Private::FitsInInternalSize<sizeof(qreal) * 2>)
-    : d(std::piecewise_construct_t{}, pt) {}
-QVariant::QVariant(QRect r) noexcept(Private::FitsInInternalSize<sizeof(int) * 4>)
-    : d(std::piecewise_construct_t{}, r) {}
-QVariant::QVariant(QRectF r) noexcept(Private::FitsInInternalSize<sizeof(qreal) * 4>)
-    : d(std::piecewise_construct_t{}, r) {}
-QVariant::QVariant(QLine l) noexcept(Private::FitsInInternalSize<sizeof(int) * 4>)
-    : d(std::piecewise_construct_t{}, l) {}
-QVariant::QVariant(QLineF l) noexcept(Private::FitsInInternalSize<sizeof(qreal) * 4>)
-    : d(std::piecewise_construct_t{}, l) {}
-QVariant::QVariant(QSize s) noexcept
-    : d(std::piecewise_construct_t{}, s) {}
-QVariant::QVariant(QSizeF s) noexcept(Private::FitsInInternalSize<sizeof(qreal) * 2>)
-    : d(std::piecewise_construct_t{}, s) {}
-QVariant::QVariant(const QUrl &u) noexcept : d(std::piecewise_construct_t{}, u) {}
-QVariant::QVariant(const QLocale &l) noexcept : d(std::piecewise_construct_t{}, l) {}
+MAKE_CTOR_BY_VALUE(QPoint);
+MAKE_CTOR_BY_VALUE(QPointF);
+MAKE_CTOR_BY_VALUE(QRect);
+MAKE_CTOR_BY_VALUE(QRectF);
+MAKE_CTOR_BY_VALUE(QLine);
+MAKE_CTOR_BY_VALUE(QLineF);
+MAKE_CTOR_BY_VALUE(QSize);
+MAKE_CTOR_BY_VALUE(QSizeF);
+QVariant::QVariant(const QUrl &u) noexcept : d{std::in_place, u} {}
+QVariant::QVariant(const QLocale &l) noexcept : d{std::in_place, l} {}
 #if QT_CONFIG(regularexpression)
-QVariant::QVariant(const QRegularExpression &re) noexcept : d(std::piecewise_construct_t{}, re) {}
+QVariant::QVariant(const QRegularExpression &re) noexcept : d{std::in_place, re} {}
 #endif // QT_CONFIG(regularexpression)
-QVariant::QVariant(QUuid uuid) noexcept(Private::FitsInInternalSize<16>) : d(std::piecewise_construct_t{}, uuid) {}
+MAKE_CTOR_BY_VALUE(QUuid);
 QVariant::QVariant(const QJsonValue &jsonValue) noexcept(Private::FitsInInternalSize<sizeof(CborValueStandIn)>)
-    : d(std::piecewise_construct_t{}, jsonValue)
+    : d{std::in_place, jsonValue}
 { static_assert(sizeof(CborValueStandIn) == sizeof(QJsonValue)); }
-QVariant::QVariant(const QJsonObject &jsonObject) noexcept : d(std::piecewise_construct_t{}, jsonObject) {}
-QVariant::QVariant(const QJsonArray &jsonArray) noexcept : d(std::piecewise_construct_t{}, jsonArray) {}
-QVariant::QVariant(const QJsonDocument &jsonDocument) : d(std::piecewise_construct_t{}, jsonDocument) {}
+QVariant::QVariant(const QJsonObject &jsonObject) noexcept : d{std::in_place, jsonObject} {}
+QVariant::QVariant(const QJsonArray &jsonArray) noexcept : d{std::in_place, jsonArray} {}
+QVariant::QVariant(const QJsonDocument &jsonDocument) : d{std::in_place, jsonDocument} {}
 #if QT_CONFIG(itemmodel)
 QVariant::QVariant(const QModelIndex &modelIndex) noexcept(Private::FitsInInternalSize<8 + 2 * sizeof(quintptr)>)
-    : d(std::piecewise_construct_t{}, modelIndex) {}
-QVariant::QVariant(const QPersistentModelIndex &modelIndex) : d(std::piecewise_construct_t{}, modelIndex) {}
+    : d{std::in_place, modelIndex} {}
+QVariant::QVariant(const QPersistentModelIndex &modelIndex)
+    : d{std::in_place, modelIndex} {}
 #endif
+
+#undef MAKE_CTOR_BY_VALUE
 
 /*! \fn QVariant::Type QVariant::type() const
     \deprecated [6.0] Use typeId() or metaType() instead.
@@ -2266,13 +2271,14 @@ static int numericTypePromotion(const QtPrivate::QMetaTypeInterface *iface1,
     if (qIsFloatingPoint(t1) || qIsFloatingPoint(t2))
         return QMetaType::QReal;
 
-    auto isUnsigned = [](uint tp) {
+    auto isUnsigned = [](uint tp, const QtPrivate::QMetaTypeInterface *iface) {
         // only types for which sizeof(T) >= sizeof(int); lesser ones promote to int
         return tp == QMetaType::ULongLong || tp == QMetaType::ULong ||
-                tp == QMetaType::UInt || tp == QMetaType::Char32;
+                tp == QMetaType::UInt || tp == QMetaType::Char32 ||
+                (iface->flags & QMetaType::IsUnsignedEnumeration && iface->size >= sizeof(int));
     };
-    bool isUnsigned1 = isUnsigned(t1);
-    bool isUnsigned2 = isUnsigned(t2);
+    bool isUnsigned1 = isUnsigned(t1, iface1);
+    bool isUnsigned2 = isUnsigned(t2, iface2);
 
     // integral rules:
     // 1) if either type is a 64-bit unsigned, compare as 64-bit unsigned

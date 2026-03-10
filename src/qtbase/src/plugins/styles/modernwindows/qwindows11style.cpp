@@ -424,8 +424,10 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
                 if (sb->frame && (sub & SC_SpinBoxFrame))
                     drawLineEditFrame(cp.painter(), frameRect, option);
 
-                const auto drawUpDown = [&](QStyle::SubControl sc) {
-                    const bool isEnabled = state & QStyle::State_Enabled;
+                const auto drawUpDown = [&](QStyle::SubControl sc,
+                                            QAbstractSpinBox::StepEnabledFlag flag) {
+                    const bool isEnabled =
+                            state.testFlag(QStyle::State_Enabled) && sb->stepEnabled.testFlag(flag);
                     const bool isUp = sc == SC_SpinBoxUp;
                     const QRect rect = proxy()->subControlRect(CC_SpinBox, option, sc, widget);
                     if (isEnabled && sb->activeSubControls & sc)
@@ -433,12 +435,15 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
                                         winUI3Color(subtleHighlightColor));
 
                     cp->setFont(d->assetFont);
-                    cp->setPen(sb->palette.buttonText().color());
+                    cp->setPen(sb->palette.color(isEnabled ? QPalette::Active : QPalette::Disabled,
+                                                 QPalette::ButtonText));
                     cp->setBrush(Qt::NoBrush);
                     cp->drawText(rect, Qt::AlignCenter, fluentIcon(isUp ? Icon::ChevronUp : Icon::ChevronDown));
                 };
-                if (sub & SC_SpinBoxUp) drawUpDown(SC_SpinBoxUp);
-                if (sub & SC_SpinBoxDown) drawUpDown(SC_SpinBoxDown);
+                if (sub & SC_SpinBoxUp)
+                    drawUpDown(SC_SpinBoxUp, QAbstractSpinBox::StepUpEnabled);
+                if (sub & SC_SpinBoxDown)
+                    drawUpDown(SC_SpinBoxDown, QAbstractSpinBox::StepDownEnabled);
                 if (state & State_KeyboardFocusChange && state & State_HasFocus) {
                     QStyleOptionFocusRect fropt;
                     fropt.QStyleOption::operator=(*option);
@@ -1866,6 +1871,8 @@ int QWindows11Style::styleHint(StyleHint hint, const QStyleOption *opt,
         return Qt::LeftButton;
     case QStyle::SH_Slider_PageSetButtons:
         return 0;
+    case SH_SpinControls_DisableOnBounds:
+        return 1;
     default:
         return QWindowsVistaStyle::styleHint(hint, opt, widget, returnData);
     }
@@ -2705,15 +2712,20 @@ void QWindows11Style::drawLineEditFrame(QPainter *p, const QRectF &rect, const Q
     if (!isEditable || StyleOptionHelper::isDisabled(o))
         return;
 
-    QPainterStateGuard psg(p);
-    p->setClipRect(rect.marginsRemoved(QMarginsF(0, rect.height() - 0.5, 0, -1)));
     const bool hasFocus = o->state & State_HasFocus;
     const auto underlineCol = hasFocus
             ? o->palette.color(QPalette::Accent)
             : colorSchemeIndex == 0 ? QColor(0x80, 0x80, 0x80)
                                     : QColor(0xa0, 0xa0, 0xa0);
-    const auto penUnderline = QPen(underlineCol, hasFocus ? 2 : 1);
-    drawRoundedRect(p, rect, penUnderline, Qt::NoBrush);
+    QPainterStateGuard psg(p);
+    if (hasFocus) {
+        p->setClipRect(rect.marginsRemoved(QMarginsF(0, rect.height() - 1.5, 0, -1)));
+        const QRectF r(rect.top(), rect.left(), rect.width(), rect.height() - 1);
+        drawRoundedRect(p, r, QPen(underlineCol, 2), Qt::NoBrush);
+    } else {
+        p->setClipRect(rect.marginsRemoved(QMarginsF(0, rect.height() - 0.5, 0, -1)));
+        drawRoundedRect(p, rect, underlineCol, Qt::NoBrush);
+    }
 }
 
 QColor QWindows11Style::winUI3Color(enum WINUI3Color col) const

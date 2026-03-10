@@ -97,6 +97,22 @@ Item {
         testModel.rows = ({ foo: 1 })   // should fail - type is JSObject
     }
 
+    function setInvalidRowsArray() {
+        testModel.rows = [1, 2, 3]      // "wrong kind of array"
+    }
+
+    function appendInvalidNumber() {   // should fail - type is int
+        testModel.appendRow(42);
+    }
+
+    function appendInvalidString() {   // should fail - type is string
+        testModel.appendRow("Hello world");
+    }
+
+    function appendInvalidArray() {   // should fail - type is array, at the moment we are expecting objects
+        testModel.appendRow([1, 2, 3]);
+    }
+
     TreeModel {
         id: treeModel
         objectName: "testModel"

@@ -519,6 +519,9 @@ private slots:
     void argumentsUsageInBindings();
 
     void aliasToLargeRevision();
+    void aliasToPropertyOfAlias();
+    void aliasesAndDefaultProperty();
+    void removeBindingFromAliasToObject();
 
     void urlWithFragment();
 
@@ -860,6 +863,7 @@ void tst_qqmllanguage::errors_data()
 
     QTest::newRow("assignComponentToWrongType") << "assignComponentToWrongType.qml" << "assignComponentToWrongType.errors.txt" << false;
     QTest::newRow("cyclicAlias") << "cyclicAlias.qml" << "cyclicAlias.errors.txt" << false;
+    QTest::newRow("cyclicSameObjectAlias") << "cyclicSameObjectAlias.qml" << "cyclicSameObjectAlias.errors.txt" << false;
 
     QTest::newRow("fuzzed.1") << "fuzzed.1.qml" << "fuzzed.1.errors.txt" << false;
     QTest::newRow("fuzzed.2") << "fuzzed.2.qml" << "fuzzed.2.errors.txt" << false;
@@ -9841,6 +9845,46 @@ void tst_qqmllanguage::aliasToLargeRevision()
     QCOMPARE(o->property("bb"), 14);
     QCOMPARE(o->property("cc"), 15);
     QCOMPARE(o->property("dd"), 16);
+}
+
+void tst_qqmllanguage::aliasToPropertyOfAlias()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("aliasToPropertyOfAlias.qml"));
+
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QCOMPARE(o->property("bar").toString(), "bar"_L1);
+
+}
+
+void tst_qqmllanguage::aliasesAndDefaultProperty()
+{
+    // This test is meant to capture the case where the reordering of aliases
+    // in the IR necessiates an update of the default property index
+
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("aliasesAndDefaultProperty.qml"));
+
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QCOMPARE(o->property("label"), "should not change"_L1);
+}
+
+void tst_qqmllanguage::removeBindingFromAliasToObject()
+{
+    QQmlEngine engine;
+
+    QQmlComponent c(&engine, testFileUrl("aliasCrash.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    std::unique_ptr<QObject> o(c.create());
+    QVERIFY(o);
+
+    QCOMPARE(o->objectName(), "boom"_L1);
 }
 
 void tst_qqmllanguage::urlWithFragment()

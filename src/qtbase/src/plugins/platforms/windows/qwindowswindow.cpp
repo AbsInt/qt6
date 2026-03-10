@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include <QtCore/qt_windows.h>
 #include <QtGui/qstylehints.h>
@@ -2066,7 +2067,14 @@ void QWindowsWindow::setParent_sys(const QPlatformWindow *parent)
         // Force toplevel state as QWindow::isTopLevel cannot be relied upon here.
         if (wasTopLevel != isTopLevel) {
             setDropSiteEnabled(false);
-            setWindowFlags_sys(window()->flags(), unsigned(isTopLevel ? WindowCreationData::ForceTopLevel : WindowCreationData::ForceChild));
+            m_data = setWindowFlags_sys(window()->flags(), unsigned(isTopLevel ? WindowCreationData::ForceTopLevel : WindowCreationData::ForceChild));
+            // Update frame margins for the new top-level state.
+            // Child windows have no frame/titlebar, so margins must be zero.
+            // Top-level windows need frame margins recalculated.
+            if (isTopLevel)
+                updateFullFrameMargins();
+            else
+                m_data.fullFrameMargins = {};
             updateDropSite(isTopLevel);
         }
     }
@@ -2392,8 +2400,8 @@ void QWindowsWindow::checkForScreenChanged(ScreenChangeMode mode, const RECT *su
 void QWindowsWindow::handleGeometryChange()
 {
     const QRect previousGeometry = m_data.geometry;
-    m_data.geometry = geometry_sys();
     updateFullFrameMargins();
+    m_data.geometry = geometry_sys();
     QWindowSystemInterface::handleGeometryChange(window(), m_data.geometry);
     // QTBUG-32121: OpenGL/normal windows (with exception of ANGLE
     // which we no longer support in Qt 6) do not receive expose

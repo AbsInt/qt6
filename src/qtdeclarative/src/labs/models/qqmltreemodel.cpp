@@ -56,6 +56,42 @@ static const QString ROWS_PROPERTY_NAME = u"rows"_s;
 
     To add new rows, use \l appendRow(). To modify existing rows, use
     \l setRow(), \l removeRow() and \l clear().
+
+    \section1 Using the TreeModel with External JSON Sources
+
+    While the intended use of the TreeModel is to define the JSON data in-place in
+    the QML file, you can use any JSON object with the model as long as
+    its structure matches the structure defined by the TreeModel. If all the rows
+    of the JSON object conform to the columns defined by the model, you can
+    assign it directly through the rows property.
+
+    The source of the JSON object can be a file. For example, if the model is
+    defined as
+
+    \snippet setRowsViaJSON.qml model
+
+    and the JSON object stored in the file and looks like
+
+    \snippet TreeData.js file
+
+    then this object can be provided by importing the JavaScript file as a
+
+    module
+
+    \snippet setRowsViaJSON.qml import
+
+    and then it can be assigned directly
+
+    \snippet setRowsViaJSON.qml assignment
+
+    \warning Ensure that the JSON data comes from a trusted source. Since the
+    model dinamically populates its rows based on the input, malformed or
+    untrusted JSON can lead to unexpected behavior or performance issues.
+
+    See \l TableModel for an another example where a JSON object is parsed
+    into and assigned as a JavaScript array.
+
+    \sa TableModelColumn, TreeView
 */
 
 QQmlTreeModel::QQmlTreeModel(QObject *parent)
@@ -130,12 +166,21 @@ void QQmlTreeModel::setRowsPrivate(const QVariantList &rowsAsVariantList)
 
     beginResetModel();
 
+    // In case the model is empty and we cannot insert any new rows in the loop below,
+    // we don't want to emit rowsChanged
+    const bool wasEmpty = mRows.empty();
+
     // We don't clear the column or role data, because a TreeModel should not be reused in that way.
     // Once it has valid data, its columns and roles are fixed.
     mRows.clear();
 
-    for (const auto &rowAsVariant : rowsAsVariantList)
-        mRows.push_back(std::make_unique<QQmlTreeRow>(rowAsVariant));
+    for (const auto &rowAsVariant : rowsAsVariantList) {
+        if (rowAsVariant.canConvert<QVariantMap>())
+            mRows.push_back(std::make_unique<QQmlTreeRow>(rowAsVariant));
+        else
+            qmlWarning(this) << "Cannot create tree row as the row does not contain "
+                             << "key-value pairs";
+    }
 
     // Gather metadata the first time rows is set.
     // If we call setrows on an empty model, mInitialRows will be empty, but mRows is not
@@ -143,7 +188,14 @@ void QQmlTreeModel::setRowsPrivate(const QVariantList &rowsAsVariantList)
         fetchColumnMetadata();
 
     endResetModel();
-    emit rowsChanged();
+
+    // was empty, still empty => no emit
+    // was empty, now non-empty => emit
+    // was not empty, now empty => emit
+    // was not empty, now non-empty => emit (there was a clear in-between)
+
+    if (!wasEmpty || !mRows.empty())
+        emit rowsChanged();
 }
 
 QVariant QQmlTreeModel::dataPrivate(const QModelIndex &index, const QString &roleName) const
@@ -219,17 +271,23 @@ void QQmlTreeModel::appendRow(QModelIndex parent, const QVariant &row)
         qmlWarning(this) << "append: could not find any node at the specified index"
                          << " - the new row will be appended to root";
 
-        beginInsertRows(QModelIndex(),
+        if (data.canConvert<QVariantMap>()) {
+            beginInsertRows(QModelIndex(),
                         static_cast<int>(mRows.size()),
                         static_cast<int>(mRows.size()));
 
-        mRows.push_back(std::make_unique<QQmlTreeRow>(data));
+            mRows.push_back(std::make_unique<QQmlTreeRow>(data));
 
-        // Gather metadata the first time a row is added.
-        if (mColumnMetadata.isEmpty())
-            fetchColumnMetadata();
+            // Gather metadata the first time a row is added.
+            if (mColumnMetadata.isEmpty())
+                fetchColumnMetadata();
 
-        endInsertRows();
+            endInsertRows();
+        } else {
+            qmlWarning(this) << "Cannot create tree row as the row does not contain "
+                             << "key-value pairs";
+            return;
+        }
     }
 
     emit rowsChanged();

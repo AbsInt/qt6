@@ -350,11 +350,13 @@ void TestQmllint::testUnqualified_data()
             << QStringLiteral("delegateContextProperties.qml")
             << Result { { Message { QStringLiteral("Unqualified access"), 6, 14 },
                           Message { QStringLiteral("Unqualified access"), 7, 15 },
-                          Message { QStringLiteral("model is implicitly injected into this "
-                                                   "delegate. Add a required property instead.") },
+                          Message { QStringLiteral("'model' is implicitly injected into this "
+                                                   "delegate. Add a required property 'model' to "
+                                                   "the delegate instead.") },
                           Message {
-                                  QStringLiteral("index is implicitly injected into this delegate. "
-                                                 "Add a required property instead.") } } };
+                                  QStringLiteral("'index' is implicitly injected into this "
+                                                 "delegate. Add a required property 'index' to the "
+                                                 "delegate instead.") } } };
     QTest::newRow("storeSloppy")
             << QStringLiteral("UnqualifiedInStoreSloppy.qml")
             << Result{ { Message{ QStringLiteral("Unqualified access"), 9, 26} } };
@@ -842,6 +844,11 @@ void TestQmllint::dirtyQmlCode_data()
                        { { "Cannot assign binding of type QQuickItem to QObject"_L1 } },
                        {},
                        Result::ExitsNormally };
+    QTest::newRow("componentDefinitionInnerRequiredProperty")
+            << u"componentDefinitionInnerRequiredProperty.qml"_s
+            << Result { { {
+                    "Component is missing required property bar from Rectangle"_L1, 11, 13
+               } } };
     QTest::newRow("connectionsBinding")
             << QStringLiteral("autofix/ConnectionsHandler.qml")
             << Result{ { { "Implicitly defining \"onWidthChanged\" as signal handler in "
@@ -1569,6 +1576,10 @@ void TestQmllint::dirtyQmlSnippet_data()
                u"}"_s
             << Result{ { { "Component is missing required property r1 from Base"_L1, 6, 1 } } }
             << defaultOptions;
+    QTest::newRow("requiredInComponent")
+            << u"Item { Component { id: comp; required property var bla; Item {} } }"_s
+            << Result{ { { "Component objects cannot declare new properties."_L1, 1, 30 } } }
+            << defaultOptions;
     QTest::newRow("testSnippet")
             << u"property int qwer: \"Hello\""_s
             << Result{ { { "Cannot assign literal of type string to int"_L1 } } }
@@ -1648,15 +1659,18 @@ void TestQmllint::cleanQmlSnippet_data()
             << u"function f(a:int, b: int): bool { return a == b; }"_s << defaultOptions;
     QTest::newRow("equality-with-coercion2")
             << u"function f(a, b) { return a == null && b == undefined; }"_s << defaultOptions;
+    QTest::newRow("listAssignment") << u"import TestTypes\n"
+                                       "BirthdayParty {\n"
+                                       "    function f() {\n"
+                                       "        guests = [];\n"
+                                       "    }\n"
+                                       "}"_s << defaultOptions;
     QTest::newRow("lowerCaseId") << u"id: root"_s << defaultOptions;
     QTest::newRow("preferNonVarProperties_nonReadOnly")
             << u"property var i: 1     \n"_s
                u"property var r: 1.0   \n"_s
                u"property var s: \"s\" \n"_s
                u"property var b: true  \n"_s
-            << defaultOptions;
-    QTest::newRow("requiredInComponent")
-            << u"Item { Component { id: comp; required property var bla; Item {} } }"_s
             << defaultOptions;
     QTest::newRow("requiredInComponent2")
             << u"Item { Component { id: comp; Item { required property var bla } } }"_s
@@ -1724,6 +1738,29 @@ void TestQmllint::cleanQmlSnippet_data()
     QTest::newRow("void") << u"function f(): void {}"_s << defaultOptions;
     QTest::newRow("ambiguity-enum-and-chained-attached-property")
             << u"import EnumList\nFlexboxLayout { direction: FlexboxLayout.Row; }"_s
+            << defaultOptions;
+    QTest::newRow("ambiguity-enum-and-attached-property")
+            << u"import QtQuick\n"
+               "Item {\n"
+               "    id: myItem\n"
+               "    enum MyEnum { Component }\n"
+               "    Item { property var myP: myItem.Component.completed() }\n"
+               "}"_s
+            << defaultOptions;
+    QTest::newRow("ambiguity-enum-and-attached-property2")
+            << u"import QtQuick\n"
+               "Item {\n"
+               "    id: myItem\n"
+               "    enum Component { SomeValue }\n"
+               "    Item { property var myP: myItem.Component.completed() }\n"
+               "}"_s
+            << defaultOptions;
+    QTest::newRow("ambiguity-enum-and-attached-property-sanity")
+            << u"import QtQuick\n"
+               "Item {\n"
+               "    id: myItem\n"
+               "    Item { property var myP: myItem.Component.completed() }\n"
+               "}"_s
             << defaultOptions;
 }
 

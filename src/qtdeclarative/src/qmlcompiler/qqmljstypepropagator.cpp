@@ -372,8 +372,9 @@ void QQmlJSTypePropagator::handleUnqualifiedAccess(const QString &name, bool isM
                     continue;
                 if (it->objectType() == qmlScope) {
                     suggestion = QQmlJSFixSuggestion {
-                        name + " is implicitly injected into this delegate."
-                               " Add a required property instead."_L1,
+                        "'%1' is implicitly injected into this delegate. "
+                        "Add a required property '%1' to the delegate instead."_L1
+                                .arg(name),
                         qmlScope->sourceLocation()
                     };
                 };
@@ -703,7 +704,7 @@ void QQmlJSTypePropagator::generate_StoreNameCommon(int nameIndex)
         return;
     }
 
-    if (!type.isWritable()) {
+    if (!type.isWritable() && !type.isList()) {
         addError(u"Can't assign to read-only property %1"_s.arg(name));
 
         m_logger->log(u"Cannot assign to read-only property %1"_s.arg(name), qmlReadOnlyProperty,
