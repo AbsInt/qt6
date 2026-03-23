@@ -1395,7 +1395,8 @@ void tst_QTcpSocket::disconnectWhileConnectingNoEventLoop()
     if (setProxy)
         return; //proxy not useful for localhost test case
 
-    QScopedPointer<ReceiverThread, ReceiverThread> thread (new ReceiverThread);
+    using Ptr = std::unique_ptr<ReceiverThread, decltype(&ReceiverThread::cleanup)>;
+    auto thread = Ptr(new ReceiverThread, ReceiverThread::cleanup);
     QVERIFY(thread->listen());
     thread->start();
 

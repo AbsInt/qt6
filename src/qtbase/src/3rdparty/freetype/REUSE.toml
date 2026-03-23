@@ -10,7 +10,7 @@ SPDX-License-Identifier = "FTL OR GPL-2.0-only"
 path = ["REUSE.toml/CMakeLists.txt"]
 precedence = "override"
 SPDX-FileCopyrightText = ["Copyright (C) 2013-2024 by David Turner, Robert Wilhelm, and Werner Lemberg.",
-"Copyright (C) 2024 The Qt Company Ltd."]
+"Copyright (C) The Qt Company Ltd."]
 SPDX-License-Identifier = "FTL OR GPL-2.0-only"
 
 
@@ -77,7 +77,7 @@ SPDX-License-Identifier = "GPL-2.0-only"
 path = "docs/REUSE.toml"
 comment = "The copyrights inside those files are not related to the file"
 precedence = "override"
-SPDX-FileCopyrightText = "Copyright (C) 2024 The Qt Company Ltd."
+SPDX-FileCopyrightText = "Copyright (C) The Qt Company Ltd."
 SPDX-License-Identifier = "BSD-3-Clause"
 
 
@@ -906,7 +906,7 @@ SPDX-License-Identifier = "FTL OR GPL-2.0-only"
 path = ["src/pcf/REUSE.toml"]
 comment = "The copyrights inside those files are not related to the file"
 precedence = "override"
-SPDX-FileCopyrightText = "Copyright (C) 2024 The Qt Company Ltd."
+SPDX-FileCopyrightText = "Copyright (C) The Qt Company Ltd."
 SPDX-License-Identifier = "BSD-3-Clause"
 
 
@@ -1042,7 +1042,7 @@ SPDX-License-Identifier = "FTL OR GPL-2.0-only"
 path = "src/sdf/REUSE.toml"
 comment = "The copyrights inside those files are not related to the file"
 precedence = "override"
-SPDX-FileCopyrightText = "Copyright (C) 2024 The Qt Company Ltd."
+SPDX-FileCopyrightText = "Copyright (C) The Qt Company Ltd."
 SPDX-License-Identifier = "BSD-3-Clause"
 
 

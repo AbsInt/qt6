@@ -33,6 +33,8 @@ qt_internal_add_plugin(QWindowsDirect2DIntegrationPlugin
         ../windows/qwindowstheme.cpp ../windows/qwindowstheme.h
         ../windows/qwindowsthreadpoolrunner.h
         ../windows/qwindowswindow.cpp ../windows/qwindowswindow.h
+        ../windows/qwindowswindowclassdescription.cpp ../windows/qwindowswindowclassdescription.h
+        ../windows/qwindowswindowclassregistry.cpp ../windows/qwindowswindowclassregistry.h
         qwindowsdirect2dbackingstore.cpp qwindowsdirect2dbackingstore.h
         qwindowsdirect2dbitmap.cpp qwindowsdirect2dbitmap.h
         qwindowsdirect2dcontext.cpp qwindowsdirect2dcontext.h
@@ -212,7 +214,9 @@ qt_internal_extend_target(QWindowsDirect2DIntegrationPlugin CONDITION QT_FEATURE
 )
 
 # This is loaded dynamically when using MINGW as its import library is incomplete
-qt_internal_extend_target(QWindowsDirect2DIntegrationPlugin CONDITION MSVC AND QT_FEATURE_accessibility
+qt_internal_extend_target(
+    QWindowsDirect2DIntegrationPlugin
+        CONDITION (MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC") AND QT_FEATURE_accessibility
     LIBRARIES
         uiautomationcore
 )

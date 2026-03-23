@@ -63,6 +63,8 @@ public Q_SLOTS:
     void toggleShowDetailedText();
 
 private:
+    void itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &data) override;
+
     Q_DISABLE_COPY(QQuickMessageDialogImpl)
     Q_DECLARE_PRIVATE(QQuickMessageDialogImpl)
 };

@@ -1,47 +1,75 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 
-ColumnLayout {
-    width: 150
-    spacing: 5
+import "../shared"
 
+FlowPane {
     Button {
         text: "Normal"
-        Layout.alignment: Qt.AlignHCenter
-        Layout.topMargin: 20
     }
 
     Button {
         text: "Focused"
-        Layout.preferredWidth: 106
-        Layout.preferredHeight: 50
-        Layout.alignment: Qt.AlignHCenter
         focus: true
     }
 
     Button {
         text: "Flat"
-        Layout.alignment: Qt.AlignHCenter
         flat: true
     }
 
     Button {
         text: "Highlighted"
-        Layout.alignment: Qt.AlignHCenter
         highlighted: true
     }
 
     Button {
         text: "Disabled"
-        Layout.alignment: Qt.AlignHCenter
         enabled: false
     }
 
     Button {
         text: "Down"
-        Layout.alignment: Qt.AlignHCenter
-        Layout.bottomMargin: 20
         down: true
+    }
+
+    Button {
+        text: "Style's icon color"
+        icon.source: "../shared/heart.svg"
+    }
+
+    Button {
+        text: "Style's icon color (action)"
+        action: Action {
+            icon.source: "../shared/heart.svg"
+        }
+    }
+
+    Button {
+        text: "Green icon color"
+        icon.source: "../shared/heart.svg"
+        icon.color: "green"
+    }
+
+    Button {
+        text: "Green icon color (action)"
+        action: Action {
+            icon.source: "../shared/heart.svg"
+            icon.color: "green"
+        }
+    }
+
+    Button {
+        text: "Original icon color"
+        icon.source: "../shared/heart.svg"
+        icon.color: "transparent"
+    }
+
+    Button {
+        text: "Original icon color (action)"
+        action: Action {
+            icon.source: "../shared/heart.svg"
+            icon.color: "transparent"
+        }
     }
 }

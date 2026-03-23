@@ -257,7 +257,7 @@ public:
 
     bool contains(const QCborValue &value) const;
 
-    int compare(const QCborArray &other) const noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION int compare(const QCborArray &other) const noexcept;
 #if QT_CORE_REMOVED_SINCE(6, 8)
     bool operator==(const QCborArray &other) const noexcept
     { return compare(other) == 0; }

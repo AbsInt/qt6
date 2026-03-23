@@ -15,12 +15,13 @@
 #ifndef GRADIENTMANAGER_H
 #define GRADIENTMANAGER_H
 
-#include <QtCore/QObject>
-#include <QtCore/QMap>
-#include <QtCore/QSize>
-#include <QtXml/QDomDocument>
-#include <QtXml/QDomElement>
-#include <QtGui/QGradient>
+#include <QtGui/qbrush.h>
+
+#include <QtXml/qdom.h>
+
+#include <QtCore/qmap.h>
+#include <QtCore/qobject.h>
+#include <QtCore/qsize.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -32,7 +33,7 @@ class QtGradientManager : public QObject
 {
     Q_OBJECT
 public:
-    QtGradientManager(QObject *parent = 0);
+    explicit QtGradientManager(QObject *parent = nullptr);
 
     QMap<QString, QGradient> gradients() const;
 

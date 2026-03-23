@@ -15,6 +15,11 @@ set(qml_files
     "RoundedElevationEffect.qml"
     "SliderHandle.qml"
     "SwitchIndicator.qml"
+    "TextEditingContextMenu.qml"
+)
+
+set_source_files_properties(TextEditingContextMenu.qml PROPERTIES
+    QT_QML_SOURCE_VERSIONS "6.11"
 )
 
 qt_internal_add_qml_module(QuickControls2MaterialStyleImpl

@@ -324,19 +324,31 @@ class IconModel : public QAbstractItemModel
         u"weather-storm"_s,
     };
 
-    const QStringList fileIconTypes = {
+    QStringList fileIconTypes = {
         u"Computer"_s,
         u"Desktop"_s,
         u"Trashcan"_s,
         u"Network"_s,
         u"Drive"_s,
         u"Folder"_s,
-        u"File"_s
+        u"File"_s,
     };
 
     QAbstractFileIconProvider m_fileIconProvider;
+
 public:
-    using QAbstractItemModel::QAbstractItemModel;
+    IconModel()
+    {
+        for (const auto &ext : {u"txt"_s, u"pdf"_s, u"png"_s}) {
+            QTemporaryFile *tempFile = new QTemporaryFile(u"XXXXXX.%1"_s.arg(ext), this);
+            if (!tempFile->open()) {
+                qWarning() << "Couldn't create temporary file" << ext;
+                fileIconTypes << u"file.%1"_s.arg(ext);
+            } else {
+                fileIconTypes << QFileInfo(*tempFile).absoluteFilePath();
+            }
+        }
+    }
 
     enum Columns {
         Name,
@@ -389,45 +401,62 @@ public:
                 const int pixmapIndex = styleMO->indexOfEnumerator("StandardPixmap");
                 Q_ASSERT(pixmapIndex >= 0);
                 const QMetaEnum pixmapEnum = styleMO->enumerator(pixmapIndex);
+                if (unsigned(pixmapEnum.value(row)) >= unsigned(QStyle::NStandardPixmap))
+                    return {};
                 const QString pixmapName = QString::fromUtf8(pixmapEnum.key(row));
                 return QVariant(pixmapName);
             }
             case File:
                 return row < fileIconTypes.size() ? fileIconTypes.at(row) : QVariant();
             default:
-                return themedIcons.at(row);
-            }
-            break;
-        case Qt::DecorationRole:
-            switch (index.column()) {
-            case Name:
-                break;
-            case StylePixmap:
-                if (row >= themedIcons.size())
-                    break;
-                return QIcon(QApplication::style()->standardPixmap(QStyle::StandardPixmap(row)));
-            case StyleIcon:
-                if (row >= themedIcons.size())
-                    break;
-                return QApplication::style()->standardIcon(QStyle::StandardPixmap(row));
-            case Theme:
-                if (row >= themedIcons.size())
-                    break;
-                return QIcon(QApplicationPrivate::platformTheme()->standardPixmap(
-                    QPlatformTheme::StandardPixmap(row), QSize(64, 64) * qGuiApp->devicePixelRatio()));
-            case Icon:
                 if (row < themedIcons.size())
-                    return QIcon::fromTheme(themedIcons.at(row));
-                break;
-            case File:
-                if (row >= fileIconTypes.size())
-                    break;
-                return m_fileIconProvider.icon(QAbstractFileIconProvider::IconType(row));
+                    return themedIcons.at(row);
+                return {};
             }
             break;
+        case Qt::DecorationRole: {
+            QIcon result = [&]{
+                switch (index.column()) {
+                case Name:
+                    break;
+                case StylePixmap:
+                    if (row >= themedIcons.size())
+                        break;
+                    return QIcon(QApplication::style()->standardPixmap(QStyle::StandardPixmap(row)));
+                case StyleIcon:
+                    if (row >= themedIcons.size())
+                        break;
+                    return QApplication::style()->standardIcon(QStyle::StandardPixmap(row));
+                case Theme:
+                    if (row >= themedIcons.size())
+                        break;
+                    return QIcon(QApplicationPrivate::platformTheme()->standardPixmap(
+                        QPlatformTheme::StandardPixmap(row), QSize(64, 64) * qGuiApp->devicePixelRatio()));
+                case Icon:
+                    if (row < themedIcons.size())
+                        return QIcon::fromTheme(themedIcons.at(row));
+                    break;
+                case File:
+                    if (row >= fileIconTypes.size())
+                        break;
+                    if (row <= QAbstractFileIconProvider::File)
+                        return m_fileIconProvider.icon(QAbstractFileIconProvider::IconType(row));
+                    return m_fileIconProvider.icon(QFileInfo(fileIconTypes.at(row)));
+                }
+                return QIcon();
+            }();
+            static QIcon missingIcon = []{
+                QImage image(64, 64, QImage::Format_ARGB32_Premultiplied);
+                image.fill(Qt::magenta);
+                return QIcon(QPixmap::fromImage(image));
+            }();
+            return !result.isNull() ? result : missingIcon;
+            break;
+        }
         default:
             break;
         }
+
         return {};
     }
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override
@@ -468,8 +497,8 @@ struct ColumnModel : public QSortFilterProxyModel
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override
     {
         const QModelIndex sourceIndex = sourceModel()->index(sourceRow, Column, sourceParent);
-        const QIcon iconData = sourceModel()->data(sourceIndex, Qt::DecorationRole).template value<QIcon>();
-        return !iconData.isNull();
+        const QString iconName = sourceModel()->data(sourceIndex, Qt::DisplayRole).template value<QString>();
+        return !iconName.isNull();
     }
 };
 
@@ -585,6 +614,64 @@ private:
     }
 };
 
+class Window : public QMainWindow
+{
+public:
+    Window()
+    {
+        QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
+        QAction *openThemeAction = fileMenu->addAction("Open theme");
+        connect(openThemeAction, &QAction::triggered, this, &Window::selectTheme);
+
+        QTabWidget *widget = new QTabWidget;
+        widget->setTabPosition(QTabWidget::West);
+        widget->addTab(new IconInspector, "Inspect");
+        widget->addTab(new IconView<IconModel::Icon>(&model), "QIcon::fromTheme");
+        widget->addTab(new IconView<IconModel::StylePixmap>(&model), "QStyle::standardPixmap");
+        widget->addTab(new IconView<IconModel::StyleIcon>(&model), "QStyle::standardIcon");
+        widget->addTab(new IconView<IconModel::Theme>(&model), "QPlatformTheme");
+        widget->addTab(new IconView<IconModel::File>(&model), "QAbstractFileIconProvider");
+
+    #ifdef QT_QUICKWIDGETS_LIB
+        QQuickWidget *quickBrowser = new QQuickWidget;
+        quickBrowser->setSource(QUrl(u"qrc:/Main.qml"_s));
+        quickBrowser->setResizeMode(QQuickWidget::SizeRootObjectToView);
+        widget->addTab(quickBrowser, "Qt Quick");
+        QObject::connect(quickBrowser, &QQuickWidget::statusChanged, quickBrowser,
+                        [](QQuickWidget::Status status){
+            qDebug() << status;
+        });
+        QObject::connect(quickBrowser, &QQuickWidget::sceneGraphError, quickBrowser,
+                        [](QQuickWindow::SceneGraphError error, const QString &message){
+            qDebug() << error << message;
+        });
+    #endif
+
+        setCentralWidget(widget);
+    }
+
+private:
+    void selectTheme()
+    {
+        QFileDialog *dialog = new QFileDialog(this);
+        dialog->setFileMode(QFileDialog::ExistingFile);
+        dialog->setAcceptMode(QFileDialog::AcceptOpen);
+        dialog->setNameFilter(u"Icon theme (*.theme)"_s);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->open();
+
+        connect(dialog, &QFileDialog::fileSelected, this, &Window::openTheme);
+    }
+
+    void openTheme(const QString &filePath)
+    {
+        QFileInfo themeFile(filePath);
+        QIcon::setThemeName(themeFile.path());
+    }
+
+    IconModel model;
+};
+
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
@@ -601,6 +688,8 @@ int main(int argc, char* argv[])
                                    u"The name of the icon theme"_s, u"theme"_s);
     parser.addOption(themeOption);
     parser.process(app);
+
+    QIcon::setThemeSearchPaths({"/"});
     if (const QString theme = parser.value(themeOption); !theme.isEmpty())
         QIcon::setThemeName(theme);
 
@@ -608,32 +697,8 @@ int main(int argc, char* argv[])
     Q_INIT_RESOURCE(icons);
 #endif
 
-    IconModel model;
+    Window mainWindow;
+    mainWindow.show();
 
-    QTabWidget widget;
-    widget.setTabPosition(QTabWidget::West);
-    widget.addTab(new IconInspector, "Inspect");
-    widget.addTab(new IconView<IconModel::Icon>(&model), "QIcon::fromTheme");
-    widget.addTab(new IconView<IconModel::StylePixmap>(&model), "QStyle::standardPixmap");
-    widget.addTab(new IconView<IconModel::StyleIcon>(&model), "QStyle::standardIcon");
-    widget.addTab(new IconView<IconModel::Theme>(&model), "QPlatformTheme");
-    widget.addTab(new IconView<IconModel::File>(&model), "QAbstractFileIconProvider");
-
-#ifdef QT_QUICKWIDGETS_LIB
-    QQuickWidget *quickBrowser = new QQuickWidget;
-    quickBrowser->setSource(QUrl(u"qrc:/Main.qml"_s));
-    quickBrowser->setResizeMode(QQuickWidget::SizeRootObjectToView);
-    widget.addTab(quickBrowser, "Qt Quick");
-    QObject::connect(quickBrowser, &QQuickWidget::statusChanged, quickBrowser,
-                     [](QQuickWidget::Status status){
-        qDebug() << status;
-    });
-    QObject::connect(quickBrowser, &QQuickWidget::sceneGraphError, quickBrowser,
-                     [](QQuickWindow::SceneGraphError error, const QString &message){
-        qDebug() << error << message;
-    });
-#endif
-
-    widget.show();
     return app.exec();
 }

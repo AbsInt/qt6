@@ -52,7 +52,7 @@ Rectangle {
 One property has multiple \l{Property Value Sources}{value sources}.
 
 \section2 Why is this bad?
-The value sources will show unexpected behavior when combined. See \l{Example}{example} below.
+The value sources will show unexpected behavior when combined. See the example below.
 
 \section2 Example
 

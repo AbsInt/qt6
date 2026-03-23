@@ -17,6 +17,12 @@ QDataStream &operator>>(QDataStream &stream, QQmlProfilerEventType &type)
            >> type.m_detailType;
     type.m_message = static_cast<Message>(message);
     type.m_rangeType = static_cast<RangeType>(rangeType);
+
+    // If the trace is from before Quick3D events were introduced, the value that's now
+    // Quick3DFrame is MaximumMessage and denoted a range. Check for that.
+    if (type.m_message == Quick3DFrame && type.m_rangeType != MaximumRangeType)
+        type.m_message = MaximumMessage;
+
     return stream;
 }
 
@@ -49,6 +55,8 @@ ProfileFeature QQmlProfilerEventType::feature() const
         return ProfileMemory;
     case DebugMessage:
         return ProfileDebugMessages;
+    case Quick3DFrame:
+        return ProfileQuick3D;
     default:
         break;
     }

@@ -50,7 +50,7 @@ public:
         if (!o)
             return v4->throwTypeError(QStringLiteral("Not a valid DelegateModel object"));
 
-        return v4->fromVariant(static_cast<QQmlDMListAccessorData *>(o->d()->item)->cachedData);
+        return v4->fromVariant(static_cast<QQmlDMListAccessorData *>(o->d()->item())->cachedData);
     }
 
     static QV4::ReturnedValue set_modelData(const QV4::FunctionObject *b, const QV4::Value *thisObject, const QV4::Value *argv, int argc)
@@ -62,20 +62,19 @@ public:
         if (!argc)
             return v4->throwTypeError();
 
-        static_cast<QQmlDMListAccessorData *>(o->d()->item)->setModelData(
+        static_cast<QQmlDMListAccessorData *>(o->d()->item())->setModelData(
                     QV4::ExecutionEngine::toVariant(argv[0], QMetaType {}));
         return QV4::Encode::undefined();
     }
 
     QV4::ReturnedValue get() override
     {
-        QV4::Scope scope(metaType->v4Engine);
+        QV4::Scope scope(metaType()->v4Engine);
         QQmlAdaptorModelEngineData *data = QQmlAdaptorModelEngineData::get(scope.engine);
         QV4::ScopedObject o(
                 scope, scope.engine->memoryManager->allocate<QQmlDelegateModelItemObject>(this));
         QV4::ScopedObject p(scope, data->listItemProto.value());
         o->setPrototypeOf(p);
-        ++scriptRef;
         return o.asReturnedValue();
     }
 
@@ -264,7 +263,7 @@ public:
         return new QQmlDMListAccessorData(metaType, this, index, row, column, value);
     }
 
-    bool notify(const QQmlAdaptorModel &model, const QList<QQmlDelegateModelItem *> &items, int index, int count, const QVector<int> &) const override
+    bool notify(const QQmlAdaptorModel &model, const QList<QQmlDelegateModelItem *> &items, int index, int count, const QList<int> &) const override
     {
         for (auto modelItem : items) {
             const int modelItemIndex = modelItem->modelIndex();

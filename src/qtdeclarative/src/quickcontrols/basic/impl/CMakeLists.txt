@@ -5,6 +5,10 @@
 ## qtquickcontrols2basicstyleimplplugin Plugin:
 #####################################################################
 
+set_source_files_properties(TextEditingContextMenu.qml PROPERTIES
+    QT_QML_SOURCE_VERSIONS "6.11"
+)
+
 qt_internal_add_qml_module(QuickControls2BasicStyleImpl
     URI "QtQuick.Controls.Basic.impl"
     VERSION "${PROJECT_VERSION}"
@@ -16,6 +20,8 @@ qt_internal_add_qml_module(QuickControls2BasicStyleImpl
         qquickbasicbusyindicator.cpp qquickbasicbusyindicator_p.h
         qquickbasicdial.cpp qquickbasicdial_p.h
         qquickbasicprogressbar.cpp qquickbasicprogressbar_p.h
+    QML_FILES
+        TextEditingContextMenu.qml
     DEFINES
         QT_NO_CAST_FROM_ASCII
         QT_NO_CAST_TO_ASCII

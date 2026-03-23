@@ -104,7 +104,7 @@ Alternatively, a custom property of an object type may be defined in
 an object declaration in a QML document with the following syntax:
 
 \code
-    [default] [final] [required] [readonly] property <propertyType> <propertyName>
+    [default] [virtual] [override] [final] [required] [readonly] property <propertyType> <propertyName>
 \endcode
 
 In this way an object declaration may \l {Defining Object Types from QML}
@@ -114,12 +114,12 @@ state more easily.
 Property names must begin with a lower case letter and can only contain
 letters, numbers and underscores. \l {JavaScript Reserved Words}
 {JavaScript reserved words} are not valid property names.  The \c default,
-\c final, \c required, and \c readonly keywords are optional, and modify the
-semantics of the property being declared.
+\c required, \c readonly, \c virtual, \c override, \c final keywords are optional,
+and modify the semantics of the property being declared.
 See the upcoming sections on \l {Default Properties}{default properties},
-\l {Final Properties}{final properties},
-\l {Required Properties}{required properties}, and
-\l {Read-Only Properties}{read-only properties} for more information
+\l {Required Properties}{required properties},
+\l {Read-Only Properties}{read-only properties} and
+\l {Override Semantics}{override semantics} for more information
 about their respective meaning.
 
 Declaring a custom property implicitly creates a value-change
@@ -640,17 +640,19 @@ Item {
 }
 \endqml
 
-\section3 Final Properties
+\section3 Override Semantics
 
-By default, properties can be shadowed: You can re-declare a property in a
-derived QML type, possibly with a new type and new attributes. The result will
-be two properties of the same name, only one of which is accessible in any given
-context. This is rarely what you want.
+By default, properties can be \e shadowed: You re-declare a property in a derived QML type,
+possibly with a new type and new attributes. This results in two properties of the same name,
+only one of which is accessible in any given context. This is rarely what you want. Often it's
+accidental, and most of the time the effects are quite confusing. Additionally, shadowing is bad
+for tooling.
 
-The \c final keyword prohibits any shadowing of a property. It is equivalent in
-meaning to the \c FINAL attribute to \l{Requirements for Declaring Properties}{Q_PROPERTY}. By
-declaring your properties \c final, you can help the \l{Qt Quick Compiler} analyze your QML code.
-This will result in better generated code.
+To address this, the \c virtual, \c override, \c final keywords and additional warnings and errors
+were introduced.
+
+For more details and a comprehensive set of examples, including warnings and errors,
+see the \l{qtqml-syntax-overridesemantics.html}{Property Shadowing and Override Semantics} page.
 
 \section3 Required Properties
 
@@ -714,7 +716,7 @@ Item {
 }
 \endqml
 
-\note A read-only property cannot also be a \l{Default Properties}{default}
+\note A read-only property cannot also be a \l{#Default Properties}{default}
 property.
 
 \section3 Property Modifier Objects
@@ -998,12 +1000,11 @@ are otherwise unavailable to the object. In particular, they allow objects to
 access properties or signals that are specifically relevant to the individual
 object.
 
-A QML type implementation may choose to \l {Providing Attached Properties}{create an \e {attaching type} in C++} with
-particular properties and signals. Instances of this type can then be created
-and \e attached to specific objects at run time, allowing those objects to
-access the properties and signals of the attaching type. These are accessed by
-prefixing the properties and respective signal handlers with the name of the
-attaching type.
+A QML type implementation may choose to \l {Providing Attached Properties}{create an \e {attaching
+type} in C++} with particular properties and signals. Instances of this type can then be created and
+\e attached to specific objects at run time, allowing those objects to access the properties and
+signals of the attaching type. These are accessed by prefixing the properties and respective signal
+handlers with the name of the attaching type.
 
 References to attached properties and handlers take the following syntax form:
 

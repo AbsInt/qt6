@@ -58,16 +58,8 @@ QT_BEGIN_NAMESPACE
 
 #if QT_CONFIG(qml_network)
 class QNetworkAccessManager;
-
-namespace QV4 {
-struct QObjectMethod;
-namespace detail {
-QNetworkAccessManager *getNetworkAccessManager(ExecutionEngine *engine);
-}
-}
-#else
-namespace QV4 { struct QObjectMethod; }
 #endif // qml_network
+namespace QV4 { struct QObjectMethod; }
 
 // Used to allow a QObject method take and return raw V4 handles without having to expose
 // 48 in the public API.
@@ -162,6 +154,23 @@ public:
 
     WTF::PageAllocation *gcStack = nullptr;
 
+    // Using jsAlloca directly can be dangerous as it temporarily, until
+    // some initialization is performed, leaves an element on the
+    // stack that is garbage memory.
+    // That element could be accessed by other parts of the system
+    // before an initialization step is performed, involuntary
+    // interacting with that memory.
+    //
+    // For example, any allocation performed by the MemoryManager
+    // might run the garbage collector, which in turn has a chance of
+    // accessing all current elements on the stack, including the
+    // garbage memory that can be left on the stack by a call to this
+    // method.
+    //
+    // Thus care needs to be taken when using jsAlloca, such that all
+    // allocated stack slots are initialized as soon as possible and
+    // without any heap allocation or other accesses to the new stack
+    // elements in the middle.
     QML_NEARLY_ALWAYS_INLINE Value *jsAlloca(int nValues) {
         Value *ptr = jsStackTop;
         jsStackTop = ptr + nValues;
@@ -177,9 +186,9 @@ public:
     template<typename TypeLoader = QQmlTypeLoader>
     TypeLoader *typeLoader()
     {
-        if (m_qmlEngine)
-            return TypeLoader::get(m_qmlEngine);
-        return nullptr;
+        if (!m_typeLoader)
+            m_typeLoader = std::make_unique<TypeLoader>(this);
+        return m_typeLoader.get();
     }
 
     enum JSObjects {
@@ -360,7 +369,8 @@ public:
     FunctionObject *thrower() const { return reinterpret_cast<FunctionObject *>(jsObjects + ThrowerObject); }
 
 #if QT_CONFIG(qml_network)
-    QNetworkAccessManager* (*networkAccessManager)(ExecutionEngine*)  = detail::getNetworkAccessManager;
+    QNetworkAccessManager *getNetworkAccessManager();
+    QNetworkAccessManager *networkAccessManager = nullptr;
 #endif
 
     enum JSStrings {
@@ -724,6 +734,7 @@ public:
 #endif
 
     void setQmlEngine(QQmlEngine *engine);
+    void resetQmlEngine() { m_qmlEngine = nullptr; }
 
     QQmlDelayedCallQueue *delayedCallQueue() { return &m_delayedCallQueue; }
 
@@ -752,10 +763,6 @@ public:
 
     double localTZA = 0.0; // local timezone, initialized at startup
 
-    QQmlRefPointer<ExecutableCompilationUnit> compileModule(const QUrl &url);
-    QQmlRefPointer<ExecutableCompilationUnit> compileModule(
-            const QUrl &url, const QString &sourceCode, const QDateTime &sourceTimeStamp);
-
     QQmlRefPointer<ExecutableCompilationUnit> compilationUnitForUrl(const QUrl &url) const;
 
     QQmlRefPointer<ExecutableCompilationUnit> executableCompilationUnit(
@@ -775,8 +782,7 @@ public:
     using Module = QQmlRefPointer<ExecutableCompilationUnit>;
 
     Module registerNativeModule(const QUrl &url, const QV4::Value &value);
-    Module moduleForUrl(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr) const;
-    Module loadModule(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr);
+    Module moduleForUrl(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr);
 
     DiskCacheOptions diskCacheOptions() const;
 
@@ -879,6 +885,7 @@ private:
     void *m_xmlHttpRequestData = nullptr;
 #endif
 
+    std::unique_ptr<QQmlTypeLoader> m_typeLoader;
     QQmlEngine *m_qmlEngine = nullptr;
 
     QQmlDelayedCallQueue m_delayedCallQueue;
@@ -888,7 +895,7 @@ private:
 
     QHash<QString, quint32> m_consoleCount;
 
-    QVector<Deletable *> m_extensionData;
+    QList<Deletable *> m_extensionData;
 
     QMultiHash<QUrl, QQmlRefPointer<ExecutableCompilationUnit>> m_compilationUnits;
 };

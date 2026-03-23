@@ -36,7 +36,6 @@ QPlatformPixmap::QPlatformPixmap(PixelType pixelType, int objectId)
       h(0),
       d(0),
       is_null(true),
-      ref(0),
       detach_no(0),
       type(pixelType),
       id(objectId),

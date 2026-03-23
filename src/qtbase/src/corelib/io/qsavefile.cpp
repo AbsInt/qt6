@@ -72,16 +72,6 @@ QSaveFilePrivate::~QSaveFilePrivate()
 */
 
 /*!
-    Constructs a new file object to represent the file with the given \a name.
-*/
-QSaveFile::QSaveFile(const QString &name)
-    : QFileDevice(*new QSaveFilePrivate, nullptr)
-{
-    Q_D(QSaveFile);
-    d->fileName = name;
-}
-
-/*!
     Constructs a new file object with the given \a parent.
     You need to call setFileName() before open().
 */
@@ -100,6 +90,14 @@ QSaveFile::QSaveFile(const QString &name, QObject *parent)
     Q_D(QSaveFile);
     d->fileName = name;
 }
+
+/*!
+    \fn QSaveFile::QSaveFile(const std::filesystem::path &path, QObject *parent)
+    \since 6.11
+
+    Constructs a new file object with the given \a parent to represent the
+    file with the specified \a path.
+*/
 
 /*!
     Destroys the file object, discarding the saved contents unless commit() was called.
@@ -126,6 +124,12 @@ QString QSaveFile::fileName() const
 }
 
 /*!
+    \fn std::filesystem::path QSaveFile::filesystemFileName() const
+    \since 6.11
+    Returns fileName() as \c{std::filesystem::path}.
+*/
+
+/*!
     Sets the \a name of the file. The name can have no path, a
     relative path, or an absolute path.
 
@@ -135,6 +139,12 @@ void QSaveFile::setFileName(const QString &name)
 {
     d_func()->fileName = name;
 }
+
+/*!
+    \fn QSaveFile::setFileName(const std::filesystem::path &name)
+    \since 6.11
+    \overload
+*/
 
 /*!
     Opens the file using \a mode flags. Returns \c true if successful;

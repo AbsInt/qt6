@@ -48,6 +48,8 @@ class Q_WIDGETS_EXPORT QAbstractItemView : public QAbstractScrollArea
     Q_PROPERTY(ScrollMode horizontalScrollMode READ horizontalScrollMode
                WRITE setHorizontalScrollMode RESET resetHorizontalScrollMode)
     Q_PROPERTY(int updateThreshold READ updateThreshold WRITE setUpdateThreshold)
+    Q_PROPERTY(Qt::MatchFlags keyboardSearchFlags READ keyboardSearchFlags
+               WRITE setKeyboardSearchFlags)
 
 public:
     enum SelectionMode {
@@ -181,6 +183,9 @@ public:
 
     int updateThreshold() const;
     void setUpdateThreshold(int threshold);
+
+    Qt::MatchFlags keyboardSearchFlags() const;
+    void setKeyboardSearchFlags(Qt::MatchFlags searchFlags);
 
     void openPersistentEditor(const QModelIndex &index);
     void closePersistentEditor(const QModelIndex &index);

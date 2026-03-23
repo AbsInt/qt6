@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include <AppKit/AppKit.h>
 
@@ -131,6 +132,7 @@ static void populateRoleMap()
     roleMap[QAccessible::ComboBox] = NSAccessibilityComboBoxRole;
     roleMap[QAccessible::RadioButton] = NSAccessibilityRadioButtonRole;
     roleMap[QAccessible::CheckBox] = NSAccessibilityCheckBoxRole;
+    roleMap[QAccessible::Switch] = NSAccessibilityCheckBoxRole;
     roleMap[QAccessible::StaticText] = NSAccessibilityStaticTextRole;
     roleMap[QAccessible::Table] = NSAccessibilityTableRole;
     roleMap[QAccessible::StatusBar] = NSAccessibilityStaticTextRole;
@@ -204,6 +206,8 @@ NSString *macSubrole(QAccessibleInterface *interface)
         return NSAccessibilitySecureTextFieldSubrole;
     if (interface->role() == QAccessible::PageTab)
         return NSAccessibilityTabButtonSubrole;
+    if (interface->role() == QAccessible::Switch)
+        return NSAccessibilitySwitchSubrole;
     return nil;
 }
 
@@ -328,8 +332,11 @@ NSString *getTranslatedAction(const QString &qtAction)
 QString translateAction(NSString *nsAction, QAccessibleInterface *interface)
 {
     if ([nsAction compare: NSAccessibilityPressAction] == NSOrderedSame) {
-        if (interface->role() == QAccessible::CheckBox || interface->role() == QAccessible::RadioButton)
+        if (interface->role() == QAccessible::CheckBox
+            || interface->role() == QAccessible::RadioButton
+            || interface->role() == QAccessible::Switch) {
             return QAccessibleActionInterface::toggleAction();
+        }
         return QAccessibleActionInterface::pressAction();
     } else if ([nsAction compare: NSAccessibilityIncrementAction] == NSOrderedSame)
         return QAccessibleActionInterface::increaseAction();

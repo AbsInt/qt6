@@ -81,10 +81,6 @@ QThreadStorageData::~QThreadStorageData()
 void **QThreadStorageData::get() const
 {
     QThreadData *data = QThreadData::current();
-    if (!data) {
-        qWarning("QThreadStorage::get: QThreadStorage can only be used with threads started with QThread");
-        return nullptr;
-    }
     QList<void *> &tls = data->tls;
     if (tls.size() <= id)
         tls.resize(id + 1);
@@ -101,10 +97,6 @@ void **QThreadStorageData::get() const
 void **QThreadStorageData::set(void *p)
 {
     QThreadData *data = QThreadData::current();
-    if (!data) {
-        qWarning("QThreadStorage::set: QThreadStorage can only be used with threads started with QThread");
-        return nullptr;
-    }
     QList<void *> &tls = data->tls;
     if (tls.size() <= id)
         tls.resize(id + 1);
@@ -142,10 +134,12 @@ void QThreadStoragePrivate::init()
     destructors();
 }
 
-void QThreadStoragePrivate::finish(QList<void *> *tls)
+void QThreadStoragePrivate::finish(QList<void *> *tls, bool suppressWarnings)
 {
     if (tls->isEmpty() || !destructors())
         return; // nothing to do
+    if (!QCoreApplication::instanceExists())
+        suppressWarnings = true;
 
     DEBUG_MSG("QThreadStorageData: Destroying storage for thread %p", QThread::currentThread());
     while (!tls->isEmpty()) {
@@ -165,7 +159,7 @@ void QThreadStoragePrivate::finish(QList<void *> *tls)
         locker.unlock();
 
         if (!destructor) {
-            if (QCoreApplication::instanceExists())
+            if (!suppressWarnings)
                 qWarning("QThreadStorage: entry %d destroyed before end of thread %p",
                          i, QThread::currentThread());
             continue;

@@ -61,6 +61,7 @@ Q_SIGNALS:
 private:
     void keyReleaseEvent(QKeyEvent *event) override;
     void focusOutEvent(QFocusEvent *event) override;
+    void itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &data) override;
 
     Q_DISABLE_COPY(QQuickFontDialogImpl)
     Q_DECLARE_PRIVATE(QQuickFontDialogImpl)

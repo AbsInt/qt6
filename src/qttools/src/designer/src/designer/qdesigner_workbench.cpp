@@ -142,8 +142,8 @@ static inline QMenu *addMenu(QMenuBar *mb, const QString &title, const ActionLis
 
 // -------- QDesignerWorkbench
 
-QDesignerWorkbench::QDesignerWorkbench(const QStringList &pluginPaths)  :
-    m_core(QDesignerComponents::createFormEditorWithPluginPaths(pluginPaths, this)),
+QDesignerWorkbench::QDesignerWorkbench(const Options &options)  :
+    m_core(QDesignerComponents::createFormEditorWithPluginPaths(options.pluginPaths, this)),
     m_windowActions(new QActionGroup(this)),
     m_globalMenuBar(new QMenuBar)
 {
@@ -153,7 +153,7 @@ QDesignerWorkbench::QDesignerWorkbench(const QStringList &pluginPaths)  :
 
     initializeCorePlugins();
     QDesignerComponents::initializePlugins(core());
-    m_actionManager = new QDesignerActions(this); // accesses plugin components
+    m_actionManager = new QDesignerActions(options, this); // accesses plugin components
 
     m_windowActions->setExclusive(true);
     connect(m_windowActions, &QActionGroup::triggered,
@@ -212,7 +212,7 @@ QDesignerWorkbench::QDesignerWorkbench(const QStringList &pluginPaths)  :
 
 
     { // Add application specific options pages
-        QDesignerAppearanceOptionsPage *appearanceOptions = new QDesignerAppearanceOptionsPage(m_core);
+        auto *appearanceOptions = new QDesignerAppearanceOptionsPage(m_core);
         connect(appearanceOptions, &QDesignerAppearanceOptionsPage::settingsChanged, this, &QDesignerWorkbench::notifyUISettingsChanged);
         auto optionsPages = m_core->optionsPages();
         optionsPages.push_front(appearanceOptions);
@@ -937,7 +937,7 @@ QDesignerFormWindow * QDesignerWorkbench::loadForm(const QString &fileName,
         return nullptr;
     }
 
-    if (qdesigner_internal::FormWindowBase *fwb = qobject_cast<qdesigner_internal::FormWindowBase *>(editor))
+    if (auto *fwb = qobject_cast<qdesigner_internal::FormWindowBase *>(editor))
         fwb->setLineTerminatorMode(mode);
 
     switch (m_mode) {
@@ -1006,7 +1006,7 @@ void QDesignerWorkbench::toggleFormMinimizationState()
     QDesignerFormWindowInterface *fwi = core()->formWindowManager()->activeFormWindow();
     if (!fwi || m_mode == NeutralMode)
         return;
-    QDesignerFormWindow *fw = qobject_cast<QDesignerFormWindow *>(fwi->parentWidget());
+    auto *fw = qobject_cast<QDesignerFormWindow *>(fwi->parentWidget());
     Q_ASSERT(fw);
     setFormWindowMinimized(fw, !isFormWindowMinimized(fw));
 }

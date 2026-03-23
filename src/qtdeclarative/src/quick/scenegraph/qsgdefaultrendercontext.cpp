@@ -21,6 +21,11 @@ QT_BEGIN_NAMESPACE
 
 Q_STATIC_LOGGING_CATEGORY(lcGlyphCaches, "qt.scenegraph.text.glyphcache")
 
+/*!
+    \class QSGDefaultRenderContext
+    \inmodule QtQuick
+    \internal
+*/
 QSGDefaultRenderContext::QSGDefaultRenderContext(QSGContext *context)
     : QSGRenderContext(context)
     , m_rhi(nullptr)

@@ -15,7 +15,7 @@
 #ifndef QTGRADIENTSTOPSWIDGET_H
 #define QTGRADIENTSTOPSWIDGET_H
 
-#include <QtWidgets/QAbstractScrollArea>
+#include <QtWidgets/qabstractscrollarea.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -27,8 +27,8 @@ class QtGradientStopsWidget : public QAbstractScrollArea
     Q_OBJECT
     Q_PROPERTY(bool backgroundCheckered READ isBackgroundCheckered WRITE setBackgroundCheckered)
 public:
-    QtGradientStopsWidget(QWidget *parent = 0);
-    ~QtGradientStopsWidget();
+    explicit QtGradientStopsWidget(QWidget *parent = nullptr);
+    ~QtGradientStopsWidget() override;
 
     QSize minimumSizeHint() const override;
     QSize sizeHint() const override;

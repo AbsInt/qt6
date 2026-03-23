@@ -11,9 +11,8 @@
 
 QT_BEGIN_NAMESPACE
 
-QQmlTypeLoaderLockedData::QQmlTypeLoaderLockedData(QQmlEngine *engine)
+QQmlTypeLoaderLockedData::QQmlTypeLoaderLockedData(QV4::ExecutionEngine *engine)
     : m_engine(engine)
-{
-}
+{}
 
 QT_END_NAMESPACE

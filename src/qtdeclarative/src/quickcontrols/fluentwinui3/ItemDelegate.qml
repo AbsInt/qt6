@@ -32,14 +32,10 @@ T.ItemDelegate {
 
     icon.width: 16
     icon.height: 16
-    icon.color: control.down ? __pressedText : __isHighContrast && control.hovered ? control.palette.button : control.palette.buttonText
 
     readonly property int __horizontalOffset: 4
     readonly property int __verticalOffset: 2
 
-    readonly property color __pressedText: Application.styleHints.colorScheme == Qt.Light
-                                                    ? Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.62)
-                                                    : Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.7725)
     readonly property string __currentState: [
         !control.enabled && "disabled",
         control.highlighted && "highlighted",
@@ -56,9 +52,15 @@ T.ItemDelegate {
         display: control.display
         alignment: control.display === IconLabel.IconOnly || control.display === IconLabel.TextUnderIcon ? Qt.AlignCenter : Qt.AlignLeft
         icon: control.icon
+        defaultIconColor: control.down ? pressedText : control.__isHighContrast && control.hovered
+            ? control.palette.button : control.palette.buttonText
         text: control.text
         font: control.font
-        color: control.icon.color
+        color: defaultIconColor
+
+        readonly property color pressedText: Application.styleHints.colorScheme === Qt.Light
+            ? Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.62)
+            : Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.7725)
     }
 
     background: Item {

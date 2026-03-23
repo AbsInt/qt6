@@ -992,7 +992,7 @@ void tst_QQmlTreeModel::setRowsRejectsNonArray()
     QCOMPARE(rowsChangedSpy.size(), rowsChangedSignalEmissions);
 
     // try to set a JSObject
-    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*but not an array"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*but an array is expected"));
     QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "setInvalidRowsObject"));
     // setRows is returning early, nothing changes
     QCOMPARE(model->treeSize(), 0);
@@ -1262,11 +1262,13 @@ void tst_QQmlTreeModel::setData()
 
     // model->index(0, 2, QModelIndex()): index to the fruit type "Apple"
     model->setData(model->index(0, 2, QModelIndex()), u"Passion fruit"_s, Qt::DisplayRole);
+    QCOMPARE(rowsChangedSpy.size(), ++rowsChangedSignalEmissions);
     QCOMPARE(model->data(model->index(0, 2, QModelIndex()), roleNames.key("display")).toString(), u"Passion fruit"_s);
 
     // Test the other overload
     // model->index(0, 3, QModelIndex()): index to the fruit name "Granny Smith"
     model->setData(model->index(0, 3, QModelIndex()), u"My favorite fruit"_s, u"display"_s);
+    QCOMPARE(rowsChangedSpy.size(), ++rowsChangedSignalEmissions);
     QCOMPARE(model->data(model->index(0, 3, QModelIndex()), roleNames.key("display")).toString(), u"My favorite fruit"_s);
 
     // Everything else is unchanged
@@ -1293,10 +1295,12 @@ void tst_QQmlTreeModel::setData()
 
     // now change the type on the JS side to "Ananas"
     QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "changeFruitTypeIntOverload"));
+    QCOMPARE(rowsChangedSpy.size(), ++rowsChangedSignalEmissions);
     QCOMPARE(model->data(model->index(1, 2, QModelIndex()), roleNames.key("display")).toString(), u"Ananas"_s);
 
     // use the other overload and change the name on the JS side tp "My other favorite fruit"
     QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "changeFruitNameStringOverload"));
+    QCOMPARE(rowsChangedSpy.size(), ++rowsChangedSignalEmissions);
     QCOMPARE(model->data(model->index(1, 3, QModelIndex()), roleNames.key("display")).toString(), u"My other favorite fruit"_s);
 
     // like before, everything else is unchanged
@@ -1327,6 +1331,7 @@ void tst_QQmlTreeModel::setData()
     int role = Qt::DisplayRole;
 
     QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "changeFruitType", Q_ARG(QVariant, idxType), Q_ARG(QVariant, type), Q_ARG(QVariant, role)));
+    QCOMPARE(rowsChangedSpy.size(), ++rowsChangedSignalEmissions);
     QCOMPARE(model->data(model->index({0,0}, 2), roleNames.key("display")).toString(), u"Weird fruit"_s);
 
     QModelIndex idxName = model->index({0,0}, 3);
@@ -1334,6 +1339,7 @@ void tst_QQmlTreeModel::setData()
     QString roleAsString = u"display"_s;
 
     QVERIFY(QMetaObject::invokeMethod(view.rootObject(), "changeFruitName", Q_ARG(QVariant, idxName), Q_ARG(QVariant, name), Q_ARG(QVariant, roleAsString)));
+    QCOMPARE(rowsChangedSpy.size(), ++rowsChangedSignalEmissions);
     QCOMPARE(model->data(model->index({0,0}, 3), roleNames.key("display")).toString(), u"Unknown fruit"_s);
 
     // Everything else is unchanged

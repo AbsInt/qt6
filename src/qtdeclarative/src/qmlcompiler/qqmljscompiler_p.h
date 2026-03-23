@@ -120,21 +120,21 @@ using QQmlJSSaveFunction
                          const QQmlJSAotFunctionMap &, QString *)>;
 
 bool Q_QMLCOMPILER_EXPORT qCompileQmlFile(const QString &inputFileName,
-                                          QQmlJSSaveFunction saveFunction,
+                                          const QQmlJSSaveFunction &saveFunction,
                                           QQmlJSAotCompiler *aotCompiler, QQmlJSCompileError *error,
                                           bool storeSourceLocation = false,
                                           QV4::Compiler::CodegenWarningInterface *wInterface =
                                                   QV4::Compiler::defaultCodegenWarningInterface(),
                                           const QString *fileContents = nullptr);
 bool Q_QMLCOMPILER_EXPORT qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
-                                          QQmlJSSaveFunction saveFunction,
+                                          const QQmlJSSaveFunction &saveFunction,
                                           QQmlJSAotCompiler *aotCompiler, QQmlJSCompileError *error,
                                           bool storeSourceLocation = false,
                                           QV4::Compiler::CodegenWarningInterface *wInterface =
                                           QV4::Compiler::defaultCodegenWarningInterface(),
                                           const QString *fileContents = nullptr);
 bool Q_QMLCOMPILER_EXPORT qCompileJSFile(const QString &inputFileName, const QString &inputFileUrl,
-                                         QQmlJSSaveFunction saveFunction,
+                                         const QQmlJSSaveFunction &saveFunction,
                                          QQmlJSCompileError *error);
 
 bool Q_QMLCOMPILER_EXPORT qSaveQmlJSUnitAsCpp(const QString &inputFileName,

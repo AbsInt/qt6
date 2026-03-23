@@ -278,14 +278,6 @@ private:
     QT_DEPRECATED_X("Use setChildProcessModifier() instead")
     virtual Use_setChildProcessModifier_Instead setupChildProcess();
 #endif
-
-    Q_PRIVATE_SLOT(d_func(), bool _q_canReadStandardOutput())
-    Q_PRIVATE_SLOT(d_func(), bool _q_canReadStandardError())
-#ifdef Q_OS_UNIX
-    Q_PRIVATE_SLOT(d_func(), bool _q_canWrite())
-#endif
-    Q_PRIVATE_SLOT(d_func(), bool _q_startupNotification())
-    Q_PRIVATE_SLOT(d_func(), void _q_processDied())
 };
 
 #ifdef Q_OS_UNIX

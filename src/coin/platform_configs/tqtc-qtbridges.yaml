@@ -4,6 +4,9 @@ Include: [
      "macos-quick-bridges",
      "linux-quick-bridges",
      "windows-quick-bridges"
+  ],
+  cmake_platforms.yaml: [
+     "rhel-9.6"
   ]
 ]
 Configurations:
@@ -19,13 +22,27 @@ Configurations:
     Template: 'qtci-windows-11_24H2-x86_64-71'
     Compiler: 'MSVC2022'
     Platform dependency: 'windows-quick-bridges'
-    Features: ['Packaging', 'Sccache', "DebugAndRelease", 'UseConfigure', 'DisableTests', 'RunAsPlatformDependency', 'QtBridgesRust']
+    Features: ['Packaging', 'Sccache', 'UseConfigure', 'DisableTests', 'RunAsPlatformDependency', 'QtBridgesRust']
+
+-
+    Id: 'windows-quick-bridges-python'
+    Template: 'qtci-windows-11_24H2-x86_64-71'
+    Compiler: 'MSVC2022'
+    Platform dependency: 'windows-quick-bridges'
+    Features: ['Packaging', 'Sccache', 'UseConfigure', 'DisableTests', 'RunAsPlatformDependency', 'QtBridgesPython']
+
+-
+    Id: 'windows-quick-bridges-java'
+    Template: 'qtci-windows-11_24H2-x86_64-71'
+    Compiler: 'MSVC2022'
+    Platform dependency: 'windows-quick-bridges'
+    Features: ['Packaging', 'Sccache', 'UseConfigure', 'DisableTests', 'RunAsPlatformDependency', 'QtBridgesJava']
 
 -
     Id: 'linux-quick-bridges-python'
-    Template: 'qtci-linux-Ubuntu-24.04-x86_64-51'
+    Template: 'qtci-linux-RHEL-9.6-x86_64-51'
     Compiler: 'GCC'
-    Platform dependency: 'linux-quick-bridges'
+    Platform dependency: 'rhel-9.6'
     Features: ['Packaging', 'Sccache', 'UseConfigure', 'DisableTests', 'RunAsPlatformDependency', 'QtBridgesPython']
 
 -

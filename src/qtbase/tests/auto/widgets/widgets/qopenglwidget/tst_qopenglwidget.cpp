@@ -63,12 +63,9 @@ private slots:
 
 void tst_QOpenGLWidget::initTestCase()
 {
-#if !QT_CONFIG(run_opengl_tests)
-    QSKIP("Skip test as run-opengl-tests feature is off.");
-#endif
     // See QOpenGLWidget constructor
-    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::RasterGLSurface))
-        QSKIP("QOpenGLWidget is not supported on this platform.");
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::OpenGL))
+        QSKIP("OpenGL is not supported on this platform.");
 }
 
 void tst_QOpenGLWidget::create()

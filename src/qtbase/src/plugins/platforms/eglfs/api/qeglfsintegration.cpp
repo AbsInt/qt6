@@ -155,6 +155,7 @@ QPlatformBackingStore *QEglFSIntegration::createPlatformBackingStore(QWindow *wi
     if (!window->handle())
         window->create();
     static_cast<QEglFSWindow *>(window->handle())->setBackingStore(bs);
+    m_bs = bs;
     return bs;
 #else
     Q_UNUSED(window);
@@ -175,6 +176,9 @@ QPlatformWindow *QEglFSIntegration::createPlatformWindow(QWindow *window) const
     // Activate only the window for the primary screen to make input work
     if (window->type() != Qt::ToolTip && window->screen() == QGuiApplication::primaryScreen())
         w->requestActivateWindow();
+
+    if (window->isTopLevel())
+        w->setBackingStore(static_cast<QOpenGLCompositorBackingStore *>(m_bs));
 
     return w;
 }
@@ -225,11 +229,9 @@ bool QEglFSIntegration::hasCapability(QPlatformIntegration::Capability cap) cons
 #ifndef QT_NO_OPENGL
     case OpenGL: return true;
     case ThreadedOpenGL: return true;
-    case RasterGLSurface: return true;
 #else
     case OpenGL: return false;
     case ThreadedOpenGL: return false;
-    case RasterGLSurface: return false;
 #endif
     case WindowManagement: return false;
     case OpenGLOnRasterSurface: return true;

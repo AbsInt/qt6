@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include <AppKit/AppKit.h>
 
@@ -22,6 +23,7 @@
 #include <QtGui/qpainter.h>
 #include <QtGui/qtextformat.h>
 #include <QtGui/private/qcoretextfontdatabase_p.h>
+#include <QtGui/private/qapplefileiconengine_p.h>
 #include <QtGui/private/qappleiconengine_p.h>
 #include <QtGui/private/qfontengine_coretext_p.h>
 #include <QtGui/private/qabstractfileiconengine_p.h>
@@ -420,31 +422,9 @@ QPixmap QCocoaTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) const
     return QPlatformTheme::standardPixmap(sp, size);
 }
 
-class QCocoaFileIconEngine : public QAbstractFileIconEngine
-{
-public:
-    explicit QCocoaFileIconEngine(const QFileInfo &info,
-                                  QPlatformTheme::IconOptions opts) :
-        QAbstractFileIconEngine(info, opts) {}
-
-    QList<QSize> availableSizes(QIcon::Mode = QIcon::Normal, QIcon::State = QIcon::Off) override
-    { return QAppleIconEngine::availableIconSizes(); }
-
-protected:
-    QPixmap filePixmap(const QSize &size, QIcon::Mode, QIcon::State) override
-    {
-        QMacAutoReleasePool pool;
-
-        NSImage *iconImage = [[NSWorkspace sharedWorkspace] iconForFile:fileInfo().canonicalFilePath().toNSString()];
-        if (!iconImage)
-            return QPixmap();
-        return qt_mac_toQPixmap(iconImage, size);
-    }
-};
-
 QIcon QCocoaTheme::fileIcon(const QFileInfo &fileInfo, QPlatformTheme::IconOptions iconOptions) const
 {
-    return QIcon(new QCocoaFileIconEngine(fileInfo, iconOptions));
+    return QIcon(new QAppleFileIconEngine(fileInfo, iconOptions));
 }
 
 QIconEngine *QCocoaTheme::createIconEngine(const QString &iconName) const

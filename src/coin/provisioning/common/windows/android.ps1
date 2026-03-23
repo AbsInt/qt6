@@ -17,6 +17,13 @@ $ndkChecksumLatest = "ac5f7762764b1f15341094e148ad4f847d050c38"
 $ndkCachedUrlLatest = "\\ci-files01-hki.ci.qt.io\provisioning\android\android-ndk-$ndkVersionLatest-windows.zip"
 $ndkOfficialUrlLatest = "https://dl.google.com/android/repository/android-ndk-$ndkVersionLatest-windows.zip"
 
+# NDK in alpha/beta/RC state
+
+$ndkVersionPreview = "r29-beta2"
+$ndkChecksumPreview = "59b665f7506f1079771393f2c90f3cb29817ecfb"
+$ndkCachedUrlPreview = "\\ci-files01-hki.ci.qt.io\provisioning\android\android-ndk-$ndkVersionPreview-windows.zip"
+$ndkOfficialUrlPreview = "https://dl.google.com/android/repository/android-ndk-$ndkVersionPreview-windows.zip"
+
 # Non-latest (but still supported by the qt/qt5 branch) NDKs are installed for nightly targets in:
 # coin/platform_configs/nightly_android.yaml
 
@@ -31,14 +38,14 @@ $ndkCachedUrlNightly2 = "\\ci-files01-hki.ci.qt.io\provisioning\android\android-
 $ndkOfficialUrlNightly2 = "https://dl.google.com/android/repository/android-ndk-$ndkVersionNightly2-windows.zip"
 
 # SDK
-$toolsVersion = "2.1"
-$toolsFile = "commandlinetools-win-6609375_latest.zip"
+$toolsVersion = "19.0"
+$toolsFile = "commandlinetools-win-13114758_latest.zip"
 $sdkApi = "ANDROID_API_VERSION"
 $sdkApiLevel = "android-36"
 $sdkBuildToolsVersion = "36.0.0"
 $toolsCachedUrl= "\\ci-files01-hki.ci.qt.io\provisioning\android\$toolsFile"
 $toolsOfficialUrl = "https://dl.google.com/android/repository/$toolsFile"
-$toolsChecksum = "e2e19c2ff584efa87ef0cfdd1987f92881323208"
+$toolsChecksum = "54a582f3bf73e04253602f2d1c80bd5868aac115"
 $cmdFolder = "c:\Utils\Android\cmdline-tools"
 
 $sdkZip = "c:\Windows\Temp\$toolsFile"
@@ -68,6 +75,13 @@ Set-EnvironmentVariable "ANDROID_NDK_ROOT_LATEST" $ndkFolderLatest
 # To be used by vcpkg
 Set-EnvironmentVariable "ANDROID_NDK_HOME" $ndkFolderLatest
 
+if ($ndkVersionPreview -ne $ndkVersionLatest) {
+    Write-Host "Installing Android NDK $ndkVersionPreview"
+    $ndkFolderPreview = Install $ndkCachedUrlPreview $ndkZip $ndkChecksumPreview $ndkOfficialUrlPreview
+    Set-EnvironmentVariable "ANDROID_NDK_ROOT_PREVIEW" $ndkFolderPreview
+    Write-Output "Android NDK = $ndkVersionPreview" >> ~/versions.txt
+}
+
 if ($ndkVersionNightly1 -ne $ndkVersionLatest) {
     Write-Host "Installing Android NDK $ndkVersionNightly1"
     $ndkFolderNightly = Install $ndkCachedUrlNightly1 $ndkZip $ndkChecksumNightly1 $ndkOfficialUrlNightly1
@@ -82,9 +96,13 @@ if ($ndkVersionNightly2 -ne $ndkVersionLatest) {
     Write-Output "Android NDK = $ndkVersionNightly2" >> ~/versions.txt
 }
 
+# Android Command-Line Tools unpacks a directory 'cmdline-tools'. Due
+# to existing code, weed to move it into 'cmdline-tools/tools'
+Write-Host "Downloading Android Command-Line Tools"
 $toolsFolder = Install $toolsCachedUrl $sdkZip $toolsChecksum $toolsOfficialUrl
+Rename-Item -Path "$toolsFolder" -NewName "c:\Utils\Android\tools"
 New-Item -ItemType directory -Path $cmdFolder
-Move-Item -Path $toolsFolder -Destination $cmdFolder\
+Move-Item -Path "c:\Utils\Android\tools" -Destination "$cmdFolder\tools"
 Set-EnvironmentVariable "ANDROID_SDK_ROOT" "C:\Utils\Android"
 Set-EnvironmentVariable "ANDROID_API_VERSION" $sdkApiLevel
 

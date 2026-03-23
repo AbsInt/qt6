@@ -42,6 +42,22 @@ QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QCocoaWindow);
 QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QCocoaMenu);
 QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QCocoaMenuBar);
 
+/*!
+    \class QNativeInterface::QCocoaScreen
+    \since 6.11
+    \brief Native interface to a screen on \macos.
+
+    Accessed through QScreen::nativeInterface().
+    \inmodule QtGui
+    \ingroup native-interfaces
+    \ingroup native-interfaces-qscreen
+*/
+/*!
+    \fn NSScreen *QNativeInterface::QCocoaScreen::nativeScreen() const
+    \return the underlying NSScreen of this QScreen.
+*/
+QT_DEFINE_NATIVE_INTERFACE(QCocoaScreen);
+
 #ifndef QT_NO_OPENGL
 
 /*!

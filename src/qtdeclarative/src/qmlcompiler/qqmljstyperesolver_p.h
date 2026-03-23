@@ -109,7 +109,7 @@ public:
         return m_imports.hasType(name) && !m_imports.type(name).scope;
     }
 
-    const QHash<QString, QQmlJS::ImportedScope<QQmlJSScope::ConstPtr>> &importedTypes() const
+    const QHash<QString, QQmlJS::ContextualType> &importedTypes() const
     {
         return m_imports.types();
     }
@@ -241,7 +241,7 @@ public:
             QQmlJSRegisterContent type, const QString &name,
             int lookupIndex = QQmlJSRegisterContent::InvalidLookupIndex) const;
 
-    QQmlJSRegisterContent valueType(QQmlJSRegisterContent list) const;
+    QQmlJSRegisterContent elementType(QQmlJSRegisterContent list) const;
 
     QQmlJSRegisterContent returnType(
             const QQmlJSMetaMethod &method, const QQmlJSScope::ConstPtr &returnType,

@@ -93,6 +93,8 @@ Q_SIGNALS:
     void specChanged();
 
 private:
+    void itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &data) override;
+
     Q_DISABLE_COPY(QQuickColorDialogImpl)
     Q_DECLARE_PRIVATE(QQuickColorDialogImpl)
 };

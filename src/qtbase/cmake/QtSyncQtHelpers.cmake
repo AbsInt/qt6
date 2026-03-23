@@ -150,10 +150,6 @@ function(qt_internal_target_sync_headers target
             "$<${warnings_are_errors_enabled_genex}:-warningsAreErrors>")
     endif()
 
-    if(is_framework)
-        list(REMOVE_ITEM module_headers "${CMAKE_CURRENT_BINARY_DIR}/${target}_fake_header.h")
-    endif()
-
     # Filter the generated ui_ header files and header files located in the 'doc/' subdirectory.
     list(FILTER module_headers EXCLUDE REGEX
         "(.+/(ui_)[^/]+\\.h|${CMAKE_CURRENT_SOURCE_DIR}(/.+)?/doc/+\\.h)")

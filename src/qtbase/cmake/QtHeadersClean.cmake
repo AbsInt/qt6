@@ -4,6 +4,8 @@
 # Add a custom ${module_target}_headersclean_check target that builds each header in
 # ${module_headers} with a custom set of defines. This makes sure our public headers
 # are self-contained, and also compile with more strict compiler options.
+# To enable the `headersclean` checks, pass `-headersclean` to `configure`
+# or `qt-configure-module`.
 function(qt_internal_add_headersclean_target module_target module_headers)
     if(INPUT_headersclean AND WASM)
         message(FATAL_ERROR "The headersclean targets are not supported on WASM platform.")
@@ -135,6 +137,10 @@ function(qt_internal_add_headersclean_target module_target module_headers)
         if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
             list(APPEND hcleanFLAGS -Wzero-as-null-pointer-constant
                 -Wdouble-promotion -Wfloat-conversion)
+            if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+                list(APPEND hcleanFLAGS
+                    -Wnrvo)
+            endif()
         endif()
 
         if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang|IntelLLVM")

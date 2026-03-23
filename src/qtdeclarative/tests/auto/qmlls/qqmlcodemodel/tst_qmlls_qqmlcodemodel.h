@@ -29,14 +29,35 @@ private slots:
     void buildPathsForFileUrl_data();
     void buildPathsForFileUrl();
     void fileNamesToWatch();
+    void resourceFiles();
+    void resourceFilesFallback();
     void findFilePathsFromFileNames_data();
     void findFilePathsFromFileNames();
+    void openFiles_data();
     void openFiles();
     void importPathViaSettings();
     void reloadLotsOfFiles();
 
+    // Tests for the qqmlcodemodelmanager:
+    void buildPaths_data();
+    void buildPaths();
+    void defaultWorkspace();
+    void closeWorkspace();
+    void rootUrls();
+    void addingWorkspaces();
+    void newWorkspace();
+    void duplicateWorkspace();
+    void withQmllsBuildIni();
+    void withQmllsBuildIniWithoutRootUrls();
     void withQmllsBuildIniRelativeImportPath();
     void withQmllsIniRelativeImportPath();
+    void shortestRootUrlForFile();
+    void qprocessScheduler_data();
+    void qprocessScheduler();
+    void qprocessSchedulerProcess();
+    void multipleQProcessScheduler_data();
+    void multipleQProcessScheduler();
+    void reloadQmllsBuildIniAfterBuild();
 };
 
 #endif // TST_QMLLS_QQMLCODEMODEL_H

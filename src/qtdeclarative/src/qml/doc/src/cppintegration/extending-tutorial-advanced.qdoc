@@ -204,7 +204,7 @@ default for all of QML.
     \skipto host
     \printuntil /^....}/
 
-\sa {Grouped Properties}
+\sa {QML Object Attributes#Grouped Properties}{Grouped Properties}
 
 
 

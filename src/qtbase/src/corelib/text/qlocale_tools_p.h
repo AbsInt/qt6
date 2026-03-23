@@ -84,7 +84,7 @@ void qt_doubleToAscii(double d, QLocaleData::DoubleForm form, int precision,
 template <typename UcsInt>
 [[nodiscard]] inline UcsInt unicodeForDigit(uint digit, UcsInt zero)
 {
-    // Must match qlocale.cpp's NumericTokenizer's digit-digestion.
+    // Must match QLocaleData::NumericData::digitValue()'s digit-digestion.
     Q_ASSERT(digit < 10);
     if (!digit)
         return zero;

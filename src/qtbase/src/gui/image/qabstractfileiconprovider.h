@@ -15,8 +15,10 @@ class QAbstractFileIconProviderPrivate;
 
 class Q_GUI_EXPORT QAbstractFileIconProvider
 {
+    Q_GADGET
 public:
     enum IconType { Computer, Desktop, Trashcan, Network, Drive, Folder, File };
+    Q_ENUM(IconType)
     enum Option {
         DontUseCustomDirectoryIcons = 0x00000001
     };

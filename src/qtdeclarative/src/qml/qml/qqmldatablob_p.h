@@ -61,6 +61,7 @@ public:
     void startLoading();
 
     QQmlTypeLoader *typeLoader() const { return m_typeLoader; }
+    void resetTypeLoader() { m_typeLoader = nullptr; }
 
     Type type() const;
 
@@ -88,7 +89,7 @@ public:
         QDateTime sourceTimeStamp() const;
         bool exists() const;
         bool isEmpty() const;
-        bool isCacheable() const { return !hasInlineSourceCode; }
+        bool isCacheable() const { return !hasStaticData; }
         bool isValid() const
         {
             return hasInlineSourceCode || !fileInfo.filePath().isEmpty();
@@ -100,6 +101,7 @@ public:
         QString inlineSourceCode;
         QFileInfo fileInfo;
         bool hasInlineSourceCode = false;
+        bool hasStaticData = false;
     };
 
     template<typename Loader = QQmlTypeLoader>
@@ -117,10 +119,17 @@ public:
     }
 
     template<typename Loader = QQmlTypeLoader>
+    void assertEngineThreadIfRunning() const
+    {
+        const Loader *loader = m_typeLoader;
+        Q_ASSERT(!loader || !loader->thread() || loader->thread()->isParentThread());
+    }
+
+    template<typename Loader = QQmlTypeLoader>
     void assertEngineThread() const
     {
         const Loader *loader = m_typeLoader;
-        Q_ASSERT(loader && loader->engine() && loader->engine()->thread()->isCurrentThread());
+        Q_ASSERT(loader && loader->thread() && loader->thread()->isParentThread());
     }
 
 protected:
@@ -266,7 +275,7 @@ protected:
 private:
 
     // List of QQmlDataBlob's that I am waiting for to complete.
-    QVector<QQmlRefPointer<QQmlDataBlob>> m_waitingFor;
+    QList<QQmlRefPointer<QQmlDataBlob>> m_waitingFor;
 
     int m_redirectCount:30;
     bool m_inCallback:1;

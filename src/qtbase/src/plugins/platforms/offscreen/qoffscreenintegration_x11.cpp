@@ -53,7 +53,6 @@ bool QOffscreenX11Integration::hasCapability(QPlatformIntegration::Capability ca
     switch (cap) {
     case OpenGL: return true;
     case ThreadedOpenGL: return true;
-    case RasterGLSurface: return true;
     default: return QOffscreenIntegration::hasCapability(cap);
     }
 }

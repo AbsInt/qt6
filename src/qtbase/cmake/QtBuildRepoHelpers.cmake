@@ -11,6 +11,8 @@ macro(qt_internal_project_setup)
     # Check for the minimum CMake version.
     qt_internal_require_suitable_cmake_version()
     qt_internal_upgrade_cmake_policies()
+    # Make sure QT_INTERNAL_BUILD_STANDALONE_PARTS is defined as early as possible
+    qt_internal_setup_standalone_parts()
 endmacro()
 
 macro(qt_build_internals_set_up_private_api)
@@ -510,7 +512,7 @@ function(qt_internal_show_extra_ide_sources)
 
     # changelogs
     set(changelogs_target_name ${qt_repo_targets_name}_changelogs)
-    file(GLOB change_logs_files LIST_DIRECTORIES false dist/*)
+    file(GLOB change_logs_files LIST_DIRECTORIES false dist/changes-*)
     if(change_logs_files)
         source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/dist" FILES ${change_logs_files})
         add_custom_target(${changelogs_target_name} SOURCES ${change_logs_files})
@@ -675,7 +677,7 @@ function(qt_get_standalone_parts_config_files_path out_var)
     # the files.
     set(dir_name "StandaloneTests")
 
-    set(path_suffix "${INSTALL_LIBDIR}/cmake/${INSTALL_CMAKE_NAMESPACE}BuildInternals/${dir_name}")
+    set(path_suffix "${INSTALL_CMAKEDIR}/${INSTALL_CMAKE_NAMESPACE}BuildInternals/${dir_name}")
 
     # Each repo's standalone parts might be configured with a unique CMAKE_STAGING_PREFIX,
     # different from any previous one, and it might not coincide with where the BuildInternals
@@ -730,6 +732,7 @@ macro(qt_internal_find_standalone_parts_qt_packages standalone_parts_args_var_na
     set(__standalone_parts_single_args "")
     set(__standalone_parts_multi_args
         QT_MODULE_PACKAGES
+        QT_TOOL_PACKAGES
     )
     cmake_parse_arguments(__standalone_parts
         "${__standalone_parts_opt_args}"
@@ -740,6 +743,32 @@ macro(qt_internal_find_standalone_parts_qt_packages standalone_parts_args_var_na
     # Packages looked up in standalone tests Config files should use the same version as
     # the one recorded on the Platform target.
     qt_internal_get_package_version_of_target(Platform __standalone_parts_main_qt_package_version)
+
+    if(__standalone_parts_QT_TOOL_PACKAGES)
+        # Set up QT_HOST_PATH as an extra root path to look for the Tools packages when
+        # cross-compiling.
+        if(NOT "${QT_HOST_PATH}" STREQUAL "")
+             set(__standalone_parts_CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH})
+             set(__standalone_parts_CMAKE_FIND_ROOT_PATH ${CMAKE_FIND_ROOT_PATH})
+             list(PREPEND CMAKE_PREFIX_PATH "${QT_HOST_PATH_CMAKE_DIR}")
+             list(PREPEND CMAKE_FIND_ROOT_PATH "${QT_HOST_PATH}")
+        endif()
+
+        foreach(__standalone_parts_package_name IN LISTS __standalone_parts_QT_TOOL_PACKAGES)
+            find_package(${QT_CMAKE_EXPORT_NAMESPACE}${__standalone_parts_package_name}
+                "${__standalone_parts_main_qt_package_version}"
+                PATHS
+                        # These come from Qt6Config.cmake
+                        ${_qt_additional_packages_prefix_path}
+                        ${_qt_additional_packages_prefix_path_env}
+            )
+        endforeach()
+
+        if(NOT "${QT_HOST_PATH}" STREQUAL "")
+             set(CMAKE_PREFIX_PATH ${__standalone_parts_CMAKE_PREFIX_PATH})
+             set(CMAKE_FIND_ROOT_PATH ${__standalone_parts_CMAKE_FIND_ROOT_PATH})
+        endif()
+    endif()
 
     if(__standalone_parts_QT_MODULE_PACKAGES)
         foreach(__standalone_parts_package_name IN LISTS __standalone_parts_QT_MODULE_PACKAGES)
@@ -753,8 +782,11 @@ macro(qt_internal_find_standalone_parts_qt_packages standalone_parts_args_var_na
     unset(__standalone_parts_single_args)
     unset(__standalone_parts_multi_args)
     unset(__standalone_parts_QT_MODULE_PACKAGES)
+    unset(__standalone_parts_QT_TOOL_PACKAGES)
     unset(__standalone_parts_main_qt_package_version)
     unset(__standalone_parts_package_name)
+    unset(__standalone_parts_CMAKE_PREFIX_PATH)
+    unset(__standalone_parts_CMAKE_FIND_ROOT_PATH)
 endmacro()
 
 # Used by standalone tests and standalone non-ExternalProject examples to find all installed qt
@@ -808,7 +840,7 @@ macro(qt_build_tests)
     # Prepending to QT_BUILD_CMAKE_PREFIX_PATH helps find components of Qt6, because those
     # find_package calls use NO_DEFAULT_PATH, and thus CMAKE_PREFIX_PATH is ignored.
     list(PREPEND CMAKE_FIND_ROOT_PATH "${QT_BUILD_DIR}")
-    list(PREPEND QT_BUILD_CMAKE_PREFIX_PATH "${QT_BUILD_DIR}/${INSTALL_LIBDIR}/cmake")
+    list(PREPEND QT_BUILD_CMAKE_PREFIX_PATH "${QT_BUILD_DIR}/${INSTALL_CMAKEDIR}")
 
     qt_internal_find_standalone_parts_config_files()
     qt_internal_find_standalone_test_config_file()
@@ -855,6 +887,8 @@ macro(qt_build_tests)
             endforeach()
         endif()
     endif()
+
+    qt_internal_add_default_tests()
 
     if(NOT QT_SUPERBUILD)
         # In a super build, we don't want to finalize the batch blacklist at the end of each repo,
@@ -943,7 +977,7 @@ endfunction()
 # examples are being built), as well as for CMake tests (tests that call CMake to try and build
 # CMake applications).
 macro(qt_internal_set_up_build_dir_package_paths)
-    list(PREPEND CMAKE_PREFIX_PATH "${QT_BUILD_DIR}/${INSTALL_LIBDIR}/cmake")
+    list(PREPEND CMAKE_PREFIX_PATH "${QT_BUILD_DIR}/${INSTALL_CMAKEDIR}")
 
     # Make sure the CMake config files do not recreate the already-existing targets.
     if(NOT QT_BUILD_STANDALONE_EXAMPLES)

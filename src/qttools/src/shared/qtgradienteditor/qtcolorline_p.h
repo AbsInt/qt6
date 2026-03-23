@@ -15,7 +15,7 @@
 #ifndef QTCOLORLINE_H
 #define QTCOLORLINE_H
 
-#include <QtWidgets/QWidget>
+#include <QtWidgets/qwidget.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -45,8 +45,8 @@ public:
     QSize minimumSizeHint() const override;
     QSize sizeHint() const override;
 
-    QtColorLine(QWidget *parent = 0);
-    ~QtColorLine();
+    explicit QtColorLine(QWidget *parent = nullptr);
+    ~QtColorLine() override;
 
     QColor color() const;
 

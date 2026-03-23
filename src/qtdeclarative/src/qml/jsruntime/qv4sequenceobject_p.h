@@ -38,10 +38,17 @@ struct Q_QML_EXPORT SequencePrototype : public QV4::Object
 
     static ReturnedValue method_valueOf(const FunctionObject *, const Value *thisObject, const Value *argv, int argc);
     static ReturnedValue method_shift(const FunctionObject *b, const Value *thisObject, const Value *, int);
+    static ReturnedValue method_unshift(
+            const FunctionObject *f, const Value *thisObject, const Value *argv, int argc);
+    static ReturnedValue method_push(
+            const FunctionObject *f, const Value *thisObject, const Value *argv, int argc);
+    static ReturnedValue method_pop(
+            const FunctionObject *f, const Value *thisObject, const Value *argv, int argc);
     static ReturnedValue method_getLength(
             const FunctionObject *b, const Value *thisObject, const Value *, int);
     static ReturnedValue method_setLength(
             const FunctionObject *f, const Value *thisObject, const Value *argv, int argc);
+
 
     static ReturnedValue newSequence(
         QV4::ExecutionEngine *engine, QMetaType type, QMetaSequence metaSequence, const void *data,

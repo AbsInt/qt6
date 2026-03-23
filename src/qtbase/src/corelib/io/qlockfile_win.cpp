@@ -16,6 +16,8 @@
 
 #include <qt_windows.h>
 #include <psapi.h>
+#include <io.h>
+#include <fcntl.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -53,9 +55,10 @@ QLockFile::LockError QLockFilePrivate::tryLock_sys()
     const QFileSystemEntry fileEntry(fileName);
     // When writing, allow others to read.
     // When reading, QFile will allow others to read and write, all good.
-    // Adding FILE_SHARE_DELETE would allow forceful deletion of stale files,
-    // but Windows doesn't allow recreating it while this handle is open anyway,
-    // so this would only create confusion (can't lock, but no lock file to read from).
+    // ### Open the file with DELETE permission and use
+    // SetFileInformationByHandle to delete the file without needing to close
+    // the handle first, to avoid someone opening the handle again without the
+    // FILE_SHARE_DELETE flag in-between closure and deletion.
     const DWORD dwShareMode = FILE_SHARE_READ;
     SECURITY_ATTRIBUTES securityAtts = { sizeof(SECURITY_ATTRIBUTES), NULL, FALSE };
     HANDLE fh = CreateFile((const wchar_t*)fileEntry.nativeFilePath().utf16(),
@@ -140,6 +143,30 @@ QString QLockFilePrivate::processNameByPid(qint64 pid)
     if (i >= 0)
         name.truncate(i);
     return name;
+}
+
+int QLockFilePrivate::openNewFileDescriptor(const QString &fileName)
+{
+    // We currently open with FILE_SHARE_DELETE, which would allow deletion to
+    // be requested even while other processes have the file open. We mostly
+    // want to do this so we can later open the file with the DELETE permission
+    // to delete the file using SetFileInformationByHandle, avoiding the need
+    // to close the handle first, where e.g. search indexer or antivirus may
+    // see their chance to open the file before we can delete it.
+    // We can't make this change immediately because currently-deployed
+    // applications will not be using FILE_SHARE_DELETE, so they would suddenly
+    // be unable to read the lockfile information.
+    HANDLE handle = CreateFile(reinterpret_cast<const wchar_t *>(fileName.utf16()), GENERIC_READ,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+        return -1;
+    int fd = _open_osfhandle(intptr_t(handle), _O_RDONLY);
+    if (fd == -1) {
+        CloseHandle(handle);
+        return -1;
+    }
+    return fd;
 }
 
 void QLockFile::unlock()

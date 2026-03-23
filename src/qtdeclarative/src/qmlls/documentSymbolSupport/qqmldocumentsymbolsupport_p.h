@@ -17,7 +17,7 @@
 
 #include <QtQmlLS/private/qlanguageserver_p.h>
 #include <QtQmlLS/private/qqmlbasemodule_p.h>
-#include <QtQmlLS/private/qqmlcodemodel_p.h>
+#include <QtQmlLS/private/qqmlcodemodelmanager_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -30,7 +30,7 @@ struct DocumentSymbolsRequest
 class QQmlDocumentSymbolSupport : public QQmlBaseModule<DocumentSymbolsRequest>
 {
 public:
-    QQmlDocumentSymbolSupport(QmlLsp::QQmlCodeModel *codeModel);
+    QQmlDocumentSymbolSupport(QmlLsp::QQmlCodeModelManager *codeModel);
     QString name() const override;
     void registerHandlers(QLanguageServer *server, QLanguageServerProtocol *protocol) override;
     void setupCapabilities(const QLspSpecification::InitializeParams &clientInfo,

@@ -559,7 +559,7 @@ int main(int argc, char *argv[])
     }
 #if QT_CONFIG(qml_animation)
     if (parser.isSet(slowAnimationsOption))
-        QUnifiedTimer::instance()->setSlowModeEnabled(true);
+        QUnifiedTimer::instance()->setSpeedModifier(0.2);
     if (parser.isSet(fixedAnimationsOption))
         QUnifiedTimer::instance()->setConsistentTiming(true);
 #endif

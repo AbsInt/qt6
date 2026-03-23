@@ -7,12 +7,15 @@
 
 #include <QtNetwork/qtnetworkglobal.h>
 #include <QtNetwork/qhttpheaders.h>
+
+#include <QtCore/qassert.h>
 #include <QtCore/QSharedDataPointer>
 #include <QtCore/QString>
 #include <QtCore/QUrl>
 #include <QtCore/QVariant>
 
 #include <QtCore/q26numeric.h>
+#include <QtCore/q20utility.h>
 
 #include <chrono>
 
@@ -178,6 +181,22 @@ public:
     qint64 decompressedSafetyCheckThreshold() const;
     void setDecompressedSafetyCheckThreshold(qint64 threshold);
 #endif // QT_CONFIG(http)
+    std::chrono::seconds tcpKeepAliveIdleTimeBeforeProbes() const;
+    void setTcpKeepAliveIdleTimeBeforeProbes(std::chrono::seconds idle)
+    {
+        const auto r = q26::saturate_cast<int>(idle.count());
+        Q_PRE(q20::cmp_equal(r, idle.count()));
+        doSetIdleTimeBeforeProbes(std::chrono::duration<int>(r));
+    }
+    std::chrono::seconds tcpKeepAliveIntervalBetweenProbes() const;
+    void setTcpKeepAliveIntervalBetweenProbes(std::chrono::seconds interval)
+    {
+        const auto r = q26::saturate_cast<int>(interval.count());
+        Q_PRE(q20::cmp_equal(r, interval.count()));
+        doSetIntervalBetweenProbes(std::chrono::duration<int>(r));
+    }
+    int tcpKeepAliveProbeCount() const;
+    void setTcpKeepAliveProbeCount(int probes);
 
 #if QT_CONFIG(http) || defined (Q_OS_WASM)
     QT_NETWORK_INLINE_SINCE(6, 8)
@@ -189,6 +208,8 @@ public:
     void setTransferTimeout(std::chrono::milliseconds duration = DefaultTransferTimeout);
 #endif // QT_CONFIG(http) || defined (Q_OS_WASM)
 private:
+    void doSetIdleTimeBeforeProbes(std::chrono::duration<int> idle);
+    void doSetIntervalBetweenProbes(std::chrono::duration<int> interval);
     QSharedDataPointer<QNetworkRequestPrivate> d;
     friend class QNetworkRequestPrivate;
 };

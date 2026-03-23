@@ -53,3 +53,8 @@ android
 android
 [TextArea::test_ignorePressRelease]
 android
+
+[SelectionRectangle::test_selectionModeAuto]
+wayland
+[ToolTip::test_makeVisibleWhileExitTransitionRunning]
+wayland

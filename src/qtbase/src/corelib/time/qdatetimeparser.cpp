@@ -2,23 +2,22 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:critical reason:data-parser
 
-#include "qplatformdefs.h"
 #include "private/qdatetimeparser_p.h"
 
 #include "qdatastream.h"
 #include "qdatetime.h"
 #include "qdebug.h"
 #include "qlocale.h"
-#include "qset.h"
-#include "qtimezone.h"
-#include "qvarlengtharray.h"
 #include "private/qlocale_p.h"
+#include "qset.h"
+#include "private/qstringiterator_p.h"
+#include "private/qtenvironmentvariables_p.h"
+#include "qtimezone.h"
 #if QT_CONFIG(timezone)
 #include "private/qtimezoneprivate_p.h"
 #endif
+#include "qvarlengtharray.h"
 
-#include "private/qstringiterator_p.h"
-#include "private/qtenvironmentvariables_p.h"
 
 //#define QDATETIMEPARSER_DEBUG
 #if defined (QDATETIMEPARSER_DEBUG) && !defined(QT_NO_DEBUG_STREAM)
@@ -1241,9 +1240,15 @@ static auto findZoneByLongName(QStringView str, const QLocale &locale, const QDa
         bool isValid() const { return nameLength > 0 && zone.isValid(); }
     } result;
     auto pfx = QTimeZonePrivate::findLongNamePrefix(str, locale, when.toMSecsSinceEpoch());
-    if (!pfx.nameLength) // Incomplete data in when: try without time-point.
+    if (!pfx) // Incomplete data in when: try without time-point.
         pfx = QTimeZonePrivate::findLongNamePrefix(str, locale);
-    if (pfx.nameLength > 0) {
+    // (We don't want offset format to match 'tttt', so do need to limit this.)
+    // The final fall-back for QTZL's localeName() is a zoneOffsetFormat(,,NarrowFormat,,):
+    if (!pfx)
+        pfx = QTimeZonePrivate::findNarrowOffsetPrefix(str, locale);
+    if (!pfx)
+        pfx = QTimeZonePrivate::findLongUtcPrefix(str);
+    if (pfx) {
         result = R{ QTimeZone(pfx.ianaId), pfx.nameLength };
         Q_ASSERT(result.zone.isValid());
         // TODO: we should be able to take pfx.timeType into account.
@@ -2384,6 +2389,7 @@ bool operator==(QDateTimeParser::SectionNode s1, QDateTimeParser::SectionNode s2
 }
 
 /*!
+  \internal
   Sets \a cal as the calendar to use. The default is Gregorian.
 */
 

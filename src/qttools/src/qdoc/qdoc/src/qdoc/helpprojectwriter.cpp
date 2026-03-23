@@ -13,7 +13,11 @@
 #include "functionnode.h"
 #include "genustypes.h"
 #include "htmlgenerator.h"
+#include "inclusionfilter.h"
+#include "location.h"
 #include "node.h"
+#include "nodecontext.h"
+#include "outputdirectory.h"
 #include "qdocdatabase.h"
 #include "typedefnode.h"
 
@@ -208,7 +212,9 @@ bool HelpProjectWriter::generateSection(HelpProject &project, QXmlStreamWriter &
     // \group group_name itself is not documented.
     bool unseenGroup{node->isGroup() && !node->wasSeen()};
 
-    if ((node->isPrivate() || node->isInternal() || node->isDontDocument()) && !unseenGroup)
+    const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+    const NodeContext context = node->createContext();
+    if ((!InclusionFilter::isIncluded(policy, context) || node->isDontDocument()) && !unseenGroup)
         return false;
 
     if (node->name().isEmpty())
@@ -252,6 +258,8 @@ bool HelpProjectWriter::generateSection(HelpProject &project, QXmlStreamWriter &
     }
 
     auto appendDocKeywords = [&](const Node *n) {
+        if (n->doc().isEmpty())
+            return;
         for (const auto *kw : n->doc().keywords()) {
                 if (!kw->string().isEmpty()) {
                     QStringList ref_parts = m_gen->fullDocumentLocation(n).split('#'_L1);
@@ -384,10 +392,8 @@ bool HelpProjectWriter::generateSection(HelpProject &project, QXmlStreamWriter &
     const Atom *atom = node->doc().body().firstAtom();
     while (atom) {
         if (atom->type() == Atom::Image || atom->type() == Atom::InlineImage) {
-            // Images are all placed within a single directory regardless of
-            // whether the source images are in a nested directory structure.
-            QStringList pieces = atom->string().split(QLatin1Char('/'));
-            project.m_files.insert("images/" + pieces.last());
+            QStringList pieces = atom->string().split('/'_L1);
+            project.m_files.insert("%1/%2"_L1.arg(m_gen->imagesOutputDir(), pieces.last()));
         }
         atom = atom->next();
     }
@@ -422,8 +428,14 @@ void HelpProjectWriter::generateSections(HelpProject &project, QXmlStreamWriter 
                 childSet << child;
                 continue;
             }
-            if (child->isIndexNode() || child->isPrivate())
+            if (child->isIndexNode())
                 continue;
+
+            const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+            const NodeContext context = child->createContext();
+            if (!InclusionFilter::isIncluded(policy, context))
+                continue;
+
             if (child->isTextPageNode()) {
                 if (!childSet.contains(child))
                     childSet << child;
@@ -556,9 +568,14 @@ void HelpProjectWriter::generateProject(HelpProject &project)
     project.m_files.clear();
     project.m_keywords.clear();
 
-    QFile file(m_outputDir + QDir::separator() + project.m_fileName);
-    if (!file.open(QFile::WriteOnly))
+    const OutputDirectory outputDir =
+            OutputDirectory::ensure(m_outputDir, Location());
+
+    QFile file(outputDir.absoluteFilePath(project.m_fileName));
+    if (!file.open(QFile::WriteOnly)) {
+        Location().error(u"Cannot open '%1' for writing"_s.arg(file.fileName()));
         return;
+    }
 
     QXmlStreamWriter writer(&file);
     writer.setAutoFormatting(true);
@@ -641,10 +658,14 @@ void HelpProjectWriter::generateProject(HelpProject &project)
                         break;
                     case Atom::Link:
                         if (inItem) {
+                            // Omit external link targets
+                            const Node *page = m_qdb->findNodeForTarget(atom->string(), nullptr);
+                            if (!page || page->isExternalPage())
+                                break;
+
                             if (sectionStack.top() > 0)
                                 writer.writeEndElement(); // section
 
-                            const Node *page = m_qdb->findNodeForTarget(atom->string(), nullptr);
                             writer.writeStartElement("section");
                             QString indexPath = m_gen->fullDocumentLocation(page);
                             writer.writeAttribute("ref", indexPath);
@@ -694,8 +715,8 @@ void HelpProjectWriter::generateProject(HelpProject &project)
         } else {
 
             writer.writeStartElement("section");
-            QString indexPath = m_gen->fullDocumentLocation(
-                    m_qdb->findNodeForTarget(subproject.m_indexTitle, nullptr));
+            const Node *indexNode = m_qdb->findNodeForTarget(subproject.m_indexTitle, nullptr);
+            QString indexPath = m_gen->fullDocumentLocation(indexNode);
             if (indexPath.isEmpty() && !subproject.m_indexTitle.isEmpty())
                 Config::instance().location().warning(
                         "Failed to find %1.indexTitle '%2'"_L1.arg(subproject.m_prefix, subproject.m_indexTitle));

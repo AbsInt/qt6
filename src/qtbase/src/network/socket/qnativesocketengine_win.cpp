@@ -34,6 +34,15 @@ QT_BEGIN_NAMESPACE
 #ifndef IP_HOPLIMIT
 #define IP_HOPLIMIT               21 // Receive packet hop limit.
 #endif
+#ifndef TCP_KEEPIDLE
+#define TCP_KEEPIDLE 3
+#endif
+#ifndef TCP_KEEPINTVL
+#define TCP_KEEPINTVL 17
+#endif
+#ifndef TCP_KEEPCNT
+#define TCP_KEEPCNT 16
+#endif
 
 #if defined(QNATIVESOCKETENGINE_DEBUG)
 
@@ -216,6 +225,18 @@ static void convertToLevelAndOption(QNativeSocketEngine::SocketOption opt,
 
     case QAbstractSocketEngine::PathMtuInformation:
         break;          // not supported on Windows
+    case QNativeSocketEngine::KeepAliveIdleOption:
+        level = IPPROTO_TCP;
+        n = TCP_KEEPIDLE;  // defined in ws2ipdef.h
+        break;
+    case QNativeSocketEngine::KeepAliveIntervalOption:
+        level = IPPROTO_TCP;
+        n = TCP_KEEPINTVL;  // defined in ws2ipdef.h
+        break;
+    case QNativeSocketEngine::KeepAliveCountOption:
+        level = IPPROTO_TCP;
+        n = TCP_KEEPCNT;  // defined in ws2ipdef.h
+        break;
     }
 }
 
@@ -516,6 +537,11 @@ bool QNativeSocketEnginePrivate::setOption(QNativeSocketEngine::SocketOption opt
     }
     return true;
 }
+
+/*!
+    \class QNativeSocketEnginePrivate
+    \internal
+*/
 
 /*!
     Fetches information about both ends of the connection: whatever is

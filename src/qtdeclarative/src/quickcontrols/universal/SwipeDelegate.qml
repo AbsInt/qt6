@@ -24,7 +24,6 @@ T.SwipeDelegate {
 
     icon.width: 20
     icon.height: 20
-    icon.color: Color.transparent(Universal.foreground, enabled ? 1.0 : 0.2)
 
     swipe.transition: Transition { SmoothedAnimation { velocity: 3; easing.type: Easing.InOutCubic } }
 
@@ -35,9 +34,10 @@ T.SwipeDelegate {
         alignment: control.display === IconLabel.IconOnly || control.display === IconLabel.TextUnderIcon ? Qt.AlignCenter : Qt.AlignLeft
 
         icon: control.icon
+        defaultIconColor: Color.transparent(control.Universal.foreground, enabled ? 1.0 : 0.2)
         text: control.text
         font: control.font
-        color: Color.transparent(control.Universal.foreground, enabled ? 1.0 : 0.2)
+        color: defaultIconColor
     }
 
     background: Rectangle {

@@ -27,7 +27,7 @@ static bool isBlockedByPopup(QQuickItem *item)
     if (!item || !item->window())
         return false;
 
-    QQuickOverlay *overlay = QQuickOverlay::overlay(item->window());
+    QQuickOverlay *overlay = QQuickOverlay::overlay(item->window(), item);
     auto popups = QQuickOverlayPrivate::get(overlay)->stackingOrderPopups();
 
     for (QWindow *popupWindow : QGuiApplicationPrivate::popup_list) {

@@ -7,8 +7,12 @@
 
 #### Libraries
 
+qt_feature_vcpkg_scope(network)
 qt_find_package(WrapBrotli MODULE
-    PROVIDED_TARGETS WrapBrotli::WrapBrotliDec MODULE_NAME network QMAKE_LIB brotli)
+    PROVIDED_TARGETS WrapBrotli::WrapBrotliDec MODULE_NAME network QMAKE_LIB brotli
+    VCPKG_PORT brotli
+    VCPKG_ADD_TO_FEATURE brotli
+)
 qt_find_package(Libproxy MODULE
     PROVIDED_TARGETS PkgConfig::Libproxy MODULE_NAME network QMAKE_LIB libproxy)
 qt_find_package(GSSAPI MODULE PROVIDED_TARGETS GSSAPI::GSSAPI MODULE_NAME network QMAKE_LIB gssapi)

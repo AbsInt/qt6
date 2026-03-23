@@ -140,6 +140,21 @@ static_assert(QQmlJSScope::sizeofQQmlSAElement() == sizeof(Element));
                                         C
                                     } <- end
                                     \endcode
+    \value [since 6.11] BindingFunctionScope     The scope represents the expression of a binding:
+                                                \badcode
+                                                Item {
+                                                    width: <- begin 10 +
+                                                        2 *parent.width <- end
+                                                }
+                                                \endcode
+                                                Before Qt 6.11, this was reported as a JSFunctionScope
+    \value [since 6.11] SignalHandlerFunctionScope     The scope represents a function used as a signal handler:
+                                                \badcode
+                                                Timer {
+                                                    onTriggered: <- begin console.log("hi") <- end
+                                                }
+                                                \endcode
+                                                Before Qt 6.11, this was reported as a JSFunctionScope
 
     Each entry is shown with an example scope of the matching type in QML code.
 */
@@ -690,6 +705,7 @@ QQmlJSMetaMethod MethodPrivate::method(const QQmlSA::Method &method)
 
 /*!
     \class QQmlSA::PropertyPrivate
+    \inmodule QtQmlCompiler
     \internal
 */
 PropertyPrivate::PropertyPrivate(Property *iface) : q_ptr{ iface } { }
@@ -1322,7 +1338,8 @@ Element GenericPass::resolveType(QAnyStringView moduleName, QAnyStringView typeN
 {
     Q_D(const GenericPass);
     QQmlJSImporter *typeImporter = PassManagerPrivate::visitor(*d->m_manager)->importer();
-    const auto module = typeImporter->importModule(moduleName.toString());
+    const auto module =
+            typeImporter->importModule(moduleName.toString(), QQmlJS::PrecedenceValues::Default);
     const auto scope = module.type(typeName.toString()).scope;
     return QQmlJSScope::createQQmlSAElement(scope);
 }
@@ -1378,7 +1395,7 @@ Element GenericPass::resolveIdToElement(QAnyStringView id, const Element &contex
     Q_D(const GenericPass);
     QQmlJSScopesById::MostLikelyCallback<QQmlJSScope::ConstPtr> result;
     PassManagerPrivate::visitor(*d->m_manager)->addressableScopes().possibleScopes(
-            id.toString(), QQmlJSScope::scope(context), Default, result);
+            id.toString(), QQmlJSScope::scope(context), QQmlJSScopesByIdOption::Default, result);
     return QQmlJSScope::createQQmlSAElement(result.result);
 }
 
@@ -1390,7 +1407,7 @@ QString GenericPass::resolveElementToId(const Element &element, const Element &c
     Q_D(const GenericPass);
     QQmlJSScopesById::MostLikelyCallback<QString> result;
     PassManagerPrivate::visitor(*d->m_manager)->addressableScopes().possibleIds(
-            QQmlJSScope::scope(element), QQmlJSScope::scope(context), Default, result);
+            QQmlJSScope::scope(element), QQmlJSScope::scope(context), QQmlJSScopesByIdOption::Default, result);
     return result.result;
 }
 
@@ -1509,7 +1526,8 @@ bool PassManagerPrivate::registerPropertyPass(std::shared_ptr<PropertyPass> pass
     QString name;
     if (!moduleName.isEmpty() && !typeName.isEmpty()) {
         auto typeImporter = m_visitor->importer();
-        auto module = typeImporter->importModule(moduleName.toString());
+        auto module = typeImporter->importModule(moduleName.toString(),
+                                                 QQmlJS::PrecedenceValues::Default);
         auto element = QQmlJSScope::createQQmlSAElement(module.type(typeName.toString()).scope);
 
         if (element.isNull())

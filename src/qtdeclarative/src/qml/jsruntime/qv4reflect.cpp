@@ -44,7 +44,7 @@ static CallArgs createListFromArrayLike(Scope &scope, const Object *o)
     if (scope.engine->hasException)
         return {nullptr, 0};
 
-    Value *arguments = scope.alloc(len);
+    Value *arguments = scope.constructUndefined(len);
 
     for (int i = 0; i < len; ++i) {
         arguments[i] = o->get(i);

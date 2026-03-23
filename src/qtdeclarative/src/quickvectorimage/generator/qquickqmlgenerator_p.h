@@ -21,6 +21,8 @@
 
 #include <QtCore/qtextstream.h>
 #include <QtCore/qbuffer.h>
+#include <QtCore/qmap.h>
+#include <QtCore/qset.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -95,14 +97,17 @@ public:
 
 protected:
     QString generateNodeBase(const NodeInfo &info) override;
+    void generateNodeEnd(const NodeInfo &info);
     bool generateDefsNode(const NodeInfo &info) override;
     void generateImageNode(const ImageNodeInfo &info) override;
     void generatePath(const PathNodeInfo &info, const QRectF &overrideBoundingRect) override;
     void generateNode(const NodeInfo &info) override;
     void generateTextNode(const TextNodeInfo &info) override;
     void generateUseNode(const UseNodeInfo &info) override;
+    void generateFilterNode(const FilterNodeInfo &info) override;
     bool generateStructureNode(const StructureNodeInfo &info) override;
     bool generateRootNode(const StructureNodeInfo &info) override;
+    bool generateMaskNode(const MaskNodeInfo &info) override;
     void outputShapePath(const PathNodeInfo &info, const QPainterPath *path, const QQuadPath *quadPath, QQuickVectorImageGenerator::PathSelector pathSelector, const QRectF &boundingRect) override;
 
 private:
@@ -115,7 +120,10 @@ private:
     void generateTransform(const QTransform &xf);
     void generatePathContainer(const StructureNodeInfo &info);
     void generateAnimateTransform(const QString &targetName, const NodeInfo &info);
+    void generateAnimateMotionPath(const QString &targetName,
+                                   const QQuickAnimatedProperty &property);
     void generateAnimationBindings();
+    void generateItemAnimations(const QString &idString, const NodeInfo &nodeInfo);
     void generateEasing(const QQuickAnimatedProperty::PropertyAnimation &animation, int time);
     void generateAnimatedPropertySetter(const QString &targetName,
                                         const QString &propertyName,
@@ -128,6 +136,8 @@ private:
                                    const QString &targetName,
                                    const QString &propertyName,
                                    AnimationType animationType = AnimationType::Auto);
+    void generateShaderUse(const NodeInfo &info);
+    qsizetype generateFilterStep(const FilterNodeInfo &info, qsizetype stepIndex);
 
     QStringView indent();
     enum StreamFlags { NoFlags = 0x0, SameLine = 0x1 };
@@ -150,6 +160,9 @@ private:
     QString m_urlPrefix;
     QString m_topLevelIdString;
     QStringList m_extraImports;
+    QMap<std::array<qreal, 4>, QString> m_easings;
+    QSet<QString> m_generatedIds;
+    quint32 m_nodeCounter = 0;
 };
 
 QT_END_NAMESPACE

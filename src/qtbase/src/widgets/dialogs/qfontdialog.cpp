@@ -172,7 +172,7 @@ void QFontDialogPrivate::init()
 
     sizeAccel = new QLabel(q);
 #ifndef QT_NO_SHORTCUT
-    sizeAccel->setBuddy(sizeEdit);
+    sizeAccel->setBuddy(sizeList);
 #endif
     sizeAccel->setIndent(2);
 

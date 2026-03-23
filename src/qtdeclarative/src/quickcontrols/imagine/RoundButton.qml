@@ -28,9 +28,6 @@ T.RoundButton {
 
     icon.width: 24
     icon.height: 24
-    icon.color: control.enabled && control.flat && control.highlighted ? control.palette.highlight
-        : control.enabled && (control.down || control.checked || control.highlighted) && !control.flat
-        ? control.palette.brightText : control.flat ? control.palette.windowText : control.palette.buttonText
 
     contentItem: IconLabel {
         spacing: control.spacing
@@ -38,11 +35,12 @@ T.RoundButton {
         display: control.display
 
         icon: control.icon
-        text: control.text
-        font: control.font
-        color: control.enabled && control.flat && control.highlighted ? control.palette.highlight
+        defaultIconColor: control.enabled && control.flat && control.highlighted ? control.palette.highlight
             : control.enabled && (control.down || control.checked || control.highlighted) && !control.flat
             ? control.palette.brightText : control.flat ? control.palette.windowText : control.palette.buttonText
+        text: control.text
+        font: control.font
+        color: defaultIconColor
     }
 
     background: NinePatchImage {

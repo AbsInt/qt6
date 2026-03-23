@@ -19,7 +19,6 @@ T.TabButton {
 
     icon.width: 25
     icon.height: 25
-    icon.color: checked ? control.palette.button : control.palette.dark
 
     display: TabButton.TextUnderIcon
     font.pointSize: 12
@@ -31,9 +30,10 @@ T.TabButton {
         alignment: Qt.AlignCenter
 
         icon: control.icon
+        defaultIconColor: control.checked ? control.palette.button : control.palette.dark
         text: control.text
         font: control.font
-        color: checked ? control.palette.button : control.palette.dark
+        color: defaultIconColor
         opacity: control.enabled ? 1 : 0.5
     }
 

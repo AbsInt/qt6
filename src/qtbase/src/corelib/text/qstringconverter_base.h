@@ -6,6 +6,7 @@
 #define QSTRINGCONVERTER_BASE_H
 
 #if 0
+// IWYU pragma: private, include "qstringconverter.h"
 // QStringConverter(Base) class are handled in qstringconverter
 #pragma qt_sync_stop_processing
 #endif
@@ -168,6 +169,22 @@ public:
     Q_CORE_EXPORT static std::optional<Encoding> encodingForHtml(QByteArrayView data);
 
     Q_CORE_EXPORT static QStringList availableCodecs();
+
+
+    enum class FinalizeResultError : quint8 {
+        NoError,
+        InvalidCharacters,
+        NotEnoughSpace,
+    };
+    template <typename Char>
+    struct FinalizeResultChar
+    {
+        using Error = FinalizeResultError;
+
+        Char *next;
+        qint16 invalidChars;
+        Error error;
+    };
 
 protected:
     const Interface *iface;

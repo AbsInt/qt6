@@ -28,7 +28,9 @@ int main(int argc, char **argv)
         qDebug() << "   -qmldir=<path>                : Scan for QML imports in the given path";
         qDebug() << "   -qmlimport=<path>             : Add the given path to the QML module search locations";
         qDebug() << "   -always-overwrite             : Copy files even if the target file exists";
-        qDebug() << "   -codesign=<ident>             : Run codesign with the given identity on all executables";
+        qDebug() << "   -codesign=<ident>             : Run codesign with the given identity on "
+                    "all executables (default: ad-hoc sign)";
+        qDebug() << "   -no-codesign                  : Disable code signing";
         qDebug() << "   -hardened-runtime             : Enable Hardened Runtime when code signing";
         qDebug() << "   -timestamp                    : Include a secure timestamp when code signing (requires internet connection)";
         qDebug() << "   -sign-for-notarization=<ident>: Activate the necessary options for notarization (requires internet connection)";
@@ -75,8 +77,9 @@ int main(int argc, char **argv)
     QStringList qmlDirs;
     QStringList qmlImportPaths;
     extern bool runCodesign;
-    extern QString codesignIdentiy;
+    QString codesignIdentity = QStringLiteral("-");
     extern bool hardenedRuntime;
+    bool noCodesignExplicit = false;
     extern bool appstoreCompliant;
     extern bool deployFramework;
     extern bool secureTimestamp;
@@ -147,18 +150,30 @@ int main(int argc, char **argv)
         } else if (argument == QByteArray("-always-overwrite")) {
             LogDebug() << "Argument found:" << argument;
             alwaysOwerwriteEnabled = true;
+        } else if (argument == QByteArray("-no-codesign")) {
+            LogDebug() << "Argument found:" << argument;
+            runCodesign = false;
+            noCodesignExplicit = true;
         } else if (argument.startsWith(QByteArray("-codesign"))) {
             LogDebug() << "Argument found:" << argument;
+            if (noCodesignExplicit) {
+                LogError() << "Error: -no-codesign cannot be combined with -codesign\n";
+                return 1;
+            }
             int index = argument.indexOf("=");
             if (index < 0 || index >= argument.size()) {
                 LogError() << "Missing code signing identity";
                 return 1;
             } else {
                 runCodesign = true;
-                codesignIdentiy = argument.mid(index+1);
+                codesignIdentity = argument.mid(index + 1);
             }
         } else if (argument.startsWith(QByteArray("-sign-for-notarization"))) {
             LogDebug() << "Argument found:" << argument;
+            if (noCodesignExplicit) {
+                LogError() << "Error: -no-codesign cannot be combined with -sign-for-notarization\n";
+                return 1;
+            }
             int index = argument.indexOf("=");
             if (index < 0 || index >= argument.size()) {
                 LogError() << "Missing code signing identity";
@@ -167,7 +182,7 @@ int main(int argc, char **argv)
                 runCodesign = true;
                 hardenedRuntime = true;
                 secureTimestamp = true;
-                codesignIdentiy = argument.mid(index+1);
+                codesignIdentity = argument.mid(index + 1);
             }
         } else if (argument.startsWith(QByteArray("-hardened-runtime"))) {
             LogDebug() << "Argument found:" << argument;
@@ -258,7 +273,7 @@ int main(int argc, char **argv)
         stripAppBinary(appBundlePath);
 
     if (runCodesign)
-        codesign(codesignIdentiy, appBundlePath);
+        codesign(codesignIdentity, appBundlePath);
 
     if (dmg) {
         LogNormal();

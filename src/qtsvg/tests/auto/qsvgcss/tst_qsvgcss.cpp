@@ -41,8 +41,12 @@ void tst_QSvgCss::testParsedDeclarations_data()
     QTest::newRow("url") << u"fill: url(#id1);"_s << u"fill"_s << u"url(#id1)"_s;
     QTest::newRow("function") << u"transform: translate(50px, 50px)"_s << u"transform"_s << u"translate(50px, 50px)"_s;
     QTest::newRow("list of numbers") << u"stroke-dasharray: 2, 5, 10, 3;"_s << u"stroke-dasharray"_s << u"2 ; 5 ; 10 ; 3"_s;
+    QTest::newRow("known identifier auto") << u"offset-rotate: auto"_s << u"offset-rotate"_s << u"auto"_s;
     QTest::newRow("known identifier none") << u"display: none"_s << u"display"_s << u"none"_s;
     QTest::newRow("multiple values 1") << u"animation: transformAnim 2000ms infinite"_s << u"animation"_s << u"transformAnim 2000ms infinite"_s;
+    QTest::newRow("multiple values percentage") << u"transform-origin: 50% 25%"_s << u"transform-origin"_s << u"50% 25%"_s;
+    QTest::newRow("multiple values 2") << u"offset-rotate: auto 90deg"_s << u"offset-rotate"_s << u"auto 90deg"_s;
+    QTest::newRow("multiple values 3") << u"offset-rotate: reverse auto"_s << u"offset-rotate"_s << u"reverse auto"_s;
     QTest::newRow("multiple urls") << u"fill: url(#id1) url(#id2)"_s << u"fill"_s << u"url(#id1) url(#id2)"_s;
 }
 

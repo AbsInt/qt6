@@ -321,7 +321,7 @@ public:
     {
         if constexpr (std::is_same_v<InputIterator, iterator> || std::is_same_v<InputIterator, const_iterator>)
             return assign(QByteArrayView(first, last));
-        d.assign(first, last);
+        d->assign(first, last);
         if (d.data())
             d.data()[d.size] = '\0';
         return *this;
@@ -400,7 +400,14 @@ public:
     QByteArray toPercentEncoding(const QByteArray &exclude = QByteArray(),
                                  const QByteArray &include = QByteArray(),
                                  char percent = '%') const;
+#if QT_CORE_REMOVED_SINCE(6, 11)
     [[nodiscard]] QByteArray percentDecoded(char percent = '%') const;
+#else
+    [[nodiscard]] QByteArray percentDecoded(char percent = '%') const &
+    { return fromPercentEncoding(*this, percent); }
+    [[nodiscard]] QByteArray percentDecoded(char percent = '%') &&
+    { return fromPercentEncoding(std::move(*this), percent); }
+#endif
 
     inline QByteArray &setNum(short, int base = 10);
     inline QByteArray &setNum(ushort, int base = 10);
@@ -432,6 +439,7 @@ public:
     [[nodiscard]] static QByteArray fromBase64(const QByteArray &base64, Base64Options options = Base64Encoding);
     [[nodiscard]] static QByteArray fromHex(const QByteArray &hexEncoded);
     [[nodiscard]] static QByteArray fromPercentEncoding(const QByteArray &pctEncoded, char percent = '%');
+    [[nodiscard]] static QByteArray fromPercentEncoding(QByteArray &&pctEncoded, char percent = '%');
 
 #if defined(Q_OS_DARWIN) || defined(Q_QDOC)
     static QByteArray fromCFData(CFDataRef data);
@@ -787,14 +795,9 @@ public:
 
     explicit operator bool() const noexcept { return decodingStatus == QByteArray::Base64DecodingStatus::Ok; }
 
-#if defined(Q_COMPILER_REF_QUALIFIERS) && !defined(Q_QDOC)
     QByteArray &operator*() & noexcept { return decoded; }
     const QByteArray &operator*() const & noexcept { return decoded; }
     QByteArray &&operator*() && noexcept { return std::move(decoded); }
-#else
-    QByteArray &operator*() noexcept { return decoded; }
-    const QByteArray &operator*() const noexcept { return decoded; }
-#endif
 
     friend inline bool operator==(const QByteArray::FromBase64Result &lhs, const QByteArray::FromBase64Result &rhs) noexcept
     {

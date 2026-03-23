@@ -19,8 +19,9 @@
 #include <QTranslator>
 #include <qscreen.h>
 
-#include <qobject.h>
+#include <QtCore/qobject.h>
 #include <QtCore/qscopeguard.h>
+#include <QtCore/qtimer.h>
 
 #include <QtWidgets/private/qapplication_p.h>
 
@@ -128,6 +129,8 @@ private slots:
     void QTBUG_65488_hiddenActionTriggered();
     void pressDragRelease_data();
     void pressDragRelease();
+
+    void setActiveAction_disablesSloppyTimer();
 
 protected slots:
     void onSimpleActivated( QAction*);
@@ -1523,6 +1526,50 @@ void tst_QMenuBar::pressDragRelease()
         break;
     }
     QTRY_COMPARE(triggeredSpy.size(), 1);
+}
+
+void tst_QMenuBar::setActiveAction_disablesSloppyTimer()
+{
+    QMenuBar menuBar;
+    QMenu *menu = new QMenu(&menuBar);
+    menuBar.addMenu(menu);
+
+    QAction *item1 = menu->addAction("Item 1");
+    QAction *item2 = menu->addAction("Item 2");
+
+    // Create submenu for first item
+    QMenu *submenu = new QMenu(&menuBar);
+    submenu->addAction("Subitem 1");
+    submenu->addAction("Subitem 2");
+    submenu->addAction("Subitem 3");
+    item1->setMenu(submenu);
+
+    using namespace std::chrono_literals;
+
+    QTimer::singleShot(0, [&]() {
+        menu->show();
+    });
+
+    QTimer::singleShot(100ms, [&]() {
+        menu->setActiveAction(item1);
+        QCOMPARE_EQ(menu->activeAction(), item1);
+    });
+
+    QTimer::singleShot(200ms, [&] {
+        menu->setActiveAction(item2);
+        QCOMPARE_EQ(menu->activeAction(), item2);
+    });
+
+    bool done = false;
+    // QTBUG-138956: sloppy timer should not fire when calling setActiveAction
+    QTimer::singleShot(2s, [&] {
+        QCOMPARE_EQ(menu->activeAction(), item2);
+        done = true;
+    });
+
+    QVERIFY(QTest::qWaitFor([&]{
+        return done;
+    }));
 }
 
 // QTBUG-56526

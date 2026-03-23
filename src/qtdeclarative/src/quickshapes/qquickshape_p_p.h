@@ -51,16 +51,17 @@ public:
     virtual void setPath(int index, const QPainterPath &path, QQuickShapePath::PathHints pathHints = {}) = 0;
     virtual void setStrokeColor(int index, const QColor &color) = 0;
     virtual void setStrokeWidth(int index, qreal w) = 0;
+    virtual void setCosmeticStroke(int index, bool c) = 0;
     virtual void setFillColor(int index, const QColor &color) = 0;
     virtual void setFillRule(int index, QQuickShapePath::FillRule fillRule) = 0;
     virtual void setJoinStyle(int index, QQuickShapePath::JoinStyle joinStyle, int miterLimit) = 0;
     virtual void setCapStyle(int index, QQuickShapePath::CapStyle capStyle) = 0;
     virtual void setStrokeStyle(int index, QQuickShapePath::StrokeStyle strokeStyle,
-                                qreal dashOffset, const QVector<qreal> &dashPattern) = 0;
+                                qreal dashOffset, const QList<qreal> &dashPattern) = 0;
     virtual void setFillGradient(int index, QQuickShapeGradient *gradient) = 0;
     virtual void setFillTextureProvider(int index, QQuickItem *textureProviderItem) = 0;
     virtual void setFillTransform(int index, const QSGTransform &transform) = 0;
-    virtual void setTriangulationScale(qreal) { }
+    virtual void setTriangulationScale(int, qreal) { }
     virtual void handleSceneChange(QQuickWindow *window) = 0;
 
     // Render thread, with gui blocked
@@ -95,8 +96,9 @@ struct QQuickShapeStrokeFillParams
     int miterLimit;
     QQuickShapePath::CapStyle capStyle;
     QQuickShapePath::StrokeStyle strokeStyle;
+    bool cosmeticStroke = false;
     qreal dashOffset;
-    QVector<qreal> dashPattern;
+    QList<qreal> dashPattern;
     QQuickShapeGradient *fillGradient;
     QSGTransform fillTransform;
     QQuickItem *fillItem;
@@ -168,7 +170,7 @@ public:
     qreal getImplicitHeight() const override;
 
     int effectRefCount;
-    QVector<QQuickShapePath *> sp;
+    QList<QQuickShapePath *> sp;
     QElapsedTimer syncTimer;
     QQuickAbstractPathRenderer *renderer = nullptr;
     int syncTimingTotalDirty = 0;

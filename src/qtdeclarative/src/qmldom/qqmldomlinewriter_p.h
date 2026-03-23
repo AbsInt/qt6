@@ -100,7 +100,9 @@ public:
     AttributesSequence attributesSequence = AttributesSequence::Normalize;
     bool objectsSpacing = false;
     bool functionsSpacing = false;
+    bool groupAttributesTogether = false;
     bool sortImports = false;
+    bool singleLineEmptyObjects = false;
     SemicolonRule semicolonRule = SemicolonRule::Always;
 };
 
@@ -140,11 +142,6 @@ public:
     LineWriter &newline()
     {
         write(u"\n");
-        return *this;
-    }
-    LineWriter &space()
-    {
-        write(u" ");
         return *this;
     }
     LineWriter &write(QStringView v, TextAddType tType = TextAddType::Normal);

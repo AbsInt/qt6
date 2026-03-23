@@ -19,18 +19,58 @@
 #include <QtCore/qstring.h>
 #include <QtCore/qhash.h>
 #include <QtCore/qvariant.h>
+#include <QtCore/qmutex.h>
+#include <QtCore/qset.h>
+#include <QtCore/qdir.h>
 
 QT_BEGIN_NAMESPACE
 
 class QQmlToolingSettings
 {
 public:
-    QQmlToolingSettings(const QString &toolName) : m_toolName(toolName) { }
+    QQmlToolingSettings(const QString &toolName,
+                        const QStringList &recognizedIniSections = { QStringLiteral("General") });
+    struct SearchOptions
+    {
+        SearchOptions();
+        SearchOptions(const QString &settingFileName, bool reportFoundSettingsFiles = false,
+                      bool isQmllintSilent = false);
+        QString settingsFileName;
+        bool reportFoundSettingsFiles = false;
+        bool isQmllintSilent = false;
+    };
+    struct SearchResult
+    {
+        enum class ResultType { Found, NotFound };
+        ResultType type = ResultType::NotFound;
+        QString iniFilePath;
+        bool isValid() const { return type == ResultType::Found && !iniFilePath.isEmpty(); }
+    };
 
-    void addOption(const QString &name, const QVariant defaultValue = QVariant());
+    class Searcher
+    {
+    public:
+        Searcher(const QString &localSettingsFile, const QString &globalSettingsFile)
+            : m_localSettingsFile(localSettingsFile), m_globalSettingsFile(globalSettingsFile)
+        {
+        }
+        SearchResult search(const QString &path);
 
+        QString localSettingsFile() const { return m_localSettingsFile; }
+
+    private:
+        SearchResult searchDefaultLocation(const QSet<QString> *visitedDirs);
+        SearchResult searchCurrentDirInCache(const QString &dirPath);
+        SearchResult searchDirectoryHierarchy(QSet<QString> *visitedDir, const QString &path);
+
+        const QString m_localSettingsFile;
+        const QString m_globalSettingsFile;
+        QHash<QString, QString> m_seenDirectories;
+    };
+
+    void addOption(const QString &name, const QVariant &defaultValue = QVariant());
+    SearchResult search(const QString &path, const SearchOptions &options = {});
     bool writeDefaults() const;
-    bool search(const QString &path);
 
     QVariant value(const QString &name) const;
     QStringList valueAsStringList(const QString &name) const;
@@ -40,14 +80,67 @@ public:
                                         const QString &baseForRelativePaths) const;
     bool isSet(const QString &name) const;
 
-private:
-    QString m_toolName;
-    QString m_currentSettingsPath;
-    QHash<QString, QString> m_seenDirectories;
-    QVariantHash m_values;
-    QVariantHash m_savedValues;
+    bool reportConfigForFiles(const QStringList &files);
 
-    bool read(const QString &settingsFilePath);
+protected:
+    QString m_currentSettingsPath;
+    QVariantHash m_values;
+    Searcher m_searcher;
+    QStringList m_recognizedIniSections;
+
+    SearchResult read(const QString &settingsFilePath, SearchOptions options);
+};
+
+class QQmlToolingSharedSettings : private QQmlToolingSettings
+{
+public:
+    QQmlToolingSharedSettings(const QString &toolName) : QQmlToolingSettings(toolName) { }
+
+    void addOption(const QString &name, const QVariant &defaultValue = QVariant())
+    {
+        QMutexLocker lock(&m_mutex);
+        QQmlToolingSettings::addOption(name, defaultValue);
+    }
+
+    bool writeDefaults() const
+    {
+        QMutexLocker lock(&m_mutex);
+        return QQmlToolingSettings::writeDefaults();
+    }
+
+    SearchResult search(const QString &path, const SearchOptions &options = {})
+    {
+        QMutexLocker lock(&m_mutex);
+        return QQmlToolingSettings::search(path, options);
+    }
+
+    QVariant value(const QString &name) const
+    {
+        QMutexLocker lock(&m_mutex);
+        return QQmlToolingSettings::value(name);
+    }
+
+    QStringList valueAsStringList(const QString &name) const
+    {
+        QMutexLocker lock(&m_mutex);
+        return QQmlToolingSettings::valueAsStringList(name);
+    }
+
+    QStringList valueAsAbsolutePathList(const QString &name,
+                                        const QString &baseForRelativePaths) const
+    {
+        QMutexLocker lock(&m_mutex);
+        return QQmlToolingSettings::valueAsAbsolutePathList(name, baseForRelativePaths);
+    }
+
+    bool isSet(const QString &name) const
+    {
+        QMutexLocker lock(&m_mutex);
+        return QQmlToolingSettings::isSet(name);
+    }
+
+private:
+    mutable QMutex m_mutex;
 };
 
 QT_END_NAMESPACE

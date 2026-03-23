@@ -20,7 +20,6 @@
 #include "qnetworkaccessmanager.h"
 #include "qnetworkaccesscache_p.h"
 #include "qnetworkaccessbackend_p.h"
-#include "private/qnetconmonitor_p.h"
 #include "qnetworkrequest.h"
 #include "qhsts_p.h"
 #include "private/qobject_p.h"
@@ -30,6 +29,10 @@
 #if QT_CONFIG(settings)
 #include "qhstsstore_p.h"
 #endif // QT_CONFIG(settings)
+
+#if QT_CONFIG(settings)
+#include <memory>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -122,7 +125,7 @@ public:
 
     QHstsCache stsCache;
 #if QT_CONFIG(settings)
-    QScopedPointer<QHstsStore> stsStore;
+    std::unique_ptr<QHstsStore> stsStore;
 #endif // QT_CONFIG(settings)
     bool stsEnabled = false;
 

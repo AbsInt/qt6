@@ -5,7 +5,6 @@
 import Qt.labs.folderlistmodel
 import QtQuick
 import QtQuick.Templates as T
-import QtQuick.Controls.impl
 import QtQuick.Controls.Imagine
 import QtQuick.Controls.Imagine.impl
 import QtQuick.Dialogs.quickimpl
@@ -58,6 +57,7 @@ FileDialogImpl {
 
         footer: DialogButtonBox {
             standardButtons: DialogButtonBox.Yes | DialogButtonBox.No
+            defaultStandardButton: DialogButtonBox.Yes
         }
     }
 
@@ -85,6 +85,7 @@ FileDialogImpl {
         spacing: 12
 
         Label {
+            objectName: "dialogTitleBarLabel"
             text: control.title
             elide: Label.ElideRight
             font.bold: true
@@ -118,7 +119,7 @@ FileDialogImpl {
             Layout.leftMargin: 16
             Layout.rightMargin: 16
             Layout.fillWidth: true
-            Layout.maximumWidth: parent.width - 28
+            Layout.maximumWidth: parent.width - 32
         }
     }
 

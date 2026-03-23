@@ -17,6 +17,7 @@ set(qml_files
     "Dial.qml"
     "Dialog.qml"
     "DialogButtonBox.qml"
+    "DoubleSpinBox.qml"
     "Frame.qml"
     "GroupBox.qml"
     "ItemDelegate.qml"

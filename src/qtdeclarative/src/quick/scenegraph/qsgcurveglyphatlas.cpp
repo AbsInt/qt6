@@ -38,10 +38,11 @@ void QSGCurveGlyphAtlas::populate(const QList<glyph_t> &glyphs)
 
             Glyph glyph;
 
-            QSGCurveProcessor::processStroke(quadPath, 2, 2, Qt::MiterJoin, Qt::FlatCap,
+            QSGCurveProcessor::processStroke(quadPath, 2, 2, false, Qt::MiterJoin, Qt::FlatCap,
                                              [&glyph](const std::array<QVector2D, 3> &s,
                                                       const std::array<QVector2D, 3> &p,
                                                       const std::array<QVector2D, 3> &n,
+                                                      const std::array<float, 3> & /* extrusions */,
                                                       QSGCurveStrokeNode::TriangleFlags f) {
                 glyph.strokeVertices.append(s.at(0));
                 glyph.strokeVertices.append(s.at(1));

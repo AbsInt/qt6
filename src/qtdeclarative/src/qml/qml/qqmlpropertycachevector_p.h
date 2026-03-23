@@ -142,7 +142,7 @@ private:
 
     Q_DISABLE_COPY(QQmlPropertyCacheVector)
     using BiPointer = QBiPointer<const QQmlPropertyCache, QQmlPropertyCache>;
-    QVector<BiPointer> data;
+    QList<BiPointer> data;
 };
 
 QT_END_NAMESPACE

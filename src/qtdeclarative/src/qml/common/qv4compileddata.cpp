@@ -230,10 +230,7 @@ void CompiledData::CompilationUnit::finalizeCompositeType(const QQmlType &type)
         const QV4::CompiledData::Object *obj = objectAt(/*root object*/0);
         auto *typeRef = resolvedTypes.value(obj->inheritedTypeNameIndex);
         Q_ASSERT(typeRef);
-        if (const auto compilationUnit = typeRef->compilationUnit())
-            qmlType = compilationUnit->qmlType;
-        else
-            qmlType = typeRef->type();
+        qmlType = typeRef->type();
     }
 }
 

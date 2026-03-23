@@ -151,7 +151,7 @@ bool QQmlFilterCompositor::filterAcceptsRowInternal(int row, const QModelIndex& 
     return std::all_of(d->m_effectiveFilters.begin(), d->m_effectiveFilters.end(),
             [row, &sourceParent, proxyModel](const QQmlFilterBase *filter) {
                 const bool filterStatus = filter->filterAcceptsRowInternal(row, sourceParent, proxyModel);
-                return !(filter->invert()) ? filterStatus : !filterStatus;
+                return !(filter->isInverted()) ? filterStatus : !filterStatus;
             });
 }
 

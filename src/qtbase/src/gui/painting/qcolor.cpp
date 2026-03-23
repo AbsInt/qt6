@@ -411,8 +411,7 @@ static QStringList get_colornames()
     of the provided QRgb, and the qGray() function calculates and
     return a gray value based on the given value.
 
-    QColor is platform and device independent. The QColormap class
-    maps the color to the hardware.
+    QColor is platform and device independent.
 
     For more information about painting in general, see the \l{Paint
     System} documentation.

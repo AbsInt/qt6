@@ -109,7 +109,7 @@ bool QQuickMouseAreaPrivate::propagateHelper(QQuickMouseEvent *ev, QQuickItem *i
     Q_Q(const QQuickMouseArea);
     QQuickItemPrivate *itemPrivate = QQuickItemPrivate::get(item);
 
-    if (itemPrivate->flags & QQuickItem::ItemClipsChildrenToShape) {
+    if (itemPrivate->effectivelyClipsEventHandlingChildren()) {
         QPointF p = item->mapFromScene(sp);
         if (!item->contains(p))
             return false;
@@ -1083,7 +1083,7 @@ void QQuickMouseArea::itemChange(ItemChange change, const ItemChangeData &value)
                 // that this QQuickMouseArea item was one of the hovered items.
                 if (dap->hoveredLeafItemFound) {
                     for (auto hoverItem : dap->hoverItems) {
-                        if (hoverItem.first == this) {
+                        if (hoverItem.item == this) {
                             // Found a match so update the hover state.
                             d->lastScenePos = scenePos;
                             d->lastPos = mapFromScene(d->lastScenePos);

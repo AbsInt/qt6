@@ -70,7 +70,7 @@ enable_testing()
 # doesn't seem to be the case.
 # Until this is figured out, disable the tests when cross-compiling to Linux.
 if(UNIX AND NOT APPLE AND NOT WIN32 AND CMAKE_CROSSCOMPILING AND NOT QT_ENABLE_CMAKE_BOOT2QT_TESTS
-    AND NOT QT_BUILD_MINIMAL_ANDROID_MULTI_ABI_TESTS)
+    AND NOT QT_BUILD_MINIMAL_ANDROID_MULTI_ABI_TESTS AND NOT ANDROID)
     message(STATUS "Running CMake tests is disabled when cross-compiling to Linux / Boot2Qt.")
     return()
 endif()
@@ -83,15 +83,15 @@ if(WIN32 AND CMAKE_CROSSCOMPILING)
     return()
 endif()
 
-set(required_packages Core Network Xml Sql Test TestInternalsPrivate)
-set(optional_packages DBus Gui Widgets PrintSupport OpenGL Concurrent)
-
-# Setup the test when called as a completely standalone project.
 if(TARGET Qt6::Core)
     # Tests are built as part of the qtbase build tree.
     # Setup paths so that the Qt packages are found, similar to examples.
     qt_internal_set_up_build_dir_package_paths()
 endif()
+
+set(required_packages Core Network Xml Sql Test TestInternalsPrivate)
+set(optional_packages DBus Gui Widgets PrintSupport OpenGL Concurrent)
+
 find_package(Qt6 REQUIRED COMPONENTS ${required_packages})
 find_package(Qt6 OPTIONAL_COMPONENTS ${optional_packages})
 
@@ -123,53 +123,93 @@ endif()
 
 include("${_Qt6CTestMacros}")
 
-# Test only multi-abi specific functionality when QT_BUILD_MINIMAL_ANDROID_MULTI_ABI_TESTS is ON.
-# Qt::Gui is the prerequisite for all Android tests.
-if(QT_BUILD_MINIMAL_ANDROID_MULTI_ABI_TESTS AND NOT NO_GUI)
-    unset(multi_abi_vars)
-    foreach(abi IN LISTS QT_ANDROID_ABIS)
-        list(APPEND multi_abi_vars "-DQT_PATH_ANDROID_ABI_${abi}=${QT_PATH_ANDROID_ABI_${abi}}")
-    endforeach()
-    if(QT_ANDROID_BUILD_ALL_ABIS)
-        list(APPEND multi_abi_vars "-DQT_ANDROID_BUILD_ALL_ABIS=${QT_ANDROID_BUILD_ALL_ABIS}")
+
+if(ANDROID)
+    # Qt::Gui is the prerequisite for all Android tests.
+    if(NO_GUI)
+        return()
     endif()
 
-    list(APPEND multi_abi_vars "-DQT_HOST_PATH=${QT_HOST_PATH}")
+    if(NOT QT_USE_ANDROID_MODERN_BUNDLE)
+        set(QT_USE_ANDROID_MODERN_BUNDLE OFF)
+    endif()
+    if(NOT QT_USE_TARGET_ANDROID_BUILD_DIR)
+        set(QT_USE_TARGET_ANDROID_BUILD_DIR OFF)
+    endif()
 
-    set(multi_abi_forward_vars
-        TEST_SINGLE_VALUE_ARG
-        TEST_SPACES_VALUE_ARG
-        TEST_LIST_VALUE_ARG
-        TEST_ESCAPING_VALUE_ARG
-    )
-    string(REPLACE ";" "[[;]]" multi_abi_forward_vars "${multi_abi_forward_vars}")
+    set(common_android_vars "-DQT_HOST_PATH=${QT_HOST_PATH}"
+        "-DQT_USE_ANDROID_MODERN_BUNDLE=${QT_USE_ANDROID_MODERN_BUNDLE}"
+        "-DQT_USE_TARGET_ANDROID_BUILD_DIR=${QT_USE_TARGET_ANDROID_BUILD_DIR}")
 
-    set(single_value "TestValue")
-    set(list_value "TestValue[[;]]TestValue2[[;]]TestValue3")
-    set(escaping_value "TestValue\\\\[[;]]TestValue2\\\\[[;]]TestValue3")
-    set(spaces_value "TestValue TestValue2 TestValue3")
-    _qt_internal_test_expect_pass(test_android_multi_abi_forward_vars
-        BUILD_OPTIONS
-            ${multi_abi_vars}
-            "-DQT_ANDROID_MULTI_ABI_FORWARD_VARS=${multi_abi_forward_vars}"
-            "-DTEST_SINGLE_VALUE_ARG=${single_value}"
-            "-DTEST_LIST_VALUE_ARG=${list_value}"
-            "-DTEST_ESCAPING_VALUE_ARG=${escaping_value}"
-            "-DTEST_SPACES_VALUE_ARG=${spaces_value}"
+    set(signing_test_common_environment
+        "QT_ANDROID_KEYSTORE_ALIAS=qttest"
+        "QT_ANDROID_KEYSTORE_STORE_PASS=qttest"
+        "QT_ANDROID_KEYSTORE_KEY_PASS=qttest"
     )
 
-    #Run test_android_aar only if the host is Unix and zipinfo is available
-    find_program(ZIPINFO_EXECUTABLE zipinfo)
-    if(CMAKE_HOST_UNIX AND ZIPINFO_EXECUTABLE)
-        _qt_internal_test_expect_pass(test_android_aar
+    foreach(package_type aab apk)
+        string(TOUPPER "${package_type}" package_type_upper)
+        set(test_name "test_android_signing_${package_type}")
+        _qt_internal_test_expect_pass(test_android_signing
+            TESTNAME ${test_name}
+            BUILD_OPTIONS ${common_android_vars} -DQT_ANDROID_SIGN_${package_type_upper}=ON
+            BUILD_DIR ${test_name}
+            BUILD_TARGET test_android_signing_make_${package_type}
+            BINARY ${CMAKE_CTEST_COMMAND}
+            BINARY_ARGS -V
+        )
+        set_property(TEST ${test_name} APPEND PROPERTY
+            ENVIRONMENT ${signing_test_common_environment}
+            "QT_ANDROID_KEYSTORE_PATH=${CMAKE_CURRENT_BINARY_DIR}/${test_name}/qttest.jks"
+        )
+    endforeach()
+
+    # Test only multi-abi specific functionality when QT_BUILD_MINIMAL_ANDROID_MULTI_ABI_TESTS is
+    # ON.
+    if(QT_BUILD_MINIMAL_ANDROID_MULTI_ABI_TESTS)
+        set(multi_abi_vars "${common_android_vars}")
+        foreach(abi IN LISTS QT_ANDROID_ABIS)
+            list(APPEND multi_abi_vars "-DQT_PATH_ANDROID_ABI_${abi}=${QT_PATH_ANDROID_ABI_${abi}}")
+        endforeach()
+        if(QT_ANDROID_BUILD_ALL_ABIS)
+            list(APPEND multi_abi_vars "-DQT_ANDROID_BUILD_ALL_ABIS=${QT_ANDROID_BUILD_ALL_ABIS}")
+        endif()
+
+        set(multi_abi_forward_vars
+            TEST_SINGLE_VALUE_ARG
+            TEST_SPACES_VALUE_ARG
+            TEST_LIST_VALUE_ARG
+            TEST_ESCAPING_VALUE_ARG
+        )
+        string(REPLACE ";" "[[;]]" multi_abi_forward_vars "${multi_abi_forward_vars}")
+
+        set(single_value "TestValue")
+        set(list_value "TestValue[[;]]TestValue2[[;]]TestValue3")
+        set(escaping_value "TestValue\\\\[[;]]TestValue2\\\\[[;]]TestValue3")
+        set(spaces_value "TestValue TestValue2 TestValue3")
+        _qt_internal_test_expect_pass(test_android_multi_abi_forward_vars
             BUILD_OPTIONS
                 ${multi_abi_vars}
-                --build-target verify_aar
+                "-DQT_ANDROID_MULTI_ABI_FORWARD_VARS=${multi_abi_forward_vars}"
+                "-DTEST_SINGLE_VALUE_ARG=${single_value}"
+                "-DTEST_LIST_VALUE_ARG=${list_value}"
+                "-DTEST_ESCAPING_VALUE_ARG=${escaping_value}"
+                "-DTEST_SPACES_VALUE_ARG=${spaces_value}"
         )
-    else()
-        message(WARNING
-            "Skipping test_android_aar CMake build test because \
-            the host is not Unix or zipinfo is not found")
+
+        #Run test_android_aar only if the host is Unix and zipinfo is available
+        find_program(ZIPINFO_EXECUTABLE zipinfo)
+        if(CMAKE_HOST_UNIX AND ZIPINFO_EXECUTABLE)
+            _qt_internal_test_expect_pass(test_android_aar
+                BUILD_OPTIONS
+                    ${multi_abi_vars}
+                    --build-target verify_aar
+            )
+        else()
+            message(WARNING
+                "Skipping test_android_aar CMake build test because \
+                the host is not Unix or zipinfo is not found")
+        endif()
     endif()
 
     return()

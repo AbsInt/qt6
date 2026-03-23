@@ -1,5 +1,7 @@
 // Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #include "qsvganimator_p.h"
 #include <QtCore/qdatetime.h>
@@ -16,7 +18,7 @@ QSvgAbstractAnimator::QSvgAbstractAnimator()
 QSvgAbstractAnimator::~QSvgAbstractAnimator()
 {
     for (auto animationHash : {&m_animationsCSS, &m_animationsSMIL}) {
-        for (const auto &nodeAnimations : *std::as_const(animationHash)) {
+        for (const auto &nodeAnimations : std::as_const(*animationHash)) {
             for (QSvgAbstractAnimation *anim : nodeAnimations)
                 delete anim;
         }
@@ -44,7 +46,7 @@ void QSvgAbstractAnimator::advanceAnimations()
 {
     qreal elapsedTime = currentElapsed();
     for (auto animationHash : {&m_animationsCSS, &m_animationsSMIL}) {
-        for (const auto &nodeAnimations : *std::as_const(animationHash)) {
+        for (const auto &nodeAnimations : std::as_const(*animationHash)) {
             for (QSvgAbstractAnimation *anim : nodeAnimations)
                 anim->evaluateAnimation(elapsedTime);
         }

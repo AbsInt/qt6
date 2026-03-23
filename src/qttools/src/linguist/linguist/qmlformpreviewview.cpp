@@ -36,20 +36,16 @@ void matchSources(QQuickItem *root, QHash<QString, QList<QObject *>> &targets)
     traverseQml(root, targets);
 }
 
-ContextItem *getContext(const DataModel *m, const QString &contextName)
-{
-    for (int i = 0; i < m->contextCount(); i++)
-        if (auto ctx = m->contextItem(i); ctx->context() == contextName)
-            return ctx;
-    Q_UNREACHABLE_RETURN(nullptr);
-}
-
-QHash<QString, QList<QObject *>> extractSources(const DataModel *m, const QString &contextName)
+QHash<QString, QList<QObject *>> extractSources(DataModel *m, const QString &contextName)
 {
     QHash<QString, QList<QObject *>> t;
-    ContextItem *ctx = getContext(m, contextName);
-    for (int j = 0; j < ctx->messageCount(); j++)
-        t[ctx->messageItem(j)->text()] = {};
+    GroupItem *ctx = m->findGroup(contextName, TEXTBASED);
+    if (ctx)
+        for (int j = 0; j < ctx->messageCount(); j++)
+            t[ctx->messageItem(j)->text()] = {};
+
+    for (DataModelIterator it(IDBASED, m); it.isValid(); ++it)
+        t[it.current()->text()] = {};
     return t;
 }
 } // namespace
@@ -74,11 +70,6 @@ bool QmlFormPreviewView::setSourceContext(int model, MessageItem *messageItem)
 
         setSource(QUrl::fromLocalFile(fileName));
         if (!errors().empty()) {
-            QString errs;
-            for (const auto &error : errors())
-                errs += error.toString() + "\n"_L1;
-            QMessageBox::warning(this, tr("Qt Linguist"),
-                                 tr("Error loading QML file: %1").arg(errs));
             m_lastError = true;
             return false;
         }
@@ -92,9 +83,13 @@ bool QmlFormPreviewView::setSourceContext(int model, MessageItem *messageItem)
         return false;
     }
     if (m_lastModel != model) {
-        ContextItem *ctx = getContext(m_dataModel->model(model), messageItem->context());
-        for (int i = 0; i < ctx->messageCount(); i++) {
-            MessageItem *message = ctx->messageItem(i);
+        for (DataModelIterator it(IDBASED, m_dataModel->model(model)); it.isValid(); ++it) {
+            MessageItem *message = it.current();
+            for (QObject *item : std::as_const(m_targets[message->text()]))
+                item->setProperty("text", message->translation());
+        }
+        for (DataModelIterator it(TEXTBASED, m_dataModel->model(model)); it.isValid(); ++it) {
+            MessageItem *message = it.current();
             for (QObject *item : std::as_const(m_targets[message->text()]))
                 item->setProperty("text", message->translation());
         }

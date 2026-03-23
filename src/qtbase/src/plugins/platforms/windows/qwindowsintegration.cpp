@@ -263,6 +263,11 @@ bool QWindowsIntegration::hasCapability(QPlatformIntegration::Capability cap) co
         return true;
 #ifndef QT_NO_OPENGL
     case OpenGL:
+#if !QT_CONFIG(run_opengl_tests)
+        // Workaround for build configs on WoA that don't have OpenGL installed
+        // FIXME: Detect at runtime
+        return false;
+#endif
         return true;
     case ThreadedOpenGL:
         if (const QWindowsStaticOpenGLContext *glContext = QWindowsIntegration::staticOpenGLContext())
@@ -274,8 +279,6 @@ bool QWindowsIntegration::hasCapability(QPlatformIntegration::Capability cap) co
     case MultipleWindows:
         return true;
     case ForeignWindows:
-        return true;
-    case RasterGLSurface:
         return true;
     case AllGLFunctionsQueryable:
         return true;
@@ -291,13 +294,6 @@ bool QWindowsIntegration::hasCapability(QPlatformIntegration::Capability cap) co
 
 QPlatformWindow *QWindowsIntegration::createPlatformWindow(QWindow *window) const
 {
-    if (window->type() == Qt::Desktop) {
-        auto *result = new QWindowsDesktopWindow(window);
-        qCDebug(lcQpaWindow) << "Desktop window:" << window
-            << Qt::showbase << Qt::hex << result->winId() << Qt::noshowbase << Qt::dec << result->geometry();
-        return result;
-    }
-
     QWindowsWindowData requested;
     requested.flags = window->flags();
     requested.geometry = window->isTopLevel()

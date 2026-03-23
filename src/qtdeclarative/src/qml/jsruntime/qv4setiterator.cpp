@@ -37,7 +37,7 @@ ReturnedValue SetIteratorPrototype::method_next(const FunctionObject *b, const V
         return IteratorPrototype::createIterResultObject(scope.engine, undefined, true);
     }
 
-    Value *arguments = scope.alloc(2);
+    Value *arguments = scope.constructUndefined(2);
 
     while (index < s->d()->esTable->size()) {
         s->d()->esTable->iterate(index, &arguments[0], &arguments[1]);

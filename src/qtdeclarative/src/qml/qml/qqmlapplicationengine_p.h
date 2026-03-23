@@ -29,7 +29,7 @@ class Q_QML_EXPORT QQmlApplicationEnginePrivate : public QQmlEnginePrivate
 {
     Q_DECLARE_PUBLIC(QQmlApplicationEngine)
 public:
-    QQmlApplicationEnginePrivate(QQmlEngine *e);
+    QQmlApplicationEnginePrivate();
     ~QQmlApplicationEnginePrivate();
     void ensureInitialized();
     void init();

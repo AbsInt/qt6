@@ -3,6 +3,7 @@
 
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/private/qwasmsuspendresumecontrol_p.h>
+#include <QtCore/qdebug.h>
 #include <qtwasmtestlib.h>
 
 using namespace emscripten;
@@ -20,6 +21,7 @@ private slots:
     void reuseTimer();
     void cancelTimer();
     void deleteTimer();
+    void suspendExclusive();
 };
 
 // Verify that a single timer fires
@@ -134,6 +136,49 @@ void WasmSuspendResumeControlTest::deleteTimer()
         suspendResume.suspend();
         suspendResume.sendPendingEvents();
     }
+
+    QWASMSUCCESS();
+}
+
+// Verify that an exclusive suspend resumes for the exclusive event only
+void WasmSuspendResumeControlTest::suspendExclusive()
+{
+    QWasmSuspendResumeControl suspendResume;
+
+    // (re) implement a native timer - this gives us a unique event handler
+    // index which we can suspend exclusively on.
+    bool exclusiveTimerFired = false;
+    auto exclusiveTimerHandler = [&exclusiveTimerFired](emscripten::val) {
+        exclusiveTimerFired = true;
+    };
+    uint32_t exlusiveTimerHandlerIndex = suspendResume.registerEventHandler(std::move(exclusiveTimerHandler));
+
+    std::chrono::milliseconds exclusiveTimerTimeout = timerTimeout * 4;
+    double timoutValue = static_cast<double>(exclusiveTimerTimeout.count());
+    val jsHandler = suspendResume.jsEventHandlerAt(exlusiveTimerHandlerIndex);
+    val::global("window").call<double>("setTimeout", jsHandler, timoutValue);
+
+    // Schedule suppressedTimer to fire before the exclusive timer. Expected
+    // behavior is that it doesn't.
+    bool suppressedTimerFired = false;
+    QWasmTimer suppressedTimer(&suspendResume, [&suppressedTimerFired](){
+        suppressedTimerFired = true;
+    });
+    suppressedTimer.setTimeout(timerTimeout);
+
+    // Suspend exclusively for the exclusive timer, and verify that
+    // the correct timers fired.
+    suspendResume.suspendExclusive(QList<uint32_t> { exlusiveTimerHandlerIndex });
+    suspendResume.sendPendingEvents(); // <- also clears exclusive mode
+    if (!exclusiveTimerFired)
+        QWASMFAIL("Exclusive timer did not fire");
+    if (suppressedTimerFired)
+        QWASMFAIL("Suppressed timer did fire");
+
+    // Send (all) events, this should give is the suppressed timer
+    suspendResume.sendPendingEvents();
+    if (!suppressedTimerFired)
+        QWASMFAIL("Suppressed timer did not fire");
 
     QWASMSUCCESS();
 }

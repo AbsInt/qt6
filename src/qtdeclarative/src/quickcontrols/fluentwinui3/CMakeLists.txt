@@ -15,6 +15,7 @@ set(qml_files
     "DelayButton.qml"
     "Dialog.qml"
     "DialogButtonBox.qml"
+    "DoubleSpinBox.qml"
     "Frame.qml"
     "GroupBox.qml"
     "ItemDelegate.qml"
@@ -55,6 +56,10 @@ set_source_files_properties(Config.qml PROPERTIES
 
 set_source_files_properties(SearchField.qml PROPERTIES
     QT_QML_SOURCE_VERSIONS "6.10"
+)
+
+set_source_files_properties(DoubleSpinBox.qml PROPERTIES
+    QT_QML_SOURCE_VERSIONS "6.11"
 )
 
 file(GLOB light_theme_resources RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "light/images/*.png")

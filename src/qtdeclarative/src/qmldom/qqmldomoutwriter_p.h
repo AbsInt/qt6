@@ -19,6 +19,7 @@
 #include "qqmldom_fwd_p.h"
 #include "qqmldomlinewriter_p.h"
 #include "qqmldomcomments_p.h"
+#include "qqmldomexternalitems_p.h"
 
 #include <QtCore/QLoggingCategory>
 
@@ -31,25 +32,48 @@ class QMLDOM_EXPORT OutWriter
 {
 public:
     int indent = 0;
-    int indenterId = -1;
     bool indentNextlines = false;
+    // TODO QTBUG-139623
     bool skipComments = false;
     LineWriter &lineWriter;
-    Path currentPath;
     QString writtenStr;
     using RegionToCommentMap = QMap<FileLocationRegion, CommentedElement>;
     QStack<RegionToCommentMap> pendingComments;
+    QStringView code;
+    bool isFormatterEnabled = true;
+
+    using OffsetToDisabledRegionMap = QMap<quint32, SourceLocation>;
+    OffsetToDisabledRegionMap formatDisabledRegions;
 
     explicit OutWriter(LineWriter &lw) : lineWriter(lw)
     {
         lineWriter.addInnerSink([this](QStringView s) { writtenStr.append(s); });
-        indenterId =
-                lineWriter.addTextAddCallback([this](LineWriter &, LineWriter::TextAddType tt) {
-                    if (indentNextlines && tt == LineWriter::TextAddType::Normal
-                        && QStringView(lineWriter.currentLine()).trimmed().isEmpty())
-                        lineWriter.setLineIndent(indent);
-                    return true;
-                });
+        lineWriter.addTextAddCallback([this](LineWriter &, LineWriter::TextAddType tt) {
+            if (indentNextlines && tt == LineWriter::TextAddType::Normal
+                && QStringView(lineWriter.currentLine()).trimmed().isEmpty())
+                lineWriter.setLineIndent(indent);
+            return true;
+        });
+    }
+
+    OutWriter(std::shared_ptr<ExternalOwningItem> ownerFile, LineWriter &lw)
+        : OutWriter(lw)
+    {
+        if (!ownerFile)
+            return;
+
+        code = ownerFile->code();
+
+        const auto engine = [&ownerFile]() -> std::shared_ptr<QQmlJS::Engine> {
+            if (auto qmlfilePtr = std::dynamic_pointer_cast<QmlFile>(ownerFile))
+                return qmlfilePtr->engine();
+            else if (auto jsfilePtr = std::dynamic_pointer_cast<JsFile>(ownerFile))
+                return jsfilePtr->engine();
+            return nullptr;
+        }();
+
+        if (engine)
+            scanFormatDirectives(code, engine->comments());
     }
 
     int increaseIndent(int level = 1)
@@ -67,39 +91,58 @@ public:
 
     void itemStart(const DomItem &it);
     void itemEnd();
-    void regionStart(FileLocationRegion region);
-    void regionEnd(FileLocationRegion regino);
+    void writePreComment(FileLocationRegion region);
+    void writePostComment(FileLocationRegion regino);
 
     quint32 counter() const { return lineWriter.counter(); }
-    OutWriter &writeRegion(FileLocationRegion region, QStringView toWrite);
-    OutWriter &writeRegion(FileLocationRegion region);
+    OutWriter &writeRegion(const FileLocations::Tree &fLoc, FileLocationRegion region, QStringView toWrite);
+    OutWriter &writeRegion(const FileLocations::Tree &fLoc, FileLocationRegion region);
     OutWriter &ensureNewline(int nNewlines = 1)
     {
-        lineWriter.ensureNewline(nNewlines);
+        if (formatterEnabled())
+            lineWriter.ensureNewline(nNewlines);
         return *this;
     }
+
     OutWriter &ensureSpace()
     {
-        lineWriter.ensureSpace();
+        if (formatterEnabled())
+            lineWriter.ensureSpace();
         return *this;
     }
+
     OutWriter &ensureSpace(QStringView space)
     {
-        lineWriter.ensureSpace(space);
+        if (formatterEnabled())
+            lineWriter.ensureSpace(space);
         return *this;
     }
+
     OutWriter &newline()
     {
-        lineWriter.newline();
+        if (formatterEnabled())
+            lineWriter.newline();
         return *this;
     }
+
     OutWriter &write(QStringView v, LineWriter::TextAddType t = LineWriter::TextAddType::Normal)
     {
-        lineWriter.write(v, t);
+        if (formatterEnabled())
+            lineWriter.write(v, t);
         return *this;
     }
-    void flush() { lineWriter.flush(); }
-    void eof(bool ensureNewline = true) { lineWriter.eof(ensureNewline); }
+    void flush()
+    {
+        if (formatterEnabled())
+            lineWriter.flush();
+    }
+
+    void eof(bool ensureNewline = true)
+    {
+        if (formatterEnabled())
+            lineWriter.eof(ensureNewline);
+    }
+
     int addNewlinesAutospacerCallback(int nLines)
     {
         return lineWriter.addNewlinesAutospacerCallback(nLines);
@@ -110,6 +153,13 @@ public:
     }
     bool removeTextAddCallback(int i) { return lineWriter.removeTextAddCallback(i); }
 
+    void maybeWriteComment(const Comment &comment);
+    bool formatterEnabled() const;
+    bool shouldFormat(const FileLocations::Tree &fLoc, FileLocationRegion region);
+    void maybeWriteDisabledRegion(const SourceLocation &loc);
+    void scanFormatDirectives(QStringView code, const QList<SourceLocation> &comments);
+    void writeDisabledRegion(const SourceLocation &loc);
+    QStringView attachedDisableCode(quint32 offset) const;
 };
 
 } // end namespace Dom

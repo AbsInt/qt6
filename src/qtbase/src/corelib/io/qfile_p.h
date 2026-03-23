@@ -39,6 +39,10 @@ protected:
     bool copy(const QString &newName);
 
     QString fileName;
+
+#ifndef QT_NO_DEBUG_STREAM
+    void writeToDebugStream(QDebug &) const override;
+#endif
 };
 
 QT_END_NAMESPACE

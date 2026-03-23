@@ -20,6 +20,7 @@ add_subdirectory(quotesInPath)
 add_subdirectory(QmllsBuildIni)
 add_subdirectory(WrongOutput)
 add_subdirectory(WithoutCMakeBuilds)
+add_subdirectory(ImportPathOrderStudy)
 
 qt_add_qml_module(tst_generate_qmlls_ini
     URI MainModule
@@ -32,6 +33,7 @@ qt_add_qml_module(tst_generate_qmlls_ini
 )
 target_compile_definitions(tst_generate_qmlls_ini
     PRIVATE
+        QTEST_THROW_ON_FAIL=1
         "SOURCE_DIRECTORY=u\"${CMAKE_CURRENT_SOURCE_DIR}\"_s"
         "BUILD_DIRECTORY=u\"${CMAKE_CURRENT_BINARY_DIR}\"_s"
 )

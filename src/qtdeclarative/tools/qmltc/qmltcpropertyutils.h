@@ -20,9 +20,9 @@ inline QString getUnderlyingType(const QQmlJSMetaProperty &p)
     if (p.isList()) {
         // We cannot just use p.type()->internalName() here because it may be
         // a list property of something that only receives a C++ name from qmltc.
-        const QQmlJSScope::ConstPtr valueType = p.type()->valueType();
-        return (valueType->isReferenceType() ? u"QQmlListProperty<" : u"QList<")
-                + valueType->internalName() + u'>';
+        const QQmlJSScope::ConstPtr elementType = p.type()->elementType();
+        return (elementType->isReferenceType() ? u"QQmlListProperty<" : u"QList<")
+                + elementType->internalName() + u'>';
     }
 
     return p.type()->augmentedInternalName();

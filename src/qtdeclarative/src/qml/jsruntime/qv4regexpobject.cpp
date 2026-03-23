@@ -771,7 +771,7 @@ ReturnedValue RegExpPrototype::method_split(const FunctionObject *f, const Value
     if (!C)
         return Encode::undefined();
 
-    Value *args = scope.alloc(2);
+    Value *args = scope.constructUndefined(2);
     args[0] = rx;
     args[1] = flags;
     ScopedObject splitter(scope, C->callAsConstructor(args, 2, f));

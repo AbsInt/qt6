@@ -19,7 +19,7 @@ QT_BEGIN_NAMESPACE
     exited early by a return statement, or exited by an exception.
 
     A scope guard can be disabled using dismiss(), in which case the function
-    is not run at all.
+    is not run at all, or executed ahead of destruction, using commit().
 
     \note Exceptions are not supported. The callable shouldn't throw when
           executed, copied or moved.
@@ -45,6 +45,18 @@ QT_BEGIN_NAMESPACE
 
     Disarms the scope guard, so that the function \e F will not be called at
     the end of the scope.
+
+    \sa commit()
+*/
+
+/*!
+    \since 6.11
+    \fn template <typename F> void QScopeGuard<F>::commit()
+
+    Calls the function \e F and then disarms the scope guard. The guard must be
+    armed (not been \l{dismiss()}ed) when calling this function.
+
+    \sa dismiss()
 */
 
 /*!

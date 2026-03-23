@@ -409,6 +409,7 @@ private slots:
     void colonAfterProtocol();
     void urlSearchParamsConstruction();
     void urlSearchParamsMethods();
+    void urlInstanceof();
     void variantConversionMethod();
     void sequenceConversionMethod();
     void proxyIteration();
@@ -869,14 +870,14 @@ void tst_qqmlecmascript::signalAssignment()
     {
         QQmlComponent component(&engine, testFileUrl("signalAssignment.3.qml"));
         QVERIFY(component.isError());
-        QString expectedErrorString = component.url().toString() + QLatin1String(":4 Signal uses unnamed parameter followed by named parameter.\n");
+        QString expectedErrorString = component.url().toString() + QLatin1String(":4:5: Signal uses unnamed parameter followed by named parameter.\n");
         QCOMPARE(component.errorString(), expectedErrorString);
     }
 
     {
         QQmlComponent component(&engine, testFileUrl("signalAssignment.4.qml"));
         QVERIFY(component.isError());
-        QString expectedErrorString = component.url().toString() + QLatin1String(":5 Signal parameter \"parseInt\" hides global variable.\n");
+        QString expectedErrorString = component.url().toString() + QLatin1String(":5:5: Signal parameter \"parseInt\" hides global variable.\n");
         QCOMPARE(component.errorString(), expectedErrorString);
     }
 }
@@ -2878,7 +2879,7 @@ void tst_qqmlecmascript::regExpBug()
 
     //QTBUG-23068
     {
-        const QString err = QString::fromLatin1("%1:6 Invalid property assignment: "
+        const QString err = QString::fromLatin1("%1:6:24: Invalid property assignment: "
                                                 "regular expression expected; "
                                                 "use /pattern/ syntax\n")
                                     .arg(testFileUrl("regularExpression.2.qml").toString());
@@ -2897,7 +2898,7 @@ static inline bool evaluate_error(QV4::ExecutionEngine *v4, const QV4::Value &o,
 
     QV4::Scope scope(v4);
     QV4::Script program(QV4::ScopedContext(scope, scope.engine->rootContext()), QV4::Compiler::ContextType::Eval, functionSource);
-    program.inheritContext = true;
+    program.setInheritContext();
 
     QV4::ScopedFunctionObject function(scope, program.run());
     if (scope.hasException()) {
@@ -2923,7 +2924,7 @@ static inline bool evaluate_value(QV4::ExecutionEngine *v4, const QV4::Value &o,
 
     QV4::Scope scope(v4);
     QV4::Script program(QV4::ScopedContext(scope, scope.engine->rootContext()), QV4::Compiler::ContextType::Eval, functionSource);
-    program.inheritContext = true;
+    program.setInheritContext();
 
     QV4::ScopedFunctionObject function(scope, program.run());
     if (scope.hasException()) {
@@ -2954,7 +2955,7 @@ static inline QV4::ReturnedValue evaluate(QV4::ExecutionEngine *v4, const QV4::V
     QV4::Scope scope(v4);
 
     QV4::Script program(QV4::ScopedContext(scope, scope.engine->rootContext()), QV4::Compiler::ContextType::Eval, functionSource);
-    program.inheritContext = true;
+    program.setInheritContext();
 
     QV4::ScopedFunctionObject function(scope, program.run());
     if (scope.hasException()) {
@@ -5756,7 +5757,7 @@ void tst_qqmlecmascript::propertyVarImplicitOwnership()
     gc(engine, GCFlags::DontSendPostedEvents);
     QPointer<QObject> qobjectGuard(childObject->property("vp").value<QObject*>()); // get the pointer prior to processing deleteLater events.
     QVERIFY(!qobjectGuard.isNull());
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLater() events from QV8QObjectWrapper.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLater() events from QV4::QObjectWrapper.
     QCoreApplication::processEvents();
     QVERIFY(!qobjectGuard.isNull());
     QMetaObject::invokeMethod(object.data(), "deassignCircular");
@@ -5857,7 +5858,7 @@ void tst_qqmlecmascript::propertyVarCircular()
         QVERIFY(canaryResourceVariant.isValid());
     }
 
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLater() events from QV8QObjectWrapper.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLater() events from QV4::QObjectWrapper.
     QCoreApplication::processEvents();
     QCOMPARE(object->property("canaryInt"), QVariant(5));
     QVariant canaryResourceVariant = object->property("canaryResource");
@@ -5883,7 +5884,7 @@ void tst_qqmlecmascript::propertyVarCircular2()
     QScopedPointer<QObject> object(component.create());
     QVERIFY2(object, qPrintable(component.errorString()));
     QMetaObject::invokeMethod(object.data(), "assignCircular");
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLater() events from QV8QObjectWrapper.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLater() events from QV4::QObjectWrapper.
     QCoreApplication::processEvents();
     QObject *rootObject = object->property("vp").value<QObject*>();
     QVERIFY(rootObject != nullptr);
@@ -5911,7 +5912,7 @@ void tst_qqmlecmascript::propertyVarInheritance()
     QScopedPointer<QObject> object(component.create());
     QVERIFY2(object, qPrintable(component.errorString()));
     QMetaObject::invokeMethod(object.data(), "assignCircular");    // cause assignment and gc
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLater() events from QV8QObjectWrapper.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLater() events from QV4::QObjectWrapper.
     QCoreApplication::processEvents();
     // we want to be able to track when the varProperties array of the last metaobject is disposed
     QObject *cco5 = object->property("varProperty").value<QObject*>()->property("vp").value<QObject*>()->property("vp").value<QObject*>()->property("vp").value<QObject*>()->property("vp").value<QObject*>();
@@ -5957,7 +5958,7 @@ void tst_qqmlecmascript::propertyVarInheritance2()
     QScopedPointer<QObject> object(component.create());
     QVERIFY2(object, qPrintable(component.errorString()));
     QMetaObject::invokeMethod(object.data(), "assignCircular");
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLater() events from QV8QObjectWrapper.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLater() events from QV4::QObjectWrapper.
     QCoreApplication::processEvents();
     QObject *rootObject = object->property("vp").value<QObject*>();
     QVERIFY(rootObject != nullptr);
@@ -9661,7 +9662,6 @@ void tst_qqmlecmascript::qpropertyBindingHandlesUndefinedWithoutResetCorrectly()
     // If the binding evaluates to undefined,
     root->setProperty("toggle", true);
     // then the value still stays the same.
-    QEXPECT_FAIL("QCompatProperty", "Not implemented for QObjectCompatProperty", Continue);
     QCOMPARE(root->property("value2").toInt(), 1);
     // and the binding is still active
     root->setProperty("anotherValue", 2);
@@ -10227,6 +10227,36 @@ void tst_qqmlecmascript::urlSearchParamsMethods()
 
     // Verify the end result
     QVERIFY(EVALUATE_VALUE("this.usp.toString()", QV4::ScopedValue(scope, scope.engine->newString("a=10&c=foo"))));
+}
+
+void tst_qqmlecmascript::urlInstanceof()
+{
+    QQmlEngine qmlengine;
+
+    QObject *o = new QObject(&qmlengine);
+
+    QV4::ExecutionEngine *engine = qmlengine.handle();
+    QV4::Scope scope(engine);
+
+    QV4::ScopedValue object(scope, QV4::QObjectWrapper::wrap(engine, o));
+
+    {
+        QV4::ScopedValue ret(scope, EVALUATE("this.url = new URL('http://localhost/a/b/c');"));
+        QV4::UrlObject *url = ret->as<QV4::UrlObject>();
+        QVERIFY(url != nullptr);
+
+        // protocol
+        QVERIFY(EVALUATE("this.url instanceof URL;"));
+    }
+
+    {
+        QV4::ScopedValue ret(scope, EVALUATE("this.params = new URLSearchParams();"));
+        QV4::UrlSearchParamsObject *searchParams = ret->as<QV4::UrlSearchParamsObject>();
+        QVERIFY(searchParams != nullptr);
+
+        // protocol
+        QVERIFY(EVALUATE("this.params instanceof URLSearchParams;"));
+    }
 }
 
 void tst_qqmlecmascript::variantConversionMethod()

@@ -15,7 +15,7 @@
 #ifndef QTGRADIENTSTOPSCONTROLLER_H
 #define QTGRADIENTSTOPSCONTROLLER_H
 
-#include <QtWidgets/QWidget>
+#include <QtWidgets/qwidget.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -27,8 +27,8 @@ class QtGradientStopsController : public QObject
 {
     Q_OBJECT
 public:
-    QtGradientStopsController(QObject *parent = 0);
-    ~QtGradientStopsController();
+    explicit QtGradientStopsController(QObject *parent = nullptr);
+    ~QtGradientStopsController() override;
 
     void setUi(Ui::QtGradientEditor *editor);
 

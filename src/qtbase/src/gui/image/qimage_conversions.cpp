@@ -14,7 +14,7 @@
 #include <qendian.h>
 #include <qrgbafloat.h>
 #if QT_CONFIG(thread)
-#include <qsemaphore.h>
+#include <private/qlatch_p.h>
 #include <qthreadpool.h>
 #include <private/qthreadpool_p.h>
 #endif
@@ -215,17 +215,17 @@ void convert_generic(QImageData *dest, const QImageData *src, Qt::ImageConversio
     if (segments <= 1 || !threadPool || threadPool->contains(QThread::currentThread()))
         return convertSegment(0, src->height);
 
-    QSemaphore semaphore;
+    QLatch latch(segments);
     int y = 0;
     for (int i = 0; i < segments; ++i) {
         int yn = (src->height - y) / (segments - i);
         threadPool->start([&, y, yn]() {
             convertSegment(y, y + yn);
-            semaphore.release(1);
+            latch.countDown();
         });
         y += yn;
     }
-    semaphore.acquire(segments);
+    latch.wait();
 #else
     convertSegment(0, src->height);
 #endif
@@ -270,17 +270,17 @@ void convert_generic_over_rgb64(QImageData *dest, const QImageData *src, Qt::Ima
     if (segments <= 1 || !threadPool || threadPool->contains(QThread::currentThread()))
         return convertSegment(0, src->height);
 
-    QSemaphore semaphore;
+    QLatch latch(segments);
     int y = 0;
     for (int i = 0; i < segments; ++i) {
         int yn = (src->height - y) / (segments - i);
         threadPool->start([&, y, yn]() {
             convertSegment(y, y + yn);
-            semaphore.release(1);
+            latch.countDown();
         });
         y += yn;
     }
-    semaphore.acquire(segments);
+    latch.wait();
 #else
     convertSegment(0, src->height);
 #endif
@@ -324,17 +324,17 @@ void convert_generic_over_rgba32f(QImageData *dest, const QImageData *src, Qt::I
     if (segments <= 1 || !threadPool || threadPool->contains(QThread::currentThread()))
         return convertSegment(0, src->height);
 
-    QSemaphore semaphore;
+    QLatch latch(segments);
     int y = 0;
     for (int i = 0; i < segments; ++i) {
         int yn = (src->height - y) / (segments - i);
         threadPool->start([&, y, yn]() {
             convertSegment(y, y + yn);
-            semaphore.release(1);
+            latch.countDown();
         });
         y += yn;
     }
-    semaphore.acquire(segments);
+    latch.wait();
 #else
     convertSegment(0, src->height);
 #endif
@@ -435,17 +435,17 @@ bool convert_generic_inplace(QImageData *data, QImage::Format dst_format, Qt::Im
     segments = std::min(segments, data->height);
     QThreadPool *threadPool = QGuiApplicationPrivate::qtGuiThreadPool();
     if (segments > 1 && threadPool && !threadPool->contains(QThread::currentThread())) {
-        QSemaphore semaphore;
+        QLatch latch(segments);
         int y = 0;
         for (int i = 0; i < segments; ++i) {
             int yn = (data->height - y) / (segments - i);
             threadPool->start([&, y, yn]() {
                 convertSegment(y, y + yn);
-                semaphore.release(1);
+                latch.countDown();
             });
             y += yn;
         }
-        semaphore.acquire(segments);
+        latch.wait();
         if (data->bytes_per_line != params.bytesPerLine) {
             // Compress segments to a continuous block
             y = 0;
@@ -529,17 +529,17 @@ bool convert_generic_inplace_over_rgb64(QImageData *data, QImage::Format dst_for
     segments = std::min(segments, data->height);
     QThreadPool *threadPool = QGuiApplicationPrivate::qtGuiThreadPool();
     if (segments > 1 && threadPool && !threadPool->contains(QThread::currentThread())) {
-        QSemaphore semaphore;
+        QLatch latch(segments);
         int y = 0;
         for (int i = 0; i < segments; ++i) {
             int yn = (data->height - y) / (segments - i);
             threadPool->start([&, y, yn]() {
                 convertSegment(y, y + yn);
-                semaphore.release(1);
+                latch.countDown();
             });
             y += yn;
         }
-        semaphore.acquire(segments);
+        latch.wait();
         if (data->bytes_per_line != params.bytesPerLine) {
             // Compress segments to a continuous block
             y = 0;
@@ -624,17 +624,17 @@ bool convert_generic_inplace_over_rgba32f(QImageData *data, QImage::Format dst_f
     segments = std::min(segments, data->height);
     QThreadPool *threadPool = QGuiApplicationPrivate::qtGuiThreadPool();
     if (segments > 1 && threadPool && !threadPool->contains(QThread::currentThread())) {
-        QSemaphore semaphore;
+        QLatch latch(segments);
         int y = 0;
         for (int i = 0; i < segments; ++i) {
             int yn = (data->height - y) / (segments - i);
             threadPool->start([&, y, yn]() {
                 convertSegment(y, y + yn);
-                semaphore.release(1);
+                latch.countDown();
             });
             y += yn;
         }
-        semaphore.acquire(segments);
+        latch.wait();
         if (data->bytes_per_line != params.bytesPerLine) {
             // Compress segments to a continuous block
             y = 0;

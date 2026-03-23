@@ -24,7 +24,6 @@ class QGraphicsViewPrivate;
 class Q_WIDGETS_EXPORT QGraphicsView : public QAbstractScrollArea
 {
     Q_OBJECT
-    Q_FLAGS(QPainter::RenderHints CacheMode OptimizationFlags)
     Q_PROPERTY(QBrush backgroundBrush READ backgroundBrush WRITE setBackgroundBrush)
     Q_PROPERTY(QBrush foregroundBrush READ foregroundBrush WRITE setForegroundBrush)
     Q_PROPERTY(bool interactive READ isInteractive WRITE setInteractive)
@@ -58,6 +57,7 @@ public:
         CacheBackground = 0x1
     };
     Q_DECLARE_FLAGS(CacheMode, CacheModeFlag)
+    Q_FLAG(CacheMode)
 
     enum DragMode {
         NoDrag,
@@ -81,6 +81,7 @@ public:
         IndirectPainting = 0x4
     };
     Q_DECLARE_FLAGS(OptimizationFlags, OptimizationFlag)
+    Q_FLAG(OptimizationFlags)
 
     QGraphicsView(QWidget *parent = nullptr);
     QGraphicsView(QGraphicsScene *scene, QWidget *parent = nullptr);

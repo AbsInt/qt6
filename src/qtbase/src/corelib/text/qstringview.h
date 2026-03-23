@@ -251,36 +251,78 @@ public:
     { return qTokenize(*this, std::forward<Needle>(needle), flags...); }
 
     [[nodiscard]] int compare(QStringView other, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
-    { return QtPrivate::compareStrings(*this, other, cs); }
+    {
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+        if (__builtin_constant_p(other.m_size) && other.size() == 1)
+            return compare(other.front(), cs);
+#endif
+        return QtPrivate::compareStrings(*this, other, cs);
+    }
     [[nodiscard]] inline int compare(QLatin1StringView other, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
     [[nodiscard]] inline int compare(QUtf8StringView other, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
     [[nodiscard]] constexpr int compare(QChar c) const noexcept
     { return size() >= 1 ? compare_single_char_helper(*utf16() - c.unicode()) : -1; }
     [[nodiscard]] int compare(QChar c, Qt::CaseSensitivity cs) const noexcept
-    { return QtPrivate::compareStrings(*this, QStringView(&c, 1), cs); }
+    {
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+        if (__builtin_constant_p(cs) && cs == Qt::CaseSensitive)
+            return compare(c);
+#endif
+        return QtPrivate::compareStrings(*this, QStringView(&c, 1), cs);
+    }
 
     [[nodiscard]] inline int localeAwareCompare(QStringView other) const;
 
     [[nodiscard]] bool startsWith(QStringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
-    { return QtPrivate::startsWith(*this, s, cs); }
+    {
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+        if (__builtin_constant_p(s.m_size) && s.size() == 1)
+            return startsWith(s.front(), cs);
+#endif
+        return QtPrivate::startsWith(*this, s, cs);
+    }
     [[nodiscard]] inline bool startsWith(QLatin1StringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
     [[nodiscard]] bool startsWith(QChar c) const noexcept
     { return !empty() && front() == c; }
     [[nodiscard]] bool startsWith(QChar c, Qt::CaseSensitivity cs) const noexcept
-    { return QtPrivate::startsWith(*this, QStringView(&c, 1), cs); }
+    {
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+        if (__builtin_constant_p(cs) && cs == Qt::CaseSensitive)
+            return startsWith(c);
+#endif
+        return QtPrivate::startsWith(*this, QStringView(&c, 1), cs);
+    }
 
     [[nodiscard]] bool endsWith(QStringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
-    { return QtPrivate::endsWith(*this, s, cs); }
+    {
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+        if (__builtin_constant_p(s.m_size) && s.size() == 1)
+            return endsWith(s.front(), cs);
+#endif
+        return QtPrivate::endsWith(*this, s, cs);
+    }
     [[nodiscard]] inline bool endsWith(QLatin1StringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
     [[nodiscard]] bool endsWith(QChar c) const noexcept
     { return !empty() && back() == c; }
     [[nodiscard]] bool endsWith(QChar c, Qt::CaseSensitivity cs) const noexcept
-    { return QtPrivate::endsWith(*this, QStringView(&c, 1), cs); }
+    {
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+        if (__builtin_constant_p(cs) && cs == Qt::CaseSensitive)
+            return endsWith(c);
+#endif
+        return QtPrivate::endsWith(*this, QStringView(&c, 1), cs);
+    }
 
     [[nodiscard]] qsizetype indexOf(QChar c, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
     { return QtPrivate::findString(*this, from, c.unicode(), cs); }
     [[nodiscard]] qsizetype indexOf(QStringView s, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
-    { return QtPrivate::findString(*this, from, s, cs); }
+    {
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+        if (__builtin_constant_p(s.m_size) && s.size() == 1)
+            return indexOf(s.front(), from, cs);
+#endif
+        return QtPrivate::findString(*this, from, s, cs);
+    }
     [[nodiscard]] inline qsizetype indexOf(QLatin1StringView s, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
 
     [[nodiscard]] bool contains(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
@@ -292,7 +334,13 @@ public:
     [[nodiscard]] qsizetype count(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
     { return QtPrivate::count(*this, c, cs); }
     [[nodiscard]] qsizetype count(QStringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
-    { return QtPrivate::count(*this, s, cs); }
+    {
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+        if (__builtin_constant_p(s.m_size) && s.size() == 1)
+            return count(s.front(), cs);
+#endif
+        return QtPrivate::count(*this, s, cs);
+    }
     [[nodiscard]] inline qsizetype count(QLatin1StringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
 
     [[nodiscard]] qsizetype lastIndexOf(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
@@ -302,7 +350,13 @@ public:
     [[nodiscard]] qsizetype lastIndexOf(QStringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
     { return lastIndexOf(s, size(), cs); }
     [[nodiscard]] qsizetype lastIndexOf(QStringView s, qsizetype from, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
-    { return QtPrivate::lastIndexOf(*this, from, s, cs); }
+    {
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+        if (__builtin_constant_p(s.m_size) && s.size() == 1)
+            return lastIndexOf(s.front(), from, cs);
+#endif
+        return QtPrivate::lastIndexOf(*this, from, s, cs);
+    }
     [[nodiscard]] inline qsizetype lastIndexOf(QLatin1StringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
     [[nodiscard]] inline qsizetype lastIndexOf(QLatin1StringView s, qsizetype from, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
 
@@ -329,10 +383,7 @@ public:
     {
         return QtPrivate::contains(*this, re, rmatch);
     }
-    [[nodiscard]] qsizetype count(const QRegularExpression &re) const
-    {
-        return QtPrivate::count(*this, re);
-    }
+    [[nodiscard]] qsizetype count(const QRegularExpression &re) const; // defined in qregularexpression.h
 #endif
 
     [[nodiscard]] bool isRightToLeft() const noexcept

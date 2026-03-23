@@ -28,8 +28,9 @@
     \ingroup qt-basic-concepts
 
 
-    Qt's paint system enables painting on screen and print devices
-    using the same API, and is primarily based on the QPainter,
+    Qt's paint system provides a unified and flexible framework for
+    rendering graphics on various surfaces, such as on-screen widgets,
+    images, and printed pages. It is primarily built around the QPainter,
     QPaintDevice, and QPaintEngine classes.
 
     QPainter is used to perform drawing operations, QPaintDevice is an
@@ -244,8 +245,7 @@
     Any color in Qt is represented by the QColor class which supports
     the RGB, HSV and CMYK color models. QColor also support
     alpha-blended outlining and filling (specifying the transparency
-    effect), and the class is platform and device independent (the
-    colors are mapped to hardware using the QColormap class). For more
+    effect), and the class is platform and device independent. For more
     information, see the QColor class documentation.
 
     The available fill patterns are described by the Qt::BrushStyle

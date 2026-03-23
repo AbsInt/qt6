@@ -190,6 +190,9 @@ QLabel::QLabel(const QString &text, QWidget *parent, Qt::WindowFlags f)
 QLabel::~QLabel()
 {
     Q_D(QLabel);
+
+    if (d->buddy)
+        d->buddy->d_func()->labels.removeAll(this);
     d->clearContents();
 }
 
@@ -513,6 +516,12 @@ void QLabel::setMargin(int margin)
     d->margin = margin;
     d->updateLabel();
 }
+
+/*!
+    \class QLabelPrivate
+    \inmodule QtWidgets
+    \internal
+*/
 
 /*!
     Returns the size that will be used if the width of the label is \a
@@ -922,10 +931,10 @@ void QLabel::keyPressEvent(QKeyEvent *ev)
 bool QLabel::event(QEvent *e)
 {
     Q_D(QLabel);
-    QEvent::Type type = e->type();
 
+    switch (e->type()) {
 #ifndef QT_NO_SHORTCUT
-    if (type == QEvent::Shortcut) {
+    case QEvent::Shortcut: {
         QShortcutEvent *se = static_cast<QShortcutEvent *>(e);
         if (se->shortcutId() == d->shortcutId) {
             QWidget *w = d->buddy;
@@ -942,21 +951,30 @@ bool QLabel::event(QEvent *e)
                 window()->setAttribute(Qt::WA_KeyboardFocusChange);
             return true;
         }
-    } else
+        break;
+    }
 #endif
-    if (type == QEvent::Resize) {
+    case QEvent::Resize:
         if (d->control)
             d->textLayoutDirty = true;
-    } else if (e->type() == QEvent::StyleChange
+        break;
+    case QEvent::StyleChange:
 #ifdef Q_OS_MAC
-               || e->type() == QEvent::MacSizeChange
+    case QEvent::MacSizeChange:
 #endif
-               ) {
         d->setLayoutItemMargins(QStyle::SE_LabelLayoutItem);
         d->updateLabel();
-    } else if (type == QEvent::Polish) {
+        break;
+    case QEvent::Polish:
         if (d->needTextControl())
             d->ensureTextControl();
+        break;
+    case QEvent::Enter:
+    case QEvent::Leave:
+        d->sendControlEvent(e);
+        break;
+    default:
+        break;
     }
 
     return QFrame::event(e);
@@ -1142,15 +1160,19 @@ void QLabel::setBuddy(QWidget *buddy)
 {
     Q_D(QLabel);
 
-    if (d->buddy)
+    if (d->buddy) {
         QObjectPrivate::disconnect(d->buddy, &QObject::destroyed,
                                    d, &QLabelPrivate::buddyDeleted);
+        d->buddy->d_func()->labels.removeAll(this);
+    }
 
     d->buddy = buddy;
 
-    if (buddy)
+    if (buddy) {
+        buddy->d_func()->labels.append(this);
         QObjectPrivate::connect(buddy, &QObject::destroyed,
                                 d, &QLabelPrivate::buddyDeleted);
+    }
 
     if (d->isTextLabel) {
         if (d->shortcutId)
@@ -1292,7 +1314,7 @@ void QLabelPrivate::clearContents()
     shortcutId = 0;
 #endif
 #if QT_CONFIG(movie)
-    for (const auto &conn : std::as_const(movieConnections))
+    for (auto &conn : movieConnections)
         QObject::disconnect(conn);
     movie = nullptr;
 #endif

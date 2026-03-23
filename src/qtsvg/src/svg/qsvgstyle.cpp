@@ -1,20 +1,18 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #include "qsvgstyle_p.h"
 
 #include "qsvgfont_p.h"
-#include "qsvggraphics_p.h"
 #include "qsvgnode_p.h"
 #include "private/qsvganimate_p.h"
-#include "qsvgtinydocument_p.h"
+#include "qsvgdocument_p.h"
 
 #include "qpainter.h"
-#include "qpair.h"
 #include "qcolor.h"
 #include "qdebug.h"
-#include "qmath.h"
-#include "qnumeric.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -171,7 +169,7 @@ void QSvgViewportFillStyle::revert(QPainter *p, QSvgExtraStates &)
     p->setBrush(m_oldFill);
 }
 
-QSvgFontStyle::QSvgFontStyle(QSvgFont *font, QSvgTinyDocument *doc)
+QSvgFontStyle::QSvgFontStyle(QSvgFont *font, QSvgDocument *doc)
     : m_svgFont(font)
     , m_doc(doc)
     , m_familySet(0)
@@ -420,8 +418,7 @@ QSvgPatternStyle::QSvgPatternStyle(QSvgPattern *pattern)
 
 QBrush QSvgPatternStyle::brush(QPainter *p, const QSvgNode *node, QSvgExtraStates &states)
 {
-    m_patternImage = m_pattern->patternImage(p, states, node);
-    QBrush b(m_patternImage);
+    QBrush b(m_pattern->patternImage(p, states, node));
     b.setTransform(m_pattern->appliedTransform());
     return b;
 }
@@ -510,6 +507,19 @@ QSvgStyleProperty::Type QSvgCompOpStyle::type() const
     return COMP_OP;
 }
 
+void QSvgOffsetStyle::apply(QPainter *, const QSvgNode *, QSvgExtraStates &)
+{
+}
+
+void QSvgOffsetStyle::revert(QPainter *, QSvgExtraStates &)
+{
+}
+
+QSvgStyleProperty::Type QSvgOffsetStyle::type() const
+{
+    return OFFSET;
+}
+
 QSvgOpacityStyle::QSvgOpacityStyle(qreal opacity)
     : m_opacity(opacity), m_oldOpacity(0)
 {
@@ -532,7 +542,7 @@ QSvgStyleProperty::Type QSvgOpacityStyle::type() const
     return OPACITY;
 }
 
-void QSvgGradientStyle::setStopLink(const QString &link, QSvgTinyDocument *doc)
+void QSvgGradientStyle::setStopLink(const QString &link, QSvgDocument *doc)
 {
     m_link = link;
     m_doc  = doc;
@@ -696,80 +706,131 @@ void QSvgAnimatedStyle::apply(QPainter *p, const QSvgNode *node, QSvgExtraStates
     if (nodeAnims.isEmpty())
         return;
 
-    for (auto anim : nodeAnims) {
+    QSvgStyleState currentStyle = m_static;
+    for (const QSvgAbstractAnimation *anim : std::as_const(nodeAnims)) {
         if (!anim->isActive())
             continue;
 
-        bool replace = anim->animationType() == QSvgAbstractAnimation::CSS ? true :
-                           (static_cast<QSvgAnimateNode *>(anim))->additiveType() == QSvgAnimateNode::Replace;
-        QList<QSvgAbstractAnimatedProperty *> props = anim->properties();
-        for (auto prop : props)
-            applyPropertyAnimation(p, prop, replace, states);
+        fetchStyleState(anim, currentStyle);
     }
+
+    applyStyle(p, states, currentStyle);
 }
 
 void QSvgAnimatedStyle::revert(QPainter *p, QSvgExtraStates &states)
 {
-    p->setWorldTransform(m_worldTransform, false);
-    p->setBrush(m_brush);
-    p->setPen(m_pen);
-    p->setOpacity(m_opacity);
-    states.fillOpacity = m_fillOpacity;
-    states.strokeOpacity = m_strokeOpacity;
+    p->setWorldTransform(m_worldTransform);
+    p->setBrush(m_static.fill);
+    p->setPen(m_static.stroke);
+    p->setOpacity(m_static.opacity);
+    states.fillOpacity = m_static.fillOpacity;
+    states.strokeOpacity = m_static.strokeOpacity;
 }
 
 void QSvgAnimatedStyle::savePaintingState(const QPainter *p, const QSvgNode *node, QSvgExtraStates &states)
 {
     QSvgStaticStyle style = node->style();
-    m_worldTransform = m_transformToNode = p->worldTransform();
+    m_worldTransform = p->worldTransform();
     if (style.transform)
-        m_transformToNode = style.transform->qtransform().inverted() * m_transformToNode;
+        m_static.transform = style.transform->qtransform();
 
-    m_brush = p->brush();
-    m_pen = p->pen();
-    m_fillOpacity = states.fillOpacity;
-    m_strokeOpacity = states.strokeOpacity;
-    m_opacity = p->opacity();
+    if (style.offset) {
+        m_static.offsetPath = style.offset->path();
+        m_static.offsetRotateType = style.offset->rotateType();
+        m_static.offsetRotate = style.offset->rotateAngle();
+    }
+
+    m_static.fill = p->brush();
+    m_static.stroke = p->pen();
+    m_static.fillOpacity = states.fillOpacity;
+    m_static.strokeOpacity = states.strokeOpacity;
+    m_static.opacity = p->opacity();
+    m_transformToNode = m_static.transform.inverted() * m_worldTransform;
 }
 
-void QSvgAnimatedStyle::applyPropertyAnimation(QPainter *p, QSvgAbstractAnimatedProperty *property,
-                                               bool replace, QSvgExtraStates &states)
+void QSvgAnimatedStyle::fetchStyleState(const QSvgAbstractAnimation *animation, QSvgStyleState &currentStyle)
 {
-    if (property->propertyName() == QStringLiteral("fill")) {
-        QBrush brush = p->brush();
-        QColor brushColor = brush.color();
-        QColor animatedColor = property->interpolatedValue().value<QColor>();
-        QColor sumOrReplaceColor = replace ? animatedColor : sumValue(brushColor, animatedColor);
-        brush.setColor(sumOrReplaceColor);
-        p->setBrush(brush);
-    } else if (property->propertyName() == QStringLiteral("stroke")) {
-        QPen pen = p->pen();
-        QBrush penBrush = pen.brush();
-        QColor penColor = penBrush.color();
-        QColor animatedColor = property->interpolatedValue().value<QColor>();
-        QColor sumOrReplaceColor = replace ? animatedColor : sumValue(penColor, animatedColor);
-        penBrush.setColor(sumOrReplaceColor);
-        penBrush.setStyle(Qt::SolidPattern);
-        pen.setBrush(penBrush);
-        p->setPen(pen);
-    } else if (property->propertyName() == QStringLiteral("transform")) {
-        QTransform animatedTransform = property->interpolatedValue().value<QTransform>();
-        QTransform sumOrReplaceTransform = replace ? animatedTransform * m_transformToNode :
-                                               animatedTransform * p->worldTransform();
-        p->setWorldTransform(sumOrReplaceTransform);
-    } else if (property->propertyName() == QStringLiteral("fill-opacity")) {
-        qreal animatedFillOpacity = property->interpolatedValue().value<qreal>();
-        qreal sumOrReplaceOpacity = replace ? animatedFillOpacity : sumValue(m_fillOpacity, animatedFillOpacity);
-        states.fillOpacity = sumOrReplaceOpacity;
-    } else if (property->propertyName() == QStringLiteral("stroke-opacity")) {
-        qreal animatedStrokeOpacity = property->interpolatedValue().value<qreal>();
-        qreal sumOrReplaceOpacity = replace ? animatedStrokeOpacity : sumValue(m_strokeOpacity, animatedStrokeOpacity);
-        states.strokeOpacity = sumOrReplaceOpacity;
-    } else if (property->propertyName() == QStringLiteral("opacity")) {
-        qreal animatedOpacity = property->interpolatedValue().value<qreal>();
-        qreal sumOrReplaceOpacity = replace ? animatedOpacity : sumValue(m_opacity, animatedOpacity);
-        p->setOpacity(sumOrReplaceOpacity);
+    bool replace = animation->animationType() == QSvgAbstractAnimation::CSS ? true :
+                       (static_cast<const QSvgAnimateNode *>(animation))->additiveType() == QSvgAnimateNode::Replace;
+
+    QList<QSvgAbstractAnimatedProperty *> properties = animation->properties();
+    for (const QSvgAbstractAnimatedProperty *property : std::as_const(properties)) {
+        if (property->propertyName() == QStringLiteral("fill")) {
+            QBrush brush = currentStyle.fill;
+            QColor brushColor = brush.color();
+            QColor animatedColor = property->interpolatedValue().value<QColor>();
+            QColor sumOrReplaceColor = replace ? animatedColor : sumValue(brushColor, animatedColor);
+            brush.setColor(sumOrReplaceColor);
+            currentStyle.fill = brush;
+        } else if (property->propertyName() == QStringLiteral("stroke")) {
+            QPen &pen = currentStyle.stroke;
+            QBrush penBrush = pen.brush();
+            QColor penColor = penBrush.color();
+            QColor animatedColor = property->interpolatedValue().value<QColor>();
+            QColor sumOrReplaceColor = replace ? animatedColor : sumValue(penColor, animatedColor);
+            penBrush.setColor(sumOrReplaceColor);
+            penBrush.setStyle(Qt::SolidPattern);
+            pen.setBrush(penBrush);
+        } else if (property->propertyName() == QStringLiteral("transform")) {
+            QTransform animatedTransform = property->interpolatedValue().value<QTransform>();
+            QTransform sumOrReplaceTransform = replace ? animatedTransform : animatedTransform * currentStyle.transform;
+            currentStyle.transform = sumOrReplaceTransform;
+        } else if (property->propertyName() == QStringLiteral("fill-opacity")) {
+            qreal animatedFillOpacity = property->interpolatedValue().value<qreal>();
+            qreal sumOrReplaceOpacity = replace ? animatedFillOpacity : sumValue(currentStyle.fillOpacity, animatedFillOpacity);
+            currentStyle.fillOpacity = sumOrReplaceOpacity;
+        } else if (property->propertyName() == QStringLiteral("stroke-opacity")) {
+            qreal animatedStrokeOpacity = property->interpolatedValue().value<qreal>();
+            qreal sumOrReplaceOpacity = replace ? animatedStrokeOpacity : sumValue(currentStyle.strokeOpacity, animatedStrokeOpacity);
+            currentStyle.strokeOpacity = sumOrReplaceOpacity;
+        } else if (property->propertyName() == QStringLiteral("opacity")) {
+            qreal animatedOpacity = property->interpolatedValue().value<qreal>();
+            qreal sumOrReplaceOpacity = replace ? animatedOpacity : sumValue(currentStyle.opacity, animatedOpacity);
+            currentStyle.opacity = sumOrReplaceOpacity;
+        } else if (property->propertyName() == QStringLiteral("offset-distance")) {
+            qreal offsetDistance = property->interpolatedValue().value<qreal>();
+            currentStyle.offsetDistance = offsetDistance;
+        }
     }
+}
+
+void QSvgAnimatedStyle::applyStyle(QPainter *p, QSvgExtraStates &states, const QSvgStyleState &currentStyle)
+{
+    p->setBrush(currentStyle.fill);
+    states.fillOpacity = currentStyle.fillOpacity;
+    p->setPen(currentStyle.stroke);
+    states.strokeOpacity = currentStyle.strokeOpacity;
+    p->setOpacity(currentStyle.opacity);
+
+    QTransform transform = currentStyle.transform;
+    QTransform offset;
+    if (m_static.offsetPath) {
+        qreal offsetDistance = currentStyle.offsetDistance;
+        qreal angle = m_static.offsetPath.value().angleAtPercent(offsetDistance);
+        QPointF position = m_static.offsetPath.value().pointAtPercent(offsetDistance);
+        offset.translate(position.x(), position.y());
+
+        switch (m_static.offsetRotateType) {
+        case QtSvg::OffsetRotateType::Auto:
+            offset.rotate(-angle);
+            break;
+        case QtSvg::OffsetRotateType::Angle:
+            offset.rotate(m_static.offsetRotate);
+            break;
+        case QtSvg::OffsetRotateType::AutoAngle:
+            offset.rotate(m_static.offsetRotate - angle);
+            break;
+        case QtSvg::OffsetRotateType::Reverse:
+            offset.rotate(180 - angle);
+            break;
+        case QtSvg::OffsetRotateType::ReverseAngle:
+            offset.rotate(180 + m_static.offsetRotate - angle);
+            break;
+        }
+    }
+
+    QTransform combinedTransform = transform * offset * m_transformToNode;
+    p->setWorldTransform(combinedTransform);
 }
 
 QT_END_NAMESPACE

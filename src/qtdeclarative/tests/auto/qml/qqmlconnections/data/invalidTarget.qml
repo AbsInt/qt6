@@ -2,7 +2,7 @@ import QtQml
 
 QtObject {
     id: root
-    objectName: button.objectName
+    objectName: button?.objectName ?? ""
 
     property QtObject b: QtObject {
         objectName: "button"

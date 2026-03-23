@@ -117,6 +117,8 @@ private slots:
     void scrollTo();
     void scroll();
     void overshoot();
+    void overshoot_data();
+    void overshoot_segments();
     void multipleWindows();
     void mouseEventTimestamp();
 
@@ -400,11 +402,77 @@ void tst_QScroller::scroll()
 #endif
 }
 
+void tst_QScroller::overshoot_data()
+{
+    QTest::addColumn<qreal>("dragDistance");
+    QTest::addColumn<qreal>("scrollDistance");
+    QTest::addColumn<QVariant>("scrollMetric");
+    QTest::addColumn<QRectF>("rectangle");
+    QTest::addColumn<QPointF>("from");
+    QTest::addColumn<QPoint>("touchStart");
+    QTest::addColumn<QPoint>("touchUpdate");
+    QTest::addColumn<QPoint>("touchEnd");
+    QTest::addColumn<bool>("overshoot");
+
+    QTest::addRow("scrollable good case") << qreal(0.2) << qreal(0.2) << QVariant(QVariant::fromValue(QScrollerProperties::OvershootWhenScrollable))
+                                          << QRectF(0, 0, 1000, 1000) << QPointF(500, 500) << QPoint(0, 0) << QPoint(400, 0) << QPoint(490, 0)  << bool(true) ;
+    QTest::addRow("scrollable bad case") << qreal(0.2) << qreal(0.2) << QVariant(QVariant::fromValue(QScrollerProperties::OvershootWhenScrollable))
+                                         << QRectF(0, 0, 0, 1000) << QPointF(0, 500) << QPoint(0, 0) << QPoint(400, 0) << QPoint(490, 0)  << bool(false);
+    QTest::addRow("overshoot always on") << qreal(0.2) << qreal(0.2) << QVariant(QVariant::fromValue(QScrollerProperties::OvershootAlwaysOn))
+                                         << QRectF(0, 0, 0, 1000) << QPointF(0, 500) << QPoint(0, 0) << QPoint(400, 0) << QPoint(490, 0)  << bool(true);
+    QTest::addRow("overshoot always off") << qreal(0.2) << qreal(0.2) << QVariant(QVariant::fromValue(QScrollerProperties::OvershootAlwaysOff))
+                                          << QRectF(0, 0, 1000, 1000) << QPointF(500, 500) << QPoint(0, 0) << QPoint(400, 0) << QPoint(490, 0)  << bool(false);
+    QTest::addRow("max overshoot null") << qreal(0.0) << qreal(0.0) << QVariant(QVariant::fromValue(QScrollerProperties::OvershootAlwaysOn))
+                                        << QRectF(0, 0, 1000, 1000) << QPointF(500, 500) << QPoint(0, 0) << QPoint(400, 0) << QPoint(490, 0)  << bool(false) ;
+}
+
+
+
 void tst_QScroller::overshoot()
 {
 #if QT_CONFIG(gestures) && QT_CONFIG(scroller)
     QScopedPointer<tst_QScrollerWidget> sw(new tst_QScrollerWidget);
-    sw->scrollArea = QRectF(0, 0, 1000, 1000);
+    QScroller::grabGesture(sw.data(), QScroller::TouchGesture);
+    sw->setGeometry(100, 100, 400, 300);
+    sw->show();
+    if (!QTest::qWaitForWindowExposed(sw.data()) || !QTest::qWaitForWindowActive(sw.data()))
+        QSKIP("Failed to show and activate window");
+
+    QFETCH(const qreal, dragDistance);
+    QFETCH(const qreal, scrollDistance);
+    QFETCH(const QVariant, scrollMetric);
+    QFETCH(const QRectF, rectangle);
+    QFETCH(const QPointF, from);
+    QFETCH(const QPoint, touchStart);
+    QFETCH(const QPoint, touchUpdate);
+    QFETCH(const QPoint, touchEnd);
+    QFETCH(const bool, overshoot);
+
+    QScroller *s1 = QScroller::scroller(sw.data());
+    QScrollerProperties sp1 = s1->scrollerProperties();
+
+    sp1.setScrollMetric(QScrollerProperties::OvershootDragResistanceFactor, 0.5);
+    sp1.setScrollMetric(QScrollerProperties::OvershootDragDistanceFactor, dragDistance);
+    sp1.setScrollMetric(QScrollerProperties::OvershootScrollDistanceFactor, scrollDistance);
+
+    sp1.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy, scrollMetric);
+
+    s1->setScrollerProperties(sp1);
+    sw->reset();
+    sw->scrollArea = rectangle;
+    kineticScrollNoTest(sw.data(), from, touchStart, touchUpdate, touchEnd);
+
+    QTRY_COMPARE(s1->state(), QScroller::Inactive);
+    QVERIFY(qFuzzyCompare(sw->currentPos.x(), 0));
+    QVERIFY(qFuzzyCompare(sw->currentPos.y(), 500));
+    QCOMPARE(sw->receivedOvershoot, overshoot);
+#endif
+}
+
+void tst_QScroller::overshoot_segments()
+{
+#if QT_CONFIG(gestures) && QT_CONFIG(scroller)
+    QScopedPointer<tst_QScrollerWidget> sw(new tst_QScrollerWidget);
     QScroller::grabGesture(sw.data(), QScroller::TouchGesture);
     sw->setGeometry(100, 100, 400, 300);
     sw->show();
@@ -418,101 +486,24 @@ void tst_QScroller::overshoot()
     sp1.setScrollMetric(QScrollerProperties::OvershootDragDistanceFactor, 0.2);
     sp1.setScrollMetric(QScrollerProperties::OvershootScrollDistanceFactor, 0.2);
 
-    // -- try to scroll with overshoot (when scrollable good case)
-
-    sp1.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy, QVariant::fromValue(QScrollerProperties::OvershootWhenScrollable));
-    s1->setScrollerProperties(sp1);
-    kineticScrollNoTest(sw.data(), QPointF(500, 500), QPoint(0, 0), QPoint(400, 0), QPoint(490, 0));
-
-    QTRY_COMPARE(s1->state(), QScroller::Inactive);
-
-    //qDebug() << "Overshoot fuzzy: "<<sw->currentPos;
-    QVERIFY(qFuzzyCompare(sw->currentPos.x(), 0));
-    QVERIFY(qFuzzyCompare(sw->currentPos.y(), 500));
-    QCOMPARE(sw->receivedOvershoot, true);
-
-    // -- try to scroll with overshoot (when scrollable bad case)
-    sw->reset();
-    sw->scrollArea = QRectF(0, 0, 0, 1000);
-
-    sp1.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy, QVariant::fromValue(QScrollerProperties::OvershootWhenScrollable));
-    s1->setScrollerProperties(sp1);
-    kineticScrollNoTest(sw.data(), QPointF(0, 500), QPoint(0, 0), QPoint(400, 0), QPoint(490, 0));
-
-    QTRY_COMPARE(s1->state(), QScroller::Inactive);
-
-    //qDebug() << "Overshoot fuzzy: "<<sw->currentPos;
-    QVERIFY(qFuzzyCompare(sw->currentPos.x(), 0));
-    QVERIFY(qFuzzyCompare(sw->currentPos.y(), 500));
-    QCOMPARE(sw->receivedOvershoot, false);
-
-    // -- try to scroll with overshoot (always on)
-    sw->reset();
-    sw->scrollArea = QRectF(0, 0, 0, 1000);
-
-    sp1.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy, QVariant::fromValue(QScrollerProperties::OvershootAlwaysOn));
-    s1->setScrollerProperties(sp1);
-    kineticScrollNoTest(sw.data(), QPointF(0, 500), QPoint(0, 0), QPoint(400, 0), QPoint(490, 0));
-
-    QTRY_COMPARE(s1->state(), QScroller::Inactive);
-
-    //qDebug() << "Overshoot fuzzy: "<<sw->currentPos;
-
-    QVERIFY(qFuzzyCompare(sw->currentPos.x(), 0));
-    QVERIFY(qFuzzyCompare(sw->currentPos.y(), 500));
-    QCOMPARE(sw->receivedOvershoot, true);
-
-    // -- try to scroll with overshoot (always off)
-    sw->reset();
-    sw->scrollArea = QRectF(0, 0, 1000, 1000);
-
     sp1.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy, QVariant::fromValue(QScrollerProperties::OvershootAlwaysOff));
     s1->setScrollerProperties(sp1);
-    kineticScrollNoTest(sw.data(), QPointF(500, 500), QPoint(0, 0), QPoint(400, 0), QPoint(490, 0));
 
-    QTRY_COMPARE(s1->state(), QScroller::Inactive);
-
-    QVERIFY(qFuzzyCompare(sw->currentPos.x(), 0));
-    QVERIFY(qFuzzyCompare(sw->currentPos.y(), 500));
-    QCOMPARE(sw->receivedOvershoot, false);
-
-    // -- try to scroll with overshoot (always off, slow)
-    sw->reset();
     sw->scrollArea = QRectF(0, 0, 1000, 1000);
-
-    sp1.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy, QVariant::fromValue(QScrollerProperties::OvershootAlwaysOff));
-    s1->setScrollerProperties(sp1);
     kineticScrollNoTest(sw.data(), QPointF(500, 500), QPoint(0, 0), QPoint(200, 0), QPoint(250, 0));
 
-    // Check that segment parameters are consistent
     QScrollerPrivate* priv = s1->d_func();
     QVERIFY(priv->xSegments.size() == 1);
     const auto& segment = priv->xSegments.head();
     QCOMPARE_LT(segment.startPos + segment.deltaPos, segment.stopPos);
 
     QTRY_COMPARE(s1->state(), QScroller::Inactive);
-
-    QVERIFY(qFuzzyCompare(sw->currentPos.x(), 0));
-    QVERIFY(qFuzzyCompare(sw->currentPos.y(), 500));
-    QCOMPARE(sw->receivedOvershoot, false);
-
-    // -- try to scroll with overshoot (always on but max overshoot = 0)
-    sp1.setScrollMetric(QScrollerProperties::OvershootDragDistanceFactor, 0.0);
-    sp1.setScrollMetric(QScrollerProperties::OvershootScrollDistanceFactor, 0.0);
-    sw->reset();
-    sw->scrollArea = QRectF(0, 0, 1000, 1000);
-
-    sp1.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy, QVariant::fromValue(QScrollerProperties::OvershootAlwaysOn));
-    s1->setScrollerProperties(sp1);
-    kineticScrollNoTest(sw.data(), QPointF(500, 500), QPoint(0, 0), QPoint(400, 0), QPoint(490, 0));
-
-    QTRY_COMPARE(s1->state(), QScroller::Inactive);
-
     QVERIFY(qFuzzyCompare(sw->currentPos.x(), 0));
     QVERIFY(qFuzzyCompare(sw->currentPos.y(), 500));
     QCOMPARE(sw->receivedOvershoot, false);
 #endif
 }
+
 
 void tst_QScroller::multipleWindows()
 {

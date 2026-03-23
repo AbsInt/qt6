@@ -22,6 +22,7 @@
 #include <QtCore/QStringList>
 #include <QtTest/QTest>
 #include <QtCore/private/qglobal_p.h>
+#include <private/qqmljsgrammar_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -121,6 +122,59 @@ bool gcDone(const QV4::ExecutionEngine *engine);
 void gc(QV4::ExecutionEngine &engine, GCFlags flags = GCFlags::None);
 bool gcDone(QQmlEngine *engine);
 void gc(QQmlEngine &engine, GCFlags flags = GCFlags::None);
+
+namespace Syntax {
+using Token = QQmlJSGrammar::VariousConstants;
+// TODO(QTBUG-138020)
+constexpr auto spellFor(Token token) -> QLatin1StringView
+{
+    switch (token) {
+    case Token::T_COLON:
+        return QLatin1StringView(":");
+    case Token::T_LBRACE:
+        return QLatin1StringView("{");
+    case Token::T_RBRACE:
+        return QLatin1StringView("}");
+    case Token::T_VAR:
+        return QLatin1StringView("var");
+    case Token::T_PROPERTY:
+        return QLatin1StringView("property");
+    case Token::T_DEFAULT:
+        return QLatin1StringView("default");
+    case Token::T_READONLY:
+        return QLatin1StringView("readonly");
+    case Token::T_REQUIRED:
+        return QLatin1StringView("required");
+    case Token::T_FINAL:
+        return QLatin1StringView("final");
+    case Token::T_VIRTUAL:
+        return QLatin1StringView("virtual");
+    case Token::T_OVERRIDE:
+        return QLatin1StringView("override");
+    default:
+        break;
+    }
+    Q_UNREACHABLE_RETURN({});
+}
+
+using Word = std::variant<Token, QLatin1StringView>;
+auto stringView(const Word &word) -> QLatin1StringView;
+
+using Phrase = QList<Word>;
+auto toString(const Phrase &phrase) -> QString;
+
+// comfort
+auto operator+(const Word &word, const Phrase &phrase) -> Phrase;
+auto operator+(const Word &word1, const Word &word2) -> Phrase;
+
+// if such declaration generating functions start to grow it might be worth creating a dedicated
+// more optimized generator
+
+// can probably be generalized later to accept QList<Phrase> if needed
+auto objectDeclaration(Phrase &&objectMember = {},
+                       QLatin1StringView objName = QLatin1StringView("QtObject")) -> Phrase;
+
+} // namespace Syntax
 
 QT_END_NAMESPACE
 

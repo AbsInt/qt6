@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "config.h"
+#include "inclusionpolicy.h"
 #include "utilities.h"
 
 #include <QtCore/qdir.h>
 #include <QtCore/qfile.h>
+#include <QtCore/qfileinfo.h>
+#include <QtCore/qlatin1stringview.h>
 #include <QtCore/qtemporaryfile.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qvariant.h>
@@ -13,9 +16,12 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 QString ConfigStrings::AUTOLINKERRORS = QStringLiteral("autolinkerrors");
 QString ConfigStrings::BUILDVERSION = QStringLiteral("buildversion");
 QString ConfigStrings::CODEINDENT = QStringLiteral("codeindent");
+QString ConfigStrings::CODELANGUAGES = QStringLiteral("codelanguages");
 QString ConfigStrings::CODEPREFIX = QStringLiteral("codeprefix");
 QString ConfigStrings::CODESUFFIX = QStringLiteral("codesuffix");
 QString ConfigStrings::CPPCLASSESPAGE = QStringLiteral("cppclassespage");
@@ -45,7 +51,10 @@ QString ConfigStrings::IGNORESINCE = QStringLiteral("ignoresince");
 QString ConfigStrings::IGNORETOKENS = QStringLiteral("ignoretokens");
 QString ConfigStrings::IGNOREWORDS = QStringLiteral("ignorewords");
 QString ConfigStrings::IMAGEDIRS = QStringLiteral("imagedirs");
+QString ConfigStrings::IMAGESOUTPUTDIR = QStringLiteral("imagesoutputdir");
 QString ConfigStrings::INCLUDEPATHS = QStringLiteral("includepaths");
+QString ConfigStrings::INCLUDEPRIVATE = QStringLiteral("includeprivate");
+QString ConfigStrings::INTERNALFILEPATTERNS = QStringLiteral("internalfilepatterns");
 QString ConfigStrings::INCLUSIVE = QStringLiteral("inclusive");
 QString ConfigStrings::INDEXES = QStringLiteral("indexes");
 QString ConfigStrings::LANDINGPAGE = QStringLiteral("landingpage");
@@ -53,6 +62,8 @@ QString ConfigStrings::LANDINGTITLE = QStringLiteral("landingtitle");
 QString ConfigStrings::LANGUAGE = QStringLiteral("language");
 QString ConfigStrings::LOCATIONINFO = QStringLiteral("locationinfo");
 QString ConfigStrings::LOGPROGRESS = QStringLiteral("logprogress");
+QString ConfigStrings::LOGWARNINGS = QStringLiteral("logwarnings");
+QString ConfigStrings::LOGWARNINGSDISABLECLIARGS = QStringLiteral("logwarnings.disablecliargs");
 QString ConfigStrings::MACRO = QStringLiteral("macro");
 QString ConfigStrings::MANIFESTMETA = QStringLiteral("manifestmeta");
 QString ConfigStrings::MODULEHEADER = QStringLiteral("moduleheader");
@@ -65,6 +76,7 @@ QString ConfigStrings::OUTPUTPREFIXES = QStringLiteral("outputprefixes");
 QString ConfigStrings::OUTPUTSUFFIXES = QStringLiteral("outputsuffixes");
 QString ConfigStrings::PRODUCTNAME = QStringLiteral("productname");
 QString ConfigStrings::PROJECT = QStringLiteral("project");
+QString ConfigStrings::PROJECTROOT = QStringLiteral("projectroot");
 QString ConfigStrings::REDIRECTDOCUMENTATIONTODEVNULL =
         QStringLiteral("redirectdocumentationtodevnull");
 QString ConfigStrings::REPORTMISSINGALTTEXTFORIMAGES =
@@ -360,6 +372,7 @@ void Config::clear()
     m_includeFilesMap.clear();
     m_excludedPaths.reset();
     m_sourceLink.reset();
+    m_internalFilePatterns.reset();
 }
 
 /*!
@@ -371,6 +384,7 @@ void Config::reset()
 
     // Default values
     setStringList(CONFIG_CODEINDENT, QStringList("0"));
+    setStringList(CONFIG_CODELANGUAGES, QStringList());
     setStringList(CONFIG_FALSEHOODS, QStringList("0"));
     setStringList(CONFIG_HEADERS + dot + CONFIG_FILEEXTENSIONS, QStringList("*.ch *.h *.h++ *.hh *.hpp *.hxx"));
     setStringList(CONFIG_SOURCES + dot + CONFIG_FILEEXTENSIONS, QStringList("*.c++ *.cc *.cpp *.cxx *.mm *.qml *.qdoc"));
@@ -378,6 +392,7 @@ void Config::reset()
     setStringList(CONFIG_OUTPUTFORMATS, QStringList("HTML"));
     setStringList(CONFIG_TABSIZE, QStringList("8"));
     setStringList(CONFIG_LOCATIONINFO, QStringList("true"));
+    setStringList(CONFIG_INCLUDEPRIVATE, QStringList("false"));
     setStringList(CONFIG_WARNABOUTMISSINGIMAGES, QStringList("true"));
     setStringList(CONFIG_WARNABOUTMISSINGPROJECTFILES, QStringList("true"));
 
@@ -435,6 +450,9 @@ void Config::load(const QString &fileName)
     m_exampleDirs = getCanonicalPathList(CONFIG_EXAMPLEDIRS);
     m_reportMissingAltTextForImages =
             m_configVars.value(CONFIG_REPORTMISSINGALTTEXTFORIMAGES).asBool();
+
+    if (!m_parser.isSet(m_parser.showInternalOption) && !qEnvironmentVariableIsSet("QDOC_SHOW_INTERNAL"))
+        m_showInternal = m_configVars.value(CONFIG_SHOWINTERNAL).asBool();
 }
 
 /*!
@@ -1430,6 +1448,111 @@ const Config::ExcludedPaths& Config::getExcludedPaths() {
 }
 
 /*!
+    Returns the set of file patterns that identify internal implementation files.
+    Classes declared in files matching these patterns will have their nodes marked
+    as internal, excluding them and their members from documentation requirements
+    when showInternal is false.
+
+    \sa isFileExcluded()
+*/
+QSet<QString> Config::getInternalFilePatterns() const
+{
+    const QStringList patterns = get(CONFIG_INTERNALFILEPATTERNS).asStringList();
+    return QSet<QString>(patterns.cbegin(), patterns.cend());
+}
+
+/*!
+    Returns a reference to the pre-compiled internal file patterns structure.
+    This method caches the compiled patterns for efficient reuse across multiple
+    file checks. The patterns are compiled once when first accessed and remain
+    valid until the configuration is cleared or reloaded.
+
+    The returned structure separates patterns into:
+    - exactMatches: Patterns without wildcards for direct string matching.
+    - regexPatterns: Pre-compiled regular expressions for regular expression
+      patterns.
+
+    \sa matchesInternalFilePattern(), clear()
+*/
+const Config::InternalFilePatterns& Config::getInternalFilePatternsCompiled()
+{
+    if (m_internalFilePatterns)
+        return *m_internalFilePatterns;
+
+    InternalFilePatterns compiled;
+    const QStringList patterns = get(CONFIG_INTERNALFILEPATTERNS).asStringList();
+
+    for (const QString &pattern : patterns) {
+        static const QRegularExpression regexMetaChars(
+                uR"(\.\*|\.\+|\.\{|\\[\.\*\?]|[\^\$\[\]{}()|+])"_s);
+        bool isRawRegex = regexMetaChars.match(pattern).hasMatch();
+
+        if (isRawRegex) {
+            QRegularExpression re(pattern);
+            if (!re.isValid()) {
+                qWarning() << "Invalid regex pattern in internalfilepatterns:" << pattern
+                          << "-" << re.errorString();
+                continue;
+            }
+            re.optimize();
+            compiled.regexPatterns.append(re);
+        } else if (pattern.contains(u'*') || pattern.contains(u'?')) {
+            QString regexPattern = QRegularExpression::wildcardToRegularExpression(pattern);
+            QRegularExpression re(regexPattern);
+            re.optimize();
+            compiled.globPatterns.append(re);
+        } else {
+            compiled.exactMatches.insert(pattern);
+        }
+    }
+
+    m_internalFilePatterns.emplace(std::move(compiled));
+    return *m_internalFilePatterns;
+}
+
+/*!
+    Returns true if the given \a filePath matches any pattern in the
+    \a patterns structure. This is an optimized version that uses pre-compiled
+    regular expressions.
+
+    The function first checks for exact matches (patterns without wildcards),
+    which compare against the full normalized path. Then it checks glob patterns
+    against the filename only, and finally regex patterns against the full path.
+
+    Path normalization is handled internally: all backslashes are converted to
+    forward slashes to ensure cross-platform consistency, as patterns are
+    expected to use forward slashes.
+
+    \sa getInternalFilePatternsCompiled()
+*/
+bool Config::matchesInternalFilePattern(const QString &filePath,
+                                       const InternalFilePatterns &patterns) noexcept
+{
+    if (patterns.exactMatches.isEmpty() && patterns.globPatterns.isEmpty()
+        && patterns.regexPatterns.isEmpty())
+        return false;
+
+    QString norm = filePath;
+    norm.replace(QChar('\\'), QChar('/'));
+
+    if (patterns.exactMatches.contains(norm))
+        return true;
+
+    const QString fileName = QFileInfo(norm).fileName();
+    for (const QRegularExpression &re : patterns.globPatterns) {
+        if (re.match(fileName).hasMatch())
+            return true;
+    }
+
+    for (const QRegularExpression &re : patterns.regexPatterns) {
+        if (re.match(norm).hasMatch())
+            return true;
+    }
+
+    return false;
+}
+
+/*!
     Returns a SourceLink struct with settings required to
     construct source links to API entities.
 */
@@ -1471,6 +1594,18 @@ std::set<Config::HeaderFilePath> Config::getHeaderFiles() {
     }
 
     return headers;
+}
+
+InclusionPolicy Config::createInclusionPolicy() const
+{
+    InclusionPolicy policy;
+
+    policy.includePrivateFunction = includePrivateFunction();
+    policy.includePrivateType = includePrivateType();
+    policy.includePrivateVariable = includePrivateVariable();
+    policy.showInternal = showInternal();
+
+    return policy;
 }
 
 QT_END_NAMESPACE

@@ -2,6 +2,10 @@
 # Copyright (C) 2023 The Qt Company Ltd.
 # SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
+# This script will
+#   1) Clone the vcpkg repo   - https://github.com/microsoft/vcpkg/tags
+#   2) Install the vcpkg-tool - https://github.com/microsoft/vcpkg-tool/tags
+
 # shellcheck source=../unix/SetEnvVar.sh
 source "${BASH_SOURCE%/*}/../unix/SetEnvVar.sh"
 # shellcheck source=../unix/DownloadURL.sh
@@ -18,6 +22,7 @@ echo "Cloning the vcpkg repo"
 git clone "$vcpkgRepo" "$vcpkgRoot"
 git -C "$vcpkgRoot" checkout "tags/$vcpkgVersion"
 
+echo "Install the vcpkg-tool"
 releaseTagFile="${BASH_SOURCE%/*}/../shared/vcpkg_tool_release_tag.txt"
 for line in $(cat "$releaseTagFile")
 do
@@ -29,8 +34,8 @@ do
         "vcpkg_tool_release_tag")
             vcpkgToolReleaseTag=${keyValue[1]}
             ;;
-        "linux_sha1")
-            vcpkgToolSHA1=${keyValue[1]}
+        "linux_checksum")
+            vcpkgToolChecksum=${keyValue[1]}
             ;;
     esac
 done
@@ -43,9 +48,9 @@ then
     exit 1
 fi
 
-if [ -z vcpkgToolSHA1 ]
+if [ -z vcpkgToolChecksum ]
 then
-    echo "Unable to read vcpkg tool SHA1 from $releaseTagFile"
+    echo "Unable to read vcpkg tool Checksum from $releaseTagFile"
     echo "Content:"
     cat $releaseTagFile
     exit 1
@@ -58,7 +63,7 @@ vcpkgToolCacheUrl="http://ci-files01-hki.ci.qt.io/input/vcpkg/vcpkg-tool-$nonDot
 vcpkgToolSourceFolder="$HOME/vcpkg-tool-$vcpkgToolReleaseTag"
 vcpkgToolBuildFolder="$HOME/vcpkg-tool-$vcpkgToolReleaseTag/build"
 
-InstallFromCompressedFileFromURL "$vcpkgToolCacheUrl" "$vcpkgToolOfficialUrl" "$vcpkgToolSHA1" "$HOME" ""
+InstallFromCompressedFileFromURL "$vcpkgToolCacheUrl" "$vcpkgToolOfficialUrl" "$vcpkgToolChecksum" "$HOME" ""
 cmake -S "$vcpkgToolSourceFolder" -B "$vcpkgToolBuildFolder" -GNinja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DVCPKG_DEVELOPMENT_WARNINGS=OFF
 cmake --build "$vcpkgToolBuildFolder" --parallel
 
@@ -86,5 +91,8 @@ export VCPKG_ROOT="$vcpkgRoot"
 # $HOME/vcpkg-cache/
 export VCPKG_BINARY_SOURCES="files,$HOME/vcpkg-cache/binaries,readwrite"
 export X_VCPKG_ASSET_SOURCES="x-azurl,file:///$HOME/vcpkg-cache/assets,,readwrite"
+
+SetEnvVar VCPKG_BINARY_SOURCES "$VCPKG_BINARY_SOURCES"
+SetEnvVar X_VCPKG_ASSET_SOURCES "$X_VCPKG_ASSET_SOURCES"
 
 echo "vcpkg = $vcpkgVersion" >> ~/versions.txt

@@ -177,15 +177,18 @@ Blob Blob::slice(uint32_t begin, uint32_t end) const
 
 ArrayBuffer Blob::arrayBuffer_sync() const
 {
-    QEventLoop loop;
     emscripten::val buffer;
-    qstdweb::Promise::make(m_blob, QStringLiteral("arrayBuffer"), {
-        .thenFunc = [&loop, &buffer](emscripten::val arrayBuffer) {
-            buffer = arrayBuffer;
-            loop.quit();
+    QList<uint32_t> handlers;
+    qstdweb::Promise::make(
+        handlers,
+        m_blob,
+        QStringLiteral("arrayBuffer"),
+        {
+            .thenFunc = [&buffer](emscripten::val arrayBuffer) {
+                buffer = arrayBuffer;
         }
     });
-    loop.exec();
+    Promise::suspendExclusive(handlers);
     return ArrayBuffer(buffer);
 }
 
@@ -443,7 +446,120 @@ EventCallback::EventCallback(emscripten::val element, const std::string &name,
 
 }
 
-void Promise::adoptPromise(emscripten::val promise, PromiseCallbacks callbacks)
+size_t qstdweb::Promise::State::s_numInstances = 0;
+
+//
+// When a promise settles, all attached handlers will be called in
+// the order they where added.
+//
+// In particular a finally handler will be called according to its
+// position in the call chain. Which is not necessarily at the end,
+//
+// This makes cleanup difficult. If we cleanup to early, we will remove
+// handlers before they have a chance to be called. This would be the
+// case if we add a finally handler in the Promise constructor.
+//
+// For correct cleanup it is necessary that it happens after the
+// last handler has been called.
+//
+// We choose to implement this by making sure the last handler
+// is always a finally handler.
+//
+// In this case we have multiple finally handlers, so any called
+// handler checks if it is the last handler to be called.
+// If it is, the cleanup is performed, otherwise cleanup
+// is delayed to the last handler.
+//
+// We could try to let the handlers cleanup themselves, but this
+// only works for finally handlers. A then or catch handler is not
+// necessarily called, and would not cleanup itself.
+//
+// We could try to let a (then,catch) pair cleanup both handlers,
+// under the assumption that one of them will always be called.
+// This does not work in the case that we do not have both handlers,
+// or if the then handler throws (both should be called in this case).
+//
+Promise& Promise::addThenFunction(std::function<void(emscripten::val)> thenFunc)
+{
+    QWasmSuspendResumeControl *suspendResume = QWasmSuspendResumeControl::get();
+    Q_ASSERT(suspendResume);
+
+    m_state->m_handlers.push_back(suspendResume->registerEventHandler(thenFunc));
+    m_state->m_promise =
+        m_state->m_promise.call<emscripten::val>(
+            "then",
+            suspendResume->jsEventHandlerAt(
+                m_state->m_handlers.back()));
+
+    addFinallyFunction([](){}); // Add a potential cleanup handler
+    return (*this);
+}
+
+Promise& Promise::addCatchFunction(std::function<void(emscripten::val)> catchFunc)
+{
+    QWasmSuspendResumeControl *suspendResume = QWasmSuspendResumeControl::get();
+    Q_ASSERT(suspendResume);
+
+    m_state->m_handlers.push_back(suspendResume->registerEventHandler(catchFunc));
+    m_state->m_promise =
+        m_state->m_promise.call<emscripten::val>(
+            "catch",
+            suspendResume->jsEventHandlerAt(
+                m_state->m_handlers.back()));
+
+    addFinallyFunction([](){}); // Add a potential cleanup handler
+    return (*this);
+}
+
+Promise& Promise::addFinallyFunction(std::function<void()> finallyFunc)
+{
+    QWasmSuspendResumeControl *suspendResume = QWasmSuspendResumeControl::get();
+    Q_ASSERT(suspendResume);
+
+    auto thisHandler = std::make_shared<uint32_t>((uint32_t)(-1));
+    auto state = m_state;
+
+    std::function<void(emscripten::val)> func =
+        [state, thisHandler, finallyFunc](emscripten::val element) {
+            Q_UNUSED(element);
+
+            finallyFunc();
+
+            // See comment at top, we can only do the cleanup
+            // if we are the last handler in the handler chain
+            if (state->m_handlers.back() == *thisHandler) {
+                auto guard = state; // removeEventHandler will remove also this function
+                QWasmSuspendResumeControl *suspendResume = QWasmSuspendResumeControl::get();
+                Q_ASSERT(suspendResume);
+                for (int i = 0; i < guard->m_handlers.size(); ++i) {
+                    suspendResume->removeEventHandler(guard->m_handlers[i]);
+                    guard->m_handlers[i] = (uint32_t)(-1);
+                }
+            }
+        };
+
+    *thisHandler = suspendResume->registerEventHandler(func);
+    m_state->m_handlers.push_back(*thisHandler);
+    m_state->m_promise =
+        m_state->m_promise.call<emscripten::val>(
+            "finally",
+            suspendResume->jsEventHandlerAt(
+                m_state->m_handlers.back()));
+
+    return (*this);
+}
+
+void Promise::suspendExclusive()
+{
+    Promise::suspendExclusive(m_state->m_handlers);
+}
+
+emscripten::val Promise::getPromise() const
+{
+    return m_state->m_promise;
+}
+
+uint32_t Promise::adoptPromise(emscripten::val promise, PromiseCallbacks callbacks, QList<uint32_t> *handlers)
 {
     Q_ASSERT_X(!!callbacks.catchFunc || !!callbacks.finallyFunc || !!callbacks.thenFunc,
         "Promise::adoptPromise", "must provide at least one callback function");
@@ -499,13 +615,30 @@ void Promise::adoptPromise(emscripten::val promise, PromiseCallbacks callbacks)
 
     promise = promise.call<emscripten::val>("finally",
                                             suspendResume->jsEventHandlerAt(*finallyIndex));
+
+    if (handlers) {
+        if (thenIndex)
+            handlers->push_back(*thenIndex);
+        if (catchIndex)
+            handlers->push_back(*catchIndex);
+        handlers->push_back(*finallyIndex);
+    }
+    return *finallyIndex;
+}
+
+void Promise::suspendExclusive(QList<uint32_t> handlerIndices)
+{
+    QWasmSuspendResumeControl *suspendResume = QWasmSuspendResumeControl::get();
+    Q_ASSERT(suspendResume);
+    suspendResume->suspendExclusive(handlerIndices);
+    suspendResume->sendPendingEvents();
 }
 
 void Promise::all(std::vector<emscripten::val> promises, PromiseCallbacks callbacks)
 {
     auto arr = emscripten::val::array(promises);
     auto all = val::global("Promise").call<emscripten::val>("all", arr);
-    return adoptPromise(all, callbacks);
+    adoptPromise(all, callbacks);
 }
 
 //  Asyncify and thread blocking: Normally, it's not possible to block the main
@@ -628,6 +761,254 @@ qint64 Uint8ArrayIODevice::writeData(const char *data, qint64 maxSize)
     if (size > 0)
         m_array.subarray(begin, end).set(Uint8Array(data, size));
     return size;
+}
+
+FileSystemWritableFileStreamIODevice::FileSystemWritableFileStreamIODevice(FileSystemWritableFileStream stream)
+    : m_stream(std::move(stream))
+{
+}
+
+bool FileSystemWritableFileStreamIODevice::open(QIODevice::OpenMode mode)
+{
+    if (mode.testFlag(QIODevice::ReadOnly))
+        return false;
+    return QIODevice::open(mode);
+}
+
+void FileSystemWritableFileStreamIODevice::close()
+{
+    if (!isOpen()) {
+        QIODevice::close();
+        return;
+    }
+
+    QList<uint32_t> handlers;
+    Promise::make(handlers, m_stream.val(), QStringLiteral("close"), {
+        .thenFunc = [](emscripten::val) {
+        }
+    });
+    Promise::suspendExclusive(handlers);
+
+    QIODevice::close();
+}
+
+bool FileSystemWritableFileStreamIODevice::isSequential() const
+{
+    return false;
+}
+
+qint64 FileSystemWritableFileStreamIODevice::size() const
+{
+    return m_size;
+}
+
+bool FileSystemWritableFileStreamIODevice::seek(qint64 pos)
+{
+    bool success = false;
+
+    emscripten::val seekParams = emscripten::val::object();
+    seekParams.set("type", std::string("seek"));
+    seekParams.set("position", static_cast<double>(pos));
+    QList<uint32_t> handlers;
+    Promise::make(handlers, m_stream.val(), QStringLiteral("write"), {
+        .thenFunc = [&success](emscripten::val) {
+            success = true;
+        },
+        .catchFunc = [](emscripten::val) {
+        }
+    }, seekParams);
+    Promise::suspendExclusive(handlers);
+
+    if (!success)
+        return false;
+
+    return QIODevice::seek(pos);
+}
+
+qint64 FileSystemWritableFileStreamIODevice::readData(char *, qint64)
+{
+    Q_UNREACHABLE();
+}
+
+qint64 FileSystemWritableFileStreamIODevice::writeData(const char *data, qint64 size)
+{
+    bool success = false;
+
+    Uint8Array array = Uint8Array::copyFrom(data, size);
+    QList<uint32_t> handlers;
+    Promise::make(handlers, m_stream.val(), QStringLiteral("write"), {
+        .thenFunc = [&success](emscripten::val) {
+            success = true;
+        },
+        .catchFunc = [](emscripten::val) {
+        }
+    }, array.val());
+    Promise::suspendExclusive(handlers);
+
+    if (success) {
+        qint64 newPos = pos() + size;
+        m_size = std::max(m_size, newPos);
+        return size;
+    }
+    return -1;
+}
+
+FileSystemWritableFileStream::FileSystemWritableFileStream(const emscripten::val &writableStream)
+    : m_writableStream(writableStream)
+{
+}
+
+emscripten::val FileSystemWritableFileStream::val() const
+{
+    return m_writableStream;
+}
+
+FileSystemFileHandle::FileSystemFileHandle(const emscripten::val &fileHandle)
+    : m_fileHandle(fileHandle)
+{
+}
+
+std::string FileSystemFileHandle::name() const
+{
+    return m_fileHandle["name"].as<std::string>();
+}
+
+std::string FileSystemFileHandle::kind() const
+{
+    return m_fileHandle["kind"].as<std::string>();
+}
+
+emscripten::val FileSystemFileHandle::val() const
+{
+    return m_fileHandle;
+}
+
+FileSystemFileIODevice::FileSystemFileIODevice(FileSystemFileHandle fileHandle)
+    : m_fileHandle(fileHandle)
+{
+}
+
+bool FileSystemFileIODevice::open(QIODevice::OpenMode mode)
+{
+    if (isOpen())
+        return false;
+
+    // Read mode: get the File and create a BlobIODevice
+    if (mode & QIODevice::ReadOnly) {
+        File file;
+        bool success = false;
+
+        QList<uint32_t> handlers;
+        Promise::make(handlers, m_fileHandle.val(), QStringLiteral("getFile"), {
+            .thenFunc = [&file, &success](emscripten::val fileVal) {
+                file = File(fileVal);
+                success = true;
+            },
+            .catchFunc = [](emscripten::val) {
+            }
+        });
+        Promise::suspendExclusive(handlers);
+
+        if (success) {
+            m_blobDevice = std::make_unique<BlobIODevice>(file.slice(0, file.size()));
+            m_size = file.size();
+
+            if (!m_blobDevice->open(mode))
+                return false;
+        } else {
+            return false;
+        }
+    }
+
+    // Write mode: create a writable stream
+    if (mode & QIODevice::WriteOnly) {
+        FileSystemWritableFileStream writableStream;
+        bool success = false;
+
+        QList<uint32_t> handlers;
+        Promise::make(handlers, m_fileHandle.val(), QStringLiteral("createWritable"), {
+            .thenFunc = [&writableStream, &success](emscripten::val writable) {
+                writableStream = FileSystemWritableFileStream(writable);
+                success = true;
+            },
+            .catchFunc = [](emscripten::val) {
+            }
+        });
+        Promise::suspendExclusive(handlers);
+
+        if (success) {
+            m_writableDevice = std::make_unique<FileSystemWritableFileStreamIODevice>(writableStream);
+            if (!m_writableDevice->open(mode))
+                return false;
+        } else {
+            return false;
+        }
+    }
+
+    return QIODevice::open(mode);
+}
+
+void FileSystemFileIODevice::close()
+{
+    if (!isOpen()) {
+        QIODevice::close();
+        return;
+    }
+
+    if (m_writableDevice) {
+        m_writableDevice->close();
+        m_writableDevice.reset();
+    }
+    if (m_blobDevice) {
+        m_blobDevice->close();
+        m_blobDevice.reset();
+    }
+
+    QIODevice::close();
+}
+
+bool FileSystemFileIODevice::isSequential() const
+{
+    return false;
+}
+
+qint64 FileSystemFileIODevice::size() const
+{
+    return m_size;
+}
+
+bool FileSystemFileIODevice::seek(qint64 pos)
+{
+    if (m_blobDevice) {
+        if (!m_blobDevice->seek(pos))
+            return false;
+    }
+    if (m_writableDevice) {
+        if (!m_writableDevice->seek(pos))
+            return false;
+    }
+    return QIODevice::seek(pos);
+}
+
+qint64 FileSystemFileIODevice::readData(char *data, qint64 maxSize)
+{
+    if (!m_blobDevice)
+        return -1;
+
+    return m_blobDevice->read(data, maxSize);
+}
+
+qint64 FileSystemFileIODevice::writeData(const char *data, qint64 size)
+{
+    if (!m_writableDevice)
+        return -1;
+
+    qint64 written = m_writableDevice->write(data, size);
+    if (written > 0) {
+        qint64 newPos = pos() + written;
+        m_size = std::max(m_size, newPos);
+    }
+    return written;
 }
 
 } // namespace qstdweb

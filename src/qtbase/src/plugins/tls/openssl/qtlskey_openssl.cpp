@@ -31,6 +31,17 @@ void TlsKeyOpenSSL::decodeDer(QSsl::KeyType type, QSsl::KeyAlgorithm algorithm, 
     decodePem(type, algorithm, pem, passPhrase, deepClear);
 }
 
+void TlsKeyOpenSSL::readGenericKey(BIO *bio, void *phrase, QSsl::KeyType keyType)
+{
+    if (keyType == QSsl::PublicKey)
+        genericKey = q_PEM_read_bio_PUBKEY(bio, nullptr, nullptr, phrase);
+    else
+        genericKey = q_PEM_read_bio_PrivateKey(bio, nullptr, nullptr, phrase);
+    keyIsNull = !genericKey;
+    if (keyIsNull)
+        QTlsBackendOpenSSL::logAndClearErrorQueue();
+}
+
 void TlsKeyOpenSSL::decodePem(KeyType type, KeyAlgorithm algorithm, const QByteArray &pem,
                               const QByteArray &passPhrase, bool deepClear)
 {
@@ -51,13 +62,7 @@ void TlsKeyOpenSSL::decodePem(KeyType type, KeyAlgorithm algorithm, const QByteA
     void *phrase = const_cast<char *>(passPhrase.data());
 
 #ifdef OPENSSL_NO_DEPRECATED_3_0
-    if (type == QSsl::PublicKey)
-        genericKey = q_PEM_read_bio_PUBKEY(bio, nullptr, nullptr, phrase);
-    else
-        genericKey = q_PEM_read_bio_PrivateKey(bio, nullptr, nullptr, phrase);
-    keyIsNull = !genericKey;
-    if (keyIsNull)
-        QTlsBackendOpenSSL::logAndClearErrorQueue();
+    readGenericKey(bio, phrase, keyType);
 #else
 
     if (algorithm == QSsl::Rsa) {
@@ -89,6 +94,8 @@ void TlsKeyOpenSSL::decodePem(KeyType type, KeyAlgorithm algorithm, const QByteA
         if (ec && ec == result)
             keyIsNull = false;
 #endif // OPENSSL_NO_EC
+    } else if (algorithm == QSsl::MlDsa) {
+        readGenericKey(bio, phrase, keyType);
     }
 
 #endif // OPENSSL_NO_DEPRECATED_3_0
@@ -232,6 +239,13 @@ int TlsKeyOpenSSL::length() const
     if (isNull() || algorithm() == QSsl::Opaque)
         return -1;
 
+#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
+    if (algorithm() == QSsl::MlDsa) {
+        Q_ASSERT(genericKey);
+        return q_EVP_PKEY_get_security_bits(genericKey);
+    }
+#endif
+
 #ifndef OPENSSL_NO_DEPRECATED_3_0
     switch (algorithm()) {
     case QSsl::Rsa:
@@ -330,6 +344,15 @@ QByteArray TlsKeyOpenSSL::toPem(const QByteArray &passPhrase) const
                 fail = true;
         }
 #endif
+    } else if (algorithm() == QSsl::MlDsa) {
+        if (type() == QSsl::PublicKey) {
+            if (!q_PEM_write_bio_PUBKEY(bio, genericKey))
+                fail = true;
+        } else {
+            if (!q_PEM_write_bio_PrivateKey(bio, genericKey, cipher, (uchar *)passPhrase.data(),
+                                            passPhrase.size(), nullptr, nullptr))
+                fail = true;
+        }
     } else {
         fail = true;
     }
@@ -370,6 +393,20 @@ bool TlsKeyOpenSSL::fromEVP_PKEY(EVP_PKEY *pkey)
 #define get_key(key, alg) key = q_EVP_PKEY_get1_##alg(pkey)
 #else
 #define get_key(key, alg) q_EVP_PKEY_up_ref(pkey); genericKey = pkey;
+#endif
+
+#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
+    // ML-DSA don't have NIDs
+    const auto keyTypeName = QLatin1StringView(q_EVP_PKEY_type_name(pkey));
+    if (keyTypeName.contains(QLatin1String("ML-DSA")) ||
+        keyTypeName.contains(QLatin1String("mldsa"))) {
+        keyAlgorithm = QSsl::MlDsa;
+        keyIsNull = false;
+        keyType = QSsl::PrivateKey;
+        q_EVP_PKEY_up_ref(pkey);
+        genericKey = pkey;
+        return true;
+    }
 #endif
 
     switch (q_EVP_PKEY_type(q_EVP_PKEY_base_id(pkey))) {
@@ -514,6 +551,11 @@ TlsKeyOpenSSL *TlsKeyOpenSSL::publicKeyFromX509(X509 *x)
 
     const int keyType = q_EVP_PKEY_type(q_EVP_PKEY_base_id(pkey));
 
+#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
+    // ML-DSA don't have NIDs
+    const auto keyTypeName = QLatin1StringView(q_EVP_PKEY_type_name(pkey));
+#endif
+
     if (keyType == EVP_PKEY_RSA) {
         get_pubkey(rsa, RSA);
         tlsKey->keyAlgorithm = QSsl::Rsa;
@@ -530,6 +572,13 @@ TlsKeyOpenSSL *TlsKeyOpenSSL::publicKeyFromX509(X509 *x)
 #endif
     } else if (keyType == EVP_PKEY_DH) {
         // DH unsupported (key is null)
+#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
+    } else if (keyTypeName.contains(QLatin1String("ML-DSA")) ||
+               keyTypeName.contains(QLatin1String("mldsa"))) {
+        tlsKey->genericKey = pkey;
+        tlsKey->keyAlgorithm = QSsl::MlDsa;
+        tlsKey->keyIsNull = false;
+#endif
     } else {
         // error? (key is null)
     }

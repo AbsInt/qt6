@@ -3,6 +3,7 @@
 #include <QTest>
 #include <QSqlDatabase>
 #include <QFontDatabase>
+#include <QtCore/qatomicscopedvaluerollback.h>
 
 #include <initializer_list>
 
@@ -24,7 +25,22 @@ class MyTestClass : public QObject
         void addSingleStringRows();
         void addMultStringRows();
         void addDataRow();
+
+    private Q_SLOTS:
+        void initTestCase();
+        void defaultTryTimeout();
 };
+
+void MyTestClass::initTestCase()
+{
+//! [set defaultTryTimeout]
+    using namespace std::chrono_literals;
+    // Since the atomic itself (defaultTryTimeout) is the only data,
+    // all reads and stores can be relaxed.
+    QTest::defaultTryTimeout.store(1s, std::memory_order_relaxed);
+//! [set defaultTryTimeout]
+}
+
 // dummy
 void closeAllDatabases()
 {
@@ -229,4 +245,19 @@ const auto restoreDefaultLocale = qScopeGuard([prior = QLocale()]() {
 });
 //! [36]
 QLocale::setDefault(QLocale::c());
+}
+
+void MyTestClass::defaultTryTimeout()
+{
+    using namespace std::chrono_literals;
+
+//! [rollback defaultTryTimeout]
+    const auto timeoutRollback = QAtomicScopedValueRollback(
+        QTest::defaultTryTimeout, 1s, std::memory_order_relaxed);
+//! [rollback defaultTryTimeout]
+
+//! [get defaultTryTimeout]
+    // Since the atomic itself is all the data, all reads and stores can be relaxed.
+    QCOMPARE(QTest::defaultTryTimeout.load(std::memory_order_relaxed), 1s);
+//! [get defaultTryTimeout]
 }

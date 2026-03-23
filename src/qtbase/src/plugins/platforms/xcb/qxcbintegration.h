@@ -94,8 +94,6 @@ public:
 
     void beep() const override;
 
-    bool nativePaintingEnabled() const;
-
 #if QT_CONFIG(vulkan)
     QPlatformVulkanInstance *createPlatformVulkanInstance(QVulkanInstance *instance) const override;
 #endif

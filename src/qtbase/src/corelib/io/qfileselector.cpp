@@ -338,6 +338,14 @@ void QFileSelectorPrivate::addStatics(const QStringList &statics)
     sharedData->staticSelectors.clear();
 }
 
+qsizetype QFileSelectorPrivate::removeStatics(const QStringList &statics)
+{
+    const auto locker = qt_scoped_lock(sharedDataMutex);
+    // Clearing staticSelectors ensures that it's repopulated in QFileSelectorPrivate::updateSelectors()
+    sharedData->staticSelectors.clear();
+    return sharedData->preloadedStatics.removeIf([statics](auto &s) {return statics.contains(s, Qt::CaseSensitive);});
+}
+
 QT_END_NAMESPACE
 
 #include "moc_qfileselector.cpp"

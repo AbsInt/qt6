@@ -521,6 +521,15 @@ QDBusMessage::QDBusMessage()
 }
 
 /*!
+    \fn QDBusMessage::QDBusMessage(QDBusMessage &&other)
+    \since 6.11
+
+    Moves \a other into this object.
+
+    \include qdbusmessage.cpp partially-formed
+*/
+
+/*!
     Constructs a copy of the object given by \a other.
 
     Note: QDBusMessage objects are shared. Modifications made to the
@@ -538,7 +547,7 @@ QDBusMessage::QDBusMessage(const QDBusMessage &other)
 */
 QDBusMessage::~QDBusMessage()
 {
-    if (!d_ptr->ref.deref())
+    if (d_ptr && !d_ptr->ref.deref())
         delete d_ptr;
 }
 
@@ -563,7 +572,8 @@ QDBusMessage::~QDBusMessage()
 */
 QDBusMessage &QDBusMessage::operator=(const QDBusMessage &other)
 {
-    qAtomicAssign(d_ptr, other.d_ptr);
+    QDBusMessage copy(other);
+    swap(copy);
     return *this;
 }
 

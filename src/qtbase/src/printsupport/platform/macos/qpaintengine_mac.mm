@@ -377,11 +377,7 @@ QCoreGraphicsPaintEngine::begin(QPaintDevice *pdev)
         QWidget *w = (QWidget*)d->pdev;
         bool unclipped = w->testAttribute(Qt::WA_PaintUnclipped);
 
-        if ((w->windowType() == Qt::Desktop)) {
-            if (!unclipped)
-                qWarning("QCoreGraphicsPaintEngine::begin: Does not support clipped desktop on OS X");
-            // ## need to do [qt_mac_window_for(w) makeKeyAndOrderFront]; (need to rename the file)
-        } else if (unclipped) {
+        if (unclipped) {
             qWarning("QCoreGraphicsPaintEngine::begin: Does not support unclipped painting");
         }
     } else if (d->pdev->devType() == QInternal::Pixmap) {             // device is a pixmap
@@ -405,9 +401,6 @@ QCoreGraphicsPaintEngine::end()
 {
     Q_D(QCoreGraphicsPaintEngine);
     setActive(false);
-    if (d->pdev->devType() == QInternal::Widget && static_cast<QWidget*>(d->pdev)->windowType() == Qt::Desktop) {
-        // ### need to do [qt_mac_window_for(static_cast<QWidget *>(d->pdev)) orderOut]; (need to rename)
-    }
     if (d->shading) {
         CGShadingRelease(d->shading);
         d->shading = 0;

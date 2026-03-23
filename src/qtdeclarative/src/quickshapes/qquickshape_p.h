@@ -225,13 +225,14 @@ class Q_QUICKSHAPES_EXPORT QQuickShapePath : public QQuickPath
     Q_PROPERTY(CapStyle capStyle READ capStyle WRITE setCapStyle NOTIFY capStyleChanged)
     Q_PROPERTY(StrokeStyle strokeStyle READ strokeStyle WRITE setStrokeStyle NOTIFY strokeStyleChanged)
     Q_PROPERTY(qreal dashOffset READ dashOffset WRITE setDashOffset NOTIFY dashOffsetChanged)
-    Q_PROPERTY(QVector<qreal> dashPattern READ dashPattern WRITE setDashPattern NOTIFY dashPatternChanged)
-    Q_PROPERTY(QQuickShapeGradient *fillGradient READ fillGradient WRITE setFillGradient RESET resetFillGradient)
-    Q_PROPERTY(QSizeF scale READ scale WRITE setScale NOTIFY scaleChanged REVISION(1, 14))
+    Q_PROPERTY(QList<qreal> dashPattern READ dashPattern WRITE setDashPattern NOTIFY dashPatternChanged)
+    Q_PROPERTY(QQuickShapeGradient *fillGradient READ fillGradient WRITE setFillGradient NOTIFY fillGradientChanged RESET resetFillGradient)
+    Q_PROPERTY(QSizeF scale READ scale WRITE setScale NOTIFY scaleChanged OVERRIDE REVISION(1, 14))
     Q_PROPERTY(PathHints pathHints READ pathHints WRITE setPathHints NOTIFY pathHintsChanged REVISION(6, 7) FINAL)
     Q_PROPERTY(QMatrix4x4 fillTransform READ fillTransform WRITE setFillTransform NOTIFY fillTransformChanged REVISION(6, 8) FINAL)
     Q_PROPERTY(QQuickItem *fillItem READ fillItem WRITE setFillItem NOTIFY fillItemChanged REVISION(6, 8) FINAL)
     Q_PROPERTY(QQuickShapeTrim *trim READ trim CONSTANT REVISION(6, 10) FINAL)
+    Q_PROPERTY(bool cosmeticStroke READ cosmeticStroke WRITE setCosmeticStroke NOTIFY cosmeticStrokeChanged REVISION(6, 11) FINAL)
     QML_NAMED_ELEMENT(ShapePath)
     QML_ADDED_IN_VERSION(1, 0)
 
@@ -304,8 +305,8 @@ public:
     qreal dashOffset() const;
     void setDashOffset(qreal offset);
 
-    QVector<qreal> dashPattern() const;
-    void setDashPattern(const QVector<qreal> &array);
+    QList<qreal> dashPattern() const;
+    void setDashPattern(const QList<qreal> &array);
 
     QQuickShapeGradient *fillGradient() const;
     void setFillGradient(QQuickShapeGradient *gradient);
@@ -323,6 +324,9 @@ public:
     QQuickShapeTrim *trim();
     bool hasTrim() const;
 
+    bool cosmeticStroke() const;
+    void setCosmeticStroke(bool c);
+
 Q_SIGNALS:
     void shapePathChanged();
     void strokeColorChanged();
@@ -335,10 +339,12 @@ Q_SIGNALS:
     void strokeStyleChanged();
     void dashOffsetChanged();
     void dashPatternChanged();
+    Q_REVISION(6, 11) void fillGradientChanged();
 
     Q_REVISION(6, 7) void pathHintsChanged();
     Q_REVISION(6, 8) void fillTransformChanged();
     Q_REVISION(6, 8) void fillItemChanged();
+    Q_REVISION(6, 11) void cosmeticStrokeChanged();
 
 private:
     Q_DISABLE_COPY(QQuickShapePath)
@@ -364,7 +370,7 @@ class Q_QUICKSHAPES_EXPORT QQuickShape : public QQuickItem
     Q_PROPERTY(HAlignment horizontalAlignment READ horizontalAlignment WRITE setHorizontalAlignment NOTIFY horizontalAlignmentChanged REVISION(6, 7) FINAL)
     Q_PROPERTY(VAlignment verticalAlignment READ verticalAlignment WRITE setVerticalAlignment NOTIFY verticalAlignmentChanged REVISION(6, 7) FINAL)
 
-    Q_PROPERTY(QQmlListProperty<QObject> data READ data)
+    Q_PROPERTY(QQmlListProperty<QObject> data READ data OVERRIDE)
     Q_CLASSINFO("DefaultProperty", "data")
     QML_NAMED_ELEMENT(Shape)
     QML_ADDED_IN_VERSION(1, 0)

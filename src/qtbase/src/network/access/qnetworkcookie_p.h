@@ -39,12 +39,14 @@ public:
     bool httpOnly = false;
 };
 
-static inline bool isLWS(char c)
+namespace {
+inline bool isLWS(char c)
 {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
-static int nextNonWhitespace(QByteArrayView text, int from)
+// Used in qnetworkcookie.cpp and qnetworkreplyhttpimpl.cpp
+inline int nextNonWhitespace(QByteArrayView text, int from)
 {
     // RFC 2616 defines linear whitespace as:
     //  LWS = [CRLF] 1*( SP | HT )
@@ -59,6 +61,7 @@ static int nextNonWhitespace(QByteArrayView text, int from)
 
     // reached the end
     return text.size();
+}
 }
 
 QT_END_NAMESPACE

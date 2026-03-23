@@ -92,6 +92,9 @@ public:
     };
 
     bool fromEVP_PKEY(EVP_PKEY *pkey);
+
+private:
+    void readGenericKey(BIO *bio, void *phrase, QSsl::KeyType keyType);
 };
 
 } // namespace QTlsPrivate

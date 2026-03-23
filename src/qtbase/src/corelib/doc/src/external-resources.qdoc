@@ -28,11 +28,6 @@
 */
 
 /*!
-    \externalpage https://marcmutz.wordpress.com/effective-qt/containers/#containers-qlist
-    \title Pros and Cons of Using QList
-*/
-
-/*!
     \externalpage https://marcmutz.wordpress.com/effective-qt/containers/
     \title Understand the Qt Containers
 */
@@ -145,6 +140,21 @@
 /*!
     \externalpage https://cmake.org/cmake/help/latest/command/add_subdirectory.html
     \title add_subdirectory()
+*/
+
+/*!
+    \externalpage https://cmake.org/cmake/help/latest/command/target_include_directories.html
+    \title CMake target_include_directories documentation
+*/
+
+/*!
+    \externalpage https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html
+    \title CMake CMAKE_PREFIX_PATH documentation
+*/
+
+/*!
+    \externalpage https://cmake.org/cmake/help/latest/variable/CMAKE_TOOLCHAIN_FILE.html
+    \title CMake CMAKE_TOOLCHAIN_FILE documentation
 */
 
 /*!

@@ -20,7 +20,7 @@ find_package(Qt6 ${PROJECT_VERSION} CONFIG REQUIRED COMPONENTS BuildInternals)
 qt_internal_project_setup()
 
 find_package(Qt6 ${PROJECT_VERSION} CONFIG REQUIRED Core)
-find_package(Qt6 ${PROJECT_VERSION} QUIET CONFIG OPTIONAL_COMPONENTS Gui Network Widgets OpenGL OpenGLWidgets Sql Concurrent Test TestInternalsPrivate LanguageServerPrivate Svg ExamplesAssetDownloaderPrivate)
+find_package(Qt6 ${PROJECT_VERSION} QUIET CONFIG OPTIONAL_COMPONENTS Gui Network Widgets OpenGL OpenGLWidgets Sql Concurrent Test TestInternalsPrivate LanguageServerPrivate Svg)
 
 # Set up QT_HOST_PATH as an extra root path to look for the ShaderToolsTools package
 # when cross-compiling.
@@ -56,6 +56,7 @@ if(ANDROID)
     include("${CMAKE_CURRENT_LIST_DIR}/src/qml/Qt6AndroidQmlMacros.cmake")
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/src/qml/Qt6QmlPublicCMakeHelpers.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/tools/svgtoqml/Qt6SvgToQmlMacros.cmake")
 # special case end
 
 if(NOT QT_FEATURE_commandlineparser)

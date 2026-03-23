@@ -48,6 +48,7 @@ set_target_properties(${target} PROPERTIES
         "some/path/to/plugin1.so;$<TARGET_PROPERTY:${target},my_plugins_property>"
     QT_ANDROID_PACKAGE_SOURCE_DIR "$<TARGET_PROPERTY:${target},my_package_source_dir>"
     QT_ANDROID_SYSTEM_LIBS_PREFIX "myLibPrefix"
+    QT_ANDROID_LEGACY_PACKAGING FALSE
 
     # Make sure that this property is overwritten by
     # qt6_android_generate_deployment_settings
@@ -75,6 +76,7 @@ set_target_properties(${target} PROPERTIES
         "some\\path\\to\\plugin1.so;some/path\\to/plugin2.so;some/path/to/plugin3.so"
     QT_ANDROID_PACKAGE_SOURCE_DIR "path\\to/source\\dir"
     QT_ANDROID_SYSTEM_LIBS_PREFIX "myLibPrefix"
+    QT_ANDROID_LEGACY_PACKAGING FALSE
 )
 tst_add_android_permissions(${target})
 tst_generate_android_deployment_setting(${target})

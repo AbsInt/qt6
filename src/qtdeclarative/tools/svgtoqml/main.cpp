@@ -5,21 +5,21 @@
 #include <QQmlApplicationEngine>
 #include <QCommandLineParser>
 #include <QFile>
+#include <QFileInfo>
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QtQuickVectorImageGenerator/private/qquickitemgenerator_p.h>
 #include <QtQuickVectorImageGenerator/private/qquickqmlgenerator_p.h>
 #include <QtQuickVectorImageGenerator/private/qquickvectorimageglobal_p.h>
 
-#define ENABLE_GUI
+#include <QtGui/qpa/qplatformintegrationfactory_p.h>
+#include <QtGui/private/qguiapplication_p.h>
 
 int main(int argc, char *argv[])
 {
-#ifdef ENABLE_GUI
-    QGuiApplication app(argc, argv);
-#else
-    QCoreApplication app(argc, argv);
-#endif
+    QStringList arguments;
+    for (int i = 0; i < argc; ++i)
+        arguments.append(QString::fromLocal8Bit(argv[i]));
 
     QCommandLineParser parser;
     parser.setApplicationDescription("SVG to QML converter");
@@ -30,6 +30,10 @@ int main(int argc, char *argv[])
     QCommandLineOption curveRendererOption({ "c", "curve-renderer" },
                                            QCoreApplication::translate("main", "Use the curve renderer in generated QML."));
     parser.addOption(curveRendererOption);
+
+    QCommandLineOption asyncOption({ "a", "asynchronous-shapes" },
+                                   QCoreApplication::translate("main", "Enable asynchronous mode in the generated Shape items."));
+    parser.addOption(asyncOption);
 
     QCommandLineOption optimizeOption({ "p", "optimize-paths" },
                                       QCoreApplication::translate("main", "Optimize paths for the curve renderer."));
@@ -77,23 +81,30 @@ int main(int argc, char *argv[])
                                                                            "are not enabled by default."));
     parser.addOption(untrustedOption);
 
-#ifdef ENABLE_GUI
     QCommandLineOption guiOption({ "v", "view" },
                                  QCoreApplication::translate("main", "Display the generated QML in a window. This is the default behavior if no "
                                                                      "output file is specified."));
     parser.addOption(guiOption);
-#endif
-    parser.process(app);
+    parser.process(arguments);
     const QStringList args = parser.positionalArguments();
     if (args.size() < 1) {
         parser.showHelp(1);
     }
 
     const QString inFileName = args.at(0);
-
-    QString commentString = QLatin1String("Generated from SVG file %1").arg(inFileName);
-
     const auto outFileName = args.size() > 1 ? args.at(1) : QString{};
+
+    const bool needsGui = outFileName.isEmpty() || parser.isSet(guiOption);
+    const bool useMinimalPlugin = qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")
+                                  && !needsGui;
+    if (useMinimalPlugin)
+        qputenv("QT_QPA_PLATFORM", QByteArrayLiteral("minimal"));
+
+    QGuiApplication app(argc, argv);
+
+    QString commentString = QLatin1String("Generated from SVG file %1")
+                                .arg(QFileInfo(inFileName).fileName());
+
     const auto typeName = parser.value(typeNameOption);
     const auto assetOutputDirectory = parser.value(assetOutputDirectoryOption);
     const auto assetOutputPrefix = parser.value(assetOutputPrefixOption);
@@ -110,6 +121,8 @@ int main(int argc, char *argv[])
         flags |= QQuickVectorImageGenerator::GeneratorFlag::AssumeTrustedSource;
     if (parser.isSet(curveRendererOption))
         flags |= QQuickVectorImageGenerator::GeneratorFlag::CurveRenderer;
+    if (parser.isSet(asyncOption))
+        flags |= QQuickVectorImageGenerator::GeneratorFlag::AsyncShapes;
     if (parser.isSet(optimizeOption))
         flags |= QQuickVectorImageGenerator::GeneratorFlag::OptimizePaths;
     if (parser.isSet(outlineModeOption))
@@ -124,8 +137,7 @@ int main(int argc, char *argv[])
     generator.setRetainFilePaths(keepPaths);
     bool ok = generator.generate() && generator.save();
 
-#ifdef ENABLE_GUI
-    if (ok && (parser.isSet(guiOption) || outFileName.isEmpty())) {
+    if (needsGui && ok) {
         app.setOrganizationName("QtProject");
         const QUrl url(QStringLiteral("qrc:/main.qml"));
         QQmlApplicationEngine engine;
@@ -142,7 +154,6 @@ int main(int argc, char *argv[])
         engine.load(url);
         return app.exec();
     }
-#endif
 
     return ok ? 0 : 1;
 }

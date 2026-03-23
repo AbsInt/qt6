@@ -106,10 +106,11 @@ void QmlLintSuggestions::setupCapabilities(const QLspSpecification::InitializePa
     serverInfo.capabilities.codeActionProvider = true;
 }
 
-QmlLintSuggestions::QmlLintSuggestions(QLanguageServer *server, QmlLsp::QQmlCodeModel *codeModel)
-    : m_server(server), m_codeModel(codeModel)
+QmlLintSuggestions::QmlLintSuggestions(QLanguageServer *server,
+                                       QmlLsp::QQmlCodeModelManager *codeModelManager)
+    : m_server(server), m_codeModelManager(codeModelManager)
 {
-    QObject::connect(m_codeModel, &QmlLsp::QQmlCodeModel::updatedSnapshot, this,
+    QObject::connect(m_codeModelManager, &QmlLsp::QQmlCodeModelManager::updatedSnapshot, this,
                      &QmlLintSuggestions::diagnose, Qt::DirectConnection);
 }
 
@@ -219,11 +220,11 @@ static Diagnostic messageToDiagnostic_helper(AdvanceFunc advancePositionPastLoca
 };
 
 static bool isSnapshotNew(std::optional<int> snapshotVersion, std::optional<int> processedVersion,
-                          bool force)
+                          QmlLsp::UpdatePolicy policy)
 {
     if (!snapshotVersion)
         return false;
-    if (force)
+    if (policy == ForceUpdate)
         return true;
     if (!processedVersion || *snapshotVersion > *processedVersion)
         return true;
@@ -233,25 +234,26 @@ static bool isSnapshotNew(std::optional<int> snapshotVersion, std::optional<int>
 using namespace std::chrono_literals;
 
 QmlLintSuggestions::VersionToDiagnose
-QmlLintSuggestions::chooseVersionToDiagnoseHelper(const QByteArray &url, bool force)
+QmlLintSuggestions::chooseVersionToDiagnoseHelper(const QByteArray &url,
+                                                  QmlLsp::UpdatePolicy policy)
 {
     const std::chrono::milliseconds maxInvalidTime = 400ms;
-    QmlLsp::OpenDocumentSnapshot snapshot = m_codeModel->snapshotByUrl(url);
+    QmlLsp::OpenDocumentSnapshot snapshot = m_codeModelManager->snapshotByUrl(url);
 
     LastLintUpdate &lastUpdate = m_lastUpdate[url];
 
     // ignore updates when already processed
-    if (!force && lastUpdate.version && *lastUpdate.version == snapshot.docVersion) {
+    if (policy != ForceUpdate && lastUpdate.version && *lastUpdate.version == snapshot.docVersion) {
         qCDebug(lspServerLog) << "skipped update of " << url << "unchanged valid doc";
         return NoDocumentAvailable{};
     }
 
     // try out a valid version, if there is one
-    if (isSnapshotNew(snapshot.validDocVersion, lastUpdate.version, force))
+    if (isSnapshotNew(snapshot.validDocVersion, lastUpdate.version, policy))
         return VersionedDocument{ snapshot.validDocVersion, snapshot.validDoc };
 
     // try out an invalid version, if there is one
-    if (isSnapshotNew(snapshot.docVersion, lastUpdate.version, force)) {
+    if (isSnapshotNew(snapshot.docVersion, lastUpdate.version, policy)) {
         if (auto since = lastUpdate.invalidUpdatesSince) {
             // did we wait enough to get a valid document?
             if (std::chrono::steady_clock::now() - *since > maxInvalidTime) {
@@ -269,10 +271,10 @@ QmlLintSuggestions::chooseVersionToDiagnoseHelper(const QByteArray &url, bool fo
 }
 
 QmlLintSuggestions::VersionToDiagnose
-QmlLintSuggestions::chooseVersionToDiagnose(const QByteArray &url, bool force)
+QmlLintSuggestions::chooseVersionToDiagnose(const QByteArray &url, QmlLsp::UpdatePolicy policy)
 {
     QMutexLocker l(&m_mutex);
-    auto versionToDiagnose = chooseVersionToDiagnoseHelper(url, force);
+    auto versionToDiagnose = chooseVersionToDiagnoseHelper(url, policy);
     if (auto versionedDocument = std::get_if<VersionedDocument>(&versionToDiagnose)) {
         // update immediately, and do not keep track of sent version, thus in extreme cases sent
         // updates could be out of sync
@@ -283,25 +285,15 @@ QmlLintSuggestions::chooseVersionToDiagnose(const QByteArray &url, bool force)
     return versionToDiagnose;
 }
 
-void QmlLintSuggestions::diagnose(const QByteArray &url)
+void QmlLintSuggestions::diagnose(const QByteArray &url, QmlLsp::UpdatePolicy policy)
 {
-    diagnoseImpl(url, false);
-}
-
-void QmlLintSuggestions::forceDiagnose(const QByteArray &url)
-{
-    diagnoseImpl(url, true);
-}
-
-void QmlLintSuggestions::diagnoseImpl(const QByteArray &url, bool force)
-{
-    auto versionedDocument = chooseVersionToDiagnose(url, force);
+    auto versionedDocument = chooseVersionToDiagnose(url, policy);
 
     std::visit(qOverloadedVisitor{
                        [](NoDocumentAvailable) {},
-                       [this, &url, &force](const TryAgainLater &tryAgainLater) {
+                       [this, &url, &policy](const TryAgainLater &tryAgainLater) {
                            QTimer::singleShot(tryAgainLater.time, Qt::VeryCoarseTimer, this,
-                                              [this, url, force]() { diagnoseImpl(url, force); });
+                                              [this, url, policy]() { diagnose(url, policy); });
                        },
                        [this, &url](const VersionedDocument &versionedDocument) {
                            diagnoseHelper(url, versionedDocument);
@@ -321,9 +313,8 @@ void QmlLintSuggestions::diagnoseHelper(const QByteArray &url,
     diagnosticParams.version = version;
 
     qCDebug(lintLog) << "has doc, do real lint";
-    QStringList imports = m_codeModel->buildPathsForFileUrl(url);
+    QStringList imports = m_codeModelManager->importPathsForUrl(url);
     const QString filename = doc.canonicalFilePath();
-    imports.append(m_codeModel->importPathsForFile(filename));
     // add source directory as last import as fallback in case there is no qmldir in the build
     // folder this mimics qmllint behaviors
     imports.append(QFileInfo(filename).dir().absolutePath());
@@ -331,9 +322,9 @@ void QmlLintSuggestions::diagnoseHelper(const QByteArray &url,
     bool silent = true;
     const QString fileContents = doc.field(Fields::code).value().toString();
     const QStringList qmltypesFiles;
-    const QStringList resourceFiles = QQmlJSUtils::resourceFilesFromBuildFolders(imports);
+    const QStringList resourceFiles = m_codeModelManager->resourceFilesForFileUrl(url);
 
-    QList<QQmlJS::LoggerCategory> categories = QQmlJSLogger::defaultCategories();
+    QList<QQmlJS::LoggerCategory> categories = QQmlJSLogger::builtinCategories();
 
     QQmlJSLinter linter(imports);
 
@@ -343,7 +334,7 @@ void QmlLintSuggestions::diagnoseHelper(const QByteArray &url,
     }
 
     QQmlToolingSettings settings(QLatin1String("qmllint"));
-    if (settings.search(filename)) {
+    if (settings.search(filename).isValid()) {
         QQmlJS::LoggingUtils::updateLogLevels(categories, settings, nullptr);
     }
 

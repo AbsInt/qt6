@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QWAYLANDWINDOW_H
 #define QWAYLANDWINDOW_H
@@ -254,6 +255,13 @@ public:
     bool windowEvent(QEvent *event) override;
 
     QSurfaceFormat format() const override;
+    void setSessionRestoreId(const QString &role) override;
+    QString sessionRestoreId() const;
+
+    void setExtendedWindowType(QNativeInterface::Private::QWaylandWindow::WindowType) override;
+    QNativeInterface::Private::QWaylandWindow::WindowType extendedWindowType() const;
+    void setParentControlGeometry(const QRect &parentAnchor) override;
+    QRect parentControlGeometry() const;
 
 public Q_SLOTS:
     void applyConfigure();
@@ -316,8 +324,6 @@ protected:
     QMutex mFrameSyncMutex;
     QWaitCondition mFrameSyncWait;
 
-    // True when we have called deliverRequestUpdate, but the client has not yet attached a new buffer
-    std::atomic_bool mWaitingForUpdate = false;
     bool mExposed = false;
     std::atomic_bool mExposeEventNeedsAttachedBuffer = false;
 
@@ -329,7 +335,6 @@ protected:
     int mFrameCallbackTimeout = 100;
     QVariantMap m_properties;
 
-    bool mSentInitialResize = false;
     QPoint mOffset;
     std::optional<qreal> mScale = std::nullopt;
 
@@ -350,6 +355,7 @@ protected:
     QWaylandShmBackingStore *mBackingStore = nullptr;
 
     QMargins mCustomMargins;
+    QString mSessionRestoreId;
 
     QPointer<QWaylandWindow> mTransientParent;
     QList<QPointer<QWaylandWindow>> mChildPopups;
@@ -397,6 +403,11 @@ private:
     static const wl_callback_listener callbackListener;
     void handleFrameCallback(struct ::wl_callback* callback);
     const QPlatformWindow *lastParent = nullptr;
+
+    struct {
+        QRect parentControlGeometry;
+        QNativeInterface::Private::QWaylandWindow::WindowType extendedWindowType = QNativeInterface::Private::QWaylandWindow::Default;
+    } m_popupInfo;
 
     static QWaylandWindow *mMouseGrab;
     static QWaylandWindow *mTopPopup;

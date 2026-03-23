@@ -30,9 +30,10 @@ class Q_QMLCOMPILER_EXPORT QQmlJSTypeDescriptionReader
 {
     Q_DECLARE_TR_FUNCTIONS(QQmlJSTypeDescriptionReader)
 public:
-    QQmlJSTypeDescriptionReader() = default;
     explicit QQmlJSTypeDescriptionReader(QString fileName, QString data)
         : m_fileName(std::move(fileName)), m_source(std::move(data)) {}
+
+    Q_DISABLE_COPY_MOVE(QQmlJSTypeDescriptionReader)
 
     bool operator()(QList<QQmlJSExportedScope> *objects, QStringList *dependencies);
 

@@ -47,6 +47,7 @@ Q_GUI_EXPORT void qt_test_resetFetchedRoot();
 QT_END_NAMESPACE
 #endif
 
+[[maybe_unused]]
 static QByteArray msgDoesNotExist(const QString &name)
 {
     return (QLatin1Char('"') + QDir::toNativeSeparators(name)
@@ -119,6 +120,7 @@ private:
     void cleanupSettingsFile();
 
     QTemporaryDir tempDir;
+    bool uncServerAvailable = false;
 };
 
 tst_QFileDialog2::tst_QFileDialog2()
@@ -143,7 +145,13 @@ void tst_QFileDialog2::initTestCase()
 {
     QVERIFY2(tempDir.isValid(), qPrintable(tempDir.errorString()));
     QStandardPaths::setTestModeEnabled(true);
-    cleanupSettingsFile();
+
+#ifdef Q_OS_WIN
+    // "When used with directories, _access determines only whether the specified directory exists"
+    if (_waccess(qUtf16Printable("//" + QTest::uncServerName() + "/TESTSHAREWRITABLE"), 0) == 0
+            && _waccess(qUtf16Printable("//" + QTest::uncServerName() + "/testshare"), 0) == 0)
+        uncServerAvailable = true;
+#endif
 }
 
 void tst_QFileDialog2::init()
@@ -261,16 +269,16 @@ void tst_QFileDialog2::showNameFilterDetails()
 void tst_QFileDialog2::unc()
 {
 #if defined(Q_OS_WIN)
-    // Only test UNC on Windows./
+    // Only test UNC on Windows.
+    if (!uncServerAvailable)
+        QSKIP("UNC server not available");
     QString dir("\\\\"  + QTest::uncServerName() + "\\testsharewritable");
-#else
-    QString dir(QDir::currentPath());
-#endif
     QVERIFY2(QFile::exists(dir), msgDoesNotExist(dir).constData());
     QFileDialog fd(0, QString(), dir);
     QFileSystemModel *model = fd.findChild<QFileSystemModel*>("qt_filesystem_model");
     QVERIFY(model);
     QCOMPARE(model->index(fd.directory().absolutePath()), model->index(dir));
+#endif
 }
 
 void tst_QFileDialog2::emptyUncPath()

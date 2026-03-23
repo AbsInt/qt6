@@ -29,7 +29,6 @@ T.TabButton {
 
     icon.width: 16
     icon.height: 16
-    icon.color: control.down ? __pressedText : control.hovered ? __hoveredText : control.palette.buttonText
 
     readonly property string __currentState: [
         checked && "checked",
@@ -38,13 +37,6 @@ T.TabButton {
         down && "pressed"
     ].filter(Boolean).join("_") || "normal"
     readonly property var __config: Config.controls.tabbutton[__currentState] || {}
-
-    readonly property color __pressedText: Application.styleHints.colorScheme == Qt.Light
-                                            ? Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.447)
-                                            : Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.529)
-    readonly property color __hoveredText: Application.styleHints.colorScheme == Qt.Light
-                                            ? Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.62)
-                                            : Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.7725)
 
     readonly property Item __focusFrameTarget: control
 
@@ -56,7 +48,15 @@ T.TabButton {
         text: control.text
         font: control.font
         icon: control.icon
+        defaultIconColor: control.down ? pressedText : control.hovered ? hoveredText : control.palette.buttonText
         color: control.icon.color
+
+        readonly property color pressedText: Application.styleHints.colorScheme === Qt.Light
+            ? Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.447)
+            : Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.529)
+        readonly property color hoveredText: Application.styleHints.colorScheme === Qt.Light
+            ? Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.62)
+            : Qt.rgba(control.palette.buttonText.r, control.palette.buttonText.g, control.palette.buttonText.b, 0.7725)
     }
 
     background: Impl.StyleImage {

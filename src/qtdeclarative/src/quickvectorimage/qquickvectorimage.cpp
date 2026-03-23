@@ -10,6 +10,7 @@
 #include <QtCore/qloggingcategory.h>
 
 #include <private/qquicktranslate_p.h>
+#include <private/qquickanimation_p.h>
 
 #include <private/qfactoryloader_p.h>
 
@@ -37,9 +38,10 @@ Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, vectorImagePluginLoader,
     Qt Quick Vector Image provides support for displaying vector image files in a Qt Quick
     scene.
 
-    It currently supports the \c SVG file format. In addition, Lottie support can be enabled by
-    setting the \l{assumeTrustedSource} property to true and including the plugin from the
-    \l{Qt Lottie Animation} module. This plugin is currently considered tech preview.
+    It currently supports the \c SVG file format. In addition, Lottie support
+    can be enabled by setting the
+    \l{QtQuick.VectorImage::VectorImage::}{assumeTrustedSource} property to true
+    and including the plugin from the \l{Qt Lottie Animation} module.
 
     Qt supports multiple options for displaying SVG files. For an overview and comparison of
     the different ones, see the documentation of the \l{svgtoqml} tool.
@@ -82,6 +84,8 @@ void QQuickVectorImagePrivate::loadFile()
         flags.setFlag(QQuickVectorImageGenerator::CurveRenderer);
     if (assumeTrustedSource)
         flags.setFlag(QQuickVectorImageGenerator::AssumeTrustedSource);
+    if (m_asyncShapes)
+        flags.setFlag(QQuickVectorImageGenerator::AsyncShapes);
 
     if (!m_qmlContext || m_qmlContext->engine() != qmlContext(q)->engine())
         m_qmlContext.reset(new QQmlContext(qmlContext(q)->engine()));
@@ -107,6 +111,18 @@ void QQuickVectorImagePrivate::loadFile()
     q->setImplicitWidth(rootItem->width());
     q->setImplicitHeight(rootItem->height());
 
+    static int freezeTime = qEnvironmentVariableIntValue("QT_QUICKVECTORIMAGE_FREEZE");
+    if (freezeTime != 0) {
+        if (freezeTime < 0)
+            freezeTime = 400; // TBD: calculate better default, e.g. midtime of total anim duration
+        q->animations()->setPaused(true);
+        const QList<QQuickAbstractAnimation *> anims = rootItem->findChildren<QQuickAbstractAnimation *>();
+        for (QQuickAbstractAnimation *anim : anims) {
+            if (anim->group() == nullptr)
+                anim->setCurrentTime(freezeTime);
+        }
+    }
+
     q->updateAnimationProperties();
     q->updateRootItemScale();
     q->update();
@@ -124,7 +140,7 @@ void QQuickVectorImagePrivate::loadFile()
 
     It currently supports the \c SVG file format. In addition, Lottie support can be enabled by
     setting the \l{assumeTrustedSource} property to true and including the plugin from the
-    \l{Qt Lottie Animation} module. This plugin is currently considered tech preview.
+    \l{Qt Lottie Animation} module.
 
     \note This complements the approach of loading the vector image file through an \l Image
     element: \l Image creates a raster version of the image at the requested size. VectorImage
@@ -149,7 +165,7 @@ QQuickVectorImage::QQuickVectorImage(QQuickItem *parent)
 
     VectorImage currently supports the \c SVG file format. In addition, Lottie support can be
     enabled by setting the \l{assumeTrustedSource} property to true and including the plugin from
-    the \l{Qt Lottie Animation} module. This plugin is currently considered tech preview.
+    the \l{Qt Lottie Animation} module.
 */
 QUrl QQuickVectorImage::source() const
 {
@@ -300,6 +316,35 @@ void QQuickVectorImage::setPreferredRendererType(RendererType newPreferredRender
 }
 
 /*!
+    \qmlproperty bool QtQuick.VectorImage::VectorImage::asynchronousShapes
+    \since 6.11
+
+    This property controls the {QtQuick.Shapes::Shape::asynchronous}{asynchronous} property of the
+    \l Shape items in the Quick scene that VectorImage builds to represent the image.
+
+    Setting this property to \c true will offload the CPU part of the rendering processing of the
+    shapes to separate worker threads. This can improve CPU utilization and user interface
+    responsiveness.
+
+    By default this property is \c false.
+*/
+
+bool QQuickVectorImage::asynchronousShapes() const
+{
+    Q_D(const QQuickVectorImage);
+    return d->m_asyncShapes;
+}
+
+void QQuickVectorImage::setAsynchronousShapes(bool asynchronous)
+{
+    Q_D(QQuickVectorImage);
+    if (d->m_asyncShapes == asynchronous)
+        return;
+    d->m_asyncShapes = asynchronous;
+    emit asynchronousShapesChanged();
+}
+
+/*!
     \qmlproperty bool QtQuick.VectorImage::VectorImage::assumeTrustedSource
     \since 6.10
 
@@ -308,8 +353,7 @@ void QQuickVectorImage::setPreferredRendererType(RendererType newPreferredRender
     \l{QtSvg::Option}{AssumeTrustedSource option}.
 
     When this is set to true, VectorImage will also try to load the image using the Lottie format
-    plugin if this is available. This plugin is currently considered tech preview. See
-    \l{Qt Lottie Animation} for additional information.
+    plugin if this is available. See \l{Qt Lottie Animation} for additional information.
 
     By default this property is \c false.
 

@@ -111,7 +111,11 @@ enum {
     CMD_TABLE,
     CMD_TABLEOFCONTENTS,
     CMD_TARGET,
+    CMD_TITLE,
     CMD_TM,
+    CMD_TOC,
+    CMD_TOCENTRY,
+    CMD_ENDTOC,
     CMD_TT,
     CMD_UICONTROL,
     CMD_UNDERLINE,
@@ -218,7 +222,11 @@ static struct
              { "table", CMD_TABLE },
              { "tableofcontents", CMD_TABLEOFCONTENTS },
              { "target", CMD_TARGET },
+             { "title", CMD_TITLE },
              { "tm", CMD_TM, true },
+             { "toc", CMD_TOC },
+             { "tocentry", CMD_TOCENTRY },
+             { "endtoc", CMD_ENDTOC },
              { "tt", CMD_TT, true },
              { "uicontrol", CMD_UICONTROL, true },
              { "underline", CMD_UNDERLINE, true },
@@ -234,6 +242,7 @@ static struct
              { nullptr, 0 } };
 
 int DocParser::s_tabSize;
+QStringList DocParser::s_allowedLanguages;
 QStringList DocParser::s_ignoreWords;
 bool DocParser::s_quoting = false;
 FileResolver *DocParser::file_resolver{ nullptr };
@@ -250,6 +259,7 @@ static QString cleanLink(const QString &link)
 void DocParser::initialize(const Config &config, FileResolver &file_resolver)
 {
     s_tabSize = config.get(CONFIG_TABSIZE).asInt();
+    s_allowedLanguages = config.get(CONFIG_CODELANGUAGES).asStringList();
     s_ignoreWords = config.get(CONFIG_IGNOREWORDS).asStringList();
 
     int i = 0;
@@ -313,6 +323,12 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
     QStack<bool> preprocessorSkipping;
     int numPreprocessorSkipping = 0;
 
+    // The code language is set by commands that accept an optional language
+    // argument, such as \code, \snippet, \quotefile and \quotefromfile.
+    // It is also used by the \print* commands which require a value to have
+    // been set first for reasonable output. The language is lower case.
+    QString codeLanguage;
+
     while (m_position < m_inputLength) {
         QChar ch = m_input.at(m_position);
 
@@ -333,11 +349,15 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
             m_endPosition = m_position;
             if (cmdStr.isEmpty()) {
                 if (m_position < m_inputLength) {
-                    enterPara();
-                    if (m_input.at(m_position).isSpace()) {
+                    QChar nextCh = m_input.at(m_position);
+                    if (nextCh == '\\') {
+                        appendEscapedIdentifier();
+                    } else if (nextCh.isSpace()) {
+                        enterPara();
                         skipAllSpaces();
                         appendChar(QLatin1Char(' '));
                     } else {
+                        enterPara();
                         appendChar(m_input.at(m_position++));
                     }
                 }
@@ -387,8 +407,12 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                     enterPara(Atom::CaptionLeft, Atom::CaptionRight);
                     break;
                 case CMD_CODE:
+                    // Only allow arguments on the same line as the command.
+                    codeLanguage = getLanguageArgument(&marker);
                     leavePara();
-                    appendAtom(Atom(Atom::Code, getCode(CMD_CODE, nullptr, getMetaCommandArgument(cmdStr))));
+                    // Store the code language in the atom, if specified, for
+                    // the HTML and DocBook generators to use.
+                    appendAtom(Atom(Atom::Code, getCode(CMD_CODE, marker, getMetaCommandArgument(cmdStr)), codeLanguage));
                     break;
                 case CMD_QML:
                     leavePara();
@@ -650,6 +674,13 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                     leavePara();
                     insertKeyword(getRestOfLine());
                     break;
+                case CMD_TOCENTRY:
+                    if (m_openedCommands.top() != CMD_TOC) {
+                        location().warning("Command '\\%1' outside of '\\%2'"_L1
+                                           .arg(cmdName(cmd), cmdName(CMD_TOC)));
+                        break;
+                    }
+                    Q_FALLTHROUGH(); // \tocentry is functionally a link command
                 case CMD_L:
                     enterPara();
                     if (isLeftBracketAhead())
@@ -786,34 +817,23 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                         processComparesWithCommand(m_private, location());
                     }
                     break;
-                case CMD_PRINTLINE: {
-                    leavePara();
-                    QString rest = getRestOfLine();
-                    if (s_quoting) {
-                        appendAtom(Atom(Atom::CodeQuoteCommand, cmdStr));
-                        appendAtom(Atom(Atom::CodeQuoteArgument, rest));
-                    }
-                    appendToCode(m_quoter.quoteLine(location(), cmdStr, rest));
-                    break;
-                }
-                case CMD_PRINTTO: {
-                    leavePara();
-                    QString rest = getRestOfLine();
-                    if (s_quoting) {
-                        appendAtom(Atom(Atom::CodeQuoteCommand, cmdStr));
-                        appendAtom(Atom(Atom::CodeQuoteArgument, rest));
-                    }
-                    appendToCode(m_quoter.quoteTo(location(), cmdStr, rest));
-                    break;
-                }
+                case CMD_PRINTLINE:
+                case CMD_PRINTTO:
                 case CMD_PRINTUNTIL: {
                     leavePara();
+
+                    Atom::AtomType atomType = marker ? marker->atomType() : Atom::Code;
                     QString rest = getRestOfLine();
                     if (s_quoting) {
                         appendAtom(Atom(Atom::CodeQuoteCommand, cmdStr));
                         appendAtom(Atom(Atom::CodeQuoteArgument, rest));
                     }
-                    appendToCode(m_quoter.quoteUntil(location(), cmdStr, rest));
+                    if (cmd == CMD_PRINTLINE)
+                        appendToCode(m_quoter.quoteLine(location(), cmdStr, rest), atomType, codeLanguage);
+                    else if (cmd == CMD_PRINTTO)
+                        appendToCode(m_quoter.quoteTo(location(), cmdStr, rest), atomType, codeLanguage);
+                    else
+                        appendToCode(m_quoter.quoteUntil(location(), cmdStr, rest), atomType, codeLanguage);
                     break;
                 }
                 case CMD_QUOTATION:
@@ -822,27 +842,25 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                         appendAtom(Atom(Atom::QuotationLeft));
                     }
                     break;
-                case CMD_QUOTEFILE: {
+                case CMD_QUOTEFILE:
+                case CMD_QUOTEFROMFILE: {
+                    // A language argument must be on the same line as the command.
+                    codeLanguage = getLanguageArgument(&marker);
                     leavePara();
 
                     QString fileName = getArgument();
-                    quoteFromFile(fileName);
                     if (s_quoting) {
                         appendAtom(Atom(Atom::CodeQuoteCommand, cmdStr));
                         appendAtom(Atom(Atom::CodeQuoteArgument, fileName));
                     }
-                    appendAtom(Atom(Atom::Code, m_quoter.quoteTo(location(), cmdStr, QString())));
-                    m_quoter.reset();
-                    break;
-                }
-                case CMD_QUOTEFROMFILE: {
-                    leavePara();
-                    QString arg = getArgument();
-                    if (s_quoting) {
-                        appendAtom(Atom(Atom::CodeQuoteCommand, cmdStr));
-                        appendAtom(Atom(Atom::CodeQuoteArgument, arg));
+                    if (!marker)
+                        marker = CodeMarker::markerForFileName(fileName);
+
+                    quoteFromFile(fileName, marker);
+                    if (cmd == CMD_QUOTEFILE) {
+                        appendAtom(Atom(Atom::Code, m_quoter.quoteTo(location(), cmdStr, QString()), codeLanguage));
+                        m_quoter.reset();
                     }
-                    quoteFromFile(arg);
                     break;
                 }
                 case CMD_RAW:
@@ -930,6 +948,9 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                     startFormat(p1, cmd);
                     break;
                 case CMD_SNIPPET: {
+                    // A language argument must be on the same line as the command.
+                    codeLanguage = getLanguageArgument(&marker);
+
                     leavePara();
                     QString snippet = getArgument();
                     QString identifier = getRestOfLine();
@@ -938,9 +959,11 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                         appendAtom(Atom(Atom::SnippetLocation, snippet));
                         appendAtom(Atom(Atom::SnippetIdentifier, identifier));
                     }
-                    marker = CodeMarker::markerForFileName(snippet);
-                    quoteFromFile(snippet);
-                    appendToCode(m_quoter.quoteSnippet(location(), identifier), marker->atomType());
+                    if (!marker)
+                        marker = CodeMarker::markerForFileName(snippet);
+
+                    quoteFromFile(snippet, marker);
+                    appendToCode(m_quoter.quoteSnippet(location(), identifier), marker->atomType(), codeLanguage);
                     break;
                 }
                 case CMD_SUB:
@@ -962,12 +985,9 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                     }
                     break;
                 case CMD_TABLEOFCONTENTS:
-                    p1 = "1";
+                    location().report("\\%1 is deprecated and will be removed in a future version."_L1.arg(cmdName(cmd)));
                     if (isLeftBraceAhead())
-                        p1 = getArgument();
-                    p1 += QLatin1Char(',');
-                    p1 += QString::number((int)getSectioningUnit());
-                    appendAtom(Atom(Atom::TableOfContents, p1));
+                        getArgument();
                     break;
                 case CMD_TARGET:
                     if (m_openedCommands.top() == CMD_TABLE && !m_inTableItem) {
@@ -976,10 +996,26 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                     }
                     insertTarget(getRestOfLine());
                     break;
+                case CMD_TITLE:
+                    leavePara();
+                    enterPara(Atom::TitleLeft, Atom::TitleRight);
+                    break;
                 case CMD_TM:
-                     // Ignore command while parsing \section<N> argument
+                     // Ignore command while parsing \section<N> or \title argument
                     if (m_paragraphState != InSingleLineParagraph)
                         startFormat(ATOM_FORMATTING_TRADEMARK, cmd);
+                    break;
+                case CMD_TOC:
+                    if (openCommand(cmd)) {
+                        leavePara();
+                        appendAtom(Atom(Atom::TableOfContentsLeft));
+                    }
+                    break;
+                case CMD_ENDTOC:
+                    if (closeCommand(cmd)) {
+                        leavePara();
+                        appendAtom(Atom(Atom::TableOfContentsRight));
+                    }
                     break;
                 case CMD_TT:
                     startFormat(ATOM_FORMATTING_TELETYPE, cmd);
@@ -1229,9 +1265,10 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
 
             if (newWord) {
                 qsizetype startPos = m_position;
-                // No auto-linking inside links
+                // No auto-linking inside links or (section) titles
                 bool autolink = (!m_pendingFormats.isEmpty() &&
-                        m_pendingFormats.last() == ATOM_FORMATTING_LINK) ?
+                        m_pendingFormats.last() == ATOM_FORMATTING_LINK)
+                        || m_paragraphState == InSingleLineParagraph ?
                             false : isAutoLinkString(m_input, m_position);
                 if (m_position == startPos) {
                     if (!ch.isSpace()) {
@@ -1403,14 +1440,25 @@ void DocParser::include(const QString &fileName, const QString &identifier, cons
                 m_inputLength = m_input.size();
                 m_openedInputs.push(m_position + includedContent.size());
             } else {
+                auto isSnippetMarker = [&identifier](QStringView trimmedLine) -> bool {
+                    if (!trimmedLine.startsWith(QLatin1String("//!")))
+                        return false;
+                    auto bracketStart = trimmedLine.indexOf(QLatin1Char('['));
+                    auto bracketEnd = trimmedLine.indexOf(QLatin1Char(']'));
+                    if (bracketStart < 0 || bracketEnd <= bracketStart)
+                        return false;
+                    auto name = trimmedLine.mid(bracketStart + 1, bracketEnd - bracketStart - 1)
+                                        .trimmed();
+                    return name == identifier;
+                };
+
                 QStringList lineBuffer = includedContent.split(QLatin1Char('\n'));
                 qsizetype bufLen{lineBuffer.size()};
                 qsizetype i;
                 QStringView trimmedLine;
                 for (i = 0; i < bufLen; ++i) {
                     trimmedLine = QStringView{lineBuffer[i]}.trimmed();
-                    if (trimmedLine.startsWith(QLatin1String("//!")) &&
-                        trimmedLine.contains(identifier))
+                    if (isSnippetMarker(trimmedLine))
                         break;
                 }
                 if (i < bufLen - 1) {
@@ -1423,8 +1471,7 @@ void DocParser::include(const QString &fileName, const QString &identifier, cons
                 QString result;
                 do {
                     trimmedLine = QStringView{lineBuffer[i]}.trimmed();
-                    if (trimmedLine.startsWith(QLatin1String("//!")) &&
-                        trimmedLine.contains(identifier))
+                    if (isSnippetMarker(trimmedLine))
                         break;
                     else
                         result += lineBuffer[i] + QLatin1Char('\n');
@@ -1481,7 +1528,8 @@ bool DocParser::openCommand(int cmd)
     int outer = m_openedCommands.top();
     bool ok = true;
 
-    if (cmd == CMD_COMPARESWITH && m_openedCommands.contains(cmd)) {
+    if ((cmd == CMD_COMPARESWITH || cmd == CMD_TOC)
+            && m_openedCommands.contains(cmd)) {
         location().warning(u"Cannot nest '\\%1' commands"_s.arg(cmdName(cmd)));
         return false;
     } else if (cmd != CMD_LINK) {
@@ -1786,7 +1834,13 @@ void DocParser::cmd_overload()
 
     leavePara();
     m_private->m_metacommandsUsed.insert(cmd);
-    const QString overloadArgument = isBlankLine() ? getMetaCommandArgument(cmd) : getRestOfLine();
+    QString overloadArgument = isBlankLine() ? getMetaCommandArgument(cmd) : getRestOfLine();
+
+    // Handle special case: \overload primary
+    // Keep the "primary" flag for the code parser, but mark it specially
+    // so generators know not to treat it as a target function name
+    if (overloadArgument.trimmed() == "primary")
+        overloadArgument = "__qdoc_primary_overload__"_L1;
 
     m_private->m_metaCommandMap[cmd].append(ArgPair(overloadArgument, QString()));
 }
@@ -1901,6 +1955,44 @@ void DocParser::appendWord(const QString &word)
         m_private->m_text.lastAtom()->concatenateString(word);
 }
 
+/*!
+    Handles escaped backslash sequences (\\) that may be followed by an identifier.
+
+    When a double backslash is followed by alphanumeric characters (such as \\section1),
+    the backslash and identifier are wrapped in notranslate formatting to preserve
+    them verbatim in the output.
+
+    When a double backslash is not followed by an identifier, a literal backslash
+    is appended.
+
+    \note Skips \\r in CRLF sequences to prevent spurious whitespace in the output.
+*/
+void DocParser::appendEscapedIdentifier()
+{
+    Q_ASSERT(m_position < m_inputLength);
+    Q_ASSERT(m_input.at(m_position) == '\\');
+
+    ++m_position;
+
+    QString identifier;
+    while (m_position < m_inputLength && m_input.at(m_position).isLetterOrNumber()) {
+        identifier += m_input.at(m_position);
+        ++m_position;
+    }
+
+    enterPara();
+    if (!identifier.isEmpty()) {
+        appendAtom(Atom(Atom::FormattingLeft, ATOM_FORMATTING_NOTRANSLATE));
+        appendAtom(Atom(Atom::String, '\\' + identifier));
+        appendAtom(Atom(Atom::FormattingRight, ATOM_FORMATTING_NOTRANSLATE));
+
+        if (m_position + 1 < m_inputLength && m_input.at(m_position) == '\r' && m_input.at(m_position + 1) == '\n')
+            ++m_position;
+    } else {
+        appendChar(QLatin1Char('\\'));
+    }
+}
+
 void DocParser::appendToCode(const QString &markedCode)
 {
     if (!isCode(m_lastAtom)) {
@@ -1910,10 +2002,16 @@ void DocParser::appendToCode(const QString &markedCode)
     m_lastAtom->concatenateString(markedCode);
 }
 
-void DocParser::appendToCode(const QString &markedCode, Atom::AtomType defaultType)
+/*!
+    Appends \a markedCode to the current documentation as an atom with the
+    \a defaultType. The \a language specifies the programming language that
+    the code is written in so that generators can include it as part of the
+    meta-data they produce.
+*/
+void DocParser::appendToCode(const QString &markedCode, Atom::AtomType defaultType, const QString &language)
 {
     if (!isCode(m_lastAtom)) {
-        appendAtom(Atom(defaultType, markedCode));
+        appendAtom(Atom(defaultType, markedCode, language));
         m_lastAtom = m_private->m_text.lastAtom();
     } else {
         m_lastAtom->concatenateString(markedCode);
@@ -1936,7 +2034,7 @@ void DocParser::enterPara(Atom::AtomType leftType, Atom::AtomType rightType, con
     m_pendingParagraphLeftType = leftType;
     m_pendingParagraphRightType = rightType;
     m_pendingParagraphString = string;
-    if (leftType == Atom::SectionHeadingLeft) {
+    if (leftType == Atom::SectionHeadingLeft || leftType == Atom::TitleLeft) {
         m_paragraphState = InSingleLineParagraph;
     } else {
         m_paragraphState = InMultiLineParagraph;
@@ -1961,7 +2059,13 @@ void DocParser::leavePara()
             && m_private->m_text.lastAtom()->string().endsWith(QLatin1Char(' '))) {
             m_private->m_text.lastAtom()->chopString();
         }
-        appendAtom(Atom(m_pendingParagraphRightType, m_pendingParagraphString));
+        if (m_pendingParagraphRightType == Atom::TitleRight) {
+            // Extract title
+            m_private->m_title = m_private->m_text.splitAtFirst(Atom::TitleLeft);
+            m_private->m_title.stripFirstAtom();
+        } else {
+            appendAtom(Atom(m_pendingParagraphRightType, m_pendingParagraphString));
+        }
     }
     m_paragraphState = OutsideParagraph;
     m_indexStartedParagraph = false;
@@ -2011,7 +2115,12 @@ void DocParser::leaveTableRow()
     }
 }
 
-void DocParser::quoteFromFile(const QString &filename)
+/*!
+    Quotes from the file with the given \a filename using an optional \a marker
+    to mark up the quoted text. If no marker is provided, a marker is selected
+    based on the file name.
+*/
+void DocParser::quoteFromFile(const QString &filename, CodeMarker *marker)
 {
     // KLUDGE: We dereference file_resolver as it is temporarily a pointer.
     // See the comment for file_resolver in the header files for more context.
@@ -2058,9 +2167,11 @@ void DocParser::quoteFromFile(const QString &filename)
         // managed in such a spread and unlocal way.
         m_quoter.reset();
 
-        CodeMarker *marker = CodeMarker::markerForFileName(QString{});
+        if (!marker)
+            marker = CodeMarker::markerForFileName(QString{});
         m_quoter.quoteFromFile(filename, QString{}, marker->markedUpCode(QString{}, nullptr, location()));
-    } else Doc::quoteFromFile(location(), m_quoter, *maybe_resolved_file);
+    } else
+        Doc::quoteFromFile(location(), m_quoter, *maybe_resolved_file, marker);
 }
 
 /*!
@@ -2363,6 +2474,26 @@ QString DocParser::getBracketedArgument()
     return arg;
 }
 
+/*!
+    Reads an optional bracketed language argument, updates the supplied
+    \a marker to refer to an appropriate code marker for the language and
+    returns a lower case representation of the language.
+
+    If no suitable marker is found, sets the marker to null and returns
+    an empty string.
+*/
+QString DocParser::getLanguageArgument(CodeMarker **marker)
+{
+    QString value{};
+    if (isLeftBracketAhead(0)) {
+        value = getBracketedArgument();
+        *marker = markerForLanguage(value);
+    } else {
+        value = ""_L1;
+        *marker = nullptr;
+    }
+    return value.toLower();
+}
 
 /*!
     Returns the list of arguments passed to a \a macro with name \a name.
@@ -2586,7 +2717,7 @@ bool DocParser::isLeftBraceAhead()
     return numEndl < 2 && i < m_inputLength && m_input[i] == '{';
 }
 
-bool DocParser::isLeftBracketAhead()
+bool DocParser::isLeftBracketAhead(int maxNewlines)
 {
     int numEndl = 0;
     qsizetype i = m_position;
@@ -2597,7 +2728,7 @@ bool DocParser::isLeftBracketAhead()
             numEndl++;
         ++i;
     }
-    return numEndl < 2 && i < m_inputLength && m_input[i] == '[';
+    return numEndl <= maxNewlines && i < m_inputLength && m_input[i] == '[';
 }
 
 /*!
@@ -2689,6 +2820,8 @@ int DocParser::endCmdFor(int cmd)
         return CMD_ENDSIDEBAR;
     case CMD_TABLE:
         return CMD_ENDTABLE;
+    case CMD_TOC:
+        return CMD_ENDTOC;
     default:
         return cmd;
     }
@@ -2793,6 +2926,21 @@ bool DocParser::isQuote(const Atom *atom)
     return (type == Atom::CodeQuoteArgument || type == Atom::CodeQuoteCommand
             || type == Atom::SnippetCommand || type == Atom::SnippetIdentifier
             || type == Atom::SnippetLocation);
+}
+
+/*!
+    \internal
+    Returns a marker for the given \a language.
+    Returns \nullptr and warns if no suitable marker is found.
+*/
+CodeMarker *DocParser::markerForLanguage(const QString &language)
+{
+    CodeMarker *marker = CodeMarker::markerForLanguage(language.toLower());
+    // Suppress warning for explicitly allowed languages.
+    if (!marker && !s_allowedLanguages.contains(language, Qt::CaseInsensitive))
+        location().warning(QStringLiteral("Unrecognized markup language '%1'").arg(language));
+
+    return marker;
 }
 
 /*!

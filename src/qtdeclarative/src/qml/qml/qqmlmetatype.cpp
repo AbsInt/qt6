@@ -8,11 +8,10 @@
 #include <private/qqmlmetatypedata_p.h>
 #include <private/qqmlpropertycachecreator_p.h>
 #include <private/qqmlscriptblob_p.h>
+#include <private/qqmlscriptdata_p.h>
 #include <private/qqmltype_p_p.h>
-#include <private/qqmltypeloader_p.h>
 #include <private/qqmltypemodule_p.h>
 #include <private/qqmlvaluetype_p.h>
-#include <private/qv4executablecompilationunit_p.h>
 
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qmutex.h>
@@ -21,6 +20,12 @@
 Q_STATIC_LOGGING_CATEGORY(lcTypeRegistration, "qt.qml.typeregistration")
 
 QT_BEGIN_NAMESPACE
+
+/*!
+    \class QQmlMetaType
+    \inmodule QtQml
+    \internal
+*/
 
 struct LockedData : private QQmlMetaTypeData
 {
@@ -192,7 +197,7 @@ static QQmlTypePrivate *createQQmlType(QQmlMetaTypeData *data, const QString &el
     d->setName(QString::fromUtf8(type.uri), elementName);
     d->version = type.version;
 
-    const QUrl normalized = QQmlTypeLoader::normalize(type.url);
+    const QUrl normalized = QQmlMetaType::normalizedUrl(type.url);
     d->extraData.compositeTypeData = normalized;
     addQQmlMetaTypeInterfaces(
             data, normalized, d, QQmlPropertyCacheCreatorBase::createClassNameTypeByUrl(normalized));
@@ -335,9 +340,7 @@ void QQmlMetaType::clearTypeRegistrations()
 
     data->moduleImports.clear();
 
-    // Avoid deletion recursion (via QQmlTypePrivate dtor) by moving them out of the way first.
-    QQmlMetaTypeData::CompositeTypes emptyComposites;
-    emptyComposites.swap(data->compositeTypes);
+    data->clearCompositeTypes();
 
     qDeleteAll(data->metaTypeToValueType);
     data->metaTypeToValueType.clear();
@@ -577,7 +580,7 @@ QQmlType QQmlMetaType::registerCompositeType(const QQmlPrivate::RegisterComposit
     QQmlTypePrivate *priv = createQQmlType(data, typeName, type);
     addTypeToData(priv, data);
 
-    data->urlToType.insert(QQmlTypeLoader::normalize(type.url), priv);
+    data->urlToType.insert(QQmlMetaType::normalizedUrl(type.url), priv);
 
     return QQmlType(priv);
 }
@@ -701,7 +704,7 @@ QQmlType QQmlMetaType::findCompositeType(
         const QUrl &url, const QQmlRefPointer<QV4::CompiledData::CompilationUnit> &compilationUnit,
         CompositeTypeLookupMode mode)
 {
-    const QUrl normalized = QQmlTypeLoader::normalize(url);
+    const QUrl normalized = QQmlMetaType::normalizedUrl(url);
     QQmlMetaTypeDataPtr data;
 
     bool urlExists = true;
@@ -1034,24 +1037,23 @@ QQmlMetaType::RegistrationResult QQmlMetaType::registerPluginTypes(
     Errors (if there are any) are placed into \a errors, if it is nonzero.
     Otherwise errors are printed as warnings.
 */
-QQmlType QQmlMetaType::typeForUrl(const QString &urlString,
-                                  const QHashedStringRef &qualifiedType,
-                                  CompositeTypeLookupMode mode, QList<QQmlError> *errors,
-                                  QTypeRevision version)
+QQmlType QQmlMetaType::typeForUrl(
+        const QUrl &url, const QHashedStringRef &qualifiedType, CompositeTypeLookupMode mode,
+        QList<QQmlError> *errors, QTypeRevision version)
 {
     // ### unfortunate (costly) conversion
-    const QUrl url = QQmlTypeLoader::normalize(QUrl(urlString));
+    const QUrl normalized = QQmlMetaType::normalizedUrl(url);
 
     QQmlMetaTypeDataPtr data;
     {
-        QQmlType ret(data->urlToType.value(url));
-        if (ret.isValid() && ret.sourceUrl() == url)
+        QQmlType ret(data->urlToType.value(normalized));
+        if (ret.isValid() && ret.sourceUrl() == normalized)
             return ret;
     }
 
     const QQmlType type = createTypeForUrl(
-        data, url, qualifiedType, mode, errors, version);
-    data->urlToType.insert(url, type.priv());
+        data, normalized, qualifiedType, mode, errors, version);
+    data->urlToType.insert(normalized, type.priv());
     return type;
 }
 
@@ -1166,13 +1168,13 @@ QMetaType QQmlMetaType::listValueType(QMetaType metaType)
         return QMetaType {};
 }
 
-QQmlAttachedPropertiesFunc QQmlMetaType::attachedPropertiesFunc(QQmlEnginePrivate *engine,
-                                                                const QMetaObject *mo)
+QQmlAttachedPropertiesFunc QQmlMetaType::attachedPropertiesFunc(
+        QQmlTypeLoader *typeLoader, const QMetaObject *mo)
 {
     QQmlMetaTypeDataPtr data;
 
     QQmlType type(data->metaObjectToType.value(mo));
-    return type.attachedPropertiesFunction(engine);
+    return type.attachedPropertiesFunction(typeLoader);
 }
 
 QMetaProperty QQmlMetaType::defaultProperty(const QMetaObject *metaObject)
@@ -1361,7 +1363,7 @@ QQmlType QQmlMetaType::qmlListType(QMetaType metaType)
 */
 QQmlType QQmlMetaType::qmlType(const QUrl &unNormalizedUrl)
 {
-    const QUrl url = QQmlTypeLoader::normalize(unNormalizedUrl);
+    const QUrl url = QQmlMetaType::normalizedUrl(unNormalizedUrl);
     const QQmlMetaTypeDataPtr data;
 
     QQmlType type(data->urlToType.value(url));
@@ -1667,9 +1669,11 @@ void QQmlMetaType::freeUnusedTypesAndCaches()
     bool droppedAtLeastOneComposite;
     do {
         droppedAtLeastOneComposite = false;
-        auto it = data->compositeTypes.begin();
-        while (it != data->compositeTypes.end()) {
-            if ((*it)->count() <= doCountInternalCompositeTypeSelfReferences(data, *it)) {
+        auto it = data->compositeTypes.cbegin();
+        while (it != data->compositeTypes.cend()) {
+            const auto &cu = *it;
+            if (cu->count() <= doCountInternalCompositeTypeSelfReferences(data, cu)) {
+                QQmlMetaTypeData::clearCompositeType(cu);
                 it = data->compositeTypes.erase(it);
                 droppedAtLeastOneComposite = true;
             } else {
@@ -2073,6 +2077,7 @@ void QQmlMetaType::unregisterInternalCompositeType(
         const auto [begin, end] = std::as_const(data->compositeTypes).equal_range(iface);
         for (auto it = begin; it != end; ++it) {
             if (*it == compilationUnit) {
+                QQmlMetaTypeData::clearCompositeType(compilationUnit);
                 data->compositeTypes.erase(it);
                 break;
             }
@@ -2103,7 +2108,7 @@ QQmlRefPointer<QV4::CompiledData::CompilationUnit> QQmlMetaType::obtainCompilati
 QQmlRefPointer<QV4::CompiledData::CompilationUnit> QQmlMetaType::obtainCompilationUnit(
         const QUrl &url)
 {
-    const QUrl normalized = QQmlTypeLoader::normalize(url);
+    const QUrl normalized = QQmlMetaType::normalizedUrl(url);
     QQmlMetaTypeDataPtr data;
 
     auto found = data->urlToType.constFind(normalized);

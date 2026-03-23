@@ -3364,7 +3364,7 @@ void tst_qquicktextinput::echoMode()
     COMPARE_INPUT_METHOD_QUERY(Qt::InputMethodHints, input, Qt::ImHints, toInt, ref);
     input->setEchoMode(QQuickTextInput::Password);
     //Password
-    ref |= Qt::ImhHiddenText;
+    ref &= ~Qt::ImhHiddenText;
     ref |= (Qt::ImhNoAutoUppercase | Qt::ImhNoPredictiveText | Qt::ImhSensitiveData);
     QCOMPARE(input->text(), initial);
     QCOMPARE(input->displayText(), QString(8, passwordMaskCharacter.at(0)));

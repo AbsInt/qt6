@@ -2,14 +2,22 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtpropertybrowserutils_p.h"
-#include <QtWidgets/QApplication>
-#include <QtGui/QPainter>
-#include <QtWidgets/QHBoxLayout>
-#include <QtGui/QMouseEvent>
-#include <QtWidgets/QCheckBox>
-#include <QtWidgets/QLineEdit>
-#include <QtWidgets/QMenu>
-#include <QtCore/QLocale>
+
+#include <QtWidgets/qapplication.h>
+#include <QtWidgets/qboxlayout.h>
+#include <QtWidgets/qcheckbox.h>
+#include <QtWidgets/qlineedit.h>
+#include <QtWidgets/qmenu.h>
+
+#include <QtGui/qevent.h>
+#include <QtGui/qpainter.h>
+#include <QtGui/qpainterstateguard.h>
+
+#include <QtCore/qhash.h>
+#include <QtCore/qlocale.h>
+#include <QtCore/qoperatingsystemversion.h>
+
+#include <utility>
 
 QT_BEGIN_NAMESPACE
 
@@ -22,48 +30,155 @@ static void clearCursorDatabase()
     QtCursorDatabase::instance()->clear();
 }
 
+using ShapeNames = QHash<Qt::CursorShape, const char *>;
+
+static const ShapeNames &shapeNames()
+{
+    static const ShapeNames result =
+            {{Qt::ArrowCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Arrow")},
+              {Qt::UpArrowCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Up Arrow")},
+              {Qt::CrossCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Cross")},
+              {Qt::WaitCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Wait")},
+              {Qt::IBeamCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "IBeam")},
+              {Qt::SizeVerCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Size Vertical")},
+              {Qt::SizeHorCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Size Horizontal")},
+              {Qt::SizeFDiagCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Size Backslash")},
+              {Qt::SizeBDiagCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Size Slash")},
+              {Qt::SizeAllCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Size All")},
+              {Qt::BlankCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Blank")},
+              {Qt::SplitVCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Split Vertical")},
+              {Qt::SplitHCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Split Horizontal")},
+              {Qt::PointingHandCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Pointing Hand")},
+              {Qt::ForbiddenCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Forbidden")},
+              {Qt::OpenHandCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Open Hand")},
+              {Qt::ClosedHandCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Closed Hand")},
+              {Qt::WhatsThisCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "What's This")},
+              {Qt::BusyCursor, QT_TRANSLATE_NOOP("QtCursorDatabase", "Busy")}};
+    return result;
+}
+
+using CursorResource = std::pair<Qt::CursorShape, QLatin1StringView>;
+
+static constexpr CursorResource cursorResources[] = {
+    {Qt::ArrowCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-arrow.png"_L1},
+    {Qt::UpArrowCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-uparrow.png"_L1},
+    {Qt::CrossCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-cross.png"_L1},
+    {Qt::WaitCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-wait.png"_L1},
+    {Qt::IBeamCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-ibeam.png"_L1},
+    {Qt::SizeVerCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-sizev.png"_L1},
+    {Qt::SizeHorCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-sizeh.png"_L1},
+    {Qt::SizeFDiagCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-sizef.png"_L1},
+    {Qt::SizeBDiagCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-sizeb.png"_L1},
+    {Qt::SizeAllCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-sizeall.png"_L1},
+    {Qt::SplitVCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-vsplit.png"_L1},
+    {Qt::SplitHCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-hsplit.png"_L1},
+    {Qt::PointingHandCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-hand.png"_L1},
+    {Qt::ForbiddenCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-forbidden.png"_L1},
+    {Qt::OpenHandCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-openhand.png"_L1},
+    {Qt::ClosedHandCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-closedhand.png"_L1},
+    {Qt::WhatsThisCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-whatsthis.png"_L1},
+    {Qt::BusyCursor, ":/qt-project.org/qtpropertybrowser/images/cursor-busy.png"_L1}
+};
+
+// A Pixmap icon engine for resource pixmaps that do not have a DPR set.
+// It sets the DPR on the pixmaps and either scales it down or centers it.
+class QtPixmapIconEngine : public QtPropertyIconEngine
+{
+public:
+    Q_DISABLE_COPY_MOVE(QtPixmapIconEngine)
+
+    explicit QtPixmapIconEngine(QPixmap p) : m_pixmap(std::move(p)) { }
+
+    QIconEngine *clone() const override
+    {
+        return new QtPixmapIconEngine(m_pixmap);
+    }
+
+    void paint(QPainter *painter, const QRect &rect, QIcon::Mode, QIcon::State) override
+    {
+        QPainterStateGuard psg(painter);
+        painter->setRenderHint(QPainter::Antialiasing, true);
+
+        const auto dpr = painter->device()->devicePixelRatioF();
+        m_pixmap.setDevicePixelRatio(dpr);
+        QSize dipSize =
+                qFuzzyCompare(dpr, 1) ? m_pixmap.size() : (QSizeF(m_pixmap.size()) / dpr).toSize();
+        const int dipWidth = dipSize.width();
+        const int dipHeight = dipSize.height();
+        if (dipWidth > rect.width() || dipHeight > rect.height()) {
+            painter->setRenderHint(QPainter::SmoothPixmapTransform);
+            painter->drawPixmap(rect, m_pixmap); // Too big: Let Qt scale down
+        } else {
+            QPoint point = rect.topLeft(); // center if needed
+            if (dipWidth < rect.width())
+                point.rx() += (rect.width() - dipWidth) / 2;
+            if (dipHeight < rect.height())
+                point.ry() += (rect.height() - dipHeight) / 2;
+            painter->drawPixmap(point, m_pixmap);
+        }
+    }
+
+private:
+    QPixmap m_pixmap;
+};
+
+static inline QIcon getResourceCursorIcon(const QString &fn)
+{
+    return QIcon{new QtPixmapIconEngine(QPixmap(fn))};
+}
+
+// Get an icon from the resources of the Windows QPA plugin. No scaling required.
+[[maybe_unused]] static QIcon getWindowsCursorIcon(QLatin1StringView name)
+{
+    static constexpr auto root = ":/qt-project.org/windows/cursors/images/"_L1;
+    static constexpr QLatin1StringView suffixes[] = {"_32.png"_L1, "_48.png"_L1, "_64.png"_L1};
+    QIcon result;
+    for (auto suffix : suffixes) {
+        const QString path = root + name + suffix;
+        QPixmap pixmap(path);
+        if (pixmap.isNull())
+            qWarning("%s: Failed to load \"%s\"", __FUNCTION__, qPrintable(path));
+        else
+            result.addPixmap(pixmap);
+    }
+    return result;
+}
+
+// Get a (small) icon from the resources of the Cocoa QPA plugin.
+[[maybe_unused]] static QIcon getCocoaCursorIcon(QLatin1StringView name)
+{
+    static constexpr auto root = ":/qt-project.org/mac/cursors/images/"_L1;
+    const QString path = root + name;
+    QPixmap pixmap(path);
+    if (pixmap.isNull()) {
+        qWarning("%s: Failed to load \"%s\"", __FUNCTION__, qPrintable(path));
+        return {};
+    }
+    return QIcon{new QtPixmapIconEngine(pixmap)};
+}
+
 QtCursorDatabase::QtCursorDatabase()
 {
     qAddPostRoutine(clearCursorDatabase);
 
-    appendCursor(Qt::ArrowCursor, QCoreApplication::translate("QtCursorDatabase", "Arrow"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-arrow.png"_L1));
-    appendCursor(Qt::UpArrowCursor, QCoreApplication::translate("QtCursorDatabase", "Up Arrow"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-uparrow.png"_L1));
-    appendCursor(Qt::CrossCursor, QCoreApplication::translate("QtCursorDatabase", "Cross"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-cross.png"_L1));
-    appendCursor(Qt::WaitCursor, QCoreApplication::translate("QtCursorDatabase", "Wait"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-wait.png"_L1));
-    appendCursor(Qt::IBeamCursor, QCoreApplication::translate("QtCursorDatabase", "IBeam"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-ibeam.png"_L1));
-    appendCursor(Qt::SizeVerCursor, QCoreApplication::translate("QtCursorDatabase", "Size Vertical"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-sizev.png"_L1));
-    appendCursor(Qt::SizeHorCursor, QCoreApplication::translate("QtCursorDatabase", "Size Horizontal"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-sizeh.png"_L1));
-    appendCursor(Qt::SizeFDiagCursor, QCoreApplication::translate("QtCursorDatabase", "Size Backslash"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-sizef.png"_L1));
-    appendCursor(Qt::SizeBDiagCursor, QCoreApplication::translate("QtCursorDatabase", "Size Slash"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-sizeb.png"_L1));
-    appendCursor(Qt::SizeAllCursor, QCoreApplication::translate("QtCursorDatabase", "Size All"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-sizeall.png"_L1));
-    appendCursor(Qt::BlankCursor, QCoreApplication::translate("QtCursorDatabase", "Blank"),
-                 QIcon());
-    appendCursor(Qt::SplitVCursor, QCoreApplication::translate("QtCursorDatabase", "Split Vertical"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-vsplit.png"_L1));
-    appendCursor(Qt::SplitHCursor, QCoreApplication::translate("QtCursorDatabase", "Split Horizontal"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-hsplit.png"_L1));
-    appendCursor(Qt::PointingHandCursor, QCoreApplication::translate("QtCursorDatabase", "Pointing Hand"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-hand.png"_L1));
-    appendCursor(Qt::ForbiddenCursor, QCoreApplication::translate("QtCursorDatabase", "Forbidden"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-forbidden.png"_L1));
-    appendCursor(Qt::OpenHandCursor, QCoreApplication::translate("QtCursorDatabase", "Open Hand"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-openhand.png"_L1));
-    appendCursor(Qt::ClosedHandCursor, QCoreApplication::translate("QtCursorDatabase", "Closed Hand"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-closedhand.png"_L1));
-    appendCursor(Qt::WhatsThisCursor, QCoreApplication::translate("QtCursorDatabase", "What's This"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-whatsthis.png"_L1));
-    appendCursor(Qt::BusyCursor, QCoreApplication::translate("QtCursorDatabase", "Busy"),
-                 QIcon(":/qt-project.org/qtpropertybrowser/images/cursor-busy.png"_L1));
+    if constexpr (QOperatingSystemVersion::currentType() == QOperatingSystemVersion::Windows) {
+        appendCursor(Qt::ClosedHandCursor, getWindowsCursorIcon("closedhandcursor"_L1));
+        appendCursor(Qt::OpenHandCursor, getWindowsCursorIcon("openhandcursor"_L1));
+        appendCursor(Qt::SplitHCursor, getWindowsCursorIcon("splithcursor"_L1));
+        appendCursor(Qt::SplitVCursor, getWindowsCursorIcon("splitvcursor"_L1));
+    }
+
+    if constexpr (QOperatingSystemVersion::currentType() == QOperatingSystemVersion::MacOS) {
+        appendCursor(Qt::BusyCursor, getCocoaCursorIcon("spincursor.png"_L1));
+        appendCursor(Qt::WaitCursor, getCocoaCursorIcon("waitcursor.png"_L1));
+    }
+
+    appendCursor(Qt::BlankCursor, QIcon{});
+
+    for (const auto &cursorResource : cursorResources) {
+        if (!hasCursor(cursorResource.first))
+            appendCursor(cursorResource.first, getResourceCursorIcon(cursorResource.second));
+    }
 }
 
 void QtCursorDatabase::clear()
@@ -74,12 +189,13 @@ void QtCursorDatabase::clear()
     m_cursorShapeToValue.clear();
 }
 
-void QtCursorDatabase::appendCursor(Qt::CursorShape shape, const QString &name, const QIcon &icon)
+void QtCursorDatabase::appendCursor(Qt::CursorShape shape, const QIcon &icon)
 {
-    if (m_cursorShapeToValue.contains(shape))
+    if (hasCursor(shape) || (shape != Qt::BlankCursor && icon.isNull()))
         return;
     const qsizetype value = m_cursorNames.size();
-    m_cursorNames.append(name);
+    const char *name = shapeNames().value(shape, nullptr);
+    m_cursorNames.append(name ? QCoreApplication::translate("QtCursorDatabase", name) : QString{});
     m_cursorIcons.insert(value, icon);
     m_valueToCursorShape.insert(value, shape);
     m_cursorShapeToValue.insert(shape, value);
@@ -134,29 +250,48 @@ QtCursorDatabase *QtCursorDatabase::instance()
     return cursorDatabase();
 }
 
-QPixmap QtPropertyBrowserUtils::brushValuePixmap(const QBrush &b)
+class QtPropertyBrushValueIconEngine : public QtPropertyIconEngine
 {
-    QImage img(16, 16, QImage::Format_ARGB32_Premultiplied);
-    img.fill(0);
+public:
+    Q_DISABLE_COPY_MOVE(QtPropertyBrushValueIconEngine)
 
-    QPainter painter(&img);
-    painter.setCompositionMode(QPainter::CompositionMode_Source);
-    painter.fillRect(0, 0, img.width(), img.height(), b);
-    QColor color = b.color();
-    if (color.alpha() != 255) { // indicate alpha by an inset
-        QBrush  opaqueBrush = b;
-        color.setAlpha(255);
-        opaqueBrush.setColor(color);
-        painter.fillRect(img.width() / 4, img.height() / 4,
-                         img.width() / 2, img.height() / 2, opaqueBrush);
+    explicit QtPropertyBrushValueIconEngine(const QBrush &b) : m_brush(b) { }
+
+    QIconEngine *clone() const override
+    {
+        return new QtPropertyBrushValueIconEngine(m_brush);
     }
-    painter.end();
-    return QPixmap::fromImage(img);
+
+    void paint(QPainter *painter, const QRect &rect, QIcon::Mode, QIcon::State) override
+    {
+        QPainterStateGuard psg(painter);
+        painter->setCompositionMode(QPainter::CompositionMode_Source);
+        painter->fillRect(rect, m_brush);
+        QColor color = m_brush.color();
+        if (color.alpha() != 255) { // indicate alpha by an inset
+            QBrush opaqueBrush = m_brush;
+            color.setAlpha(255);
+            opaqueBrush.setColor(color);
+            const QPoint offset{rect.width() / 4, rect.height() / 4};
+            const QRect inset{rect.topLeft() + offset, rect.size() / 2};
+            painter->fillRect(inset, opaqueBrush);
+        }
+    }
+
+private:
+    QBrush m_brush;
+};
+
+QPixmap QtPropertyBrowserUtils::brushValuePixmap(const QBrush &b, const QSize &size,
+                                                 qreal devicePixelRatio)
+{
+    QtPropertyBrushValueIconEngine engine(b);
+    return engine.drawPixmap(size, devicePixelRatio);
 }
 
 QIcon QtPropertyBrowserUtils::brushValueIcon(const QBrush &b)
 {
-    return QIcon(brushValuePixmap(b));
+    return QIcon(new QtPropertyBrushValueIconEngine(b));
 }
 
 QString QtPropertyBrowserUtils::colorValueText(QColor c)
@@ -165,25 +300,44 @@ QString QtPropertyBrowserUtils::colorValueText(QColor c)
            .arg(c.red()).arg(c.green()).arg(c.blue()).arg(c.alpha());
 }
 
-QPixmap QtPropertyBrowserUtils::fontValuePixmap(const QFont &font)
+class QtPropertyFontValueIconEngine : public QtPropertyIconEngine
 {
-    QFont f = font;
-    QImage img(16, 16, QImage::Format_ARGB32_Premultiplied);
-    img.fill(0);
-    QPainter p(&img);
-    p.setRenderHint(QPainter::TextAntialiasing, true);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    f.setPointSize(13);
-    p.setFont(f);
-    QTextOption t;
-    t.setAlignment(Qt::AlignCenter);
-    p.drawText(QRect(0, 0, 16, 16), QString(QLatin1Char('A')), t);
-    return QPixmap::fromImage(img);
+public:
+    Q_DISABLE_COPY_MOVE(QtPropertyFontValueIconEngine)
+
+    explicit QtPropertyFontValueIconEngine(const QFont &f) : m_font(f) { }
+
+    QIconEngine *clone() const override
+    {
+        return new QtPropertyFontValueIconEngine(m_font);
+    }
+
+    void paint(QPainter *painter, const QRect &rect, QIcon::Mode, QIcon::State) override
+    {
+        QPainterStateGuard psg(painter);
+        const auto maxDimension = qMax(rect.width(), rect.height());
+        m_font.setPointSize(maxDimension - 3);
+        painter->setPen(QPen(Qt::black));
+        painter->setFont(m_font);
+        painter->setRenderHint(QPainter::TextAntialiasing, true);
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->drawText(rect, QString(u'A'), QTextOption(Qt::AlignCenter));
+    }
+
+private:
+    QFont m_font;
+};
+
+QPixmap QtPropertyBrowserUtils::fontValuePixmap(const QFont &font, const QSize &size,
+                                                qreal devicePixelRatio)
+{
+    QtPropertyFontValueIconEngine engine(font);
+    return engine.drawPixmap(size, devicePixelRatio);
 }
 
 QIcon QtPropertyBrowserUtils::fontValueIcon(const QFont &f)
 {
-    return QIcon(fontValuePixmap(f));
+    return QIcon(new QtPropertyFontValueIconEngine(f));
 }
 
 QString QtPropertyBrowserUtils::fontValueText(const QFont &f)
@@ -282,6 +436,33 @@ void QtBoolEdit::mousePressEvent(QMouseEvent *event)
     } else {
         QWidget::mousePressEvent(event);
     }
+}
+
+QPixmap QtPropertyIconEngine::createEmptyPixmap(const QSize &size, qreal devicePixelRatio)
+{
+    QPixmap result(size * devicePixelRatio);
+    result.fill(Qt::transparent);
+    result.setDevicePixelRatio(devicePixelRatio);
+    return result;
+}
+
+QtPropertyIconEngine::QtPropertyIconEngine() = default;
+
+// ### FIXME Qt 7: Remove? (reimplemented in Qt 6 since the default
+// cannot be trusted to handle fractional dpr).
+QPixmap QtPropertyIconEngine::scaledPixmap(const QSize &size, QIcon::Mode mode, QIcon::State state,
+                                         qreal scale)
+{
+    QPixmap result = createEmptyPixmap(size, scale);
+    QPainter painter(&result);
+    paint(&painter, QRect(0, 0, size.width(), size.height()), mode, state);
+    painter.end();
+    return result;
+}
+
+QPixmap QtPropertyIconEngine::drawPixmap(const QSize &size, qreal devicePixelRatio)
+{
+    return scaledPixmap(size, QIcon::Mode::Normal, QIcon::State::On, devicePixelRatio);
 }
 
 QT_END_NAMESPACE

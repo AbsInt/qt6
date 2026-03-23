@@ -190,6 +190,14 @@ QFileSystemEngine::createLegacyEngine(QFileSystemEntry &entry, QFileSystemMetaDa
     return engine;
 }
 
+std::unique_ptr<QAbstractFileEngine>
+QFileSystemEngine::createLegacyEngine(const QString &fileName)
+{
+    QFileSystemEntry entry(fileName);
+    QFileSystemMetaData metaData;
+    return createLegacyEngine(entry, metaData);
+}
+
 //static
 QString QFileSystemEngine::resolveUserName(const QFileSystemEntry &entry, QFileSystemMetaData &metaData)
 {

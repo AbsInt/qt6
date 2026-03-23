@@ -30,6 +30,8 @@ class Q_CORE_EXPORT QDate
 {
     explicit constexpr QDate(qint64 julianDay) : jd(julianDay) {}
 public:
+    using difference_type = qint64;
+
     constexpr QDate() : jd(nullJd()) {}
     QDate(int y, int m, int d);
     QDate(int y, int m, int d, QCalendar cal);
@@ -211,6 +213,32 @@ private:
     compareThreeWay(const QDate &lhs, const QDate &rhs) noexcept
     { return Qt::compareThreeWay(lhs.jd, rhs.jd); }
     Q_DECLARE_STRONGLY_ORDERED_LITERAL_TYPE(QDate)
+
+    friend QDate &operator++(QDate &date)
+    {
+        date = date.addDays(1);
+        return date;
+    }
+
+    friend QDate &operator--(QDate &date)
+    {
+        date = date.addDays(-1);
+        return date;
+    }
+
+    friend QDate operator++(QDate &date, int)
+    {
+        QDate old = date;
+        ++date;
+        return old;
+    }
+
+    friend QDate operator--(QDate &date, int)
+    {
+        QDate old = date;
+        --date;
+        return old;
+    }
 
 #ifndef QT_NO_DATASTREAM
     friend Q_CORE_EXPORT QDataStream &operator<<(QDataStream &, QDate);

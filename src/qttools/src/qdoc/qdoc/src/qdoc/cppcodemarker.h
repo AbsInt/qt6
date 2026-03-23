@@ -6,6 +6,10 @@
 
 #include "codemarker.h"
 
+struct RelaxedTemplateDeclaration;
+struct RelaxedTemplateParameter;
+struct TemplateDeclarationStorage;
+
 QT_BEGIN_NAMESPACE
 
 class CppCodeMarker : public CodeMarker
@@ -16,6 +20,7 @@ public:
 
     bool recognizeCode(const QString &code) override;
     bool recognizeExtension(const QString &ext) override;
+    bool recognizeFileName(const QString & /*name*/) override { return false; }
     bool recognizeLanguage(const QString &lang) override;
     [[nodiscard]] Atom::AtomType atomType() const override;
     QString markedUpCode(const QString &code, const Node *relative,
@@ -26,7 +31,13 @@ public:
     QString markedUpEnumValue(const QString &enumValue, const Node *relative) override;
 
 private:
+    enum class TemplateFormat { SingleLine, MultiLine };
+
     QString addMarkUp(const QString &protectedCode, const Node *relative, const Location &location);
+    QString formatTemplateDecl(const RelaxedTemplateDeclaration *templateDecl);
+    QString formatTemplateDeclStorage(const TemplateDeclarationStorage &templateDecl,
+                                      TemplateFormat format);
+    QString formatTemplateParameter(const RelaxedTemplateParameter &param);
 };
 
 QT_END_NAMESPACE

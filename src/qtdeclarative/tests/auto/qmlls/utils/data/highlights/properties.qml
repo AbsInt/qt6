@@ -10,5 +10,7 @@ Item {
         required property int kkk
         default property int kkkk
         final property int kkkkk
+        virtual property int v
+        override property int o
     }
 }

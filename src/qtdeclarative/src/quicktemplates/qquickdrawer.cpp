@@ -210,7 +210,7 @@ void QQuickDrawerPositioner::reposition()
 
     // The overlay is assumed to fully cover the window's contents, although the overlay's geometry
     // might not always equal the window's geometry (for example, if the window's contents are rotated).
-    QQuickOverlay *overlay = QQuickOverlay::overlay(drawer->window());
+    QQuickOverlay *overlay = QQuickOverlay::overlay(drawer->window(), drawer->parentItem());
     if (!overlay)
         return;
 
@@ -249,7 +249,7 @@ void QQuickDrawerPrivate::resizeDimmer()
     if (!dimmer || !window)
         return;
 
-    const QQuickOverlay *overlay = QQuickOverlay::overlay(window);
+    const QQuickOverlay *overlay = QQuickOverlay::overlay(window, parentItem);
 
     QRectF geometry(0, 0, overlay ? overlay->width() : 0, overlay ? overlay->height() : 0);
 

@@ -49,13 +49,13 @@ public:
     void setPreciseRemainingTime(qint64 secs, qint64 nsecs = 0,
                                  Qt::TimerType type = Qt::CoarseTimer) noexcept;
 
-    qint64 deadline() const noexcept Q_DECL_PURE_FUNCTION;
-    qint64 deadlineNSecs() const noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION qint64 deadline() const noexcept;
+    Q_DECL_PURE_FUNCTION qint64 deadlineNSecs() const noexcept;
     void setDeadline(qint64 msecs, Qt::TimerType timerType = Qt::CoarseTimer) noexcept;
     void setPreciseDeadline(qint64 secs, qint64 nsecs = 0,
                             Qt::TimerType type = Qt::CoarseTimer) noexcept;
 
-    static QDeadlineTimer addNSecs(QDeadlineTimer dt, qint64 nsecs) noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION static QDeadlineTimer addNSecs(QDeadlineTimer dt, qint64 nsecs) noexcept;
     static QDeadlineTimer current(Qt::TimerType timerType = Qt::CoarseTimer) noexcept;
 
     friend Q_CORE_EXPORT QDeadlineTimer operator+(QDeadlineTimer dt, qint64 msecs);

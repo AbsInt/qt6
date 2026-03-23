@@ -16,8 +16,8 @@
 // We mean it.
 //
 
-#include "qqmlcodemodel_p.h"
 #include "qlanguageserver_p.h"
+#include "qqmlcodemodelmanager_p.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -25,7 +25,7 @@ class TextSynchronization : public QLanguageServerModule
 {
     Q_OBJECT
 public:
-    TextSynchronization(QmlLsp::QQmlCodeModel *codeModel, QObject *parent = nullptr);
+    TextSynchronization(QmlLsp::QQmlCodeModelManager *codeModelManager, QObject *parent = nullptr);
     QString name() const override;
     void registerHandlers(QLanguageServer *server, QLanguageServerProtocol *protocol) override;
     void setupCapabilities(const QLspSpecification::InitializeParams &clientInfo,
@@ -37,7 +37,7 @@ public Q_SLOTS:
     void didCloseTextDocument(const QLspSpecification::DidCloseTextDocumentParams &params);
 
 private:
-    QmlLsp::QQmlCodeModel *m_codeModel;
+    QmlLsp::QQmlCodeModelManager *m_codeModelManager;
 };
 
 QT_END_NAMESPACE

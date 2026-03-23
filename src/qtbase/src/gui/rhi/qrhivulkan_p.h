@@ -425,7 +425,8 @@ struct QVkCommandBuffer : public QRhiCommandBuffer
             TransitionPassResources,
             Dispatch,
             ExecuteSecondary,
-            SetShadingRate
+            SetShadingRate,
+            MemoryBarrier
         };
         Cmd cmd;
 
@@ -461,6 +462,13 @@ struct QVkCommandBuffer : public QRhiCommandBuffer
                 int count;
                 int index;
             } imageBarrier;
+            struct {
+                VkPipelineStageFlags srcStageMask;
+                VkPipelineStageFlags dstStageMask;
+                VkAccessFlags srcAccessMask;
+                VkAccessFlags dstAccessMask;
+                VkDependencyFlags dependencyFlags;
+            } memoryBarrier;
             struct {
                 VkPipelineStageFlags srcStageMask;
                 VkPipelineStageFlags dstStageMask;
@@ -560,7 +568,7 @@ struct QVkCommandBuffer : public QRhiCommandBuffer
     };
 
     QRhiBackendCommandList<Command> commands;
-    QVarLengthArray<QRhiPassResourceTracker, 8> passResTrackers;
+    QVector<QRhiPassResourceTracker> passResTrackers;
     int currentPassResTrackerIndex;
 
     void resetCommands() {
@@ -625,7 +633,9 @@ struct QVkSwapChain : public QRhiSwapChain
     int bufferCount = 0;
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     VkSurfaceKHR lastConnectedSurface = VK_NULL_HANDLE;
-    VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    const VkFormat defaultColorFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    const VkFormat defaultSrgbColorFormat = VK_FORMAT_B8G8R8A8_SRGB;
+    VkFormat colorFormat = VK_FORMAT_UNDEFINED;
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     QVkRenderBuffer *ds = nullptr;
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
@@ -936,6 +946,7 @@ public:
 
     struct {
         bool compute = false;
+        bool depthClamp = false;
         bool wideLines = false;
         bool debugUtils = false;
         bool vertexAttribDivisor = false;

@@ -105,7 +105,7 @@ void QmltcVisitor::findCppIncludes()
         addCppInclude(type);
 
         if (type->isListProperty())
-            addCppInclude(type->valueType());
+            addCppInclude(type->elementType());
 
         // look in type's base type
         auto base = type->baseType();

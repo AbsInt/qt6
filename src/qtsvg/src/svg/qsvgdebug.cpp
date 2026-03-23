@@ -1,5 +1,7 @@
 // Copyright (C) 2023 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #include "qsvgvisitor_p.h"
 #include <QDebug>
@@ -41,7 +43,7 @@ class SvgDebugVisitor : public QSvgVisitor
 {
 public:
     SvgDebugVisitor(QDebug &stream) : debug(stream) {}
-    void write(const QSvgTinyDocument *doc);
+    void write(const QSvgDocument *doc);
 
 protected:
     void visitNode(const QSvgNode *) override;
@@ -166,7 +168,7 @@ void SvgDebugVisitor::visitVideoNode(const QSvgVideo *node)
     debug << Qt::endl;
 }
 
-void SvgDebugVisitor::write(const QSvgTinyDocument *doc)
+void SvgDebugVisitor::write(const QSvgDocument *doc)
 {
     debug << "SVG" << doc->size() << "viewBox" << doc->viewBox() << Qt::endl;
     traverse(doc);
@@ -174,7 +176,7 @@ void SvgDebugVisitor::write(const QSvgTinyDocument *doc)
     debug << "END SVG" << nodeCounter << "nodes";
 }
 
-QDebug operator<<(QDebug debug, const QSvgTinyDocument &doc)
+QDebug operator<<(QDebug debug, const QSvgDocument &doc)
 {
     SvgDebugVisitor visitor(debug);
     visitor.write(&doc);

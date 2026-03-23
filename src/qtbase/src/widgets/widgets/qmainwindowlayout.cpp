@@ -572,6 +572,8 @@ bool QDockWidgetGroupWindow::hasNativeDecos() const
 #endif
 }
 
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_GCC("-Waggressive-loop-optimizations")
 /*
     The given widget is hovered over this floating group.
     This function will save the state and create a gap in the actual state.
@@ -623,6 +625,7 @@ bool QDockWidgetGroupWindow::hover(QLayoutItem *widgetItem, const QPoint &mouseP
     layoutInfo()->apply(opts & QMainWindow::AnimatedDocks);
     return true;
 }
+QT_WARNING_POP
 
 void QDockWidgetGroupWindow::updateCurrentGapRect()
 {
@@ -1540,6 +1543,12 @@ void QMainWindowLayout::removeToolBar(QToolBar *toolbar)
         removeWidget(toolbar);
     }
 }
+
+/*!
+    \class QMainWindowLayout
+    \inmodule QtWidgets
+    \internal
+*/
 
 /*!
     Adds \a toolbar to \a area, continuing the current line.
@@ -3119,6 +3128,7 @@ void QMainWindowLayout::hover(QLayoutItem *hoverTarget,
             auto *groupWindow = qobject_cast<QDockWidgetGroupWindow *>(w);
             Q_ASSERT(groupWindow);
             if (groupWindow->hover(hoverTarget, groupWindow->mapFromGlobal(mousePos))) {
+                savedState.clear();
                 setCurrentHoveredFloat(groupWindow);
                 applyState(layoutState); // update the tabbars
             }

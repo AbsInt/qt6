@@ -52,7 +52,22 @@ namespace QmlLsp {
 QFile *logFile = nullptr;
 QBasicMutex *logFileLock = nullptr;
 
-class StdinReader : public QObject
+class AbstractReader : public QObject
+{
+    Q_OBJECT
+public:
+    virtual ~AbstractReader() { }
+
+protected:
+    virtual void readNextMessageImpl() = 0;
+signals:
+    void receivedData(const QByteArray &data, bool canRequestMoreData);
+    void eof();
+public slots:
+    void readNextMessage() { readNextMessageImpl(); }
+};
+
+class StdinReader final : public AbstractReader
 {
     Q_OBJECT
 public:
@@ -103,11 +118,9 @@ private:
     Indicates whether sendData() should be called or not.
     */
     bool m_shouldSendData = false;
-signals:
-    void receivedData(const QByteArray &data, bool canRequestMoreData);
-    void eof();
-public slots:
-    void readNextMessage()
+
+protected:
+    void readNextMessageImpl() override
     {
         if (m_hasEof)
             return;
@@ -133,6 +146,37 @@ public slots:
             if (std::exchange(m_shouldSendData, false))
                 sendData();
         }
+    }
+};
+
+/*!
+   \internal
+   FileReader allows to read JsonRPC commands from a file. This is useful when the JsonRPC
+   commands can't be read from stdin, for example when running qmlls in the macos profiler.
+ */
+class FileReader final : public AbstractReader
+{
+    Q_OBJECT
+public:
+    FileReader(const QString &fileName) : m_file(fileName)
+    {
+        bool isOpen = m_file.open(QFile::ReadOnly);
+        Q_ASSERT(isOpen);
+    }
+
+private:
+    QFile m_file;
+
+protected:
+    void readNextMessageImpl() override
+    {
+        if (!m_file.isOpen())
+            return;
+        emit receivedData(m_file.readAll(), false);
+        // emit eof will shutdown qmlls before it manages to complete the preceding requests, so
+        // don't emit eof when reading from a file.
+        // also, just read the content of the file once, so close it now
+        m_file.close();
     }
 };
 
@@ -177,6 +221,59 @@ static QStringList collectImportPaths(const QCommandLineParser &parser,
     return importPaths;
 }
 
+static int cmakeJobs(const QCommandLineParser &parser, const QCommandLineOption &cmakeJobsOption)
+{
+    auto parseAndWarn = [](const QString &valueString, const QString &infoMessage,
+                           const QString &warningMessage) {
+        bool ok = false;
+        if (valueString == QQmlCodeModel::s_maxCMakeJobs) {
+            const int value = QThread::idealThreadCount();
+            qInfo().noquote() << infoMessage.arg("max (%1)"_L1.arg(QString::number(value)));
+            return value;
+        }
+
+        const int value = valueString.toInt(&ok);
+        if (!ok || value < 1) {
+            qInfo().noquote() << warningMessage.arg(valueString);
+            return QQmlCodeModel::s_defaultCMakeJobs;
+        }
+        qInfo().noquote() << infoMessage.arg(QString::number(value));
+        return value;
+    };
+
+    if (parser.isSet(cmakeJobsOption)) {
+        return parseAndWarn(
+                parser.value(cmakeJobsOption), "Using %1 jobs for CMake, set via --cmake-jobs."_L1,
+                "Value \"%1\" passed to --cmake-jobs is not a number greater than 0 and not "
+                "\"max\", using default value of 1 instead."_L1);
+    }
+
+    if (!qEnvironmentVariableIsSet("QMLLS_CMAKE_JOBS")) {
+        qInfo() << "Using 1 job for CMake, you can increase that value with the QMLLS_CMAKE_JOBS "
+                   "environment variable or the --cmake-jobs option.";
+        return QQmlCodeModel::s_defaultCMakeJobs;
+    }
+    return parseAndWarn(
+            qEnvironmentVariable("QMLLS_CMAKE_JOBS"),
+            "Using %1 jobs for CMake, set via QMLLS_CMAKE_JOBS environment variable."_L1,
+            "Value \"%1\" passed to QMLLS_CMAKE_JOBS is not a number greater than 0 and not "
+            "\"max\", using default value of 1 instead."_L1);
+}
+
+static bool prepareCMakeFeature(const QCommandLineParser &parser,
+                                const QCommandLineOption &noCMakeCallsOption)
+{
+    if (qmlGetConfigOption<bool, qmlConvertBoolConfigOption>("QMLLS_NO_CMAKE_CALLS")) {
+        qWarning() << "Disabling CMake calls via QMLLS_NO_CMAKE_CALLS environment variable.";
+        return false;
+    }
+    if (parser.isSet(noCMakeCallsOption)) {
+        qWarning() << "Disabling CMake calls via command line switch.";
+        return false;
+    }
+    return true;
+}
+
 // To debug:
 //
 // * simple logging can be redirected to a file
@@ -217,7 +314,7 @@ int qmllsMain(int argv, char *argc[])
     QCoreApplication app(argv, argc);
 
     QCommandLineParser parser;
-    QQmlToolingSettings settings("qmlls"_L1);
+    QQmlToolingSharedSettings settings("qmlls"_L1);
     parser.setApplicationDescription("QML languageserver"_L1);
 
     parser.addHelpOption();
@@ -275,6 +372,12 @@ int qmllsMain(int argv, char *argc[])
     parser.addOption(noCMakeCallsOption);
     settings.addOption("no-cmake-calls"_L1, "false"_L1);
 
+    QCommandLineOption cmakeJobsOption(QStringList() << "cmake-jobs"_L1 << "j"_L1,
+                                       "Number of CMake jobs for automatic CMake rebuilds. "_L1,
+                                       "jobs"_L1, "1"_L1);
+    parser.addOption(cmakeJobsOption);
+    settings.addOption("CMakeJobs"_L1, "1"_L1);
+
     QCommandLineOption docDir({ { "d"_L1, "p"_L1, "doc-dir"_L1 },
                                 "Documentation path to use for the documentation hints feature"_L1,
                                 "path"_L1,
@@ -288,6 +391,11 @@ int qmllsMain(int argv, char *argc[])
     parser.addOption(qmlImportNoDefault);
     const QString qmlImportNoDefaultSetting = "DisableDefaultImports"_L1;
     settings.addOption(qmlImportNoDefaultSetting, false);
+
+    QCommandLineOption inputFile(QStringList() << "inputFile"_L1,
+                                 "Read from file instead of stdin"_L1, "fileName"_L1);
+    inputFile.setFlags(QCommandLineOption::HiddenFromHelp);
+    parser.addOption(inputFile);
 
     // we can't use parser.addVersionOption() because we already have one '-v' option for verbose...
     QCommandLineOption versionOption("version"_L1, "Displays version information."_L1);
@@ -303,6 +411,7 @@ int qmllsMain(int argv, char *argc[])
     if (parser.isSet(writeDefaultsOption)) {
         return settings.writeDefaults() ? 0 : 1;
     }
+
     if (parser.isSet(logFileOption)) {
         QString fileName = parser.value(logFileOption);
         qInfo() << "will log to" << fileName;
@@ -321,8 +430,6 @@ int qmllsMain(int argv, char *argc[])
             logFile->flush();
         });
     }
-    if (parser.isSet(verboseOption))
-        QLoggingCategory::setFilterRules("qt.languageserver*.debug=true\n"_L1);
     if (parser.isSet(waitOption)) {
         int waitSeconds = parser.value(waitOption).toInt();
         if (waitSeconds > 0)
@@ -339,22 +446,13 @@ int qmllsMain(int argv, char *argc[])
             },
             (parser.isSet(ignoreSettings) ? nullptr : &settings));
 
-    if (parser.isSet(docDir))
-        qmlServer.codeModel()->setDocumentationRootPath(
-                QString::fromUtf8(parser.value(docDir).toUtf8()));
-
-    const bool disableCMakeCallsViaEnvironment =
-            qmlGetConfigOption<bool, qmlConvertBoolConfigOption>("QMLLS_NO_CMAKE_CALLS");
-
-    if (disableCMakeCallsViaEnvironment || parser.isSet(noCMakeCallsOption)) {
-        if (disableCMakeCallsViaEnvironment) {
-            qWarning() << "Disabling CMake calls via QMLLS_NO_CMAKE_CALLS environment variable.";
-        } else {
-            qWarning() << "Disabling CMake calls via command line switch.";
-        }
-
-        qmlServer.codeModel()->disableCMakeCalls();
+    if (parser.isSet(verboseOption)) {
+        QLoggingCategory::setFilterRules("qt.languageserver*.debug=true\n"_L1);
+        qmlServer.codeModelManager()->setVerbose(true);
     }
+    if (parser.isSet(docDir))
+        qmlServer.codeModelManager()->setDocumentationRootPath(
+                QString::fromUtf8(parser.value(docDir).toUtf8()));
 
     if (parser.isSet(buildDirOption)) {
         const QStringList dirs =
@@ -363,7 +461,7 @@ int qmllsMain(int argv, char *argc[])
         qInfo().nospace().noquote()
                 << "Using build directories passed by -b: \"" << dirs.join(u"\", \""_s) << "\".";
 
-        qmlServer.codeModel()->setBuildPathsForRootUrl(QByteArray(), dirs);
+        qmlServer.codeModelManager()->setBuildPathsForRootUrl(QByteArray(), dirs);
     } else if (QStringList dirsFromEnv =
                        QQmlToolingUtils::getAndWarnForInvalidDirsFromEnv(u"QMLLS_BUILD_DIRS"_s);
                !dirsFromEnv.isEmpty()) {
@@ -373,23 +471,32 @@ int qmllsMain(int argv, char *argc[])
         qInfo().nospace().noquote() << "Using build directories passed from environment variable "
                                        "\"QMLLS_BUILD_DIRS\": \""
                                     << dirsFromEnv.join(u"\", \""_s) << "\".";
-
+        qmlServer.codeModelManager()->setBuildPathsForRootUrl(QByteArray(), dirsFromEnv);
     } else {
         qInfo() << "Using the build directories found in the .qmlls.ini file. Your build folder "
                    "might not be found if no .qmlls.ini files are present in the root source "
                    "folder.";
     }
 
-    qmlServer.codeModel()->setImportPaths(
+    qmlServer.codeModelManager()->setImportPaths(
             collectImportPaths(parser, qmlImportPathOption, environmentOption, qmlImportNoDefault));
 
-    StdinReader r;
+    if (prepareCMakeFeature(parser, noCMakeCallsOption)) {
+        qmlServer.codeModelManager()->setCMakeJobs(cmakeJobs(parser, cmakeJobsOption));
+        qmlServer.codeModelManager()->tryEnableCMakeCalls();
+    } else {
+        qmlServer.codeModelManager()->disableCMakeCalls();
+    }
+
+    auto r = parser.isSet(inputFile) && parser.value(inputFile) != "-"_L1
+            ? std::unique_ptr<AbstractReader>(std::make_unique<FileReader>(parser.value(inputFile)))
+            : std::unique_ptr<AbstractReader>(std::make_unique<StdinReader>());
     QThread workerThread;
-    r.moveToThread(&workerThread);
-    QObject::connect(&r, &StdinReader::receivedData, qmlServer.server(),
+    r->moveToThread(&workerThread);
+    QObject::connect(r.get(), &AbstractReader::receivedData, qmlServer.server(),
                      &QLanguageServer::receiveData);
-    QObject::connect(qmlServer.server(), &QLanguageServer::readNextMessage, &r,
-                     &StdinReader::readNextMessage);
+    QObject::connect(qmlServer.server(), &QLanguageServer::readNextMessage, r.get(),
+                     &AbstractReader::readNextMessage);
     auto exit = [&app, &workerThread]() {
         workerThread.quit();
         workerThread.wait();
@@ -398,10 +505,10 @@ int qmllsMain(int argv, char *argc[])
             QCoreApplication::exit();
         });
     };
-    QObject::connect(&r, &StdinReader::eof, &app, exit);
+    QObject::connect(r.get(), &StdinReader::eof, &app, exit);
     QObject::connect(qmlServer.server(), &QLanguageServer::exit, &workerThread, exit);
 
-    emit r.readNextMessage();
+    emit r->readNextMessage();
     workerThread.start();
     app.exec();
     workerThread.quit();

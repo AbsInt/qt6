@@ -17,6 +17,7 @@
 #include <QMatrix4x4>
 #include <QFont>
 #include <QColor>
+#include <QEasingCurve>
 #include <qqml.h>
 #include <QQmlPropertyValueSource>
 #include <QQmlProperty>
@@ -50,6 +51,7 @@ class MyTypeObject : public QObject
     Q_PROPERTY(QVariant variant READ variant NOTIFY changed)
     Q_PROPERTY(QQmlProperty colorProperty READ colorProperty CONSTANT)
     Q_PROPERTY(QQmlProperty invalidProperty READ invalidProperty CONSTANT)
+    Q_PROPERTY(QEasingCurve easeCurve READ easeCurve WRITE setEaseCurve NOTIFY changed)
 
 public:
     MyTypeObject() :
@@ -82,6 +84,11 @@ public:
         m_color.setGreenF(0.88f);
         m_color.setBlueF(0.6f);
         m_color.setAlphaF(0.34f);
+        m_easeCurve.setType(QEasingCurve::InOutElastic);
+        m_easeCurve.setAmplitude(0.25);
+        m_easeCurve.setOvershoot(0.5);
+        m_easeCurve.setPeriod(0.75);
+        m_easeCurve.addCubicBezierSegment(QPointF(0.4, 0.4), QPointF(0.8, 0.8), QPointF(1, 1));
     }
 
     QPoint m_point;
@@ -155,6 +162,10 @@ public:
     QQmlProperty colorProperty() { return QQmlProperty(this, "color"); }
 
     QQmlProperty invalidProperty() const { return QQmlProperty(); }
+
+    QEasingCurve m_easeCurve;
+    QEasingCurve easeCurve() const { return m_easeCurve; }
+    void setEaseCurve(const QEasingCurve &v) { m_easeCurve = v; emit changed(); }
 
     void emitRunScript() { emit runScript(); }
 

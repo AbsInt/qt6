@@ -40,10 +40,10 @@ The generic form of the various imports are as follows:
 
 Examples:
 \list
-\li \tt{import QtQuick 2.0}
-\li \tt{import QtQuick.LocalStorage 2.0 as Database}
-\li \tt{import "../privateComponents"}
-\li \tt{import "somefile.js" as Script}
+\li \c{import QtQuick 2.0}
+\li \c{import QtQuick.LocalStorage 2.0 as Database}
+\li \c{import "../privateComponents"}
+\li \c{import "somefile.js" as Script}
 \endlist
 
 Please see the \l{qtqml-syntax-imports.html}{QML Syntax - Import Statements}

@@ -280,6 +280,7 @@ qt_internal_add_module(Gui
     DEFINES
         QT_NO_CONTEXTLESS_CONNECT
         QT_NO_FOREACH
+        QT_NO_URL_CAST_FROM_STRING
         QT_NO_USING_NAMESPACE
         QT_USE_NODISCARD_FILE_OPEN
         QT_QPA_DEFAULT_PLATFORM_NAME="${QT_QPA_DEFAULT_PLATFORM}"
@@ -424,6 +425,7 @@ qt_internal_extend_target(Gui CONDITION APPLE
         platform/darwin/qmacmimeregistry.mm platform/darwin/qmacmimeregistry_p.h
         platform/darwin/qutimimeconverter.mm platform/darwin/qutimimeconverter.h
         platform/darwin/qapplekeymapper.mm platform/darwin/qapplekeymapper_p.h
+        platform/darwin/qapplefileiconengine.mm platform/darwin/qapplefileiconengine_p.h
         platform/darwin/qappleiconengine.mm platform/darwin/qappleiconengine_p.h
         text/coretext/qcoretextfontdatabase.mm text/coretext/qcoretextfontdatabase_p.h
         text/coretext/qfontengine_coretext.mm text/coretext/qfontengine_coretext_p.h
@@ -432,6 +434,7 @@ qt_internal_extend_target(Gui CONDITION APPLE
         ${FWCoreGraphics}
         ${FWCoreText}
         ${FWFoundation}
+        ${FWAccelerate}
     PUBLIC_LIBRARIES
         ${FWImageIO}
 )
@@ -571,6 +574,7 @@ qt_internal_extend_target(Gui CONDITION atspi_accessibility
         accessible/linux/qspiaccessiblebridge.cpp accessible/linux/qspiaccessiblebridge_p.h
         accessible/linux/qspiapplicationadaptor.cpp accessible/linux/qspiapplicationadaptor_p.h
         accessible/linux/qspidbuscache.cpp accessible/linux/qspidbuscache_p.h
+        accessible/linux/qspimatchrulematcher.cpp accessible/linux/qspimatchrulematcher_p.h
     DBUS_ADAPTOR_SOURCES
         accessible/linux/dbusxml/Cache.xml
         accessible/linux/dbusxml/DeviceEventController.xml
@@ -1128,3 +1132,7 @@ if(IOS)
 endif()
 
 qt_internal_add_optimize_full_flags()
+
+if(QT_FEATURE_doc_snippets)
+    add_subdirectory(doc/snippets)
+endif()

@@ -59,16 +59,17 @@ public:
     void setPath(int index, const QPainterPath &path, QQuickShapePath::PathHints pathHints = {}) override;
     void setStrokeColor(int index, const QColor &color) override;
     void setStrokeWidth(int index, qreal w) override;
+    void setCosmeticStroke(int index, bool c) override;
     void setFillColor(int index, const QColor &color) override;
     void setFillRule(int index, QQuickShapePath::FillRule fillRule) override;
     void setJoinStyle(int index, QQuickShapePath::JoinStyle joinStyle, int miterLimit) override;
     void setCapStyle(int index, QQuickShapePath::CapStyle capStyle) override;
     void setStrokeStyle(int index, QQuickShapePath::StrokeStyle strokeStyle,
-                        qreal dashOffset, const QVector<qreal> &dashPattern) override;
+                        qreal dashOffset, const QList<qreal> &dashPattern) override;
     void setFillGradient(int index, QQuickShapeGradient *gradient) override;
     void setFillTextureProvider(int index, QQuickItem *textureProviderItem) override;
     void setFillTransform(int index, const QSGTransform &transform) override;
-    void setTriangulationScale(qreal scale) override;
+    void setTriangulationScale(int index, qreal scale) override;
     void endSync(bool async) override;
     void setAsyncCallback(void (*)(void *), void *) override;
     Flags flags() const override { return SupportsAsync; }
@@ -79,9 +80,9 @@ public:
     void setRootNode(QQuickShapeGenericNode *node);
 
     struct Color4ub { unsigned char r, g, b, a; };
-    typedef QVector<QSGGeometry::ColoredPoint2D> VertexContainerType;
-    typedef QVector<QSGGeometry::TexturedPoint2D> TexturedVertexContainerType;
-    typedef QVector<quint32> IndexContainerType;
+    typedef QList<QSGGeometry::ColoredPoint2D> VertexContainerType;
+    typedef QList<QSGGeometry::TexturedPoint2D> TexturedVertexContainerType;
+    typedef QList<quint32> IndexContainerType;
 
     static void triangulateFill(const QPainterPath &path,
                                 const Color4ub &fillColor,
@@ -102,6 +103,7 @@ private:
 
     struct ShapePathData {
         float strokeWidth;
+        float triangulationScale;
         QPen pen;
         Color4ub strokeColor = { uchar(0), uchar(0), uchar(0), uchar(0) };
         Color4ub fillColor = { uchar(0), uchar(0), uchar(0), uchar(0) };
@@ -128,11 +130,10 @@ private:
     QQuickItem *m_item;
     QSGRendererInterface::GraphicsApi m_api;
     QQuickShapeGenericNode *m_rootNode;
-    QVector<ShapePathData> m_sp;
+    QList<ShapePathData> m_sp;
     int m_accDirty;
     void (*m_asyncCallback)(void *);
     void *m_asyncCallbackData;
-    float m_triangulationScale = 1.0;
 };
 
 class QQuickShapeFillRunnable : public QObject, public QRunnable

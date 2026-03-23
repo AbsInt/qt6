@@ -435,10 +435,10 @@ void QEventDispatcherGlib::registerSocketNotifier(QSocketNotifier *notifier)
         p->pollfd.events = G_IO_IN | G_IO_HUP | G_IO_ERR;
         break;
     case QSocketNotifier::Write:
-        p->pollfd.events = G_IO_OUT | G_IO_ERR;
+        p->pollfd.events = G_IO_OUT | G_IO_HUP | G_IO_ERR;
         break;
     case QSocketNotifier::Exception:
-        p->pollfd.events = G_IO_PRI | G_IO_ERR;
+        p->pollfd.events = G_IO_PRI | G_IO_HUP | G_IO_ERR;
         break;
     }
     p->socketNotifier = notifier;

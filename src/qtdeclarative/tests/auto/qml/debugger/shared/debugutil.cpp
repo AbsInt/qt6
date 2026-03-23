@@ -238,4 +238,47 @@ QString debugJsServerPath(const QString &selfPath)
             + "/" + debugserver;
 }
 
+
+void checkAnimationSpeed(QQmlDebugProcess *process, int targetMillisPerDegree)
+{
+    const QString markerString = QStringLiteral("ms/degrees");
+
+    // Funny things can happen with time and VMs. Also the change might take a while to propagate.
+    // Thus, we wait until we either have 3 passes or 3 failures in a row, or 10 loops have passed.
+
+    uint numFailures = 0;
+    uint numPasses = 0;
+
+    for (uint i = 0; i < 10; ++i) {
+        QString output = process->output();
+        const qsizetype position = output.size();
+        do {
+            QVERIFY(QQmlDebugTest::waitForSignal(process, SIGNAL(readyReadStandardOutput())));
+            output = process->output().mid(position);
+        } while (!output.contains(markerString));
+
+        const QStringList words = output.split(QLatin1Char(' '));
+        const qsizetype marker = words.lastIndexOf(markerString);
+        QVERIFY(marker > 1);
+        const double degrees = words[marker - 1].toDouble();
+        const int milliseconds = words[marker - 2].toInt();
+        const double millisecondsPerDegree = milliseconds / degrees;
+
+        if (millisecondsPerDegree > targetMillisPerDegree - 3
+                && millisecondsPerDegree < targetMillisPerDegree + 3) {
+            if (++numPasses == 3)
+                return; // pass
+            numFailures = 0;
+        } else {
+            QVERIFY2(++numFailures < 3,
+                     QString("3 consecutive failures when checking for %1 milliseconds per degree")
+                             .arg(targetMillisPerDegree).toLocal8Bit().constData());
+            numPasses = 0;
+        }
+    }
+
+    QFAIL(QString("Animation speed won't settle to %1 milliseconds per degree")
+                  .arg(targetMillisPerDegree).toLocal8Bit().constData());
+}
+
 #include <moc_debugutil_p.cpp>

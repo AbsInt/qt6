@@ -3,12 +3,14 @@
 // Qt-Security score:significant reason:default
 
 #include <qqmlhighlightsupport_p.h>
+#include <qqmldiffer_p.h>
 
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 using namespace QLspSpecification;
 using namespace QQmlJS::Dom;
+using namespace QmlHighlighting;
 
 /*!
 \internal
@@ -37,7 +39,36 @@ QList<QByteArray> defaultTokenModifiersList()
 
 QList<QByteArray> extendedTokenTypesList()
 {
-    return enumToByteArray<QmlHighlighting::SemanticTokenProtocolTypes>();
+    return enumToByteArray<SemanticTokenProtocolTypes>();
+}
+
+static QList<int> generateHighlights(QmlLsp::RegisteredSemanticTokens &cached,
+                                     const QmlLsp::OpenDocument &doc,
+                                     const std::optional<HighlightsRange> &range,
+                                     HighlightingMode mode)
+{
+    DomItem file = doc.snapshot.doc.fileObject(GoTo::MostLikely);
+    const auto fileObject = file.ownerAs<QmlFile>();
+    QmlHighlighting::Utils::updateResultID(cached.resultId);
+    if (!fileObject || !(fileObject && fileObject->isValid())) {
+        if (const auto lastValidItem = doc.snapshot.validDoc.ownerAs<QmlFile>()) {
+            const auto shiftedHighlights = QmlHighlighting::Utils::shiftHighlights(
+                cached.highlights, lastValidItem->code(), doc.textDocument->toPlainText());
+                return QmlHighlighting::Utils::encodeSemanticTokens(shiftedHighlights, mode);
+        } else {
+            // TODO: Implement regexp based fallback highlighting
+            return {};
+        }
+    } else {
+        HighlightsContainer highlights = QmlHighlighting::Utils::visitTokens(file, range);
+        if (highlights.isEmpty())
+            return {};
+        // Record the highlights for future diffs, only record full highlights
+        if (!range.has_value() )
+            cached.highlights = highlights;
+
+        return QmlHighlighting::Utils::encodeSemanticTokens(highlights, mode);
+    }
 }
 
 /*!
@@ -46,8 +77,8 @@ A wrapper class that handles the semantic tokens request for a whole file as des
 https://microsoft.github.io/language-server-protocol/specifications/specification-3-16/#semanticTokens_fullRequest
 Sends a QLspSpecification::SemanticTokens data as response that is generated for the entire file.
 */
-SemanticTokenFullHandler::SemanticTokenFullHandler(QmlLsp::QQmlCodeModel *codeModel)
-    : QQmlBaseModule(codeModel), m_mode(QmlHighlighting::HighlightingMode::Default)
+SemanticTokenFullHandler::SemanticTokenFullHandler(QmlLsp::QQmlCodeModelManager *codeModelManager)
+    : QQmlBaseModule(codeModelManager), m_mode(HighlightingMode::Default)
 {
 }
 
@@ -61,25 +92,16 @@ void SemanticTokenFullHandler::process(
 
     Responses::SemanticTokensResultType result;
     ResponseScopeGuard guard(result, request->m_response);
-    const auto doc = m_codeModel->openDocumentByUrl(
-            QQmlLSUtils::lspUriToQmlUrl(request->m_parameters.textDocument.uri));
-    DomItem file = doc.snapshot.doc.fileObject(GoTo::MostLikely);
-    const auto fileObject = file.ownerAs<QmlFile>();
-    if (!fileObject || !(fileObject && fileObject->isValid())) {
-        guard.setError({
-                int(QLspSpecification::ErrorCodes::RequestCancelled),
-                "Cannot proceed: current QML document is invalid!"_L1,
-        });
-        return;
-    }
-    auto &&encoded = QmlHighlighting::Utils::collectTokens(file, std::nullopt, m_mode);
-    auto &registeredTokens = m_codeModel->registeredTokens();
-    if (!encoded.isEmpty()) {
-        QmlHighlighting::Utils::updateResultID(registeredTokens.resultId);
-        result = SemanticTokens{ registeredTokens.resultId, encoded };
-        registeredTokens.lastTokens = std::move(encoded);
-    } else {
+    const QByteArray uri = QQmlLSUtils::lspUriToQmlUrl(request->m_parameters.textDocument.uri);
+    const auto doc = m_codeModelManager->openDocumentByUrl(uri);
+    auto &cached = m_codeModelManager->registeredTokens(uri);
+    const auto encoded = generateHighlights(cached, doc, std::nullopt, m_mode);
+
+    if (encoded.isEmpty()) {
         result = nullptr;
+        return;
+    } else {
+        result = SemanticTokens{cached.resultId, std::move(encoded)};
     }
 }
 
@@ -95,8 +117,8 @@ https://microsoft.github.io/language-server-protocol/specifications/specificatio
 Sends either SemanticTokens or SemanticTokensDelta data as response.
 This is generally requested when the text document is edited after receiving full highlighting data.
 */
-SemanticTokenDeltaHandler::SemanticTokenDeltaHandler(QmlLsp::QQmlCodeModel *codeModel)
-    : QQmlBaseModule(codeModel), m_mode(QmlHighlighting::HighlightingMode::Default)
+SemanticTokenDeltaHandler::SemanticTokenDeltaHandler(QmlLsp::QQmlCodeModelManager *codeModelManager)
+    : QQmlBaseModule(codeModelManager), m_mode(HighlightingMode::Default)
 {
 }
 
@@ -110,35 +132,22 @@ void SemanticTokenDeltaHandler::process(
 
     Responses::SemanticTokensDeltaResultType result;
     ResponseScopeGuard guard(result, request->m_response);
-    const auto doc = m_codeModel->openDocumentByUrl(
-            QQmlLSUtils::lspUriToQmlUrl(request->m_parameters.textDocument.uri));
-    DomItem file = doc.snapshot.doc.fileObject(GoTo::MostLikely);
-    const auto fileObject = file.ownerAs<QmlFile>();
-    if (!fileObject || !(fileObject && fileObject->isValid())) {
-        guard.setError({
-                int(QLspSpecification::ErrorCodes::RequestCancelled),
-                "Cannot proceed: current QML document is invalid!"_L1,
-        });
-        return;
-    }
-    auto newEncoded = QmlHighlighting::Utils::collectTokens(file, std::nullopt, m_mode);
-    auto &registeredTokens = m_codeModel->registeredTokens();
-    const auto lastResultId = registeredTokens.resultId;
-    QmlHighlighting::Utils::updateResultID(registeredTokens.resultId);
-
-    // Return full token list if result ids not align
-    // otherwise compute the delta.
-    if (lastResultId == request->m_parameters.previousResultId) {
-        result = QLspSpecification::SemanticTokensDelta{
-            registeredTokens.resultId,
-            QmlHighlighting::Utils::computeDiff(registeredTokens.lastTokens, newEncoded)
-        };
-    } else if (!newEncoded.isEmpty()) {
-        result = QLspSpecification::SemanticTokens{ registeredTokens.resultId, newEncoded };
+    const QByteArray uri = QQmlLSUtils::lspUriToQmlUrl(request->m_parameters.textDocument.uri);
+    const auto doc = m_codeModelManager->openDocumentByUrl(uri);
+    auto &cached = m_codeModelManager->registeredTokens(uri);
+    if (cached.resultId != request->m_parameters.previousResultId) {
+        // The client is out of sync, send full tokens
+        cached.resultId = request->m_parameters.previousResultId;
+        const auto encoded = generateHighlights(cached, doc, std::nullopt, m_mode);
+        result = QLspSpecification::SemanticTokens{ cached.resultId, encoded };
     } else {
-        result = nullptr;
+        const auto cachedHighlights = QmlHighlighting::Utils::encodeSemanticTokens(cached.highlights);
+        const auto encoded = generateHighlights(cached, doc, std::nullopt, m_mode);
+        result = QLspSpecification::SemanticTokensDelta{
+                cached.resultId,
+                QmlHighlighting::Utils::computeDiff(cachedHighlights, encoded)
+            };
     }
-    registeredTokens.lastTokens = std::move(newEncoded);
 }
 
 void SemanticTokenDeltaHandler::registerHandlers(QLanguageServer *, QLanguageServerProtocol *protocol)
@@ -152,8 +161,8 @@ A wrapper class that handles the semantic tokens range request for a file
 https://microsoft.github.io/language-server-protocol/specifications/specification-3-16/#semanticTokens_rangeRequest
 Sends a QLspSpecification::SemanticTokens data as response that is generated for a range of file.
 */
-SemanticTokenRangeHandler::SemanticTokenRangeHandler(QmlLsp::QQmlCodeModel *codeModel)
-    : QQmlBaseModule(codeModel), m_mode(QmlHighlighting::HighlightingMode::Default)
+SemanticTokenRangeHandler::SemanticTokenRangeHandler(QmlLsp::QQmlCodeModelManager *codeModelManager)
+    : QQmlBaseModule(codeModelManager), m_mode(HighlightingMode::Default)
 {
 }
 
@@ -167,31 +176,23 @@ void SemanticTokenRangeHandler::process(
 
     Responses::SemanticTokensRangeResultType result;
     ResponseScopeGuard guard(result, request->m_response);
-    const auto doc = m_codeModel->openDocumentByUrl(
-            QQmlLSUtils::lspUriToQmlUrl(request->m_parameters.textDocument.uri));
-    DomItem file = doc.snapshot.doc.fileObject(GoTo::MostLikely);
-    const auto qmlFile = file.as<QmlFile>();
-    if (!qmlFile || !(qmlFile && qmlFile->isValid())) {
-        guard.setError({
-                int(QLspSpecification::ErrorCodes::RequestCancelled),
-                "Cannot proceed: current QML document is invalid!"_L1,
-        });
-        return;
-    }
-    const QString &code = qmlFile->code();
+    const QByteArray uri = QQmlLSUtils::lspUriToQmlUrl(request->m_parameters.textDocument.uri);
+    const auto doc = m_codeModelManager->openDocumentByUrl(uri);
+    const QString code = doc.textDocument->toPlainText();
     const auto range = request->m_parameters.range;
     int startOffset =
             int(QQmlLSUtils::textOffsetFrom(code, range.start.line, range.end.character));
     int endOffset = int(QQmlLSUtils::textOffsetFrom(code, range.end.line, range.end.character));
-    auto &registeredTokens = m_codeModel->registeredTokens();
-    auto &&encoded = QmlHighlighting::Utils::collectTokens(
-            file, QmlHighlighting::HighlightsRange{ startOffset, endOffset }, m_mode);
-
-    if (!encoded.isEmpty()) {
-        QmlHighlighting::Utils::updateResultID(registeredTokens.resultId);
-        result = SemanticTokens{ registeredTokens.resultId, std::move(encoded) };
-    } else {
+    auto &cached = m_codeModelManager->registeredTokens(uri);
+    const auto encodedTokens = generateHighlights(
+            cached,
+            doc,
+            QmlHighlighting::HighlightsRange{ startOffset, endOffset },
+            m_mode);
+    if (encodedTokens.isEmpty()) {
         result = nullptr;
+    } else {
+        result = SemanticTokens{ cached.resultId, std::move(encodedTokens) };
     }
 }
 
@@ -200,8 +201,8 @@ void SemanticTokenRangeHandler::registerHandlers(QLanguageServer *, QLanguageSer
     protocol->registerSemanticTokensRangeRequestHandler(getRequestHandler());
 }
 
-QQmlHighlightSupport::QQmlHighlightSupport(QmlLsp::QQmlCodeModel *codeModel)
-    : m_full(codeModel), m_delta(codeModel), m_range(codeModel)
+QQmlHighlightSupport::QQmlHighlightSupport(QmlLsp::QQmlCodeModelManager *codeModelManager)
+    : m_full(codeModelManager), m_delta(codeModelManager), m_range(codeModelManager)
 {
 }
 
@@ -227,7 +228,7 @@ void QQmlHighlightSupport::setupCapabilities(
 
     if (auto clientInitOptions = clientCapabilities.initializationOptions) {
         if ((*clientInitOptions)[u"qtCreatorHighlighting"_s].toBool(false)) {
-            const auto mode = QmlHighlighting::HighlightingMode::QtCHighlighting;
+            const auto mode = HighlightingMode::QtCHighlighting;
             m_delta.setHighlightingMode(mode);
             m_full.setHighlightingMode(mode);
             m_range.setHighlightingMode(mode);

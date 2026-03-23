@@ -86,21 +86,6 @@ class QtActivityDelegate extends QtActivityDelegateBase
     }
 
     @Override
-    public void setSystemUiVisibility(boolean isFullScreen, boolean expandedToCutout)
-    {
-        if (m_layout == null)
-            return;
-
-        QtNative.runAction(() -> {
-            if (m_layout != null) {
-                m_displayManager.setSystemUiVisibility(isFullScreen, expandedToCutout);
-                QtWindow.updateWindows();
-            }
-        });
-    }
-
-
-    @Override
     final public void onAppStateDetailsChanged(QtNative.ApplicationStateDetails details) {
         if (details.isStarted)
             registerBackends();
@@ -138,9 +123,9 @@ class QtActivityDelegate extends QtActivityDelegateBase
         int orientation = m_activity.getResources().getConfiguration().orientation;
         setUpSplashScreen(orientation);
         m_activity.registerForContextMenu(m_layout);
-        m_activity.setContentView(m_layout,
-                                  new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                                                             ViewGroup.LayoutParams.MATCH_PARENT));
+        ViewGroup.LayoutParams rootParams = new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        m_activity.setContentView(m_layout, rootParams);
 
         handleUiModeChange();
 

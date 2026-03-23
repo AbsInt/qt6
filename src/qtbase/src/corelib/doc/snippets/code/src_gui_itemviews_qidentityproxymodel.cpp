@@ -1,6 +1,20 @@
 // Copyright (C) 2016 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Stephen Kelly <stephen.kelly@kdab.com>
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
+#include <QIdentityProxyModel>
+#include <QDateTime>
+#include <QMap>
+#include <QModelIndex>
+#include <QVariant>
+
+class SourceClass
+{
+public:
+    enum Roles {
+        DateRole = 1
+    };
+};
+
 //! [0]
 class DateFormatProxyModel : public QIdentityProxyModel
 {
@@ -11,7 +25,7 @@ class DateFormatProxyModel : public QIdentityProxyModel
     m_formatString = formatString;
   }
 
-  QVariant data(const QModelIndex &index, int role) const override
+  QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override
   {
     if (role != Qt::DisplayRole)
       return QIdentityProxyModel::data(index, role);

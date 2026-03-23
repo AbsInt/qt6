@@ -1,5 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QSVGSTYLE_P_H
 #define QSVGSTYLE_P_H
@@ -17,6 +19,7 @@
 
 #include "QtCore/qstack.h"
 #include "QtGui/qpainter.h"
+#include "QtGui/qpainterpath.h"
 #include "QtGui/qpen.h"
 #include "QtGui/qbrush.h"
 #include "QtGui/qtransform.h"
@@ -30,7 +33,7 @@ QT_BEGIN_NAMESPACE
 class QPainter;
 class QSvgNode;
 class QSvgFont;
-class QSvgTinyDocument;
+class QSvgDocument;
 class QSvgPattern;
 
 template <class T> class QSvgRefCounter
@@ -134,10 +137,9 @@ public:
         GRADIENT,
         PATTERN,
         TRANSFORM,
-        ANIMATE_TRANSFORM,
-        ANIMATE_COLOR,
         OPACITY,
-        COMP_OP
+        COMP_OP,
+        OFFSET,
     };
 public:
     virtual ~QSvgStyleProperty();
@@ -311,7 +313,7 @@ public:
     static const int LIGHTER = -1;
     static const int BOLDER = 1;
 
-    QSvgFontStyle(QSvgFont *font, QSvgTinyDocument *doc);
+    QSvgFontStyle(QSvgFont *font, QSvgDocument *doc);
     QSvgFontStyle();
     void apply(QPainter *p, const QSvgNode *node, QSvgExtraStates &states) override;
     void revert(QPainter *p, QSvgExtraStates &states) override;
@@ -364,20 +366,20 @@ public:
         return m_qfont;
     }
 
-    QSvgTinyDocument *doc() const {return m_doc;}
+    QSvgDocument *doc() const {return m_doc;}
 
 private:
     QSvgFont *m_svgFont;
-    QSvgTinyDocument *m_doc;
+    QSvgDocument *m_doc;
     QFont m_qfont;
 
-    int m_weight;
+    int m_weight = 0;
     Qt::Alignment m_textAnchor;
 
-    QSvgFont *m_oldSvgFont;
+    QSvgFont *m_oldSvgFont = nullptr;
     QFont m_oldQFont;
     Qt::Alignment m_oldTextAnchor;
-    int m_oldWeight;
+    int m_oldWeight = 0;
 
     uint m_familySet : 1;
     uint m_sizeSet : 1;
@@ -559,7 +561,7 @@ public:
     ~QSvgGradientStyle() { delete m_gradient; }
     Type type() const override;
 
-    void setStopLink(const QString &link, QSvgTinyDocument *doc);
+    void setStopLink(const QString &link, QSvgDocument *doc);
     QString stopLink() const { return m_link; }
     void resolveStops();
     void resolveStops_helper(QStringList *visited);
@@ -590,7 +592,7 @@ private:
     QGradient      *m_gradient;
     QTransform m_transform;
 
-    QSvgTinyDocument *m_doc{nullptr};
+    QSvgDocument *m_doc{nullptr};
     QString           m_link;
     bool m_gradientStopsSet;
 };
@@ -606,7 +608,6 @@ public:
     QSvgPattern *patternNode() { return m_pattern; }
 private:
     QSvgPattern *m_pattern;
-    QImage m_patternImage;
     QRectF m_parentBound;
 };
 
@@ -649,6 +650,61 @@ private:
     QPainter::CompositionMode m_oldMode{QPainter::CompositionMode_SourceOver};
 };
 
+class Q_SVG_EXPORT QSvgOffsetStyle : public QSvgStyleProperty
+{
+public:
+    QSvgOffsetStyle() = default;
+    void apply(QPainter *p, const QSvgNode *node, QSvgExtraStates &states) override;
+    void revert(QPainter *p, QSvgExtraStates &states) override;
+    Type type() const override;
+
+    void setPath(const QPainterPath &path)
+    {
+        m_path = path;
+    }
+
+    const QPainterPath &path() const
+    {
+        return m_path;
+    }
+
+    void setRotateAngle(qreal angle)
+    {
+        m_rotateAngle = angle;
+    }
+
+    qreal rotateAngle() const
+    {
+        return m_rotateAngle;
+    }
+
+    void setRotateType(QtSvg::OffsetRotateType type)
+    {
+        m_rotateType = type;
+    }
+
+    QtSvg::OffsetRotateType rotateType() const
+    {
+        return m_rotateType;
+    }
+
+    void setDistance(qreal distance)
+    {
+        m_distance = distance;
+    }
+
+    qreal distance() const
+    {
+        return m_distance;
+    }
+
+private:
+    QPainterPath m_path;
+    qreal m_distance = 0;
+    qreal m_rotateAngle = 0;
+    QtSvg::OffsetRotateType m_rotateType = QtSvg::OffsetRotateType::Auto;
+};
+
 class Q_SVG_EXPORT QSvgStaticStyle
 {
 public:
@@ -668,9 +724,25 @@ public:
     QSvgRefCounter<QSvgTransformStyle>    transform;
     QSvgRefCounter<QSvgOpacityStyle>      opacity;
     QSvgRefCounter<QSvgCompOpStyle>       compop;
+    QSvgRefCounter<QSvgOffsetStyle>       offset;
 };
 
-class QSvgAbstractAnimatedProperty;
+class QSvgAbstractAnimation;
+
+struct QSvgStyleState
+{
+    QBrush fill;
+    QPen stroke;
+    qreal fillOpacity;
+    qreal strokeOpacity;
+    qreal opacity;
+    QTransform transform;
+    std::optional<QPainterPath> offsetPath;
+    qreal offsetDistance;
+    qreal offsetRotate;
+    QtSvg::OffsetRotateType offsetRotateType;
+};
+
 class Q_SVG_EXPORT QSvgAnimatedStyle
 {
 public:
@@ -682,16 +754,13 @@ public:
 
 private:
     void savePaintingState(const QPainter *p, const QSvgNode *node, QSvgExtraStates &states);
-    void applyPropertyAnimation(QPainter *p, QSvgAbstractAnimatedProperty *property, bool replace, QSvgExtraStates &states);
+    void fetchStyleState(const QSvgAbstractAnimation *animation, QSvgStyleState &currentStyle);
+    void applyStyle(QPainter *p, QSvgExtraStates &states, const QSvgStyleState &currentStyle);
 
 private:
-    QBrush m_brush;
-    QPen m_pen;
     QTransform m_worldTransform;
     QTransform m_transformToNode;
-    qreal m_fillOpacity = 1.0;
-    qreal m_strokeOpacity = 1.0;
-    qreal m_opacity = 1.0;
+    QSvgStyleState m_static;
 };
 
 /********************************************************/

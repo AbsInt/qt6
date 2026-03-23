@@ -10,7 +10,7 @@
 #include <QtCore/qbuffer.h>
 #include <QtCore/qdatetime.h>
 #include <QtCore/qmutex.h>
-#include <QtCore/qsequentialiterable.h>
+#include <QtCore/qmetasequence.h>
 #include <QtCore/qthread.h>
 #include <QtCore/qwaitcondition.h>
 #include <QtQml/qqmlengine.h>
@@ -1058,8 +1058,8 @@ void tst_QJSValue::toVariant()
         QVERIFY(object.isObject());
 
         QVariant retained = object.toVariant(QJSValue::RetainJSObjects);
-        QCOMPARE(retained.metaType(), QMetaType::fromType<QJSValue>());
-        QVERIFY(retained.value<QJSValue>().strictlyEquals(object));
+        QCOMPARE(retained.metaType(), QMetaType::fromType<QVariantMap>());
+        QCOMPARE(retained, mapIn);
 
         QVariant ret = object.toVariant();
         QCOMPARE(ret.typeId(), QMetaType::QVariantMap);
@@ -2768,7 +2768,7 @@ void tst_QJSValue::jsvalueArrayToSequenceType()
         array.setProperty(3, testObject);
         auto asVariant = QVariant::fromValue(array);
         QVERIFY(asVariant.canConvert<QVariantList>());
-        auto asIterable = asVariant.value<QSequentialIterable>();
+        auto asIterable = asVariant.value<QMetaSequence::Iterable>();
         for (auto it = asIterable.begin(); it != asIterable.end(); ++it) {
             Q_UNUSED(*it);
         }
@@ -2793,11 +2793,11 @@ void tst_QJSValue::jsvalueArrayToSequenceType()
     QCOMPARE(instanceCount, 0);
 
     QJSValue five(5);
-    QSequentialIterable iterable;
+    QMetaSequence::Iterable iterable;
 
     QVERIFY(QMetaType::convert(
             QMetaType::fromType<QJSValue>(), &five,
-            QMetaType::fromType<QSequentialIterable>(), &iterable));
+            QMetaType::fromType<QMetaSequence::Iterable>(), &iterable));
 
     QCOMPARE_LE(iterable.size(), 0);
 
@@ -2813,7 +2813,7 @@ void tst_QJSValue::jsvalueArrayToSequenceType()
         fiveFive.setProperty(i, 5);
     QVERIFY(QMetaType::convert(
             QMetaType::fromType<QJSValue>(), &fiveFive,
-            QMetaType::fromType<QSequentialIterable>(), &iterable));
+            QMetaType::fromType<QMetaSequence::Iterable>(), &iterable));
 
     QCOMPARE(iterable.size(), 5);
 

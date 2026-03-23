@@ -379,6 +379,8 @@ QQuickItem *QQuickTumbler::currentItem() const
     \qmlproperty Component QtQuick.Controls::Tumbler::delegate
 
     This property holds the delegate used to display each item.
+
+    \include delegate-ownership.qdocinc {no-ownership} {Tumbler}
 */
 QQmlComponent *QQuickTumbler::delegate() const
 {

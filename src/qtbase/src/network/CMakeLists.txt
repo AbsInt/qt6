@@ -33,7 +33,6 @@ qt_internal_add_module(Network
         kernel/qauthenticator.cpp kernel/qauthenticator.h kernel/qauthenticator_p.h
         kernel/qhostaddress.cpp kernel/qhostaddress.h kernel/qhostaddress_p.h
         kernel/qhostinfo.cpp kernel/qhostinfo.h kernel/qhostinfo_p.h
-        kernel/qnetconmonitor_p.h
         kernel/qnetworkdatagram.cpp kernel/qnetworkdatagram.h kernel/qnetworkdatagram_p.h
         kernel/qnetworkinformation.cpp kernel/qnetworkinformation_p.h kernel/qnetworkinformation.h
         kernel/qnetworkinterface.cpp kernel/qnetworkinterface.h kernel/qnetworkinterface_p.h
@@ -43,6 +42,7 @@ qt_internal_add_module(Network
         kernel/qtnetworkglobal.h kernel/qtnetworkglobal_p.h
         socket/qabstractsocket.cpp socket/qabstractsocket.h socket/qabstractsocket_p.h
         socket/qabstractsocketengine.cpp socket/qabstractsocketengine_p.h
+        socket/qabstractsocketenginereceiver_p.h
         socket/qnativesocketengine.cpp socket/qnativesocketengine_p.h socket/qnativesocketengine_p_p.h
         socket/qtcpserver.cpp socket/qtcpserver.h socket/qtcpserver_p.h
         socket/qtcpsocket.cpp socket/qtcpsocket.h socket/qtcpsocket_p.h
@@ -60,6 +60,7 @@ qt_internal_add_module(Network
     DEFINES
         QT_NO_CONTEXTLESS_CONNECT
         QT_NO_FOREACH
+        QT_NO_SCOPED_POINTER
         QT_NO_USING_NAMESPACE
         QT_NO_CAST_FROM_ASCII
         QT_NO_CAST_TO_ASCII
@@ -147,6 +148,7 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_http
         access/qrestaccessmanager.cpp access/qrestaccessmanager.h access/qrestaccessmanager_p.h
         access/qrestreply.cpp access/qrestreply.h access/qrestreply_p.h
         access/qsocketabstraction_p.h
+        access/qtcpkeepaliveconfiguration_p.h
         socket/qhttpsocketengine.cpp socket/qhttpsocketengine_p.h
 )
 
@@ -254,20 +256,8 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND NOT QT_FEAT
 )
 
 qt_internal_extend_target(Network CONDITION APPLE
-    SOURCES
-        kernel/qnetconmonitor_darwin.mm
     LIBRARIES
         ${FWNetwork}
-)
-
-qt_internal_extend_target(Network CONDITION QT_FEATURE_networklistmanager AND NOT IOS AND NOT MACOS
-    SOURCES
-        kernel/qnetconmonitor_win.cpp
-)
-
-qt_internal_extend_target(Network CONDITION NOT APPLE AND NOT QT_FEATURE_networklistmanager
-    SOURCES
-        kernel/qnetconmonitor_stub.cpp
 )
 
 qt_internal_extend_target(Network CONDITION QT_FEATURE_gssapi
@@ -405,7 +395,6 @@ qt_internal_extend_target(Network CONDITION WIN32
         kernel/qhostaddress.cpp
         kernel/qhostinfo.cpp
         kernel/qhostinfo_win.cpp
-        kernel/qnetconmonitor_win.cpp
         kernel/qnetworkinterface_win.cpp
         kernel/qnetworkproxy_win.cpp
         socket/qabstractsocket.cpp
@@ -417,7 +406,7 @@ qt_internal_extend_target(Network CONDITION WIN32
         socket/qnativesocketengine_win.cpp
 )
 
-if(QT_FEATURE_doc_snippets)
+if(QT_BUILD_DOC_SNIPPETS)
     add_subdirectory(doc/snippets/network)
 endif()
 

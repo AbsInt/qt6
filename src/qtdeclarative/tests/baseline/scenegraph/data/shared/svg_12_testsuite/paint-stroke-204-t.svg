@@ -30,7 +30,7 @@
       </p>
       <p>
         The top is always blue. If something
-        red gets visible, an error is occured.
+        red gets visible, an error is occurred.
       </p>
     </d:OperatorScript>
   </SVGTestCase>

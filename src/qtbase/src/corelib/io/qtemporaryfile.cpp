@@ -887,7 +887,10 @@ void QTemporaryFile::setFileTemplate(const QString &name)
     calling rename(). Otherwise, the file will be deleted when the QTemporaryFile
     object is destroyed.
 
-    \sa QSaveFile, QSaveFile::commit(), QFile::rename()
+    This function will fail if \a newName already exists. To replace it, use
+    renameOverwrite() instead.
+
+    \sa renameOverwrite(), QSaveFile, QSaveFile::commit(), QFile::rename()
 */
 bool QTemporaryFile::rename(const QString &newName)
 {
@@ -915,6 +918,30 @@ bool QTemporaryFilePrivate::rename(const QString &newName, bool overwrite)
         setError(QFile::RenameError, tef->errorString());
     }
     return false;
+}
+
+/*!
+    \fn bool QTemporaryFile::renameOverwrite(const std::filesystem::path &newName)
+    \overload
+    \since 6.11
+*/
+
+/*!
+    \since 6.11
+
+    This is the same as rename(), except that it atomically replaces \a newName
+    if it already exists, like QSaveFile::commit() does, too.
+
+    Returns \c{false} if the rename could not performed atomically
+    (for example, the temporary file and the target file name live on
+    different file systems / volumes / drives.
+
+    \sa rename(), QSaveFile, QSaveFile::commit(), QFile::rename()
+*/
+bool QTemporaryFile::renameOverwrite(const QString &newName)
+{
+    Q_D(QTemporaryFile);
+    return d->rename(newName, true);
 }
 
 /*!

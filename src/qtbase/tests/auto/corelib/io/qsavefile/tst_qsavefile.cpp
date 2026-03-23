@@ -55,6 +55,8 @@ class tst_QSaveFile : public QObject
 public slots:
 
 private slots:
+    void basics();
+    void stdfilesystem();
     void transactionalWrite();
     void retryTransactionalWrite();
     void textStreamManualFlush();
@@ -89,6 +91,43 @@ static inline QByteArray msgCannotOpen(const QFileDevice &f)
     QString result = QStringLiteral("Cannot open ") + QDir::toNativeSeparators(f.fileName())
         + QStringLiteral(": ") + f.errorString();
     return result.toLocal8Bit();
+}
+
+void tst_QSaveFile::basics()
+{
+    QSaveFile f;
+    QCOMPARE(f.fileName(), QString());
+    f.setFileName("foobar");
+    QCOMPARE(f.fileName(), "foobar");
+    f.setFileName(QString());
+    QCOMPARE(f.fileName(), QString());
+
+    QString abspath = QDir::currentPath() + "/foobar";
+    QSaveFile f2(abspath);
+    QCOMPARE(f2.fileName(), abspath);
+    f2.setFileName(QString());
+    QCOMPARE(f2.fileName(), QString());
+}
+
+void tst_QSaveFile::stdfilesystem()
+{
+#if QT_CONFIG(cxx17_filesystem)
+    using namespace std::filesystem;
+    QSaveFile f;
+    f.setFileName(path("foobar"));
+    QCOMPARE(f.fileName(), "foobar");
+    QCOMPARE(f.filesystemFileName(), path("foobar"));
+    f.setFileName(path());
+    QCOMPARE(f.fileName(), QString());
+    QVERIFY(f.filesystemFileName().empty());
+
+    path abspath = QDir::current().filesystemAbsolutePath() / "foobar";
+    QSaveFile f2(abspath);
+    QCOMPARE(f2.filesystemFileName(), abspath);
+    f2.setFileName(path());
+    QCOMPARE(f2.fileName(), QString());
+    QVERIFY(f.filesystemFileName().empty());
+#endif
 }
 
 void tst_QSaveFile::transactionalWrite()

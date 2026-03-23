@@ -28,7 +28,8 @@ using namespace Qt::StringLiterals;
     garbage-collected and providing access to most \c JNIEnv method calls
     (member, static) and fields (setter, getter).  It eliminates much
     boiler-plate that would normally be needed, with direct JNI access, for
-    every operation, including exception-handling.
+    every operation. Exceptions thrown by called Java methods are cleared by
+    default, but can since Qt 6.11 also be handled by the caller.
 
     \note This API has been designed and tested for use with Android.
     It has not been tested for other platforms.
@@ -130,12 +131,46 @@ using namespace Qt::StringLiterals;
     Note that while the first template parameter specifies the return type of the Java
     function, the method will still return a QJniObject.
 
-    \section1 Handling Java Exception
+    \section1 Handling Java Exceptions
 
     After calling Java functions that might throw exceptions, it is important
     to check for, handle and clear out any exception before continuing. All
-    QJniObject functions handle exceptions internally by reporting and clearing them,
-    saving client code the need to handle exceptions.
+    QJniObject functions can handle exceptions internally by reporting and
+    clearing them. This includes JNI exceptions, for instance when trying to
+    call a method that doesn't exist, or with bad parameters; and exceptions
+    are thrown by the method as a way of reporting errors or returning failure
+    information.
+
+    From Qt 6.11 on, client code can opt in to handle exceptions explicitly in
+    each call. To do so, use \c{std::expected} from C++ 23 as the return type,
+    with the value type as the expected, and \c{jthrowable} as the error type.
+    For instance, trying to read a setting value via the
+    \c{android.provider.Settings.Secure} type might throw an exception if the
+    setting does not exist.
+
+    \code
+    Q_DECLARE_JNI_CLASS(SettingsSecure, "android/provider/Settings$Secure")
+    using namespace QtJniTypes;
+
+    QString enabledInputMethods()
+    {
+        ContentResolver resolver;
+        SettingsSecure settings;
+
+        auto defaultInputMethods = settings.callMethod<std::expected<QString, jthrowable>>(
+            "getString", resolver, u"enabled_input_methods"_s
+        );
+        if (defaultInputMethods)
+            return defaultInputMethods.value();
+        QStringList stackTrace = QJniEnvironment::stackTrace(defaultInputMethods.error());
+    }
+    \endcode
+
+    You can use any other type that behaves like \c{std::expected}, so handling
+    exceptions explicitly is possible without using C++23. The only
+    requirements are that the type declares three nested types \c{value_type},
+    \c{error_type}, and \c{unexpected_type}, can be constructed from the value
+    type, and from its \c{unexpected_type} holding a \c{jthrowable}.
 
     \note The user must handle exceptions manually when doing JNI calls using \c JNIEnv directly.
     It is unsafe to make other JNI calls when exceptions are pending. For more information, see
@@ -349,7 +384,10 @@ static inline QByteArray cacheKey(Args &&...args)
     return (QByteArrayView(":") + ... + QByteArrayView(args));
 }
 
-typedef QHash<QByteArray, jclass> JClassHash;
+struct JClassHash : QHash<QByteArray, jclass>
+{
+    jmethodID loadClassMethod = 0;
+};
 Q_GLOBAL_STATIC(JClassHash, cachedClasses)
 Q_GLOBAL_STATIC(QReadWriteLock, cachedClassesLock)
 
@@ -392,29 +430,22 @@ bool QJniObjectPrivate::isJString(JNIEnv *env) const
 */
 static QJniObject getCleanJniObject(jobject object, JNIEnv *env)
 {
-    if (QJniEnvironment::checkAndClearExceptions(env) || !object) {
-        if (object)
-            env->DeleteLocalRef(object);
+    if (!object || env->ExceptionCheck())
         return QJniObject();
-    }
 
-    QJniObject res(object);
-    env->DeleteLocalRef(object);
-    return res;
+    return QJniObject::fromLocalRef(object);
 }
 
-/*!
-    \internal
-    \a className must be slash-encoded
-*/
-jclass QtAndroidPrivate::findClass(const char *className, JNIEnv *env)
+namespace {
+
+jclass loadClassHelper(const QByteArray &className, JNIEnv *env)
 {
     Q_ASSERT(env);
     QByteArray classNameArray(className);
 #ifdef QT_DEBUG
     if (classNameArray.contains('.')) {
         qWarning("QtAndroidPrivate::findClass: className '%s' should use slash separators!",
-                 className);
+                 className.constData());
     }
 #endif
     classNameArray.replace('.', '/');
@@ -443,21 +474,40 @@ jclass QtAndroidPrivate::findClass(const char *className, JNIEnv *env)
 
     if (!clazz) {
         // Wrong class loader, try our own
-        QJniObject classLoader(QtAndroidPrivate::classLoader());
-        if (!classLoader.isValid())
+        jobject classLoader = QtAndroidPrivate::classLoader();
+        if (!classLoader)
             return nullptr;
+
+        if (!cachedClasses->loadClassMethod) {
+            jclass classLoaderClass = env->GetObjectClass(classLoader);
+            if (!classLoaderClass)
+                return nullptr;
+            cachedClasses->loadClassMethod =
+                env->GetMethodID(classLoaderClass,
+                                 "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+            env->DeleteLocalRef(classLoaderClass);
+            if (!cachedClasses->loadClassMethod) {
+                qCritical("Couldn't find the 'loadClass' method in the Qt class loader");
+                return nullptr;
+            }
+        }
 
         // ClassLoader::loadClass on the other hand wants the binary name of the class,
         // e.g. dot-separated. In testing it works also with /, but better to stick to
         // the specification.
         const QString binaryClassName = QString::fromLatin1(className).replace(u'/', u'.');
-        jstring classNameObject = env->NewString(reinterpret_cast<const jchar*>(binaryClassName.constData()),
-                                                                                binaryClassName.length());
-        QJniObject classObject = classLoader.callMethod<jclass>("loadClass", classNameObject);
+        jstring classNameObject = env->NewString(binaryClassName.utf16(), binaryClassName.length());
+        jobject classObject = env->CallObjectMethod(classLoader,
+                                                    cachedClasses->loadClassMethod,
+                                                    classNameObject);
         env->DeleteLocalRef(classNameObject);
 
-        if (!QJniEnvironment::checkAndClearExceptions(env) && classObject.isValid())
-            clazz = static_cast<jclass>(env->NewGlobalRef(classObject.object()));
+        if (classObject && !env->ExceptionCheck()) {
+            clazz = static_cast<jclass>(env->NewGlobalRef(classObject));
+            env->DeleteLocalRef(classObject);
+        }
+        // Clearing the exception is the caller's responsibility (see
+        // QtAndroidPrivate::findClass()) and QJniObject::loadClass{KeepExceptions}
     }
 
     if (clazz)
@@ -466,10 +516,31 @@ jclass QtAndroidPrivate::findClass(const char *className, JNIEnv *env)
     return clazz;
 }
 
+} // unnamed namespace
+
+/*!
+    \internal
+    \a className must be slash-encoded
+*/
+jclass QtAndroidPrivate::findClass(const char *className, JNIEnv *env)
+{
+    jclass clazz = loadClassHelper(className, env);
+    if (!clazz)
+        QJniEnvironment::checkAndClearExceptions(env);
+    return clazz;
+}
+
 jclass QJniObject::loadClass(const QByteArray &className, JNIEnv *env)
 {
     return QtAndroidPrivate::findClass(className, env);
 }
+
+jclass QJniObject::loadClassKeepExceptions(const QByteArray &className, JNIEnv *env)
+{
+    return loadClassHelper(className, env);
+}
+
+
 
 typedef QHash<QByteArray, jmethodID> JMethodIDHash;
 Q_GLOBAL_STATIC(JMethodIDHash, cachedMethodID)
@@ -483,9 +554,6 @@ jmethodID QJniObject::getMethodID(JNIEnv *env,
 {
     jmethodID id = isStatic ? env->GetStaticMethodID(clazz, name, signature)
                             : env->GetMethodID(clazz, name, signature);
-
-    if (QJniEnvironment::checkAndClearExceptions(env))
-        return nullptr;
 
     return id;
 }
@@ -526,7 +594,8 @@ jmethodID QJniObject::getCachedMethodID(JNIEnv *env,
 
         jmethodID id = getMethodID(env, clazz, name, signature, isStatic);
 
-        cachedMethodID->insert(key, id);
+        if (id)
+            cachedMethodID->insert(key, id);
         return id;
     }
 }
@@ -549,9 +618,6 @@ jfieldID QJniObject::getFieldID(JNIEnv *env,
 {
     jfieldID id = isStatic ? env->GetStaticFieldID(clazz, name, signature)
                            : env->GetFieldID(clazz, name, signature);
-
-    if (QJniEnvironment::checkAndClearExceptions(env))
-        return nullptr;
 
     return id;
 }
@@ -584,7 +650,8 @@ jfieldID QJniObject::getCachedFieldID(JNIEnv *env,
 
         jfieldID id = getFieldID(env, clazz, name, signature, isStatic);
 
-        cachedFieldID->insert(key, id);
+        if (id)
+            cachedFieldID->insert(key, id);
         return id;
     }
 }
@@ -890,7 +957,10 @@ QByteArray QJniObject::className() const
     jint size = myJavaString.callMethod<jint>("length");
     \endcode
 
-    The method signature is deduced at compile time from \c Ret and the types of \a args.
+    The method signature is deduced at compile time from \c Ret and the types
+    of \a args. \c Ret can be a \c{std::expected}-compatible type that returns
+    a value, or \l{Handling Java Exceptions}{any Java exception thrown} by the
+    called method.
 */
 
 /*!
@@ -921,7 +991,10 @@ QByteArray QJniObject::className() const
     jint value = QJniObject::callStaticMethod<jint>("MyClass", "staticMethod");
     \endcode
 
-    The method signature is deduced at compile time from \c Ret and the types of \a args.
+    The method signature is deduced at compile time from \c Ret and the types
+    of \a args. \c Ret can be a \c{std::expected}-compatible type that returns
+    a value, or \l{Handling Java Exceptions}{any Java exception thrown} by the
+    called method.
 */
 
 /*!
@@ -978,7 +1051,10 @@ QByteArray QJniObject::className() const
     jdouble randNr = QJniObject::callStaticMethod<jdouble>(javaMathClass, "random");
     \endcode
 
-    The method signature is deduced at compile time from \c Ret and the types of \a args.
+    The method signature is deduced at compile time from \c Ret and the types
+    of \a args. \c Ret can be a \c{std::expected}-compatible type that returns
+    a value, or \l{Handling Java Exceptions}{any Java exception thrown} by the
+    called method.
 */
 
 /*!
@@ -989,8 +1065,12 @@ QByteArray QJniObject::className() const
     \c Ret (unless \c Ret is \c void).  If \c Ret is a jobject type, then the returned value will
     be a QJniObject.
 
-    The method signature is deduced at compile time from \c Ret and the types of \a args.
-    \c Klass needs to be a C++ type with a registered type mapping to a Java type.
+    The method signature is deduced at compile time from \c Ret and the types
+    of \a args. \c Klass needs to be a C++ type with a registered type mapping
+    to a Java type. \c Ret can be a \c{std::expected}-compatible type that
+    returns a value, or \l{Handling Java Exceptions}{any Java exception thrown}
+    by the called method.
+
 */
 
 /*!
@@ -1009,15 +1089,15 @@ QJniObject QJniObject::callObjectMethod(const char *methodName, const char *sign
 {
     JNIEnv *env = jniEnv();
     jmethodID id = getCachedMethodID(env, methodName, signature);
-    if (id) {
-        va_list args;
-        va_start(args, signature);
-        QJniObject res = getCleanJniObject(env->CallObjectMethodV(d->m_jobject, id, args), env);
-        va_end(args);
-        return res;
-    }
+    va_list args;
+    va_start(args, signature);
+    // can't go back from variadic arguments to variadic templates
+    jobject object = id ? jniEnv()->CallObjectMethodV(javaObject(), id, args) : nullptr;
+    QJniObject res = getCleanJniObject(object, env);
+    va_end(args);
 
-    return QJniObject();
+    QJniEnvironment::checkAndClearExceptions(env);
+    return res;
 }
 
 /*!
@@ -1119,7 +1199,10 @@ QJniObject QJniObject::callStaticObjectMethod(jclass clazz, jmethodID methodId, 
     QJniObject myJavaString2 = myJavaString1.callObjectMethod<jstring>("toString");
     \endcode
 
-    The method signature is deduced at compile time from \c Ret and the types of \a args.
+    The method signature is deduced at compile time from \c Ret and the types
+    of \a args. \c Ret can be a \c{std::expected}-compatible type that returns
+    a value, or \l{Handling Java Exceptions}{any Java exception thrown} by the
+    called method.
 */
 
 /*!
@@ -1133,7 +1216,10 @@ QJniObject QJniObject::callStaticObjectMethod(jclass clazz, jmethodID methodId, 
     QJniObject string = QJniObject::callStaticObjectMethod<jstring>("CustomClass", "getClassName");
     \endcode
 
-    The method signature is deduced at compile time from \c Ret and the types of \a args.
+    The method signature is deduced at compile time from \c Ret and the types
+    of \a args. \c Ret can be a \c{std::expected}-compatible type that returns
+    a value, or \l{Handling Java Exceptions}{any Java exception thrown} by the
+    called method.
 */
 
 /*!
@@ -1151,7 +1237,7 @@ QJniObject QJniObject::callStaticObjectMethod(jclass clazz, jmethodID methodId, 
 */
 
 /*!
-    \fn template <typename T> void QJniObject::setStaticField(const char *className, const char *fieldName, const char *signature, T value);
+    \fn template <typename Ret, typename Type> auto QJniObject::setStaticField(const char *className, const char *fieldName, const char *signature, Type value);
 
     Sets the static field \a fieldName on the class \a className to \a value
     using the setter with \a signature.
@@ -1159,7 +1245,7 @@ QJniObject QJniObject::callStaticObjectMethod(jclass clazz, jmethodID methodId, 
 */
 
 /*!
-    \fn template <typename T> void QJniObject::setStaticField(jclass clazz, const char *fieldName, const char *signature, T value);
+    \fn template <typename Ret, typename Type> auto QJniObject::setStaticField(jclass clazz, const char *fieldName, const char *signature, Type value);
 
     Sets the static field \a fieldName on the class \a clazz to \a value using
     the setter with \a signature.
@@ -1197,19 +1283,19 @@ QJniObject QJniObject::callStaticObjectMethod(jclass clazz, jmethodID methodId, 
 */
 
 /*!
-    \fn template <typename T> void QJniObject::setStaticField(const char *className, const char *fieldName, T value)
+    \fn template <typename Ret, typename Type> auto QJniObject::setStaticField(const char *className, const char *fieldName, Type value)
 
     Sets the static field \a fieldName of the class \a className to \a value.
 */
 
 /*!
-    \fn template <typename T> void QJniObject::setStaticField(jclass clazz, const char *fieldName, T value)
+    \fn template <typename Ret, typename Type> auto QJniObject::setStaticField(jclass clazz, const char *fieldName, Type value)
 
     Sets the static field \a fieldName of the class \a clazz to \a value.
 */
 
 /*!
-    \fn template <typename Klass, typename T> auto QJniObject::setStaticField(const char *fieldName, T value)
+    \fn template <typename Klass, typename Ret, typename Type> auto QJniObject::setStaticField(const char *fieldName, Type value)
 
     Sets the static field \a fieldName of the class \c Klass to \a value.
 
@@ -1264,11 +1350,16 @@ QJniObject QJniObject::getStaticObjectField(jclass clazz, const char *fieldName,
 {
     JNIEnv *env = QJniEnvironment::getJniEnv();
     jfieldID id = getFieldID(env, clazz, fieldName, signature, true);
-    return getCleanJniObject(env->GetStaticObjectField(clazz, id), env);
+
+    const auto clearExceptions = qScopeGuard([env]{
+        QJniEnvironment::checkAndClearExceptions(env);
+    });
+
+    return getCleanJniObject(getStaticObjectFieldImpl(env, clazz, id), env);
 }
 
 /*!
-    \fn template <typename T> void QJniObject::setField(const char *fieldName, const char *signature, T value)
+    \fn template <typename Ret, typename Type> void QJniObject::setField(const char *fieldName, const char *signature, Type value)
 
     Sets the value of \a fieldName with \a signature to \a value.
 
@@ -1305,14 +1396,16 @@ QJniObject QJniObject::getObjectField(const char *fieldName, const char *signatu
 {
     JNIEnv *env = jniEnv();
     jfieldID id = getCachedFieldID(env, fieldName, signature);
-    if (!id)
-        return QJniObject();
 
-    return getCleanJniObject(env->GetObjectField(d->m_jobject, id), env);
+    const auto clearExceptions = qScopeGuard([env]{
+        QJniEnvironment::checkAndClearExceptions(env);
+    });
+
+    return getCleanJniObject(getObjectFieldImpl(env, id), env);
 }
 
 /*!
-    \fn template <typename T> void QJniObject::setField(const char *fieldName, T value)
+    \fn template <typename Ret, typename Type> void QJniObject::setField(const char *fieldName, Type value)
 
     Sets the value of \a fieldName to \a value.
 
@@ -1488,5 +1581,180 @@ jobject QJniObject::javaObject() const
 {
     return d->m_jobject;
 }
+
+/*!
+    \class QtJniTypes::JObjectBase
+    \brief The JObjectBase in the QtJniTypes namespace is the base of all declared Java types.
+    \inmodule QtCore
+    \internal
+*/
+
+/*!
+    \class QtJniTypes::JObject
+    \inmodule QtCore
+    \brief The JObject template in the QtJniTypes namespace is the base of declared Java types.
+    \since Qt 6.8
+
+    This template gets specialized when using the Q_DECLARE_JNI_CLASS macro. The
+    specialization produces a unique type in the QtJniTypes namespace. This
+    allows the type system to deduce the correct signature in JNI calls when an
+    instance of the specialized type is passed as a parameter.
+
+    Instances can be implicitly converted to and from QJniObject and jobject,
+    and provide the same template API as QJniObject to call methods and access
+    properties. Since instances of JObject know about the Java type they hold,
+    APIs to access static methods or fields do not require the class name as an
+    explicit parameter.
+
+    \sa Q_DECLARE_JNI_CLASS
+*/
+
+/*!
+    \fn template <typename Type> QtJniTypes::JObject<Type>::JObject()
+
+    Default-constructs the JObject instance. This also default-constructs an
+    instance of the represented Java type.
+*/
+
+/*!
+    \fn template <typename Type> QtJniTypes::JObject<Type>::JObject(const QJniObject &other)
+
+    Constructs a JObject instance that holds a reference to the same jobject as \a other.
+*/
+
+/*!
+    \fn template <typename Type> QtJniTypes::JObject<Type>::JObject(jobject other)
+
+    Constructs a JObject instance that holds a reference to \a other.
+*/
+
+/*!
+    \fn template <typename Type> QtJniTypes::JObject<Type>::JObject(QJniObject &&other)
+
+    Move-constructs a JObject instance from \a other.
+*/
+
+/*!
+    \fn template <typename Type> bool QtJniTypes::JObject<Type>::isValid() const
+
+    Returns whether the JObject instance holds a valid reference to a jobject.
+
+    \sa QJniObject::isValid()
+*/
+
+/*!
+    \fn template <typename Type> jclass QtJniTypes::JObject<Type>::objectClass() const
+
+    Returns the Java class that this JObject is an instance of as a jclass.
+
+    \sa className(), QJniObject::objectClass()
+*/
+
+/*!
+    \fn template <typename Type> QString QtJniTypes::JObject<Type>::toString() const
+
+    Returns a QString with a string representation of the Java object.
+
+    \sa QJniObject::toString()
+*/
+
+/*!
+    \fn template <typename Type> QByteArray QtJniTypes::JObject<Type>::className() const
+
+    Returns the name of the Java class that this object is an instance of.
+
+    \sa objectClass(), QJniObject::className()
+*/
+
+/*!
+    \fn template <typename Type> bool QtJniTypes::JObject<Type>::isClassAvailable()
+
+    Returns whether the class that this JObject specialization represents is
+    available.
+
+    \sa QJniObject::isClassAvailable()
+*/
+
+/*!
+    \fn template <typename Type> JObject QtJniTypes::JObject<Type>::fromJObject(jobject object)
+
+    Constructs a JObject instance from \a object and returns that instance.
+*/
+
+/*!
+    \fn template <typename Type> template <typename ...Args> JObject QtJniTypes::JObject<Type>::construct(Args &&...args)
+
+    Constructs a Java object from \a args and returns a JObject instance that
+    holds a reference to that Java object.
+*/
+
+/*!
+    \fn template <typename Type> JObject QtJniTypes::JObject<Type>::fromLocalRef(jobject ref)
+
+    Constructs a JObject that holds a local reference to \a ref, and returns
+    that object.
+*/
+
+/*!
+    \fn template <typename Type> template <typename Ret, typename ...Args> auto QtJniTypes::JObject<Type>::callStaticMethod(const char *methodName, Args &&...args)
+
+    Calls the static method \a methodName with arguments \a args, and returns
+    the result of type \c Ret (unless \c Ret is \c void). If \c Ret is a
+    jobject type, then the returned value will be a QJniObject.
+
+    \sa QJniObject::callStaticMethod()
+*/
+
+/*!
+    \fn template <typename Type> bool QtJniTypes::JObject<Type>::registerNativeMethods(std::initializer_list<JNINativeMethod> methods)
+
+    Registers the Java methods in \a methods with the Java class represented by
+    the JObject specialization, and returns whether the registration was successful.
+
+    \sa QJniEnvironment::registerNativeMethods()
+*/
+
+/*!
+    \fn template <typename Type> template <typename T> auto QtJniTypes::JObject<Type>::getStaticField(const char *field)
+
+    Returns the value of the static field \a field.
+
+    \sa QJniObject::getStaticField()
+*/
+
+/*!
+    \fn template <typename Type> template <typename Ret, typename T> auto QtJniTypes::JObject<Type>::setStaticField(const char *field, T &&value)
+
+    Sets the static field \a field to \a value.
+
+    \sa QJniObject::setStaticField()
+*/
+
+/*!
+    \fn template <typename Type> template <typename Ret, typename ...Args> auto QtJniTypes::JObject<Type>::callMethod(const char *method, Args &&...args) const
+
+    Calls the instance method \a method with arguments \a args, and returns
+    the result of type \c Ret (unless \c Ret is \c void). If \c Ret is a
+    jobject type, then the returned value will be a QJniObject.
+
+    \sa QJniObject::callMethod()
+*/
+
+/*!
+    \fn template <typename Type> template <typename T> auto QtJniTypes::JObject<Type>::getField(const char *field) const
+
+    Returns the value of the instance field \a field.
+
+    \sa QJniObject::getField()
+*/
+
+/*!
+    \fn template <typename Type> template <typename Ret, typename T> auto QtJniTypes::JObject<Type>::setField(const char *field, T &&value)
+
+    Sets the value of the instance field \a field to \a value.
+
+    \sa QJniObject::setField()
+*/
+
 
 QT_END_NAMESPACE

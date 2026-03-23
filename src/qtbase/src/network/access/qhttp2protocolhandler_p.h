@@ -93,7 +93,6 @@ private:
     // Stream's lifecycle management:
     QHttp2Stream *createNewStream(const HttpMessagePair &message, bool uploadDone = false);
     void connectStream(const HttpMessagePair &message, QHttp2Stream *stream);
-    quint32 popStreamToResume();
 
     QHttp2Connection *h2Connection;
 

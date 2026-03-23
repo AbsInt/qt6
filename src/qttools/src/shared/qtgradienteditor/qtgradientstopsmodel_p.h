@@ -15,8 +15,8 @@
 #ifndef QTGRADIENTSTOPSMODEL_H
 #define QTGRADIENTSTOPSMODEL_H
 
-#include <QtCore/QObject>
-#include <QtCore/QMap>
+#include <QtCore/qmap.h>
+#include <QtCore/qobject.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -35,7 +35,7 @@ private:
     void setColor(QColor color);
     void setPosition(qreal position);
     friend class QtGradientStopsModel;
-    QtGradientStop(QtGradientStopsModel *model = 0);
+    explicit QtGradientStop(QtGradientStopsModel *model = nullptr);
     ~QtGradientStop();
     QScopedPointer<class QtGradientStopPrivate> d_ptr;
 };
@@ -46,8 +46,8 @@ class QtGradientStopsModel : public QObject
 public:
     using PositionStopMap = QMap<qreal, QtGradientStop *>;
 
-    QtGradientStopsModel(QObject *parent = 0);
-    ~QtGradientStopsModel();
+    explicit QtGradientStopsModel(QObject *parent = nullptr);
+    ~QtGradientStopsModel() override;
 
     PositionStopMap stops() const;
     QtGradientStop *at(qreal pos) const;

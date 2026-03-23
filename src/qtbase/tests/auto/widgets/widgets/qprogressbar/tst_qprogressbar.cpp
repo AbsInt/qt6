@@ -220,13 +220,19 @@ void tst_QProgressBar::setMinMaxRepaint()
         QSKIP("Wayland: This fails. Figure out why.");
 
     ProgressBar pbar;
+    const QSize size(200, 25);
+    pbar.setWindowFlag(Qt::FramelessWindowHint);
     pbar.setMinimum(0);
     pbar.setMaximum(10);
     pbar.setFormat("%v");
     pbar.move(300, 300);
+    pbar.resize(size);
     pbar.show();
-    QApplicationPrivate::setActiveWindow(&pbar);
     QVERIFY(QTest::qWaitForWindowActive(&pbar));
+    QTRY_COMPARE(pbar.size(), size);
+
+    // Ensure pbar is displayed before updating the minimum and maximum values
+    QApplication::processEvents();
 
     // No repaint when setting minimum to the current minimum
     pbar.repainted = false;

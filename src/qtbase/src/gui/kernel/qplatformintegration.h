@@ -90,7 +90,9 @@ public:
         WindowManagement,
         WindowActivation, // whether requestActivate is supported
         SyncState,
-        RasterGLSurface,
+#if QT_REMOVAL_QT7_DEPRECATED_SINCE(6, 11)
+        RasterGLSurface Q_DECL_ENUMERATOR_DEPRECATED_X("This capability is no longer used"),
+#endif
         AllGLFunctionsQueryable,
         ApplicationIcon,
         SwitchableWidgetComposition,

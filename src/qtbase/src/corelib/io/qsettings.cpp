@@ -1425,6 +1425,13 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
                 }
             }
 
+            for (const auto &section : confFile->unparsedIniSections.keys()) {
+                if (section.count(u'/') > 1) {
+                    setStatus(QSettings::FormatError);
+                    break;
+                }
+            }
+
             if (!ok)
                 setStatus(QSettings::FormatError);
         }
@@ -2916,7 +2923,7 @@ void QSettings::setAtomicSyncRequired(bool enable)
 
     \list
     \li \c mainwindow/size
-    \li \c mainwindow/fullScreen
+    \li \c mainwindow/active
     \li \c outputpanel/visible
     \endlist
 

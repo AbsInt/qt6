@@ -389,6 +389,8 @@ public:
         Kuvi = 344,
         KaraKalpak = 345,
         SwampyCree = 346,
+        Ladin = 347,
+        Shan = 348,
 
         Afan = Oromo,
         Bengali = Bangla,
@@ -410,7 +412,7 @@ public:
         Uigur = Uyghur,
         Walamo = Wolaytta,
 
-        LastLanguage = SwampyCree
+        LastLanguage = Shan
     };
 
     enum Script : ushort {
@@ -1162,7 +1164,7 @@ public:
     static QString scriptToString(Script script);
     static void setDefault(const QLocale &locale);
 
-    static QLocale c() { return QLocale(C); }
+    static QLocale c() noexcept;
     static QLocale system();
 
     static QList<QLocale> matchingLocales(QLocale::Language language, QLocale::Script script,

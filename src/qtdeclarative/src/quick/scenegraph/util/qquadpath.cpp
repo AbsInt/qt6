@@ -987,9 +987,11 @@ static void printElement(QDebug stream, const QQuadPath::Element &element)
     printPoint(element.controlPoint());
     printPoint(element.endPoint());
     stream << "} " << (element.isLine() ? "L " : "C ") << (element.isConvex() ? "X " : "O ")
+           << (element.isFillOnRight() ? "R " : "L ")
            << (element.isSubpathStart() ? "S" : element.isSubpathEnd() ? "E" : "");
 }
 
+#ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug stream, const QQuadPath::Element &element)
 {
     QDebugStateSaver saver(stream);
@@ -1006,15 +1008,17 @@ QDebug operator<<(QDebug stream, const QQuadPath &path)
     stream.nospace();
     stream << "QuadPath(" << path.elementCount() << " main elements, "
            << path.elementCountRecursive() << " leaf elements, "
-           << (path.fillRule() == Qt::OddEvenFill ? "OddEven" : "Winding") << Qt::endl;
+           << (path.fillRule() == Qt::OddEvenFill ? "OddEven" : "Winding")
+           << ", hints: " << path.pathHints() << Qt::endl;
     int count = 0;
     path.iterateElements([&](const QQuadPath::Element &e, int) {
-        stream << " " << count++ << (e.isSubpathStart() ? " >" : " ");
+        stream << " " << count++ << (e.isSubpathStart() ? ">" : e.isSubpathEnd() ? "<" : " ");
         printElement(stream, e);
         stream << Qt::endl;
     });
     stream << ")";
     return stream;
 }
+#endif
 
 QT_END_NAMESPACE

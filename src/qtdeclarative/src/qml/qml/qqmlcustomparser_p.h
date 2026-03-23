@@ -51,7 +51,7 @@ public:
             QObject *, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &,
             const QList<const QV4::CompiledData::Binding *> &) = 0;
 
-    QVector<QQmlError> errors() const { return exceptions; }
+    QList<QQmlError> errors() const { return exceptions; }
 
 protected:
     void error(const QV4::CompiledData::Binding *binding, const QString& description)
@@ -66,7 +66,7 @@ protected:
     QQmlTypeLoader *typeLoader() const;
 
 private:
-    QVector<QQmlError> exceptions;
+    QList<QQmlError> exceptions;
     QQmlEnginePrivate *engine;
     const QQmlPropertyValidator *validator;
     Flags m_flags;

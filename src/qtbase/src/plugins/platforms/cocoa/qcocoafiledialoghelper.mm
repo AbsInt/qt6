@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include <QtCore/qglobal.h>
 
@@ -18,6 +19,7 @@
 #include <QtCore/qregularexpression.h>
 #include <QtCore/qpointer.h>
 #include <QtCore/private/qcore_mac_p.h>
+#include <QtCore/private/qdarwinsecurityscopedfileengine_p.h>
 
 #include <QtGui/qguiapplication.h>
 #include <QtGui/private/qguiapplication_p.h>
@@ -394,14 +396,15 @@ typedef QSharedPointer<QFileDialogOptions> SharedPointerFileDialogOptions;
 {
     if (auto *openPanel = openpanel_cast(m_panel)) {
         QList<QUrl> result;
-        for (NSURL *url in openPanel.URLs) {
-            QString path = QString::fromNSString(url.path).normalized(QString::NormalizationForm_C);
-            result << QUrl::fromLocalFile(path);
-        }
+        for (NSURL *url in openPanel.URLs)
+            result << qt_apple_urlFromPossiblySecurityScopedURL(url);
         return result;
     } else {
-        QString filename = QString::fromNSString(m_panel.URL.path).normalized(QString::NormalizationForm_C);
-        QFileInfo fileInfo(filename);
+        QUrl result = qt_apple_urlFromPossiblySecurityScopedURL(m_panel.URL);
+        if (qt_apple_isSandboxed())
+            return { result }; // Can't tweak suffix
+
+        QFileInfo fileInfo(result.toLocalFile());
 
         if (fileInfo.suffix().isEmpty() && ![self fileInfoMatchesCurrentNameFilter:fileInfo]) {
             // We end up in this situation if we accept a file name without extension

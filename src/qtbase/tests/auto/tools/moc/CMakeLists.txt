@@ -56,6 +56,7 @@ set(JSON_HEADERS
         tech-preview.h
         trigraphs.h
         using-namespaces.h
+        virtualAndOverride.h
 )
 
 qt_wrap_cpp(comparison_relevant_moc_list ${JSON_HEADERS}
@@ -66,6 +67,8 @@ qt_wrap_cpp(comparison_relevant_moc_list ${JSON_HEADERS}
         "-DDEFINE_CMDLINE_EMPTY="
         "-DDEFINE_CMDLINE_SIGNAL=void cmdlineSignal(const QMap<int, int> &i)"
         "--output-json"
+    DEPENDS
+        ${QT_CMAKE_EXPORT_NAMESPACE}::moc
 )
 
 list(TRANSFORM comparison_relevant_moc_list  APPEND ".json" OUTPUT_VARIABLE moc_json_files)

@@ -7,8 +7,10 @@
 #include "qaccessiblequickview_p.h"
 #include "qaccessiblequickitem_p.h"
 #include "qaccessiblequicktextedit_p.h"
+#include "qaccessiblequicktextinput_p.h"
 #include <QtQuick/private/qquickitem_p.h>
 #include <QtQuick/private/qquicktextedit_p.h>
+#include <QtQuick/private/qquicktextinput_p.h>
 
 QT_BEGIN_NAMESPACE
 #if QT_CONFIG(accessibility)
@@ -19,6 +21,8 @@ QAccessibleInterface *qQuickAccessibleFactory(const QString &classname, QObject 
         return new QAccessibleQuickWindow(qobject_cast<QQuickWindow *>(object));
     if (classname == QLatin1String("QQuickTextEdit"))
         return new QAccessibleQuickTextEdit(qobject_cast<QQuickTextEdit *>(object));
+    if (classname == QLatin1String("QQuickTextInput"))
+        return new QAccessibleQuickTextInput(qobject_cast<QQuickTextInput *>(object));
     if (classname == QLatin1String("QQuickItem")) {
         QQuickItem *item = qobject_cast<QQuickItem *>(object);
         Q_ASSERT(item);

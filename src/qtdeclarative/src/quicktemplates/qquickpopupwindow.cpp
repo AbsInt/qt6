@@ -76,7 +76,7 @@ QQuickPopupWindow::QQuickPopupWindow(QQuickPopup *popup, QWindow *parent)
 
     setFlags(flags);
 
-    qCDebug(lcPopupWindow) << "Created popup window with parent:" << parent << "flags:" << flags;
+    qCDebug(lcPopupWindow) << "Created popup window" << this << "with parent" << parent;
 }
 
 QQuickPopup *QQuickPopupWindow::popup() const

@@ -204,11 +204,11 @@ public class QtNative
     }
 
     static QtThread getQtThread() {
-        if (m_qtThread != null)
+        if (m_qtThread != null && m_qtThread.isAlive())
             return m_qtThread;
 
         synchronized (m_qtThreadLock) {
-            if (m_qtThread == null)
+            if (m_qtThread == null || !m_qtThread.isAlive())
                 m_qtThread = new QtThread();
 
             return m_qtThread;
@@ -361,42 +361,11 @@ public class QtNative
         if (m_stateDetails.isStarted)
             return;
 
-        QtThread thread = getQtThread();
-        thread.run(() -> {
-            final String qtParams = mainLib + " " + params;
-            if (!startQtAndroidPlugin(qtParams))
-                Log.e(QtTAG, "An error occurred while starting the Qt Android plugin");
-        });
-        thread.post(QtNative::startQtApplication);
+        getQtThread().run(() -> initAndroidQpaPlugin());
+        final String qtParams = mainLib + " " + params;
+        getQtThread().post(() -> { startQtNativeApplication(qtParams); });
         waitForServiceSetup();
-        m_stateDetails.isStarted = true;
-        notifyAppStateDetailsChanged(m_stateDetails);
-    }
-
-    static void quitApp()
-    {
-        runAction(() -> {
-            quitQtAndroidPlugin();
-            if (isActivityValid())
-                m_activity.get().finish();
-            if (isServiceValid())
-                m_service.get().stopSelf();
-            m_stateDetails.isStarted = false;
-            notifyAppStateDetailsChanged(m_stateDetails);
-        });
-    }
-
-    static void quitQt()
-    {
-        runAction(() -> {
-            terminateQt();
-            m_stateDetails.isStarted = false;
-            notifyAppStateDetailsChanged(m_stateDetails);
-            getQtThread().exit();
-            synchronized (m_qtThreadLock) {
-                m_qtThread = null;
-            }
-        });
+        setStarted(true);
     }
 
     @UsedFromNativeCode
@@ -462,12 +431,10 @@ public class QtNative
     }
 
     // application methods
-    static native boolean startQtAndroidPlugin(String params);
-    static native void startQtApplication();
+    static native boolean initAndroidQpaPlugin();
+    static native void startQtNativeApplication(String params);
     static native void waitForServiceSetup();
-    static native void quitQtCoreApplication();
-    static native void quitQtAndroidPlugin();
-    static native void terminateQt();
+    static native void terminateQtNativeApplication();
     static native boolean updateNativeActivity();
     // application methods
 

@@ -143,6 +143,9 @@ void QWindowsUiaAccessibility::notifyAccessibilityUpdate(QAccessibleEvent *event
     case QAccessible::NameChanged:
         QWindowsUiaMainProvider::notifyNameChange(event);
         break;
+    case QAccessible::RoleChanged:
+        QWindowsUiaMainProvider::notifyRoleChange(event);
+        break;
     case QAccessible::SelectionAdd:
         QWindowsUiaMainProvider::notifySelectionChange(event);
         break;

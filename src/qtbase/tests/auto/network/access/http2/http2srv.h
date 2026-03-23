@@ -12,7 +12,6 @@
 
 #include <QtNetwork/qabstractsocket.h>
 #include <QtCore/qsharedpointer.h>
-#include <QtCore/qscopedpointer.h>
 #include <QtNetwork/qtcpserver.h>
 #include <QtCore/qbytearray.h>
 #include <QtCore/qatomic.h>
@@ -21,6 +20,7 @@
 
 #include <vector>
 #include <map>
+#include <memory>
 #include <set>
 
 QT_BEGIN_NAMESPACE
@@ -135,7 +135,7 @@ private:
     bool verifyProtocolUpgradeRequest();
     void triggerGOAWAYEmulation();
 
-    QScopedPointer<QAbstractSocket> socket;
+    std::unique_ptr<QAbstractSocket> socket;
 
     H2Type connectionType = H2Type::h2Alpn;
     // Connection preface:
@@ -196,7 +196,7 @@ private:
     // We need QHttpNetworkReply (actually its private d-object) to handle the
     // first HTTP/1.1 request. QHttpNetworkReplyPrivate does parsing + in case
     // of POST it is also reading the body for us.
-    QScopedPointer<Http11Reply> protocolUpgradeHandler;
+    std::unique_ptr<Http11Reply> protocolUpgradeHandler;
     // We need it for PUSH_PROMISE, with the correct port number appended,
     // when replying to essentially 1.1 request.
     QByteArray authority;

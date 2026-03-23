@@ -12,16 +12,41 @@
     about an open SSL connection and to allow the application to control
     certain features of that connection.
     The sslConfiguration encapsulates QSslConfiguration object inside.
-    The sslConfiguration calls defaultSslCongiguration in ctor.
+    The sslConfiguration defaults are initialized by calling
+    \l QSslConfiguration::defaultConfiguration.
 
     \sa QSslConfiguration
 */
 
 /*!
     \qmlproperty QList sslConfiguration::sslOptions
+    \deprecated [6.11] Use sslOptionFlags instead. This property will be removed
+    in Qt 7.
+
     Holds the list of SslOption values, that are activated by configuration.
 
-    \sa QSsl::SslOption
+//! [usage-warning]
+    \warning This property has known issues and its usage is discouraged.
+    Specifically, it does not allow to disable an SSL option once it was
+    enabled and can get out of sync with the underlying SSL configuration.
+    It is kept only for source and behavior compatibility. Use \l sslOptionFlags
+    property instead.
+//! [usage-warning]
+
+    \sa QSsl::SslOption, sslOptionFlags
+*/
+
+/*!
+    \qmlproperty QSsl::SslOptions sslConfiguration::sslOptionFlags
+    \since 6.11
+
+    Holds the bitwise OR of SslOption values that are enabled in the
+    configuration.
+
+    The default value is the same as set by
+    \l QSslConfiguration::defaultConfiguration().
+
+    \sa QSsl::SslOptions
 */
 
 /*!
@@ -92,9 +117,27 @@
 
 /*!
     \qmlproperty QList sslDtlsConfiguration::sslOptions
+    \deprecated [6.11] Use sslOptionFlags instead. This property will be removed
+    in Qt 7.
+
     Holds the list of SslOption values, that are activated by configuration.
 
-    \sa QSsl::SslOption
+    \include qqmlssl.qdoc usage-warning
+
+    \sa QSsl::SslOption, sslOptionFlags
+*/
+
+/*!
+    \qmlproperty QSsl::SslOptions sslDtlsConfiguration::sslOptionFlags
+    \since 6.11
+
+    Holds the bitwise OR of SslOption values that are enabled in the
+    configuration.
+
+    The default value is the same as set by
+    \l QSslConfiguration::defaultDtlsConfiguration().
+
+    \sa QSsl::SslOptions
 */
 
 /*!

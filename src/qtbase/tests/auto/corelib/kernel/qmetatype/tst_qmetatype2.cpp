@@ -148,6 +148,11 @@ void registerCustomTypeConversions()
 
 void tst_QMetaType::convertCustomType_data()
 {
+    static bool calledOnce = false;
+    if (calledOnce)
+        QSKIP("convertCustomType can only run once");
+    calledOnce = true;
+
     customTypeNotYetConvertible();
     registerCustomTypeConversions();
 
@@ -363,6 +368,11 @@ void tst_QMetaType::compareCustomEqualOnlyType()
 
 void tst_QMetaType::customDebugStream()
 {
+    static bool calledOnce = false;
+    if (calledOnce)
+        QSKIP("customDebugStream can only run once");
+    calledOnce = true;
+
     MessageHandlerCustom handler(::qMetaTypeId<CustomDebugStreamableType>());
     QVariant v1 = QVariant::fromValue(CustomDebugStreamableType());
     handler.expectedMessage = "QVariant(CustomDebugStreamableType, string-content)";

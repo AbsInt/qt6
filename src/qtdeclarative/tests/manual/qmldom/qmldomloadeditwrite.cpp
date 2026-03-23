@@ -417,9 +417,14 @@ int main()
         MethodParameter param;
         param.name = QLatin1String("x");
         mInfo.parameters.append(param);
-        mInfo.setCode(QLatin1String("return 4*10+2 - x"));
+        mInfo.body = std::make_shared<ScriptExpression>(
+                QLatin1String("return 4*10+2 - x"), ScriptExpression::ExpressionType::FunctionBody);
         // we can change the added binding
-        addedBinding.setCode(QLatin1String("245"));
+        addedBinding.mutableAs<Binding>()->setValue(
+                std::make_unique<BindingValue>(std::make_shared<ScriptExpression>(
+                        QLatin1String("245"),
+                        ScriptExpression::ExpressionType::BindingExpression)));
+
         MutableDomItem addedMethod = qmlObj.addMethod(mInfo);
         qDebug() << "added method at:" << addedMethod.pathFromOwner();
         // * new QmlObjects

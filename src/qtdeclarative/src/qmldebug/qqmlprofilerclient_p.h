@@ -25,6 +25,7 @@
 
 QT_BEGIN_NAMESPACE
 
+struct QQmlDebugContextInfo;
 class QQmlProfilerClientPrivate;
 class QQmlProfilerClient : public QQmlDebugClient
 {
@@ -62,6 +63,10 @@ Q_SIGNALS:
     void recordedFeaturesChanged(quint64 features);
 
     void cleared();
+
+private:
+    void receiveDebugMessage(
+            QtMsgType type, const QString &text, const QQmlDebugContextInfo &context);
 };
 
 QT_END_NAMESPACE

@@ -32,9 +32,10 @@ public:
     typedef std::function<void(const std::array<QVector2D, 3> &,
                                const std::array<QVector2D, 3> &,
                                uvForPointCallback)> addTriangleCallback;
-    typedef std::function<void(const std::array<QVector2D, 3> &,
-                               const std::array<QVector2D, 3> &,
-                               const std::array<QVector2D, 3> &,
+    typedef std::function<void(const std::array<QVector2D, 3> &, // vertex coordinates
+                               const std::array<QVector2D, 3> &, // start, control, end
+                               const std::array<QVector2D, 3> &, // normals
+                               const std::array<float, 3> &, // extrusions
                                QSGCurveStrokeNode::TriangleFlags)> addStrokeTriangleCallback;
 
     static void processFill(const QQuadPath &path,
@@ -43,6 +44,7 @@ public:
     static void processStroke(const QQuadPath &strokePath,
                               float miterLimit,
                               float penWidth,
+                              bool cosmetic,
                               Qt::PenJoinStyle joinStyle,
                               Qt::PenCapStyle capStyle,
                               addStrokeTriangleCallback addTriangle,

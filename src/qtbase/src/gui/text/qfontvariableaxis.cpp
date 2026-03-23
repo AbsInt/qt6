@@ -60,6 +60,18 @@ QT_DEFINE_QESDP_SPECIALIZATION_DTOR(QFontVariableAxisPrivate)
 QFontVariableAxis::QFontVariableAxis(const QFontVariableAxis &axis) = default;
 
 /*!
+    \property QFontVariableAxis::tag
+    \brief the tag of the axis
+
+    This is a four-character sequence which identifies the axis. Certain tags
+    have standardized meanings, such as "wght" (weight) and "wdth" (width),
+    but any sequence of four latin-1 characters is a valid tag. By convention,
+    non-standard/custom axes are denoted by tags in all uppercase.
+
+    \sa QFont::setVariableAxis(), name()
+*/
+
+/*!
     Returns the tag of the axis. This is a four-character sequence which identifies the axis.
     Certain tags have standardized meanings, such as "wght" (weight) and "wdth" (width), but any
     sequence of four latin-1 characters is a valid tag. By convention, non-standard/custom axes
@@ -91,6 +103,13 @@ void QFontVariableAxis::setTag(QFont::Tag tag)
 }
 
 /*!
+    \property QFontVariableAxis::name
+    \brief the name of the axis, if provided by the font
+
+    \sa tag()
+*/
+
+/*!
     Returns the name of the axis, if provided by the font.
 
     \sa tag()
@@ -117,6 +136,11 @@ void QFontVariableAxis::setName(const QString &name)
     Q_D(QFontVariableAxis);
     d->name = name;
 }
+
+/*!
+    \property QFontVariableAxis::minimumValue
+    \brief the minimum value of the axis.
+*/
 
 /*!
     Returns the minimum value of the axis. Setting the axis to a value which is lower than this
@@ -148,6 +172,15 @@ void QFontVariableAxis::setMinimumValue(qreal minimumValue)
 }
 
 /*!
+    \property QFontVariableAxis::maximumValue
+    \brief the maximum value of the axis
+
+    Setting the axis to a value which is higher than this is not supported.
+
+    \sa minimumValue(), defaultValue()
+*/
+
+/*!
     Returns the maximum value of the axis. Setting the axis to a value which is higher than this
     is not supported.
 
@@ -175,6 +208,16 @@ void QFontVariableAxis::setMaximumValue(qreal maximumValue)
     Q_D(QFontVariableAxis);
     d->maximumValue = maximumValue;
 }
+
+/*!
+    \property QFontVariableAxis::defaultValue
+    \brief the default value of the axis
+
+    This is the value the axis will have if none has been provided in the
+    QFont query.
+
+    \sa minimumValue(), maximumValue()
+*/
 
 /*!
     Returns the default value of the axis. This is the value the axis will have if none has been

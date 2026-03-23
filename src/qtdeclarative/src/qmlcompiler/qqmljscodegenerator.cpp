@@ -119,8 +119,8 @@ QString QQmlJSCodeGenerator::metaType(const QQmlJSScope::ConstPtr &type)
         return compositeMetaType(name);
     }
 
-    if (type->isListProperty() && type->valueType()->isComposite()) {
-        const QString name = m_typeResolver->nameForType(type->valueType());
+    if (type->isListProperty() && type->elementType()->isComposite()) {
+        const QString name = m_typeResolver->nameForType(type->elementType());
         Q_ASSERT(!name.isEmpty()); // There can't be a list with anonymous composite value type
         return compositeListMetaType(name);
     }
@@ -891,7 +891,7 @@ void QQmlJSCodeGenerator::generate_LoadElement(int base)
     }
 
     // Since we can do .at() below, we know that we can natively store the element type.
-    QQmlJSRegisterContent elementType = m_typeResolver->valueType(baseType);
+    QQmlJSRegisterContent elementType = m_typeResolver->elementType(baseType);
     elementType = m_pool->storedIn(
             elementType, m_typeResolver->storedType(elementType.containedType()));
 
@@ -928,8 +928,8 @@ void QQmlJSCodeGenerator::generate_StoreElement(int base, int index)
     const QString baseName = registerVariable(base);
     const QString indexName = registerVariable(index);
 
-    const auto valueType = m_typeResolver->valueType(baseType);
-    const auto elementType = m_typeResolver->genericType(valueType.containedType());
+    const auto elementType = m_typeResolver->genericType(
+            m_typeResolver->elementType(baseType).containedType());
 
     addInclude(u"QtQml/qjslist.h"_s);
     if (!m_typeResolver->isNativeArrayIndex(indexType))
@@ -1170,13 +1170,13 @@ void QQmlJSCodeGenerator::generateVariantEqualityComparison(
 void QQmlJSCodeGenerator::generateArrayInitializer(int argc, int argv)
 {
     const QQmlJSScope::ConstPtr stored = m_state.accumulatorOut().storedType();
-    const QQmlJSScope::ConstPtr value = stored->valueType();
-    Q_ASSERT(value);
+    const QQmlJSScope::ConstPtr element = stored->elementType();
+    Q_ASSERT(element);
 
     QStringList initializer;
     for (int i = 0; i < argc; ++i) {
         initializer += convertStored(
-                registerType(argv + i).storedType(), value,
+                registerType(argv + i).storedType(), element,
                 consumedRegisterVariable(argv + i));
     }
 
@@ -1434,7 +1434,7 @@ static bool canTypeBeAffectedBySideEffects(
         case QQmlJSRegisterContent::Operation:
         case QQmlJSRegisterContent::Literal: {
             // Stack-created lists of primitives and pointers can't be affected by side effects
-            const QQmlJSScope::ConstPtr elementContained = contained->valueType();
+            const QQmlJSScope::ConstPtr elementContained = contained->elementType();
             return !elementContained->isReferenceType()
                     && !typeResolver->isPrimitive(elementContained);
         }
@@ -1917,7 +1917,7 @@ QString QQmlJSCodeGenerator::initAndCall(
     QString argumentPreparation;
     for (int i = 0; i < argc; ++i) {
         if (isRegisterAffectedBySideEffects(argv + i))
-            reject(u"calling method with argument affected by side effects"_s);
+            REJECT<QString>(u"calling method with argument affected by side effects"_s);
         const QQmlJSRegisterContent content = registerType(argv + i);
         const QQmlJSRegisterContent read = m_state.readRegister(argv + i);
         if (read.contains(content.containedType())) {
@@ -2348,7 +2348,7 @@ bool QQmlJSCodeGenerator::inlineConsoleMethod(const QString &name, int argc, int
 bool QQmlJSCodeGenerator::inlineArrayMethod(const QString &name, int base, int argc, int argv)
 {
     const auto intType = m_typeResolver->int32Type();
-    const auto valueType = registerType(base).storedType()->valueType();
+    const auto elementType = registerType(base).storedType()->elementType();
     const auto boolType = m_typeResolver->boolType();
     const auto stringType = m_typeResolver->stringType();
     const auto baseType = registerType(base);
@@ -2361,7 +2361,7 @@ bool QQmlJSCodeGenerator::inlineArrayMethod(const QString &name, int base, int a
 
     if (name == u"includes" && argc > 0 && argc < 3) {
         QString call = qjsListMethod
-                + convertStored(registerType(argv).storedType(), valueType,
+                + convertStored(registerType(argv).storedType(), elementType,
                                 consumedRegisterVariable(argv));
         if (argc == 2) {
             call += u", " + convertStored(registerType(argv + 1).storedType(), intType,
@@ -2409,7 +2409,7 @@ bool QQmlJSCodeGenerator::inlineArrayMethod(const QString &name, int base, int a
 
     if ((name == u"indexOf" || name == u"lastIndexOf") && argc > 0 && argc < 3) {
         QString call = qjsListMethod
-                + convertStored(registerType(argv).storedType(), valueType,
+                + convertStored(registerType(argv).storedType(), elementType,
                                 consumedRegisterVariable(argv));
         if (argc == 2) {
             call += u", " + convertStored(registerType(argv + 1).storedType(), intType,
@@ -4423,7 +4423,7 @@ QString QQmlJSCodeGenerator::convertStored(
 
     if (from->isListProperty()
             && to->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence
-            && to->valueType()->isReferenceType()
+            && to->elementType()->isReferenceType()
             && !to->isListProperty()) {
         return variable + u".toList<"_s + to->internalName() + u">()"_s;
     }
@@ -4435,8 +4435,18 @@ QString QQmlJSCodeGenerator::convertStored(
     } else if (const auto ctor = m_typeResolver->selectConstructor(to, from, &isExtension);
                ctor.isValid()) {
         const auto argumentTypes = ctor.parameters();
-        return (isExtension ? to->extensionType().scope->internalName() : to->internalName())
-                + u"("_s + convertStored(from, argumentTypes[0].type(), variable) + u")"_s;
+        const QString argument = convertStored(from, argumentTypes[0].type(), variable);
+        if (isExtension) {
+            // We typically use private inheritance for the foreign/extension trick.
+            // Therefore we need to jump through some hoops to extract the actual value here.
+            return u"[](auto &&arg) { "
+                    "%1 wrapper(std::forward<decltype(arg)>(arg)); "
+                    "return %2(reinterpret_cast<%2 &>(wrapper)); "
+                    "}(%3)"_s.arg(
+                           to->extensionType().scope->internalName(), to->internalName(), argument);
+        }
+
+        return u"%1(%2)"_s.arg(to->internalName(), argument);
     }
 
     if (to == m_typeResolver->stringType()

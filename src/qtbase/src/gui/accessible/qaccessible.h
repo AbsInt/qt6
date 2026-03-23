@@ -305,7 +305,8 @@ public:
     inline QAccessibleEvent(QObject *obj, QAccessible::Event typ)
         : m_type(typ), m_object(obj), m_child(-1)
     {
-        Q_ASSERT(obj);
+        if (m_type != QAccessible::ObjectDestroyed)
+            Q_ASSERT(obj);
         // All events below have a subclass of QAccessibleEvent.
         // Use the subclass, since it's expected that it's possible to cast to that.
         Q_ASSERT(m_type != QAccessible::ValueChanged);
@@ -342,7 +343,7 @@ public:
     QObject *object() const { return m_object; }
     QAccessible::Id uniqueId() const;
 
-    void setChild(int chld) { m_child = chld; }
+    void setChild(int chld);
     int child() const { return m_child; }
 
     virtual QAccessibleInterface *accessibleInterface() const;

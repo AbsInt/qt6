@@ -29,7 +29,7 @@ class Q_CORE_EXPORT QThread : public QObject
 {
     Q_OBJECT
 public:
-    static Qt::HANDLE currentThreadId() noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION static Qt::HANDLE currentThreadId() noexcept;
     static QThread *currentThread();
     static bool isMainThread() noexcept;
     static int idealThreadCount() noexcept;
@@ -123,7 +123,7 @@ private:
     friend class QEventLoopLocker;
 
     [[nodiscard]] static QThread *createThreadImpl(std::future<void> &&future);
-    static Qt::HANDLE currentThreadIdImpl() noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION static Qt::HANDLE currentThreadIdImpl() noexcept;
 
     friend class QCoreApplication;
     friend class QThreadData;

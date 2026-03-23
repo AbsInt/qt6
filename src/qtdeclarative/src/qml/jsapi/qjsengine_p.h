@@ -36,9 +36,11 @@ class Q_QML_EXPORT QJSEnginePrivate : public QObjectPrivate
     Q_DECLARE_PUBLIC(QJSEngine)
 
 public:
-    static QJSEnginePrivate* get(QJSEngine*e) { return e->d_func(); }
+    static QJSEnginePrivate *get(QJSEngine*e) { return e->d_func(); }
     static const QJSEnginePrivate* get(const QJSEngine*e) { return e->d_func(); }
-    static QJSEnginePrivate* get(QV4::ExecutionEngine *e);
+    static QJSEngine *get(QJSEnginePrivate *e) { return e->q_func(); }
+    static const QJSEngine *get(const QJSEnginePrivate *e) { return e->q_func(); }
+    static QJSEnginePrivate *get(QV4::ExecutionEngine *e);
 
     QJSEnginePrivate() = default;
     ~QJSEnginePrivate() override;
@@ -53,6 +55,8 @@ public:
             Q_EMIT q->uiLanguageChanged();
     }
     Q_OBJECT_BINDABLE_PROPERTY(QJSEnginePrivate, QString, uiLanguage, &QJSEnginePrivate::uiLanguageChanged);
+
+    std::unique_ptr<QV4::ExecutionEngine> v4Engine;
 };
 
 QT_END_NAMESPACE

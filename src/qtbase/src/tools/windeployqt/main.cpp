@@ -17,6 +17,8 @@
 #include <QtCore/QList>
 #include <QtCore/QOperatingSystemVersion>
 #include <QtCore/QSharedPointer>
+#include <QtCore/QXmlStreamWriter>
+#include <QtNetwork/QSslCertificate>
 
 #ifdef Q_OS_WIN
 #include <QtCore/qt_windows.h>
@@ -213,6 +215,8 @@ struct Options {
     bool ignoreLibraryErrors = false;
     bool deployInsightTrackerPlugin = false;
     bool forceOpenSslPlugin = false;
+    bool createAppx = false;
+    QString appxCertificatePath;
 };
 
 // Return binary to be deployed from folder, ignore pre-existing web engine process.
@@ -513,6 +517,15 @@ static inline int parseArguments(const QStringList &arguments, QCommandLineParse
                                   QStringLiteral("option"));
     parser->addOption(listOption);
 
+    QCommandLineOption appxOption(QStringLiteral("appx"),
+                                  QStringLiteral("Create an appx package for the Windows Store"));
+    parser->addOption(appxOption);
+
+    QCommandLineOption appxCertificatePath(QStringLiteral("appx-certificate"),
+                                          QStringLiteral("Path to appx certificate to sign appx package"),
+                                          QStringLiteral(".cer file"));
+    parser->addOption(appxCertificatePath);
+
     // Add early option to have it available in the help text.
     parser->addOption(createVerboseOption());
 
@@ -569,6 +582,14 @@ static inline int parseArguments(const QStringList &arguments, QCommandLineParse
     options->systemD3dCompiler = !parser->isSet(noSystemD3DCompilerOption);
     options->systemDxc = !parser->isSet(noSystemDxcOption);
     options->quickImports = !parser->isSet(noQuickImportOption);
+    options->createAppx = parser->isSet(appxOption);
+    if (options->createAppx) {
+        if (!parser->isSet(appxCertificatePath)) {
+            *errorMessage = QStringLiteral("--appx requires --appx-certificate with a valid certificate");
+            return CommandLineParseError;
+        }
+        options->appxCertificatePath = parser->value(appxCertificatePath);
+    }
 
     // default to deployment of compiler runtime for windows desktop configurations
     if (options->platform == WindowsDesktopMinGW || options->platform == WindowsDesktopClangMinGW
@@ -823,16 +844,10 @@ static inline bool isQtModule(const QString &libName)
 // Helper for recursively finding all dependent Qt libraries.
 static bool findDependentQtLibraries(const QString &qtBinDir, const QString &binary,
                                      Platform platform, QString *errorMessage,
-                                     QStringList *qtDependencies, QStringList *nonQtDependencies,
-                                     unsigned *wordSize = nullptr, bool *isDebug = nullptr,
-                                     unsigned short *machineArch = nullptr,
-                                     int *directDependencyCount = nullptr, int recursionDepth = 0)
+                                     QStringList *qtDependencies, QStringList *nonQtDependencies)
 {
     QStringList dependentLibs;
-    if (directDependencyCount)
-        *directDependencyCount = 0;
-    if (!readPeExecutable(binary, errorMessage, &dependentLibs, wordSize, isDebug,
-                          platform == WindowsDesktopMinGW, machineArch)) {
+    if (!readPeExecutableDependencies(binary, errorMessage, &dependentLibs)) {
         errorMessage->prepend("Unable to find dependent libraries of "_L1 +
                               QDir::toNativeSeparators(binary) + " :"_L1);
         return false;
@@ -850,14 +865,13 @@ static bool findDependentQtLibraries(const QString &qtBinDir, const QString &bin
         }
     }
     const int end = qtDependencies->size();
-    if (directDependencyCount)
-        *directDependencyCount = end - start;
     // Recurse
-    for (int i = start; i < end; ++i)
+    for (int i = start; i < end; ++i) {
         if (!findDependentQtLibraries(qtBinDir, qtDependencies->at(i), platform, errorMessage,
-                                      qtDependencies, nonQtDependencies,
-                                      nullptr, nullptr, nullptr, nullptr, recursionDepth + 1))
+                                      qtDependencies, nonQtDependencies)) {
             return false;
+        }
+    }
     return true;
 }
 
@@ -1345,6 +1359,27 @@ static QString vcRedistDir()
     return QString();
 }
 
+static bool isSystemLibrary(const QString &libraryPath)
+{
+    static const QString systemRootEnv = qEnvironmentVariable("SystemRoot");
+    static bool systemRootEmptyEmitted = false;
+    if (systemRootEnv.isEmpty()) {
+        if (!systemRootEmptyEmitted) {
+            std::wcerr << "Warning: Cannot detect system root.\n";
+            systemRootEmptyEmitted = true;
+        }
+        return false;
+    }
+    static QString systemRoot;
+    if (systemRoot.isEmpty()) {
+        systemRoot = QDir(QDir::fromNativeSeparators(systemRootEnv)).canonicalPath();
+        if (!systemRoot.endsWith(u'/'))
+            systemRoot += u'/';
+    }
+
+    return libraryPath.startsWith(systemRoot, Qt::CaseInsensitive);
+}
+
 static QStringList findMinGWRuntimePaths(const QString &qtBinDir, Platform platform, const QStringList &runtimeFilters)
 {
     //MinGW: Add runtime libraries. Check first for the Qt binary directory, and default to path if nothing is found.
@@ -1494,19 +1529,17 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
 
     QStringList dependentQtLibs;
     QStringList dependentNonQtLibs;
-    bool detectedDebug;
-    unsigned wordSize;
-    unsigned short machineArch;
-    int directDependencyCount = 0;
+    PeHeaderInfoStruct peHeaderInfo;
+
+    if (!readPeExecutableInfo(options.binaries.first(), errorMessage, &peHeaderInfo))
+        return result;
     if (!findDependentQtLibraries(libraryLocation, options.binaries.first(), options.platform,
-                                  errorMessage, &dependentQtLibs, &dependentNonQtLibs, &wordSize,
-                                  &detectedDebug, &machineArch, &directDependencyCount)) {
+                                  errorMessage, &dependentQtLibs, &dependentNonQtLibs)) {
         return result;
     }
     for (int b = 1; b < options.binaries.size(); ++b) {
         if (!findDependentQtLibraries(libraryLocation, options.binaries.at(b), options.platform,
-                                      errorMessage, &dependentQtLibs, &dependentNonQtLibs,
-                                      nullptr, nullptr, nullptr, nullptr)) {
+                                      errorMessage, &dependentQtLibs, &dependentNonQtLibs)) {
             return result;
         }
     }
@@ -1525,8 +1558,7 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
             std::wcout << "Adding local dependency" << path << '\n';
 
         if (!findDependentQtLibraries(libraryLocation, path, options.platform,
-                                      errorMessage, &dependentQtLibs, &dependentNonQtLibs,
-                                      nullptr, nullptr, nullptr, nullptr)) {
+                                      errorMessage, &dependentQtLibs, &dependentNonQtLibs)) {
             return result;
         }
     }
@@ -1539,7 +1571,7 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
         // runtimes and binaries. For anything else, use MatchDebugOrRelease
         // since also debug cannot be reliably detect for MinGW.
         if (options.platform.testFlag(Msvc) || options.platform.testFlag(ClangMsvc)) {
-            result.isDebug = detectedDebug;
+            result.isDebug = peHeaderInfo.isDebug;
             debugMatchMode = result.isDebug ? MatchDebug : MatchRelease;
         }
         break;
@@ -1568,7 +1600,7 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
 
     if (optVerboseLevel) {
         std::wcout << QDir::toNativeSeparators(options.binaries.first()) << ' '
-                   << wordSize << " bit, " << (result.isDebug ? "debug" : "release")
+                   << peHeaderInfo.wordSize << " bit, " << (result.isDebug ? "debug" : "release")
                    << " executable";
         if (usesQml2)
             std::wcout << " [QML]";
@@ -1606,8 +1638,10 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
             qmlScanResult.append(scanResult);
             // Additional dependencies of QML plugins.
             for (const QString &plugin : std::as_const(qmlScanResult.plugins)) {
-                if (!findDependentQtLibraries(libraryLocation, plugin, options.platform, errorMessage, &dependentQtLibs, nullptr, &wordSize, &detectedDebug, &machineArch))
+                if (!findDependentQtLibraries(libraryLocation, plugin, options.platform,
+                                              errorMessage, &dependentQtLibs, nullptr)) {
                     return result;
+                }
             }
             if (optVerboseLevel >= 1) {
                 std::wcout << "QML imports:\n";
@@ -1739,8 +1773,9 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
             if (softwareRasterizer.isFile())
                 deployedQtLibraries.append(softwareRasterizer.absoluteFilePath());
         }
-        if (options.systemD3dCompiler && machineArch != IMAGE_FILE_MACHINE_ARM64) {
-            const QString d3dCompiler = findD3dCompiler(options.platform, qtBinDir, wordSize);
+        if (options.systemD3dCompiler && peHeaderInfo.machineArch != IMAGE_FILE_MACHINE_ARM64) {
+            const QString d3dCompiler = findD3dCompiler(options.platform, qtBinDir,
+                                                        peHeaderInfo.wordSize);
             if (d3dCompiler.isEmpty()) {
                 std::wcerr << "Warning: Cannot find any version of the d3dcompiler DLL.\n";
             } else {
@@ -1748,7 +1783,8 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
             }
         }
         if (options.systemDxc) {
-            const QStringList dxcLibs = findDxc(options.platform, qtBinDir, wordSize);
+            const QStringList dxcLibs = findDxc(options.platform, qtBinDir,
+                                                peHeaderInfo.wordSize);
             if (!dxcLibs.isEmpty())
                 deployedQtLibraries.append(dxcLibs);
             else
@@ -1767,9 +1803,15 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
         const QString targetPath = options.libraryDirectory.isEmpty() ?
             options.directory : options.libraryDirectory;
         QStringList libraries = deployedQtLibraries;
-        if (options.compilerRunTime)
-            libraries.append(compilerRunTimeLibs(qtBinDir, options.platform, result.isDebug, machineArch));
+        if (options.compilerRunTime) {
+            libraries.append(compilerRunTimeLibs(qtBinDir, options.platform, result.isDebug,
+                                                 peHeaderInfo.machineArch));
+        }
         for (const QString &qtLib : std::as_const(libraries)) {
+            if (isSystemLibrary(qtLib)) {
+                std::wcout << "Skipping system library " << qtLib << "\n";
+                continue;
+            }
             if (!updateLibrary(qtLib, targetPath, options, errorMessage))
                 return result;
         }
@@ -2068,6 +2110,116 @@ int main(int argc, char **argv)
             std::wcerr << errorMessage << '\n';
             return 1;
         }
+    }
+
+    if (options.createAppx && !options.appxCertificatePath.isEmpty()) {
+        const QFileInfo storeLogo(options.directory + QStringLiteral("/Assets/StoreLogo.png"));
+        if (!storeLogo.exists()) {
+            std::wcerr << "Error: Could not open application logo file " << storeLogo.absoluteFilePath() << '\n';
+            return 1;
+        }
+
+        QFile certFile(options.appxCertificatePath);
+        if (!certFile.open(QIODevice::ReadOnly)) {
+            std::wcerr << "Could not open certificate file" << '\n';
+            return 1;
+        }
+
+        QSslCertificate cert(&certFile, QSsl::Der);
+        QString publisher = cert.subjectDisplayName();
+
+        const QString applicationName = QFileInfo(options.binaries.first()).baseName();
+        const QString platform = options.platform.testFlag(PlatformFlag::IntelBased) ? QStringLiteral("x64") : QStringLiteral("arm64");
+        const QString appxFilePath(options.directory + QStringLiteral("/") + QStringLiteral("AppxManifest.xml"));
+        QFile f(appxFilePath);
+        if (!f.open(QIODevice::Truncate | QIODevice::WriteOnly | QIODevice::Text)) {
+            std::wcerr << "Could not create AppxManifest.xml" << '\n';
+            return 1;
+        }
+
+        QXmlStreamWriter manifestWriter(&f);
+        manifestWriter.setAutoFormatting(true);
+        manifestWriter.writeStartDocument();
+        manifestWriter.writeStartElement(QStringLiteral("Package"));
+        manifestWriter.writeAttribute(QStringLiteral("xmlns"), QStringLiteral("http://schemas.microsoft.com/appx/manifest/foundation/windows10"));
+        manifestWriter.writeAttribute(QStringLiteral("xmlns:uap"), QStringLiteral("http://schemas.microsoft.com/appx/manifest/uap/windows10"));
+        manifestWriter.writeAttribute(QStringLiteral("xmlns:rescap"), QStringLiteral("http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"));
+
+            manifestWriter.writeStartElement(QStringLiteral("Identity"));
+            manifestWriter.writeAttribute("Name", QUuid::createUuid().toString(QUuid::WithoutBraces));
+            manifestWriter.writeAttribute("Publisher", QStringLiteral("CN=") + publisher);
+            manifestWriter.writeAttribute("Version", "1.0.0.0");
+            manifestWriter.writeAttribute("ProcessorArchitecture", platform);
+            manifestWriter.writeEndElement();
+
+            manifestWriter.writeStartElement("Properties");
+                manifestWriter.writeStartElement("DisplayName");
+                    manifestWriter.writeCharacters(applicationName);
+                manifestWriter.writeEndElement();
+                manifestWriter.writeStartElement("PublisherDisplayName");
+                    manifestWriter.writeCharacters(publisher);
+                manifestWriter.writeEndElement();
+                manifestWriter.writeStartElement("Logo");
+                    manifestWriter.writeCharacters("Assets/StoreLogo.png");
+                manifestWriter.writeEndElement();
+            manifestWriter.writeEndElement();
+
+            manifestWriter.writeStartElement("Dependencies");
+                manifestWriter.writeStartElement("TargetDeviceFamily");
+                    manifestWriter.writeAttribute("Name", "Windows.Desktop");
+                    manifestWriter.writeAttribute("MinVersion", "10.0.14316.0");
+                    manifestWriter.writeAttribute("MaxVersionTested", "10.0.14316.0");
+                manifestWriter.writeEndElement();
+            manifestWriter.writeEndElement();
+
+            manifestWriter.writeStartElement("Capabilities");
+                manifestWriter.writeStartElement("rescap:Capability");
+                    manifestWriter.writeAttribute("Name", "runFullTrust");
+                manifestWriter.writeEndElement();
+            manifestWriter.writeEndElement();
+
+            manifestWriter.writeStartElement("Resources");
+                manifestWriter.writeStartElement("Resource");
+                    if (options.languages.isEmpty()) {
+                        QLocale locale = QLocale::system();
+                        manifestWriter.writeAttribute("Language", locale.bcp47Name());
+                    } else {
+                        for (const auto& language : options.languages) {
+                            manifestWriter.writeAttribute("Language", language);
+                        }
+                    }
+                manifestWriter.writeEndElement();
+            manifestWriter.writeEndElement();
+
+            manifestWriter.writeStartElement("Applications");
+                for (const auto& binary : options.binaries) {
+                        const QString binaryRelative = binary.split(QStringLiteral("/")).last();
+                        const QString displayName = binaryRelative.split(QStringLiteral(".")).first();
+                        QFile descriptionFile(options.directory + QStringLiteral("/") + QStringLiteral("Assets/Description_") + displayName + QStringLiteral(".txt"));
+                        QString description;
+                        if (!descriptionFile.exists())
+                            std::wcerr << "Warning: No package description was provided " << descriptionFile.fileName() << '\n';
+                        if (descriptionFile.open(QIODevice::ReadOnly | QIODevice::Text))
+                            description = QString::fromUtf8(descriptionFile.readAll());
+
+                        manifestWriter.writeStartElement("Application");
+                            manifestWriter.writeAttribute("Id", displayName);
+                            manifestWriter.writeAttribute("Executable", binaryRelative);
+                            manifestWriter.writeAttribute("EntryPoint", "Windows.FullTrustApplication");
+                            manifestWriter.writeStartElement("uap:VisualElements");
+                                manifestWriter.writeAttribute("DisplayName", displayName);
+                                manifestWriter.writeAttribute("Description", description);
+                                manifestWriter.writeAttribute("BackgroundColor", "transparent");
+                                manifestWriter.writeAttribute("Square150x150Logo", "Assets/Logo.png");
+                                manifestWriter.writeAttribute("Square44x44Logo", "Assets/SmallLogo.png");
+                                manifestWriter.writeStartElement("uap:DefaultTile");
+                                manifestWriter.writeEndElement();
+                            manifestWriter.writeEndElement();
+                        manifestWriter.writeEndElement();
+                }
+            manifestWriter.writeEndElement();
+        manifestWriter.writeEndElement();
+        manifestWriter.writeEndDocument();
     }
 
     if (options.json) {

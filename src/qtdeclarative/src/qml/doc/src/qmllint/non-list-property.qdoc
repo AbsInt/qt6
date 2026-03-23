@@ -13,7 +13,7 @@
 \section1 Cannot assign multiple objects to a default non-list property
 
 \section2 What happened?
-A \l{Default Properties}{default property} has multiple bindings but the default
+A \l{QML Object Attributes#Default Properties}{default property} has multiple bindings but the default
 property type is not a list type and only expects one binding.
 
 \section2 Why is this bad?

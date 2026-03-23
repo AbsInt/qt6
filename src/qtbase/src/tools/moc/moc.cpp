@@ -65,14 +65,16 @@ bool Moc::parseClassHead(ClassDef *def)
             return false;
         name = lexem();
     } else  if (test(IDENTIFIER)) {
-        const QByteArray lex = lexem();
+        const QByteArrayView lex = lexemView();
         if (lex != "final" && lex != "sealed" && lex != "Q_DECL_FINAL")
-            name = lex;
+            name = lexem();
+        else
+            def->isFinal = true;
     }
 
     def->qualified += name;
     while (test(SCOPE)) {
-        def->qualified += lexem();
+        def->qualified += lexemView();
         if (test(IDENTIFIER)) {
             name = lexem();
             def->qualified += name;
@@ -82,9 +84,11 @@ bool Moc::parseClassHead(ClassDef *def)
     def->lineNumber = symbol().lineNum;
 
     if (test(IDENTIFIER)) {
-        const QByteArray lex = lexem();
+        const QByteArrayView lex = lexemView();
         if (lex != "final" && lex != "sealed" && lex != "Q_DECL_FINAL")
             return false;
+        else
+            def->isFinal = true;
     }
 
     if (test(COLON)) {
@@ -138,7 +142,7 @@ Type Moc::parseType()
                 Q_FALLTHROUGH();
             case CONST:
             case VOLATILE:
-                type.name += lexem();
+                type.name += lexemView();
                 type.name += ' ';
                 if (lookup(0) == VOLATILE)
                     type.isVolatile = true;
@@ -150,7 +154,7 @@ Type Moc::parseType()
             case Q_SLOTS_TOKEN:
             case Q_SIGNAL_TOKEN:
             case Q_SLOT_TOKEN:
-                type.name += lexem();
+                type.name += lexemView();
                 return type;
             case NOTOKEN:
                 return type;
@@ -182,7 +186,7 @@ Type Moc::parseType()
         case SHORT:
         case INT:
         case LONG:
-            type.name += lexem();
+            type.name += lexemView();
             // preserve '[unsigned] long long', 'short int', 'long int', 'long double'
             if (test(LONG) || test(INT) || test(DOUBLE)) {
                 type.name += ' ';
@@ -195,7 +199,7 @@ Type Moc::parseType()
         case VOID:
         case BOOL:
         case AUTO:
-            type.name += lexem();
+            type.name += lexemView();
             isVoid |= (lookup(0) == VOID);
             break;
         case NOTOKEN:
@@ -212,7 +216,7 @@ Type Moc::parseType()
             type.name += lexemUntil(RANGLE);
         }
         if (test(SCOPE)) {
-            type.name += lexem();
+            type.name += lexemView();
             type.isScoped = true;
         } else {
             break;
@@ -221,7 +225,7 @@ Type Moc::parseType()
     while (test(CONST) || test(VOLATILE) || test(SIGNED) || test(UNSIGNED)
            || test(STAR) || test(AND) || test(ANDAND)) {
         type.name += ' ';
-        type.name += lexem();
+        type.name += lexemView();
         if (lookup(0) == AND)
             type.referenceType = Type::Reference;
         else if (lookup(0) == ANDAND)
@@ -318,7 +322,7 @@ void Moc::parseFunctionArguments(FunctionDef *def)
         }
         if (test(CONST) || test(VOLATILE)) {
             arg.rightType += ' ';
-            arg.rightType += lexem();
+            arg.rightType += lexemView();
         }
         arg.normalizedType = normalizeType(QByteArray(arg.type.name + ' ' + arg.rightType));
         if (test(EQ))
@@ -591,6 +595,41 @@ bool Moc::parseMaybeFunction(const ClassDef *cdef, FunctionDef *def)
         scopedFunctionName = tempType.isScoped;
     }
 
+    if (!test(RPAREN)) {
+        parseFunctionArguments(def);
+        if (!test(RPAREN))
+            return false;
+    }
+
+    def->isConst = test(CONST);
+
+    while (test(IDENTIFIER))
+        ;
+
+    if (test(THROW)) {
+        next(LPAREN);
+        until(RPAREN);
+    }
+
+    if (def->type.name == "auto" && test(ARROW))
+        def->type = parseType(); // Parse trailing return-type
+
+    if (scopedFunctionName
+        && (def->isSignal || def->isSlot || def->isInvokable)) {
+        const QByteArray msg = "parsemaybe: Function declaration " + def->name
+                + " contains extra qualification. Ignoring as signal or slot.";
+        warning(msg.constData());
+        return false;
+    }
+
+    if (def->isSlot || def->isSignal || def->isInvokable) {
+        QList<QByteArray> typeNameParts = normalizeType(def->type.name).split(' ');
+        if (typeNameParts.contains("auto")) {
+            // We expected a trailing return type but we haven't seen one
+            error("Function declared with auto as return type but missing trailing return type. "
+                  "Return type deduction is not supported.");
+        }
+    }
     // we don't support references as return types, it's too dangerous
     if (def->type.referenceType == Type::Reference) {
         QByteArray rawName = def->type.rawName;
@@ -599,20 +638,6 @@ bool Moc::parseMaybeFunction(const ClassDef *cdef, FunctionDef *def)
     }
 
     def->normalizedType = normalizeType(def->type.name);
-
-    if (!test(RPAREN)) {
-        parseFunctionArguments(def);
-        if (!test(RPAREN))
-            return false;
-    }
-    def->isConst = test(CONST);
-    if (scopedFunctionName
-        && (def->isSignal || def->isSlot || def->isInvokable)) {
-        const QByteArray msg = "parsemaybe: Function declaration " + def->name
-                + " contains extra qualification. Ignoring as signal or slot.";
-        warning(msg.constData());
-        return false;
-    }
     return true;
 }
 
@@ -995,7 +1020,7 @@ void Moc::parse()
                     break;
                 case IDENTIFIER:
                 {
-                    const QByteArray lex = lexem();
+                    const QByteArrayView lex = lexemView();
                     if (lex.startsWith("QML_")) {
                         if (   lex == "QML_ELEMENT" || lex == "QML_NAMED_ELEMENT"
                             || lex == "QML_ANONYMOUS" || lex == "QML_VALUE_TYPE") {
@@ -1243,12 +1268,30 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
             "#endif\n\n");
 #endif
 
+    // filter out undeclared enumerators and sets
+    for (ClassDef &cdef : classList) {
+        QList<EnumDef> enumList;
+        for (EnumDef def : std::as_const(cdef.enumList)) {
+            if (cdef.enumDeclarations.contains(def.name)) {
+                enumList += def;
+            }
+            def.enumName = def.name;
+            QByteArray alias = cdef.flagAliases.value(def.name);
+            if (cdef.enumDeclarations.contains(alias)) {
+                def.name = alias;
+                def.flags |= cdef.enumDeclarations[alias];
+                enumList += def;
+            }
+        }
+        cdef.enumList = enumList;
+    }
+
     fprintf(out, "QT_WARNING_PUSH\n");
     fprintf(out, "QT_WARNING_DISABLE_DEPRECATED\n");
     fprintf(out, "QT_WARNING_DISABLE_GCC(\"-Wuseless-cast\")\n");
 
     fputs("", out);
-    for (ClassDef &def : classList) {
+    for (const ClassDef &def : std::as_const(classList)) {
         Generator generator(this, &def, metaTypes, knownQObjectClasses, knownGadgets, out,
                             requireCompleteTypes);
         generator.generateCode();
@@ -1419,7 +1462,7 @@ void Moc::parsePropertyAttributes(PropertyDef &propDef)
 
     while (test(IDENTIFIER)) {
         const Symbol &lsym = symbol();
-        const QByteArray l = lsym.lexem();
+        const QByteArrayView l = lsym.lexemView();
         if (l[0] == 'C' && l == "CONSTANT") {
             propDef.constant = true;
             continue;
@@ -1430,12 +1473,18 @@ void Moc::parsePropertyAttributes(PropertyDef &propDef)
             next(IDENTIFIER);
             propDef.name = lexem();
             continue;
+        } else if (l[0] == 'O' && l == "OVERRIDE") {
+            propDef.override = true;
+            continue;
         } else if (l[0] == 'R' && l == "REQUIRED") {
             propDef.required = true;
             continue;
         } else if (l[0] == 'R' && l == "REVISION" && test(LPAREN)) {
             prev();
             propDef.revision = parseRevision().toEncodedVersion<int>();
+            continue;
+        } else if (l[0] == 'V' && l == "VIRTUAL") {
+            propDef.virtual_ = true;
             continue;
         }
 
@@ -1541,6 +1590,24 @@ void Moc::parsePropertyAttributes(PropertyDef &propDef)
         propDef.write = "";
         warning(msg.constData());
     }
+    if (propDef.override && propDef.virtual_) {
+        const QByteArray msg = "Issue with property declaration " + propDef.name
+                + ": VIRTUAL is redundant when overriding a property. The OVERRIDE "
+                  "must only be used when actually overriding an existing property; using it on a "
+                  "new property is an error.";
+        error(msg.constData());
+    }
+    if (propDef.override && propDef.final) {
+        const QByteArray msg = "Issue with property declaration " + propDef.name
+                + ": OVERRIDE is redundant when property is marked FINAL";
+        error(msg.constData());
+    }
+    if (propDef.virtual_ && propDef.final) {
+        const QByteArray msg = "Issue with property declaration " + propDef.name
+                + ": The VIRTUAL cannot be combined with FINAL, as these attributes are mutually "
+                  "exclusive";
+        error(msg.constData());
+    }
 }
 
 void Moc::parseProperty(ClassDef *def, Moc::PropertyMode mode)
@@ -1567,7 +1634,7 @@ void Moc::parsePluginData(ClassDef *def)
             def->pluginData.uri = unquotedLexem();
         } else if (l == "FILE") {
             next(STRING_LITERAL);
-            QByteArray metaDataFile = unquotedLexem();
+            QByteArrayView metaDataFile = unquotedLexemView();
             QFileInfo fi(QFileInfo(QString::fromLocal8Bit(currentFilenames.top())).dir(),
                          QString::fromLocal8Bit(metaDataFile));
             for (const IncludePath &p : std::as_const(includes)) {
@@ -1576,7 +1643,7 @@ void Moc::parsePluginData(ClassDef *def)
                 if (p.isFrameworkPath)
                     continue;
 
-                fi.setFile(QString::fromLocal8Bit(p.path.constData()), QString::fromLocal8Bit(metaDataFile.constData()));
+                fi.setFile(QString::fromLocal8Bit(p.path), QString::fromLocal8Bit(metaDataFile));
                 // try again, maybe there's a file later in the include paths with the same name
                 if (fi.isDir()) {
                     fi = QFileInfo();
@@ -1584,14 +1651,14 @@ void Moc::parsePluginData(ClassDef *def)
                 }
             }
             if (!fi.exists()) {
-                const QByteArray msg = "Plugin Metadata file " + lexem()
+                const QByteArray msg = "Plugin Metadata file " + lexemView()
                         + " does not exist. Declaration will be ignored";
                 error(msg.constData());
                 return;
             }
             QFile file(fi.canonicalFilePath());
             if (!file.open(QFile::ReadOnly)) {
-                QByteArray msg = "Plugin Metadata file " + lexem() + " could not be opened: "
+                QByteArray msg = "Plugin Metadata file " + lexemView() + " could not be opened: "
                     + file.errorString().toUtf8();
                 error(msg.constData());
                 return;
@@ -1604,7 +1671,7 @@ void Moc::parsePluginData(ClassDef *def)
     if (!metaData.isEmpty()) {
         def->pluginData.metaData = QJsonDocument::fromJson(metaData);
         if (!def->pluginData.metaData.isObject()) {
-            const QByteArray msg = "Plugin Metadata file " + lexem()
+            const QByteArray msg = "Plugin Metadata file " + lexemView()
                     + " does not contain a valid JSON object. Declaration will be ignored";
             warning(msg.constData());
             def->pluginData.iid = QByteArray();
@@ -1630,7 +1697,7 @@ QByteArray Moc::parsePropertyAccessor()
             ++nesting;
         if (t == RPAREN)
             --nesting;
-        accessor += lexem();
+        accessor += lexemView();
     }
     return accessor;
 }
@@ -1656,7 +1723,7 @@ void Moc::parseEnumOrFlag(BaseDef *def, EnumFlags flags)
         identifier = lexem();
         while (test(SCOPE) && test(IDENTIFIER)) {
             identifier += "::";
-            identifier += lexem();
+            identifier += lexemView();
         }
         def->enumDeclarations[identifier] = flags;
     }
@@ -1671,7 +1738,7 @@ void Moc::parseFlag(BaseDef *def)
         flagName = lexem();
         while (test(SCOPE) && test(IDENTIFIER)) {
             flagName += "::";
-            flagName += lexem();
+            flagName += lexemView();
         }
     }
     next(COMMA);
@@ -1679,7 +1746,7 @@ void Moc::parseFlag(BaseDef *def)
         enumName = lexem();
         while (test(SCOPE) && test(IDENTIFIER)) {
             enumName += "::";
-            enumName += lexem();
+            enumName += lexemView();
         }
     }
 
@@ -1727,17 +1794,17 @@ void Moc::parseInterfaces(ClassDef *def)
         QList<ClassDef::Interface> iface;
         iface += ClassDef::Interface(lexem());
         while (test(SCOPE)) {
-            iface.last().className += lexem();
+            iface.last().className += lexemView();
             next(IDENTIFIER);
-            iface.last().className += lexem();
+            iface.last().className += lexemView();
         }
         while (test(COLON)) {
             next(IDENTIFIER);
             iface += ClassDef::Interface(lexem());
             while (test(SCOPE)) {
-                iface.last().className += lexem();
+                iface.last().className += lexemView();
                 next(IDENTIFIER);
-                iface.last().className += lexem();
+                iface.last().className += lexemView();
             }
         }
         // resolve from classnames to interface ids
@@ -1758,11 +1825,11 @@ void Moc::parseDeclareInterface()
     next(LPAREN);
     QByteArray interface;
     next(IDENTIFIER);
-    interface += lexem();
+    interface += lexemView();
     while (test(SCOPE)) {
-        interface += lexem();
+        interface += lexemView();
         next(IDENTIFIER);
-        interface += lexem();
+        interface += lexemView();
     }
     next(COMMA);
     QByteArray iid;
@@ -2055,6 +2122,8 @@ QJsonObject ClassDef::toJson() const
     cls["className"_L1] = QString::fromUtf8(classname.constData());
     cls["qualifiedClassName"_L1] = QString::fromUtf8(qualified.constData());
     cls["lineNumber"_L1] = lineNumber;
+    if (isFinal)
+        cls["final"_L1] = true;
 
     QJsonArray classInfos;
     for (const auto &info: std::as_const(classInfoList)) {
@@ -2225,6 +2294,8 @@ QJsonObject PropertyDef::toJson() const
 
     prop["constant"_L1] = constant;
     prop["final"_L1] = final;
+    prop["virtual"_L1] = virtual_;
+    prop["override"_L1] = override;
     prop["required"_L1] = required;
     prop["index"_L1] = relativeIndex;
     prop["lineNumber"_L1] = lineNumber;

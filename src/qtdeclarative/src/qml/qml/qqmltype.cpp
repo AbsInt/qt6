@@ -711,22 +711,11 @@ QTypeRevision QQmlType::metaObjectRevision() const
     return d ? d->revision : QTypeRevision();
 }
 
-QQmlAttachedPropertiesFunc QQmlType::attachedPropertiesFunction(
-        QQmlEnginePrivate *enginePrivate) const
-{
-    return attachedPropertiesFunction(&enginePrivate->typeLoader);
-}
-
 QQmlAttachedPropertiesFunc QQmlType::attachedPropertiesFunction(QQmlTypeLoader *typeLoader) const
 {
     if (const QQmlTypePrivate *base = d ? d->attachedPropertiesBase(typeLoader) : nullptr)
         return base->extraData.cppTypeData->attachedPropertiesFunc;
     return nullptr;
-}
-
-const QMetaObject *QQmlType::attachedPropertiesType(QQmlEnginePrivate *enginePrivate) const
-{
-    return attachedPropertiesType(&enginePrivate->typeLoader);
 }
 
 const QMetaObject *QQmlType::attachedPropertiesType(QQmlTypeLoader *typeLoader) const

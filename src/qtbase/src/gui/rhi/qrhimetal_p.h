@@ -299,6 +299,7 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     QRhiCommandBuffer::IndexFormat currentIndexFormat;
     int currentCullMode;
     int currentTriangleFillMode;
+    int currentDepthClipMode;
     int currentFrontFaceWinding;
     std::pair<float, float> currentDepthBiasValues;
 
@@ -527,6 +528,7 @@ public:
         int maxThreadGroupSize = 512;
         bool multiView = false;
         bool shadingRateMap = false;
+        bool depthClamp = true;
     } caps;
 
     QRhiMetalData *d = nullptr;

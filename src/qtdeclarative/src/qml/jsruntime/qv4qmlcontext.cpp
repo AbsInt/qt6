@@ -202,7 +202,7 @@ ReturnedValue QQmlContextWrapper::getPropertyAndBase(const QQmlContextWrapper *r
     if (context->imports() && (name->startsWithUpper() || context->valueTypesAreAddressable())) {
         // Search for attached properties, enums and imported scripts
         QQmlTypeNameCache::Result r = context->imports()->query<QQmlImport::AllowRecursion>(
-                name, QQmlTypeLoader::get(ep));
+                name, v4->typeLoader());
 
         if (r.isValid()) {
             if (hasProperty)
@@ -457,7 +457,7 @@ bool QQmlContextWrapper::virtualPut(Managed *m, PropertyKey id, const Value &val
     if (!context)
         return false;
 
-    // See QV8ContextWrapper::Getter for resolution order
+    // See QQmlContextWrapper::Getter for resolution order
 
     QObject *scopeObject = wrapper->getScopeObject();
     ScopedString name(scope, id.asStringOrSymbol());

@@ -51,6 +51,9 @@ enum WINUI3Color {
     fillAccentSecondary,              // button hover color (alpha)
     fillAccentTertiary,               // button pressed color (alpha)
     fillAccentDisabled,               // button disabled color (alpha)
+    fillMicaAltDefault,               // tabbar button default
+    fillMicaAltTransparent,           // tabbar button (not selected, not hovered)
+    fillMicaAltSecondary,             // tabbar button (not selected, hovered)
     textPrimary,                      // text of default/hovered control
     textSecondary,                    // text of pressed control
     textDisabled,                     // text of disabled control
@@ -64,6 +67,31 @@ class QWindows11Style : public QWindowsVistaStyle
 {
     Q_OBJECT
 public:
+    enum class Icon : ushort {
+        AcceptMedium = 0xF78C,
+        Dash12 = 0xE629,
+        CheckMark = 0xE73E,
+        CaretLeftSolid8 = 0xEDD9,
+        CaretRightSolid8 = 0xEDDA,
+        CaretUpSolid8 = 0xEDDB,
+        CaretDownSolid8 = 0xEDDC,
+        ChevronDown = 0xE70D,
+        ChevronUp = 0xE70E,
+        ChevronUpMed = 0xE971,
+        ChevronDownMed = 0xE972,
+        ChevronLeftMed = 0xE973,
+        ChevronRightMed = 0xE974,
+        ChevronUpSmall = 0xE96D,
+        ChevronDownSmall = 0xE96E,
+        ChromeMinimize = 0xE921,
+        ChromeMaximize = 0xE922,
+        ChromeRestore = 0xE923,
+        ChromeClose = 0xE8BB,
+        More = 0xE712,
+        Help = 0xE897,
+        Clear = 0xE894,
+    };
+
     QWindows11Style();
     ~QWindows11Style() override;
     void drawComplexControl(ComplexControl control, const QStyleOptionComplex *option,
@@ -86,10 +114,19 @@ public:
                     const QWidget *widget = nullptr) const override;
     void polish(QPalette &pal) override;
     void unpolish(QWidget *widget) override;
+    QPixmap standardPixmap(StandardPixmap standardPixmap, const QStyleOption *option = nullptr,
+                           const QWidget *widget = nullptr) const override;
+    QIcon standardIcon(StandardPixmap standardIcon, const QStyleOption *option = nullptr,
+                       const QWidget *widget = nullptr) const override;
+    void polish(QApplication *app) override;
+    void unpolish(QApplication *app) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
+
 protected:
     QWindows11Style(QWindows11StylePrivate &dd);
 
 private:
+    void dwmSetWindowCornerPreference(const QWidget *widget, bool bSet) const;
     QColor calculateAccentColor(const QStyleOption *option) const;
     QPen borderPenControlAlt(const QStyleOption *option) const;
     enum class ControlType
@@ -103,6 +140,7 @@ private:
     QColor controlTextColor(const QStyleOption *option, bool ignoreIsChecked = false) const;
     void drawLineEditFrame(QPainter *p, const QRectF &rect, const QStyleOption *o, bool isEditable = true) const;
     inline QColor winUI3Color(enum WINUI3Color col) const;
+    static inline QString fluentIcon(Icon i) { return QChar(ushort(i)); }
 
 private:
     Q_DISABLE_COPY_MOVE(QWindows11Style)
@@ -111,12 +149,18 @@ private:
 
     bool highContrastTheme = false;
     int colorSchemeIndex = 0;
+
+    mutable QVarLengthFlatMap<int, int, 8> m_fontPoint2ChevronDownMedWidth;
 };
 
 class QWindows11StylePrivate : public QWindowsVistaStylePrivate {
     Q_DECLARE_PUBLIC(QWindows11Style)
+
+    QWindows11StylePrivate();
+
 protected:
-    QFont assetFont;
+    QVarLengthFlatMap<QWindows11Style::Icon, QIcon, 16> m_standardIcons;
+    bool nativeRoundedTopLevelWindows;
 };
 
 QT_END_NAMESPACE

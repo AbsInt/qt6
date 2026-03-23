@@ -229,7 +229,6 @@ public:
         , animatorDriver(nullptr)
         , pendingUpdate(0)
         , sleeping(false)
-        , syncResultedInChanges(false)
         , active(false)
         , window(nullptr)
         , stopEventProcessing(false)
@@ -267,12 +266,6 @@ public:
     void processEvents();
     void postEvent(QEvent *e);
 
-public slots:
-    void sceneGraphChanged() {
-        qCDebug(QSG_LOG_RENDERLOOP, QSG_RT_PAD, "sceneGraphChanged");
-        syncResultedInChanges = true;
-    }
-
 public:
     enum {
         SyncRequest         = 0x01,
@@ -294,7 +287,6 @@ public:
 
     uint pendingUpdate;
     bool sleeping;
-    bool syncResultedInChanges;
 
     volatile bool active;
 
@@ -556,18 +548,12 @@ void QSGRenderThread::sync(bool inExpose)
     }
     if (canSync) {
         QQuickWindowPrivate *d = QQuickWindowPrivate::get(window);
-        bool hadRenderer = d->renderer != nullptr;
         // If the scene graph was touched since the last sync() make sure it sends the
         // changed signal.
         if (d->renderer)
             d->renderer->clearChangedFlag();
         d->syncSceneGraph();
         sgrc->endSync();
-        if (!hadRenderer && d->renderer) {
-            qCDebug(QSG_LOG_RENDERLOOP, QSG_RT_PAD, "- renderer was created");
-            syncResultedInChanges = true;
-            connect(d->renderer, SIGNAL(sceneGraphChanged()), this, SLOT(sceneGraphChanged()), Qt::DirectConnection);
-        }
 
         // Process deferred deletes now, directly after the sync as
         // deleteLater on the GUI must now also have resulted in SG changes
@@ -631,7 +617,6 @@ void QSGRenderThread::syncAndRender()
                 int(elapsedSinceLastMs));
     }
 
-    syncResultedInChanges = false;
     QQuickWindowPrivate *d = QQuickWindowPrivate::get(window);
 
     const bool syncRequested = (pendingUpdate & SyncRequest);
@@ -740,8 +725,7 @@ void QSGRenderThread::syncAndRender()
     Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphRenderLoopFrame,
                               QQuickProfiler::SceneGraphRenderLoopSync);
 
-    // Qt 6 no longer aborts when !syncResultedInChanges && !RepaintRequest,
-    // meaning this function always completes and presents a frame. This is
+    // In Qt 6 this function always completes and presents a frame. This is
     // more compatible with what the basic render loop (or a custom loop with
     // QQuickRenderControl) would do, is more accurate due to not having to do
     // an msleep() with an inaccurate interval, and avoids misunderstandings

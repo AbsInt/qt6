@@ -32,7 +32,6 @@
 #include <private/qdnd_p.h>
 #endif
 #include "private/qguiapplication_p.h"
-#include "qcolormap.h"
 #include "qdebug.h"
 #if QT_CONFIG(style_stylesheet)
 #include "private/qstylesheetstyle_p.h"
@@ -358,8 +357,6 @@ Q_GLOBAL_STATIC(FontHash, app_fonts)
 // Exported accessor for use outside of this file
 FontHash *qt_app_fonts_hash() { return app_fonts(); }
 
-QWidget *qt_desktopWidget = nullptr;                // root window widgets
-
 /*!
     \internal
 */
@@ -481,7 +478,6 @@ void QApplicationPrivate::init()
     process_cmdline();
 
     // Must be called before initialize()
-    QColormap::initialize();
     initializeWidgetPalettesFromTheme();
     qt_init_tooltip_palette();
     QApplicationPrivate::initializeWidgetFontHash();
@@ -505,6 +501,12 @@ void qt_init_tooltip_palette()
 }
 
 extern void qRegisterWidgetsVariant();
+
+/*!
+    \class QApplicationPrivate
+    \inmodule QtWidgets
+    \internal
+*/
 
 /*!
   Initializes the QApplication object, called from the constructors.
@@ -687,9 +689,6 @@ QApplication::~QApplication()
         delete mySet;
     }
 
-    delete qt_desktopWidget;
-    qt_desktopWidget = nullptr;
-
     QApplicationPrivate::widgetPalettes.clear();
 
     delete QApplicationPrivate::sys_font;
@@ -710,7 +709,6 @@ QApplication::~QApplication()
     d->cleanupMultitouch();
 
     QPixmapCache::clear();
-    QColormap::cleanup();
 
     QApplicationPrivate::active_window = nullptr; //### this should not be necessary
 
@@ -984,10 +982,8 @@ void QApplication::setStyle(QStyle *style)
         if (QApplicationPrivate::is_app_running && !QApplicationPrivate::is_app_closing) {
             for (QWidgetList::ConstIterator it = all.constBegin(), cend = all.constEnd(); it != cend; ++it) {
                 QWidget *w = *it;
-                if (!(w->windowType() == Qt::Desktop) &&        // except desktop
-                     w->testAttribute(Qt::WA_WState_Polished)) { // has been polished
+                if (w->testAttribute(Qt::WA_WState_Polished)) // has been polished
                     QApplicationPrivate::app_style->unpolish(w);
-                }
             }
         }
         QApplicationPrivate::app_style->unpolish(qApp);
@@ -1025,7 +1021,7 @@ void QApplication::setStyle(QStyle *style)
     if (QApplicationPrivate::is_app_running && !QApplicationPrivate::is_app_closing) {
         for (QWidgetList::ConstIterator it = all.constBegin(), cend = all.constEnd(); it != cend; ++it) {
             QWidget *w = *it;
-            if (w->windowType() != Qt::Desktop && w->testAttribute(Qt::WA_WState_Polished)) {
+            if (w->testAttribute(Qt::WA_WState_Polished)) {
                 if (w->style() == QApplicationPrivate::app_style)
                     QApplicationPrivate::app_style->polish(w);                // repolish
 #if QT_CONFIG(style_stylesheet)
@@ -1037,10 +1033,10 @@ void QApplication::setStyle(QStyle *style)
 
         for (QWidgetList::ConstIterator it = all.constBegin(), cend = all.constEnd(); it != cend; ++it) {
             QWidget *w = *it;
-            if (w->windowType() != Qt::Desktop && !w->testAttribute(Qt::WA_SetStyle)) {
-                    QEvent e(QEvent::StyleChange);
-                    QCoreApplication::sendEvent(w, &e);
-                    w->update();
+            if (!w->testAttribute(Qt::WA_SetStyle)) {
+                QEvent e(QEvent::StyleChange);
+                QCoreApplication::sendEvent(w, &e);
+                w->update();
             }
         }
     }
@@ -1463,7 +1459,7 @@ QWidgetList QApplication::topLevelWidgets()
     QWidgetList list;
     if (QWidgetPrivate::allWidgets != nullptr) {
         const auto isTopLevelWidget = [] (const QWidget *w) {
-            return w->isWindow() && w->windowType() != Qt::Desktop;
+            return w->isWindow();
         };
         std::copy_if(QWidgetPrivate::allWidgets->cbegin(), QWidgetPrivate::allWidgets->cend(),
                      std::back_inserter(list), isTopLevelWidget);
@@ -1591,7 +1587,7 @@ QWidget *QApplication::activeWindow()
 #if QT_DEPRECATED_SINCE(6,0)
 QFontMetrics QApplication::fontMetrics()
 {
-    return QApplicationPrivate::desktop()->fontMetrics();
+    return QFontMetrics(qApp->font());
 }
 #endif
 
@@ -1611,8 +1607,7 @@ bool QApplicationPrivate::tryCloseAllWidgetWindows(QWindowList *processedWindows
 retry:
     const QWidgetList list = QApplication::topLevelWidgets();
     for (auto *w : list) {
-        if (w->isVisible() && w->windowType() != Qt::Desktop &&
-                !w->testAttribute(Qt::WA_DontShowOnScreen) && !w->data->is_closing) {
+        if (w->isVisible() && !w->testAttribute(Qt::WA_DontShowOnScreen) && !w->data->is_closing) {
             QWindow *window = w->windowHandle();
             if (!window->close())  // Qt::WA_DeleteOnClose may cause deletion.
                 return false;
@@ -1693,7 +1688,7 @@ bool QApplication::event(QEvent *e)
         for (auto *w : topLevelWidgets()) {
             if (w->data->is_closing)
                 continue;
-            if (w->isVisible() && !(w->windowType() == Qt::Desktop) && !(w->windowType() == Qt::Popup) &&
+            if (w->isVisible() && !(w->windowType() == Qt::Popup) &&
                  (!(w->windowType() == Qt::Dialog) || !w->parentWidget()) && !w->testAttribute(Qt::WA_DontShowOnScreen)) {
                 e->ignore();
                 return true;
@@ -1709,10 +1704,8 @@ bool QApplication::event(QEvent *e)
         // WM_SETTINGCHANGE event handler.
         const QWidgetList list = topLevelWidgets();
         for (auto *w : list) {
-            if (!(w->windowType() == Qt::Desktop)) {
-                if (!w->testAttribute(Qt::WA_SetLocale))
-                    w->d_func()->setLocale_helper(QLocale(), true);
-            }
+            if (!w->testAttribute(Qt::WA_SetLocale))
+                w->d_func()->setLocale_helper(QLocale(), true);
         }
         break;
     }
@@ -1761,7 +1754,7 @@ bool QApplication::event(QEvent *e)
         // need to have the event posted here
         const QWidgetList list = topLevelWidgets();
         for (auto *w : list) {
-            if (!w->windowHandle() && (w->windowType() != Qt::Desktop))
+            if (!w->windowHandle())
                 postEvent(w, new QEvent(e->type()));
         }
         break;
@@ -2158,11 +2151,7 @@ void QApplicationPrivate::dispatchEnterLeave(QWidget* enter, QWidget* leave, con
         if (!parentOfLeavingCursor->window()->graphicsProxyWidget())
 #endif
         {
-            if (enter == QApplicationPrivate::desktop()) {
-                qt_qpa_set_cursor(enter, true);
-            } else {
-                qt_qpa_set_cursor(parentOfLeavingCursor, true);
-            }
+            qt_qpa_set_cursor(parentOfLeavingCursor, true);
         }
     }
     if (enterOnAlien) {
@@ -2448,24 +2437,6 @@ void QApplicationPrivate::sendSyntheticEnterLeave(QWidget *widget)
 #else // !QT_NO_CURSOR
     Q_UNUSED(widget);
 #endif // QT_NO_CURSOR
-}
-
-/*!
-    \internal
-
-    Returns the desktop widget (also called the root window).
-
-    The widget represents the entire virtual desktop, and its geometry will
-    be the union of all screens.
-*/
-QWidget *QApplicationPrivate::desktop()
-{
-    CHECK_QAPP_INSTANCE(nullptr)
-    if (!qt_desktopWidget || // not created yet
-         !(qt_desktopWidget->windowType() == Qt::Desktop)) { // reparented away
-        qt_desktopWidget = new QWidget(nullptr, Qt::Desktop);
-    }
-    return qt_desktopWidget;
 }
 
 /*
@@ -2838,7 +2809,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
             }
 
             const Qt::ScrollPhase phase = wheel->phase();
-            QPoint relpos = wheel->position().toPoint();
+            QPointF relpos = wheel->position();
 
             // Ideally, we should lock on a widget when it starts receiving wheel
             // events. This avoids other widgets to start receiving those events
@@ -2864,7 +2835,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
             if (QApplicationPrivate::wheel_widget) {
                 Q_ASSERT(phase != Qt::NoScrollPhase);
                 w = QApplicationPrivate::wheel_widget;
-                relpos = w->mapFromGlobal(wheel->globalPosition().toPoint());
+                relpos = w->mapFromGlobal(wheel->globalPosition());
             }
             /*
                 Start or finish a scrolling sequence by grabbing/releasing the wheel via
@@ -2884,7 +2855,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                     QApplicationPrivate::wheel_widget = w;
                 Q_FALLTHROUGH();
             case Qt::NoScrollPhase:
-                QApplicationPrivate::giveFocusAccordingToFocusPolicy(w, e, relpos);
+                QApplicationPrivate::giveFocusAccordingToFocusPolicy(w, e, relpos.toPoint());
                 break;
             // no default: - we want warnings if we don't handle all phases explicitly
             }
@@ -3635,7 +3606,9 @@ void QApplication::setEffectEnabled(Qt::UIEffect effect, bool enable)
 bool QApplication::isEffectEnabled(Qt::UIEffect effect)
 {
     CHECK_QAPP_INSTANCE(false)
-    return QColormap::instance().depth() >= 16
+    const auto primaryScreenDepth = QGuiApplication::primaryScreen() ?
+        QGuiApplication::primaryScreen()->depth() : 24;
+    return primaryScreenDepth >= 16
            && (QApplicationPrivate::enabledAnimations & QPlatformTheme::GeneralUiEffect)
            && (QApplicationPrivate::enabledAnimations & uiEffectToFlag(effect));
 }

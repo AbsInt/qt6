@@ -1,12 +1,9 @@
 [defaultFamily:cursive]
 centos
 b2qt
-rhel
 [defaultFamily:fantasy]
 centos
 b2qt
-rhel
-
 # QTBUG-130738
 [familyNameWithCommaQuote:weird]
 vxworks

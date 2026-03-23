@@ -402,6 +402,28 @@ void tst_qmlls_highlighting::highlights_data()
                 << HighlightToken(QQmlJS::SourceLocation(297, 5, 12, 28),
                          QmlHighlightKind::QmlProperty,
                          QmlHighlightModifier::QmlPropertyDefinition | QmlHighlightModifier::QmlFinalProperty);
+        QTest::addRow("virtual-keyword")
+                << fileItem
+                << HighlightToken(QQmlJS::SourceLocation(311, 7, 13, 9),
+                                  QmlHighlightKind::QmlKeyword, QmlHighlightModifier::None);
+        QTest::addRow("virtual-modifier")
+                << fileItem
+                << HighlightToken(
+                           // Sloc of the "name" of the property
+                           QQmlJS::SourceLocation(332, 1, 13, 30), QmlHighlightKind::QmlProperty,
+                           QmlHighlightModifier::QmlPropertyDefinition
+                                   | QmlHighlightModifier::QmlVirtualProperty);
+        QTest::addRow("override-keyword")
+                << fileItem
+                << HighlightToken(QQmlJS::SourceLocation(342, 8, 14, 9),
+                                  QmlHighlightKind::QmlKeyword, QmlHighlightModifier::None);
+        QTest::addRow("override-modifier")
+                << fileItem
+                << HighlightToken(
+                           // Sloc of the "name" of the property
+                           QQmlJS::SourceLocation(364, 1, 14, 31), QmlHighlightKind::QmlProperty,
+                           QmlHighlightModifier::QmlPropertyDefinition
+                                   | QmlHighlightModifier::QmlOverrideProperty);
     }
     {
         // methods and signals, lambda functions
@@ -1036,6 +1058,255 @@ void tst_qmlls_highlighting::crashes()
     HighlightingVisitor hv(fileItem, std::nullopt);
     const auto highlights = hv.highlights();
     QVERIFY(!highlights.isEmpty());
+}
+
+void tst_qmlls_highlighting::shiftHighlights_data()
+{
+    QTest::addColumn<QmlHighlighting::HighlightsContainer>("lastValidHighlights");
+    QTest::addColumn<QString>("lastValidCode");
+    QTest::addColumn<QString>("currentCode");
+    QTest::addColumn<QmlHighlighting::HighlightsContainer>("expectedHighlights");
+
+    const auto filePath = m_highlightingDataDir + "/highlightsShift.qml";
+    const auto fileItem = fileObject(filePath);
+    const auto originalHighlights = QmlHighlighting::Utils::visitTokens(fileItem, std::nullopt);
+    const QString lastValidCode = fileItem.ownerAs<QQmlJS::Dom::QmlFile>()->code();
+
+    const auto editedCode = [&](const QString &file) -> QString {
+        const auto editedPath = m_highlightingDataDir + file;
+        QFile editedFile(editedPath);
+        if (!editedFile.open(QIODevice::ReadOnly | QIODevice::Text))
+            return QString();
+        return editedFile.readAll();
+    };
+
+    // delete port Qt from import QtQuick
+    // Expect highlights are the same as the originals except Item token.
+    {
+        const QString currentCode = editedCode("/invalid/highlightsShift_del1.qml");
+
+        QmlHighlighting::HighlightsContainer expectedHighlights = originalHighlights;
+        expectedHighlights.remove(0);
+        expectedHighlights.remove(7);
+        const auto im = QQmlJS::SourceLocation(0, 2, 1, 1); // 'im' location
+        expectedHighlights[im.offset] =
+                HighlightToken(im, QmlHighlightKind::QmlKeyword, QmlHighlightModifier::None);
+        const auto quick = QQmlJS::SourceLocation(3, 5, 1, 3); // 'Quick' location
+        expectedHighlights[quick.offset] =
+                HighlightToken(quick, QmlHighlightKind::QmlImportId, QmlHighlightModifier::None);
+
+        QTest::addRow("modify-line-without-lineshift-from-lhs-rhs")
+                << originalHighlights << lastValidCode << currentCode << expectedHighlights;
+    }
+    // modify Item { into Ite
+    // Expect highlights are the same as the originals except Item token.
+    {
+        const QString currentCode = editedCode("/invalid/highlightsShift_del2.qml");
+
+        QmlHighlighting::HighlightsContainer expectedHighlights = originalHighlights;
+        const auto itemNewLoc = QQmlJS::SourceLocation(15, 3, 2, 1); // 'Ite' location
+        expectedHighlights[itemNewLoc.offset] =
+                HighlightToken(itemNewLoc, QmlHighlightKind::QmlType, QmlHighlightModifier::None);
+
+        QTest::addRow("modify-line-without-lineshift-from-rhs")
+                << originalHighlights << lastValidCode << currentCode << expectedHighlights;
+    }
+    // delete "import"  from import QtQuick
+    // Expect highlights are the same as the originals QtQuick token should shift.
+    // and import should be gone.
+    {
+        const QString currentCode = editedCode("/invalid/highlightsShift_del3.qml");
+
+        QmlHighlighting::HighlightsContainer expectedHighlights = originalHighlights;
+        // remove import QtQuick
+        expectedHighlights.remove(0);
+        expectedHighlights.remove(7);
+        // insert QtQuick
+        const auto qtquickNewLoc = QQmlJS::SourceLocation(1, 7, 1, 2);
+        expectedHighlights[qtquickNewLoc.offset] = HighlightToken(
+                qtquickNewLoc, QmlHighlightKind::QmlImportId, QmlHighlightModifier::None);
+
+        QTest::addRow("modify-line-without-lineshift-from-lhs")
+                << originalHighlights << lastValidCode << currentCode << expectedHighlights;
+    }
+
+    // delete inner content of Rectangle, leave it in invalid state
+    {
+        const QString currentCode = editedCode("/invalid/highlightsShift_del4.qml");
+
+        QmlHighlighting::HighlightsContainer expectedHighlights = originalHighlights;
+        // remove Rectangle content tokens
+        expectedHighlights.remove(61); // width
+        expectedHighlights.remove(68); // 100
+        expectedHighlights.remove(80); // height
+        expectedHighlights.remove(88); // 100
+
+        QTest::addRow("delete-multiline-no-shift")
+                << originalHighlights << lastValidCode << currentCode << expectedHighlights;
+    }
+    // delete width content of Rectangle, height should line shift up
+    {
+        const QString currentCode = editedCode("/invalid/highlightsShift_del5.qml");
+
+        QmlHighlighting::HighlightsContainer expectedHighlights = originalHighlights;
+        // remove Rectangle content tokens
+        expectedHighlights.remove(61); // width
+        expectedHighlights.remove(68); // 100
+
+        // height should line shift up, and shifts column
+        auto heightToken = expectedHighlights.take(80);
+        expectedHighlights.remove(80);
+        heightToken.loc.startLine = 5;
+        heightToken.loc.startColumn = 1;
+        heightToken.loc.offset = 51;
+        expectedHighlights[heightToken.loc.offset] = heightToken;
+
+        auto numberToken = expectedHighlights.take(88);
+        expectedHighlights.remove(88);
+        numberToken.loc.startLine = 5;
+        numberToken.loc.startColumn = 9;
+        numberToken.loc.offset = 59;
+        expectedHighlights[numberToken.loc.offset] = numberToken;
+        QTest::addRow("delete-multiline-line-column-shift")
+                << originalHighlights << lastValidCode << currentCode << expectedHighlights;
+    }
+    // delete width content of Rectangle, height should line shift up, Rectangle should be erased
+    // th: 100 part of width should line up and start at the end of upper line
+    {
+        const QString currentCode = editedCode("/invalid/highlightsShift_del6.qml");
+
+        QmlHighlighting::HighlightsContainer expectedHighlights = originalHighlights;
+        // remove Rectangle content tokens
+        expectedHighlights.remove(41); // Rectangle
+
+        // width
+        auto widthToken = expectedHighlights.take(61);
+        expectedHighlights.remove(61);
+        widthToken.loc.startLine = 3;
+        widthToken.loc.startColumn = 15;
+        widthToken.loc.offset = 36;
+        widthToken.loc.length = 2; // th part remained
+        expectedHighlights[widthToken.loc.offset] = widthToken;
+        // 100
+        auto numberToken = expectedHighlights.take(68);
+        expectedHighlights.remove(68);
+        numberToken.loc.startLine = 3;
+        numberToken.loc.startColumn = 19;
+        numberToken.loc.offset = 40;
+        expectedHighlights[numberToken.loc.offset] = numberToken;
+        // height should line shift up
+        auto heightToken = expectedHighlights.take(80);
+        expectedHighlights.remove(80);
+        heightToken.loc.startLine = 4;
+        heightToken.loc.startColumn = 9;
+        heightToken.loc.offset = 52;
+        expectedHighlights[heightToken.loc.offset] = heightToken;
+
+        auto heightNumber = expectedHighlights.take(88);
+        expectedHighlights.remove(88);
+        heightNumber.loc.startLine = 4;
+        heightNumber.loc.startColumn = 17;
+        heightNumber.loc.offset = 60;
+        expectedHighlights[heightNumber.loc.offset] = heightNumber;
+
+        QTest::addRow("delete-multiline-line-column-shift-2")
+                << originalHighlights << lastValidCode << currentCode << expectedHighlights;
+    }
+    { // manual testing find: console.log(element)
+        const auto filePath = m_highlightingDataDir + "/highlightsShift_consoleLog.qml";
+        const auto fileItem = fileObject(filePath);
+        const auto highlights = QmlHighlighting::Utils::visitTokens(fileItem, std::nullopt);
+        const QString validCode = fileItem.ownerAs<QQmlJS::Dom::QmlFile>()->code();
+        const QString currentCode = editedCode("/invalid/highlightsShift_consoleLog_del.qml");
+
+        QmlHighlighting::HighlightsContainer expectedHighlights = highlights;
+        // console
+        auto consoleToken = expectedHighlights.take(108);
+        expectedHighlights.remove(108);
+        consoleToken.loc.offset = 107;
+        expectedHighlights[consoleToken.loc.offset] = consoleToken;
+        // log
+        auto logToken = expectedHighlights.take(116);
+        expectedHighlights.remove(116);
+        logToken.loc.offset = 115;
+        expectedHighlights[logToken.loc.offset] = logToken;
+        // enumValue
+        auto enumValueToken = expectedHighlights.take(120);
+        expectedHighlights.remove(120);
+        enumValueToken.loc.offset = 119;
+        expectedHighlights[enumValueToken.loc.offset] = enumValueToken;
+
+        QTest::addRow("delete-shift-console-log")
+                << highlights << validCode << currentCode << expectedHighlights;
+    }
+    { // manual testing find: comments after deletion
+        const auto filePath = m_highlightingDataDir + "/highlightsShift_withComments.qml";
+        const auto fileItem = fileObject(filePath);
+        const auto highlights = QmlHighlighting::Utils::visitTokens(fileItem, std::nullopt);
+        const QString validCode = fileItem.ownerAs<QQmlJS::Dom::QmlFile>()->code();
+        const QString currentCode = editedCode("/invalid/highlightsShift_withComments_del.qml");
+
+        QmlHighlighting::HighlightsContainer expectedHighlights;
+        // import
+        expectedHighlights[0] = highlights[0];
+        // QtQuick
+        expectedHighlights[7] = highlights[7];
+        // commentline 1
+        auto commentLine1 = QmlHighlighting::HighlightToken(
+                QQmlJS::SourceLocation(17, 25, 4, 1),
+                QmlHighlightKind::Comment, QmlHighlightModifier::None);
+        expectedHighlights[commentLine1.loc.offset] = commentLine1;
+        // commentline 2
+        auto commentLine2 = QmlHighlighting::HighlightToken(
+                QQmlJS::SourceLocation(43, 23, 5, 1),
+                QmlHighlightKind::Comment, QmlHighlightModifier::None);
+        expectedHighlights[commentLine2.loc.offset] = commentLine2;
+
+        QTest::addRow("delete-shift-comments-after-deletion")
+                << highlights << validCode << currentCode << expectedHighlights;
+    }
+}
+
+void tst_qmlls_highlighting::shiftHighlights()
+{
+    QFETCH(QmlHighlighting::HighlightsContainer, lastValidHighlights);
+    QFETCH(QString, lastValidCode);
+    QFETCH(QString, currentCode);
+    QFETCH(QmlHighlighting::HighlightsContainer, expectedHighlights);
+
+    HighlightsContainer actualHighlights =
+            QmlHighlighting::Utils::shiftHighlights(lastValidHighlights, lastValidCode, currentCode);
+    [&] {
+        const auto actualEncoded = QmlHighlighting::Utils::encodeSemanticTokens(
+                actualHighlights, QmlHighlighting::HighlightingMode::Default);
+        const auto expectedEncoded = QmlHighlighting::Utils::encodeSemanticTokens(
+                expectedHighlights, QmlHighlighting::HighlightingMode::Default);
+        QCOMPARE(actualEncoded, expectedEncoded);
+    }();
+
+    if (QTest::currentTestFailed()) {
+        auto [actual, expected] =
+                std::mismatch(actualHighlights.begin(), actualHighlights.end(),
+                              expectedHighlights.begin(), expectedHighlights.end());
+
+        if (actual != actualHighlights.end() && expected != expectedHighlights.end()) {
+
+            const auto msg = [](const QString &title, int actualValue, int expectedValue) {
+                return QString("%1 : [Actual %2, Expected %3]")
+                        .arg(title)
+                        .arg(actualValue)
+                        .arg(expectedValue);
+            };
+            qDebug() << msg("Offset", actual->loc.offset, expected->loc.offset);
+            qDebug() << msg("Length", actual->loc.length, expected->loc.length);
+            qDebug() << msg("StartLine", actual->loc.startLine, expected->loc.startLine);
+            qDebug() << msg("StartColumn", actual->loc.startColumn, expected->loc.startColumn);
+            qDebug() << msg("Kind", static_cast<int>(actual->kind),
+                            static_cast<int>(expected->kind));
+            qDebug() << msg("Modifiers", static_cast<int>(actual->modifiers),
+                            static_cast<int>(expected->modifiers));
+        }
+    }
 }
 
 QTEST_MAIN(tst_qmlls_highlighting)

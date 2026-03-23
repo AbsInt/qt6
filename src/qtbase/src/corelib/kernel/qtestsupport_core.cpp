@@ -8,7 +8,36 @@
 
 using namespace std::chrono_literals;
 
+// Assert that this instantiation of std::atomic is always lock-free so we
+// know that no code will execute on destruction.
+static_assert(std::atomic<std::chrono::milliseconds>::is_always_lock_free);
+
 QT_BEGIN_NAMESPACE
+
+// ### Qt 7: reduce the default: QTBUG-138160
+Q_CONSTINIT std::atomic<std::chrono::milliseconds> QTest::defaultTryTimeout{5s};
+
+/*!
+    \variable QTest::defaultTryTimeout
+    \since 6.11
+
+    This global variable stores the default timeout used by the \c {QTRY_*}
+    functions and \l qWait.
+
+    The most typical use case for this variable is to modify the timeout
+    for an entire test:
+
+    \snippet code/src_qtestlib_qtestcase.cpp set defaultTryTimeout
+
+    However, you can also set it for a specific scope, using
+    \l QAtomicScopedValueRollback:
+
+    \snippet code/src_qtestlib_qtestcase.cpp rollback defaultTryTimeout
+
+    To access the value, call \c load():
+
+    \snippet code/src_qtestlib_qtestcase.cpp get defaultTryTimeout
+*/
 
 /*!
     \overload

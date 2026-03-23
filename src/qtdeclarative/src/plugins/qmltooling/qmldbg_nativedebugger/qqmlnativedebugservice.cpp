@@ -104,7 +104,7 @@ public:
     bool m_haveBreakPoints;
     bool m_breakOnThrow;
     int m_lastBreakpoint;
-    QVector<BreakPoint> m_breakPoints;
+    QList<BreakPoint> m_breakPoints;
 };
 
 void BreakPointHandler::handleSetBreakpoint(QJsonObject *response, const QJsonObject &arguments)
@@ -222,11 +222,12 @@ QV4::ReturnedValue NativeDebugger::evaluateExpression(const QString &expression)
 
     QV4::Script script(ctx, QV4::Compiler::ContextType::Eval, expression);
     if (const QV4::Function *function = m_engine->currentStackFrame
-            ? m_engine->currentStackFrame->v4Function : m_engine->globalCode)
-        script.strictMode = function->isStrict();
+                ? m_engine->currentStackFrame->v4Function : m_engine->globalCode) {
+        script.setStrictMode(function->isStrict());
+    }
     // In order for property lookups in QML to work, we need to disable fast v4 lookups.
     // That is a side-effect of inheritContext.
-    script.inheritContext = true;
+    script.setInheritContext();
     script.parse();
     if (!m_engine->hasException) {
         if (m_engine->currentStackFrame) {

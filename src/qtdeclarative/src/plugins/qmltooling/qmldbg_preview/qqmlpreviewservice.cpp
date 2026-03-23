@@ -27,6 +27,8 @@ QQmlPreviewServiceImpl::QQmlPreviewServiceImpl(QObject *parent) :
     connect(this, &QQmlPreviewServiceImpl::drop, &m_handler, &QQmlPreviewHandler::dropCU);
     connect(this, &QQmlPreviewServiceImpl::rerun, &m_handler, &QQmlPreviewHandler::rerun);
     connect(this, &QQmlPreviewServiceImpl::zoom, &m_handler, &QQmlPreviewHandler::zoom);
+    connect(this, &QQmlPreviewServiceImpl::animationSpeed,
+            &m_handler, &QQmlPreviewHandler::setAnimationSpeed);
     connect(&m_handler, &QQmlPreviewHandler::error, this, &QQmlPreviewServiceImpl::forwardError,
             Qt::DirectConnection);
     connect(&m_handler, &QQmlPreviewHandler::fps, this, &QQmlPreviewServiceImpl::forwardFps,
@@ -98,6 +100,12 @@ void QQmlPreviewServiceImpl::messageReceived(const QByteArray &data)
         float factor;
         packet >> factor;
         emit zoom(static_cast<qreal>(factor));
+        break;
+    }
+    case AnimationSpeed: {
+        float factor;
+        packet >> factor;
+        emit animationSpeed(qreal(factor));
         break;
     }
     default:

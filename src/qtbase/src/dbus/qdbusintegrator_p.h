@@ -108,8 +108,8 @@ class QDBusActivateObjectEvent: public QAbstractMetaCallEvent
 public:
     QDBusActivateObjectEvent(const QDBusConnection &c, QObject *sender,
                              const QDBusConnectionPrivate::ObjectTreeNode &n,
-                             int p, const QDBusMessage &m, QSemaphore *s = nullptr)
-        : QAbstractMetaCallEvent(sender, -1, s), connection(c), node(n),
+                             int p, const QDBusMessage &m, QLatch *l = nullptr)
+        : QAbstractMetaCallEvent(sender, -1, l), connection(c), node(n),
           pathStartPos(p), message(m), handled(false)
         { }
     ~QDBusActivateObjectEvent() override;

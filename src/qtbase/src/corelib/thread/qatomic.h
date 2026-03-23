@@ -46,6 +46,7 @@ public:
     static constexpr bool isReferenceCountingWaitFree();
 
     bool ref();
+    void refRelaxed();
     bool deref();
 
     static constexpr bool isTestAndSetNative();

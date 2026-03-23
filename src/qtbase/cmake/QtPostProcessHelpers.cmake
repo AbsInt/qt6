@@ -202,12 +202,10 @@ function(qt_internal_create_module_depends_file target)
 
     # Extra QtFooModuleTools packages to be added as dependencies to
     # QtModuleDependencies.cmake. Needed for QtWaylandCompositor / QtWaylandClient.
-    if(NOT is_interface_lib)
-        get_target_property(extra_tools_package_dependencies "${target}"
-                            QT_EXTRA_TOOLS_PACKAGE_DEPENDENCIES)
-        if(extra_tools_package_dependencies)
-            list(APPEND main_module_tool_deps "${extra_tools_package_dependencies}")
-        endif()
+    get_target_property(extra_tools_package_dependencies "${target}"
+                        _qt_extra_tools_package_dependencies)
+    if(extra_tools_package_dependencies)
+        list(APPEND main_module_tool_deps "${extra_tools_package_dependencies}")
     endif()
 
     qt_internal_get_qt_all_known_modules(known_modules)
@@ -530,7 +528,7 @@ function(qt_generate_install_prefixes out_var)
     set(vars INSTALL_BINDIR INSTALL_INCLUDEDIR INSTALL_LIBDIR INSTALL_MKSPECSDIR INSTALL_ARCHDATADIR
         INSTALL_PLUGINSDIR INSTALL_LIBEXECDIR INSTALL_QMLDIR INSTALL_DATADIR INSTALL_DOCDIR
         INSTALL_TRANSLATIONSDIR INSTALL_SYSCONFDIR INSTALL_EXAMPLESDIR INSTALL_TESTSDIR
-        INSTALL_DESCRIPTIONSDIR INSTALL_SBOMDIR)
+        INSTALL_DESCRIPTIONSDIR INSTALL_SBOMDIR INSTALL_CMAKEDIR)
     # INSTALL_PUBLICBINDIR is processed only if it is not empty
     # See usage in qt_internal_generate_user_facing_tools_info
     if(NOT "${INSTALL_PUBLICBINDIR}" STREQUAL "")
@@ -793,14 +791,23 @@ function(qt_modules_process_android_dependencies)
     qt_internal_get_qt_repo_known_modules(repo_known_modules)
     foreach (target ${repo_known_modules})
         qt_internal_android_dependencies(${target})
+        qt_internal_android_add_interface_permissions(${target})
+        qt_internal_android_add_interface_features(${target})
     endforeach()
 endfunction()
 
 function(qt_create_tools_config_files)
     # Create packages like Qt6CoreTools/Qt6CoreToolsConfig.cmake.
     foreach(module_name ${QT_KNOWN_MODULES_WITH_TOOLS})
-        qt_export_tools("${module_name}")
+        qt_export_tools(MODULE_NAME "${module_name}")
     endforeach()
+
+    get_cmake_property(standalone_packages _qt_standalone_tool_packages)
+    if(standalone_packages)
+        foreach(package_name IN LISTS standalone_packages)
+            qt_export_tools(PACKAGE_BASE_NAME "${package_name}")
+        endforeach()
+    endif()
 endfunction()
 
 function(qt_internal_create_config_file_for_standalone_tests)
@@ -833,9 +840,11 @@ function(qt_internal_create_config_file_for_standalone_tests)
         endif()
     endforeach()
 
-    # Skip generating and installing file if no modules were built. This make sure not to install
-    # anything when build qtx11extras on macOS for example.
-    if(NOT modules)
+    get_cmake_property(tool_package_base_names _qt_standalone_tool_packages)
+
+    # Skip generating and installing file if no modules or tools were built. This makes sure not
+    # to install anything when building qtx11extras on macOS for example.
+    if(NOT modules AND NOT tool_package_base_names)
         return()
     endif()
 
@@ -844,7 +853,22 @@ function(qt_internal_create_config_file_for_standalone_tests)
     qt_internal_get_standalone_parts_config_file_name(tests_config_file_name)
 
     # Substitution variables.
-    list(JOIN modules "\n        " QT_MODULE_PACKAGES)
+    if(modules)
+        list(JOIN modules "\n        " module_string)
+        set(QT_MODULE_PACKAGES "    QT_MODULE_PACKAGES
+        ${module_string}")
+    endif()
+
+    if(tool_package_base_names)
+        # We only have the base package names, so we need to append Tools to each of the package
+        # names
+        set(tool_packages "${tool_package_base_names}")
+        list(TRANSFORM tool_packages APPEND Tools)
+
+        list(JOIN tool_packages "\n        " tool_packages_string)
+        set(QT_TOOL_PACKAGES "    QT_TOOL_PACKAGES
+        ${tool_packages_string}")
+    endif()
 
     configure_file(
         "${QT_CMAKE_DIR}/QtStandaloneTestsConfig.cmake.in"
@@ -865,6 +889,11 @@ function(qt_internal_generate_user_facing_tools_info)
     qt_path_join(tool_link_base_dir "${CMAKE_INSTALL_PREFIX}" "${INSTALL_PUBLICBINDIR}")
     get_property(user_facing_tool_targets GLOBAL PROPERTY QT_USER_FACING_TOOL_TARGETS)
     set(lines "")
+    set(cmake_install_script "${PROJECT_BINARY_DIR}/install_user_facing_tool_links.cmake")
+    set(cmake_install_script_content
+"execute_process(COMMAND \"\${CMAKE_COMMAND}\" -E make_directory
+    \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${INSTALL_PUBLICBINDIR}\")
+")
     foreach(target ${user_facing_tool_targets})
         get_target_property(filename ${target} OUTPUT_NAME)
         if(NOT filename)
@@ -881,9 +910,17 @@ function(qt_internal_generate_user_facing_tools_info)
         qt_path_join(tool_link_path "${INSTALL_PUBLICBINDIR}" "${linkname}${PROJECT_VERSION_MAJOR}")
         _qt_internal_relative_path(tool_target_path BASE_DIRECTORY ${tool_link_base_dir})
         list(APPEND lines "${tool_target_path} ${tool_link_path}")
+        string(APPEND cmake_install_script_content
+"execute_process(COMMAND \"\${CMAKE_COMMAND}\" -E create_symlink
+    \"${tool_target_path}\" \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${tool_link_path}\")
+")
     endforeach()
     string(REPLACE ";" "\n" content "${lines}")
     string(APPEND content "\n")
     set(out_file "${PROJECT_BINARY_DIR}/user_facing_tool_links.txt")
     file(WRITE "${out_file}" "${content}")
+    qt_configure_file(OUTPUT "${cmake_install_script}"
+        CONTENT "${cmake_install_script_content}"
+    )
+    install(SCRIPT ${cmake_install_script})
 endfunction()

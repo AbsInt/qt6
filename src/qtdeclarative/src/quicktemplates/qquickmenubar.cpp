@@ -651,6 +651,8 @@ QQuickMenuBar::~QQuickMenuBar()
     This property holds the component that is used to create menu bar
     items to present menus in the menu bar.
 
+    \include delegate-ownership.qdocinc {no-ownership} {MenuBar}
+
     \sa MenuBarItem
 */
 QQmlComponent *QQuickMenuBar::delegate() const

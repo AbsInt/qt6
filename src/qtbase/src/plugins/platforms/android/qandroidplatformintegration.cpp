@@ -340,7 +340,6 @@ bool QAndroidPlatformIntegration::hasCapability(Capability cap) const
             return isValidAndroidContextForRendering();
         case ThreadedOpenGL:
             return !needsBasicRenderloopWorkaround() && isValidAndroidContextForRendering();
-        case RasterGLSurface: return QtAndroidPrivate::activity().isValid();
         case TopStackedNativeChildWindows: return false;
         case MaximizeUsingFullscreenGeometry: return true;
         // FIXME QTBUG-118849 - we do not implement grabWindow() anymore, calling it will return

@@ -1,5 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QSVGNODE_P_H
 #define QSVGNODE_P_H
@@ -16,16 +18,12 @@
 //
 
 #include "qsvgstyle_p.h"
-#include "qtsvgglobal_p.h"
-#include "qsvghelper_p.h"
-
-#include "QtCore/qstring.h"
-#include "QtCore/qhash.h"
+#include <QtCore/qstring.h>
 
 QT_BEGIN_NAMESPACE
 
 class QPainter;
-class QSvgTinyDocument;
+class QSvgDocument;
 
 class Q_SVG_EXPORT QSvgNode
 {
@@ -91,7 +89,7 @@ public:
     QSvgNode(QSvgNode *parent=0);
     virtual ~QSvgNode();
     void draw(QPainter *p, QSvgExtraStates &states);
-    virtual bool separateFillStroke() const {return false;}
+    virtual bool separateFillStroke(const QPainter *, const QSvgExtraStates &) const {return false;}
     virtual void drawCommand(QPainter *p, QSvgExtraStates &states) = 0;
     void fillThenStroke(QPainter *p, QSvgExtraStates &states);
     QImage drawIntoBuffer(QPainter *p, QSvgExtraStates &states, const QRect &boundsRect);
@@ -112,7 +110,7 @@ public:
     QSvgStyleProperty *styleProperty(QSvgStyleProperty::Type type) const;
     QSvgPaintStyleProperty *styleProperty(QStringView id) const;
 
-    QSvgTinyDocument *document() const;
+    QSvgDocument *document() const;
 
     virtual Type type() const = 0;
     QString typeName() const;
@@ -213,7 +211,7 @@ private:
     DisplayMode    m_displayMode;
     bool           m_visible;
 
-    friend class QSvgTinyDocument;
+    friend class QSvgDocument;
 };
 
 inline QSvgNode *QSvgNode::parent() const

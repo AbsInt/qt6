@@ -30,8 +30,10 @@ void UrlPrototype::init(ExecutionEngine *engine, Object *ctor)
 
     Scope scope(engine);
     ScopedObject o(scope);
+    ctor->defineReadonlyProperty(engine->id_prototype(), (o = this));
 
-    defineDefaultProperty(QLatin1String("toString"), method_getHref);
+    defineDefaultProperty(QStringLiteral("constructor"), (o = ctor));
+    defineDefaultProperty(engine->id_toString(), method_getHref);
     defineDefaultProperty(QLatin1String("toJSON"), method_getHref);
 
     defineAccessorProperty(QLatin1String("hash"), method_getHash, method_setHash);
@@ -48,258 +50,118 @@ void UrlPrototype::init(ExecutionEngine *engine, Object *ctor)
     defineAccessorProperty(QLatin1String("username"), method_getUsername, method_setUsername);
 }
 
-bool UrlObject::setHash(QString hash)
+bool UrlObject::setHash(const QString &hash)
 {
-    if (hash.startsWith(QLatin1Char('#')))
-        hash = hash.mid(1);
-
-    QUrl url = toQUrl();
-    url.setFragment(hash);
-
-    if (!url.isValid())
-        return false;
-
-    d()->hash.set(engine(), engine()->newString(url.fragment()));
-    d()->href.set(engine(), engine()->newString(url.toString()));
-
-    return true;
+    return updateUrl([&](QUrl *url) {
+        url->setFragment(hash.startsWith(QLatin1Char('#')) ? hash.mid(1) : hash);
+    });
 }
 
-bool UrlObject::setHostname(QString host)
+bool UrlObject::setHostname(const QString &hostName)
 {
-    QUrl url = toQUrl();
-    url.setHost(host);
-
-    if (!url.isValid())
-        return false;
-
-    d()->hostname.set(engine(), engine()->newString(url.host()));
-    d()->href.set(engine(), engine()->newString(url.toString()));
-
-    updateOrigin();
-    updateHost();
-
-    return true;
+    return updateUrl([&](QUrl *url) {
+        url->setHost(hostName);
+    });
 }
 
-bool UrlObject::setHost(QString hostname)
+bool UrlObject::setHost(const QString &host)
 {
-    int port = -1;
-
-    if (hostname.contains(QLatin1Char(':'))) {
-        const QStringList list = hostname.split(QLatin1Char(':'));
-        hostname = list[0];
-        port = list[1].toInt();
-    }
-
-    QUrl url = toQUrl();
-    url.setHost(hostname);
-    url.setPort(port);
-
-    if (!url.isValid())
-        return false;
-
-    if (url.port() != -1)
-        d()->port.set(engine(), engine()->newString(QString::number(url.port())));
-
-    d()->hostname.set(engine(), engine()->newString(url.host()));
-    d()->href.set(engine(), engine()->newString(url.toString()));
-
-    updateOrigin();
-    updateHost();
-
-    return true;
+    return updateUrl([&](QUrl *url) {
+        qsizetype colon = host.indexOf(QLatin1Char(':'));
+        if (colon == -1) {
+            url->setHost(host);
+            url->setPort(-1);
+        } else {
+            url->setHost(host.left(colon));
+            url->setPort(QStringView(host).mid(colon + 1).toInt());
+        }
+    });
 }
 
-bool UrlObject::setHref(QString href)
+bool UrlObject::setHref(const QString &href)
 {
-    const QUrl url(href);
-    if (!url.isValid() || url.isRelative())
+    QUrl replacement(href);
+    if (!replacement.isValid() || replacement.isRelative())
         return false;
 
-    setUrl(url);
+    d()->setUrl(std::move(replacement));
     return true;
 }
 
 void UrlObject::setUrl(const QUrl &url)
 {
-    d()->hash.set(engine(), engine()->newString(url.fragment()));
-    d()->hostname.set(engine(), engine()->newString(url.host()));
-    d()->href.set(engine(), engine()->newString(url.toString(QUrl::ComponentFormattingOptions(QUrl::ComponentFormattingOption::FullyEncoded))));
-    d()->password.set(engine(), engine()->newString(url.password()));
-    d()->pathname.set(engine(), engine()->newString(url.path()));
-    d()->port.set(engine(),
-                  engine()->newString(url.port() == -1 ? QLatin1String("")
-                                                       : QString::number(url.port())));
-    d()->protocol.set(engine(), engine()->newString(url.scheme() + QLatin1Char(':')));
-    d()->search.set(engine(), engine()->newString(url.query(QUrl::ComponentFormattingOptions(QUrl::ComponentFormattingOption::FullyEncoded))));
-    d()->username.set(engine(), engine()->newString(url.userName()));
-
-    updateOrigin();
-    updateHost();
+    d()->setUrl(QUrl(url));
 }
 
-bool UrlObject::setPassword(QString password)
+bool UrlObject::setPassword(const QString &password)
 {
-    QUrl url = toQUrl();
-    url.setPassword(password);
-
-    if (!url.isValid())
-        return false;
-
-    d()->password.set(engine(), engine()->newString(url.password()));
-    d()->href.set(engine(), engine()->newString(url.toString()));
-
-    return true;
+    return updateUrl([&](QUrl *url) {
+        url->setPassword(password);
+    });
 }
 
-bool UrlObject::setPathname(QString pathname)
+bool UrlObject::setPathname(const QString &pathname)
 {
-    QUrl url = toQUrl();
-    url.setPath(pathname);
-
-    if (!url.isValid())
-        return false;
-
-    d()->pathname.set(engine(), engine()->newString(url.path()));
-    d()->href.set(engine(), engine()->newString(url.toString()));
-
-    return true;
+    return updateUrl([&](QUrl *url) {
+        url->setPath(pathname);
+    });
 }
 
-bool UrlObject::setPort(QString port)
+bool UrlObject::setPort(const QString &port)
 {
-    QUrl url = toQUrl();
-    url.setPort(port.isEmpty() ? -1 : port.toInt());
-
-    if (!url.isValid())
-        return false;
-
-    d()->port.set(engine(),
-                  engine()->newString(url.port() == -1 ? QLatin1String("")
-                                                       : QString::number(url.port())));
-    d()->href.set(engine(), engine()->newString(url.toString()));
-
-    updateOrigin();
-    updateHost();
-
-    return true;
+    return updateUrl([&](QUrl *url) {
+        url->setPort(port.isEmpty() ? -1 : port.toInt());
+    });
 }
 
-bool UrlObject::setProtocol(QString protocolOrScheme)
+bool UrlObject::setProtocol(const QString &protocolOrScheme)
 {
-    QUrl url = toQUrl();
     // If there is one or several ':' in the protocolOrScheme,
     // everything from the first colon is removed.
 
-    qsizetype firstColonPos = protocolOrScheme.indexOf(QLatin1Char(':'));
-
-    if (firstColonPos != -1)
-        protocolOrScheme.truncate(firstColonPos);
-
-    url.setScheme(protocolOrScheme);
-
-    if (!url.isValid())
-        return false;
-
-    d()->protocol.set(engine(), engine()->newString(url.scheme() + QLatin1Char(':')));
-    d()->href.set(engine(), engine()->newString(url.toString()));
-
-    updateOrigin();
-    updateHost();
-
-    return true;
+    return updateUrl([&](QUrl *url) {
+        const qsizetype colon = protocolOrScheme.indexOf(QLatin1Char(':'));
+        url->setScheme(colon == -1 ? protocolOrScheme : protocolOrScheme.left(colon));
+    });
 }
 
-bool UrlObject::setSearch(QString search)
+bool UrlObject::setSearch(const QString &search)
 {
-    QUrl url = toQUrl();
+    return updateUrl([&](QUrl *url) {
+        if (search.startsWith(QLatin1Char('?'))) {
+            url->setQuery(search.mid(1));
+            return;
+        }
 
-    if (search.startsWith(QLatin1Char('?'))) {
-        search = search.mid(1);
-    } else if (search.isEmpty()) {
-        // In JS, setting an empty query removes the '?' as well. QUrl only does that for a null QString.
-        // The way to get a lone '?' in JS is to set the search property to "?". That is why this is in
-        // the else branch.
-        search = QString(); // it's null now
-    }
+        if (search.isEmpty()) {
+            // In JS, setting an empty query removes the '?' as well. QUrl only does that for a
+            // null QString. The way to get a lone '?' in JS is to set the search property to "?".
+            // That is why this is in the else branch.
+            url->setQuery(QString()); // it's null now
+            return;
+        }
 
-    url.setQuery(search);
-
-    if (!url.isValid())
-        return false;
-
-    d()->search.set(engine(), engine()->newString(url.query()));
-    d()->href.set(engine(), engine()->newString(url.toString()));
-
-    return true;
+        url->setQuery(search);
+    });
 }
 
-bool UrlObject::setUsername(QString username)
+bool UrlObject::setUsername(const QString &username)
 {
-    QUrl url = toQUrl();
-    url.setUserName(username);
-
-    if (!url.isValid())
-        return false;
-
-    d()->username.set(engine(), engine()->newString(url.userName()));
-    d()->href.set(engine(), engine()->newString(url.toString()));
-
-    return true;
+    return updateUrl([&](QUrl *url) {
+        url->setUserName(username);
+    });
 }
 
 QString UrlObject::search() const
 {
-    auto url = QUrl(href());
-    if (auto url = QUrl(href()); !url.hasQuery() || url.query().isEmpty())
-        return QLatin1String("");
+    const QUrl url = d()->url();
+    if (!url.hasQuery() || url.query().isEmpty())
+        return QString();
 
     constexpr auto options = QUrl::ComponentFormattingOption::EncodeSpaces
             | QUrl::ComponentFormattingOption::EncodeUnicode
             | QUrl::ComponentFormattingOption::EncodeReserved;
-    return u'?' + url.query(options);
-}
-
-QUrl UrlObject::toQUrl() const
-{
-    return QUrl(href());
-}
-
-void UrlObject::updateOrigin()
-{
-    QUrl url = toQUrl();
-
-    QString proto = url.scheme();
-
-    // A blob's origin is the origin of the URL that it points to
-    if (proto == QLatin1String("blob")) {
-        url = QUrl(url.path());
-        proto = url.scheme();
-    }
-
-    QString origin;
-    if (proto == QLatin1String("http") || proto == QLatin1String("https")
-        || proto == QLatin1String("ftp")) {
-        origin = QLatin1String("%1://%2").arg(url.scheme(), url.host());
-
-        if (url.port() != -1)
-            origin.append(QLatin1String(":") + QString::number(url.port()));
-    }
-
-    d()->origin.set(engine(), engine()->newString(origin));
-}
-
-void UrlObject::updateHost()
-{
-    QUrl url = toQUrl();
-
-    QString host = url.host();
-
-    if (url.port() != -1)
-        host.append(QLatin1String(":") + QString::number(url.port()));
-
-    d()->host.set(engine(), engine()->newString(host));
+    return QLatin1Char('?') + url.query(options);
 }
 
 static bool checkUrlObjectType(ExecutionEngine *v4, const Scoped<UrlObject> &r)
@@ -768,8 +630,10 @@ void UrlSearchParamsPrototype::init(ExecutionEngine *engine, Object *ctor)
 
     Scope scope(engine);
     ScopedObject o(scope);
+    ctor->defineReadonlyProperty(engine->id_prototype(), (o = this));
 
-    defineDefaultProperty(QLatin1String("toString"), method_toString);
+    defineDefaultProperty(QStringLiteral("constructor"), (o = ctor));
+    defineDefaultProperty(engine->id_toString(), method_toString);
     defineDefaultProperty(QLatin1String("sort"), method_sort);
     defineDefaultProperty(QLatin1String("append"), method_append);
     defineDefaultProperty(QLatin1String("delete"), method_delete);

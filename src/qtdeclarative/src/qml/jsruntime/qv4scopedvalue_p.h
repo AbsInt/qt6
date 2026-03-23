@@ -57,6 +57,7 @@ inline bool hasExceptionOrIsInterrupted(ExecutionEngine *engine)
 #define THROW_GENERIC_ERROR(str) \
     return scope.engine->throwError(QString::fromUtf8(str))
 
+struct FunctionPrototype; // Used later for friending in Scope.
 struct Scope {
     explicit Scope(ExecutionContext *ctx)
         : engine(ctx->engine())
@@ -88,54 +89,9 @@ struct Scope {
         engine->jsStackTop = mark;
     }
 
-    enum AllocMode {
-        Undefined,
-        Empty,
-        /* Be careful when using Uninitialized, the stack has to be fully initialized before calling into the memory manager again */
-        Uninitialized
-    };
-
-    template <AllocMode mode = Undefined>
-    Value *alloc(qint64 nValues) const = delete; // use safeForAllocLength
-
-    template <AllocMode mode = Undefined>
-    QML_NEARLY_ALWAYS_INLINE Value *alloc(int nValues) const
-    {
-        Value *ptr = engine->jsAlloca(nValues);
-        switch (mode) {
-        case Undefined:
-            for (int i = 0; i < nValues; ++i)
-                ptr[i] = Value::undefinedValue();
-            break;
-        case Empty:
-            for (int i = 0; i < nValues; ++i)
-                ptr[i] = Value::emptyValue();
-            break;
-        case Uninitialized:
-            break;
-        }
-        return ptr;
-    }
-    template <AllocMode mode = Undefined>
-    QML_NEARLY_ALWAYS_INLINE Value *alloc() const
-    {
-        Value *ptr = engine->jsAlloca(1);
-        switch (mode) {
-        case Undefined:
-            *ptr = Value::undefinedValue();
-            break;
-        case Empty:
-            *ptr = Value::emptyValue();
-            break;
-        case Uninitialized:
-            break;
-        }
-        return ptr;
-    }
-
     QML_NEARLY_ALWAYS_INLINE Value *construct(int nValues, const ReturnedValue& initialValue) const
     {
-        Value *ptr = engine->jsAlloca(nValues);
+        Value *ptr = alloc(nValues);
         for (int i = 0; i < nValues; ++i)
             ptr[i].setRawValue(initialValue);
         return ptr;
@@ -143,10 +99,31 @@ struct Scope {
 
     QML_NEARLY_ALWAYS_INLINE Value *construct(int nValues, const Value &initialValue) const
     {
-        Value *ptr = engine->jsAlloca(nValues);
+        Value *ptr = alloc(nValues);
         for (int i = 0; i < nValues; ++i)
             ptr[i] = initialValue;
         return ptr;
+    }
+
+    QML_NEARLY_ALWAYS_INLINE Value *construct(int nValues, Heap::Base* initialValue) const
+    {
+        Value *ptr = alloc(nValues);
+        for (int i = 0; i < nValues; ++i)
+            ptr[i].setM(initialValue);
+        return ptr;
+    }
+
+    QML_NEARLY_ALWAYS_INLINE PropertyKey *construct(int nValues, const PropertyKey &initialValue) const
+    {
+        PropertyKey *ptr = reinterpret_cast<PropertyKey*>(alloc(nValues));
+        for (int i = 0; i < nValues; ++i)
+            ptr[i] = initialValue;
+        return ptr;
+    }
+
+    QML_NEARLY_ALWAYS_INLINE Value *constructUndefined(int nValues) const
+    {
+        return construct(nValues, Value::undefinedValue());
     }
 
     bool hasException() const {
@@ -157,7 +134,22 @@ struct Scope {
     Value *mark;
 
 private:
+    QML_NEARLY_ALWAYS_INLINE Value *alloc(int nValues) const {
+        return engine->jsAlloca(nValues);
+    }
+
     Q_DISABLE_COPY(Scope)
+
+    // The following are friended to allow access to a naked alloc.
+    // General usage of alloc is dangerous, and thus generally
+    // avoided, but in this case some more complex initialization
+    // patterns are used that don't sensibly fit into the various
+    // construct methods and further want to avoid the unnecessary
+    // writes that initializing the memory with a common value such as
+    // undefined would require.
+    friend FunctionPrototype;
+    template<typename Args>
+    friend CallData *callDatafromJS(const Scope &scope, const Args *args, const FunctionObject *f);
 };
 
 struct ScopedValue
@@ -167,32 +159,27 @@ struct ScopedValue
 
     ScopedValue(const Scope &scope)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        ptr->setRawValue(0);
+        ptr = scope.construct(1, quint64(0));
     }
 
     ScopedValue(const Scope &scope, const Value &v)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        *ptr = v;
+        ptr = scope.construct(1, v);
     }
 
     ScopedValue(const Scope &scope, Heap::Base *o)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        ptr->setM(o);
+        ptr = scope.construct(1, o);
     }
 
     ScopedValue(const Scope &scope, Managed *m)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        ptr->setRawValue(m->asReturnedValue());
+        ptr = scope.construct(1, m->asReturnedValue());
     }
 
     ScopedValue(const Scope &scope, const ReturnedValue &v)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        ptr->setRawValue(v);
+        ptr = scope.construct(1, v);
     }
 
     ScopedValue &operator=(const Value &v) {
@@ -239,14 +226,12 @@ struct ScopedPropertyKey
 {
     ScopedPropertyKey(const Scope &scope)
     {
-        ptr = reinterpret_cast<PropertyKey *>(scope.alloc<Scope::Uninitialized>());
-        *ptr = PropertyKey::invalid();
+        ptr = scope.construct(1, PropertyKey::invalid());
     }
 
     ScopedPropertyKey(const Scope &scope, const PropertyKey &v)
     {
-        ptr = reinterpret_cast<PropertyKey *>(scope.alloc<Scope::Uninitialized>());
-        *ptr = v;
+        ptr = scope.construct(1, v);
     }
 
     ScopedPropertyKey &operator=(const PropertyKey &other) {
@@ -283,31 +268,33 @@ struct Scoped
 {
     enum ConvertType { Convert };
 
+    QML_NEARLY_ALWAYS_INLINE Heap::Base *underlying(const Managed *p) {
+        return p ? p->m() : nullptr;
+    }
+
     QML_NEARLY_ALWAYS_INLINE void setPointer(const Managed *p) {
-        ptr->setM(p ? p->m() : nullptr);
+        ptr->setM(underlying(p));
     }
 
     QML_NEARLY_ALWAYS_INLINE Scoped(const Scope &scope)
     {
-        ptr = scope.alloc<Scope::Undefined>();
+        ptr = scope.constructUndefined(1);
     }
 
     QML_NEARLY_ALWAYS_INLINE Scoped(const Scope &scope, const Value &v)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        setPointer(v.as<T>());
+        ptr = scope.construct(1, underlying(v.as<T>()));
     }
+
     QML_NEARLY_ALWAYS_INLINE Scoped(const Scope &scope, Heap::Base *o)
     {
         Value v;
         v = o;
-        ptr = scope.alloc<Scope::Uninitialized>();
-        setPointer(v.as<T>());
+        ptr = scope.construct(1, underlying(v.as<T>()));
     }
     QML_NEARLY_ALWAYS_INLINE Scoped(const Scope &scope, const ScopedValue &v)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        setPointer(v.ptr->as<T>());
+        ptr = scope.construct(1, underlying(v.ptr->as<T>()));
     }
 
     QML_NEARLY_ALWAYS_INLINE Scoped(const Scope &scope, const Value &v, ConvertType)
@@ -317,32 +304,27 @@ struct Scoped
 
     QML_NEARLY_ALWAYS_INLINE Scoped(const Scope &scope, const Value *v)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        setPointer(v ? v->as<T>() : nullptr);
+        ptr = scope.construct(1, underlying(v ? v->as<T>() : nullptr));
     }
 
     QML_NEARLY_ALWAYS_INLINE Scoped(const Scope &scope, T *t)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        setPointer(t);
+        ptr = scope.construct(1, underlying(t));
     }
 
     QML_NEARLY_ALWAYS_INLINE Scoped(const Scope &scope, const T *t)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        setPointer(t);
+        ptr = scope.construct(1, underlying(t));
     }
 
     QML_NEARLY_ALWAYS_INLINE Scoped(const Scope &scope, typename T::Data *t)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        *ptr = t;
+        ptr = scope.construct(1, t);
     }
 
     QML_NEARLY_ALWAYS_INLINE Scoped(const Scope &scope, const ReturnedValue &v)
     {
-        ptr = scope.alloc<Scope::Uninitialized>();
-        setPointer(QV4::Value::fromReturnedValue(v).as<T>());
+        ptr = scope.construct(1, underlying(QV4::Value::fromReturnedValue(v).as<T>()));
     }
 
     QML_NEARLY_ALWAYS_INLINE Scoped(const Scope &scope, const ReturnedValue &v, ConvertType)
@@ -432,7 +414,7 @@ struct ScopedProperty
 {
     ScopedProperty(Scope &scope)
     {
-        property = reinterpret_cast<Property*>(scope.alloc(int(sizeof(Property) / sizeof(Value))));
+        property = reinterpret_cast<Property*>(scope.constructUndefined(int(sizeof(Property) / sizeof(Value))));
     }
 
     Property *operator->() { return property; }

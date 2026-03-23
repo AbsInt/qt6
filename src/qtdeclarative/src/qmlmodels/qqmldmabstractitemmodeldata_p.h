@@ -27,7 +27,7 @@ class QQmlDMAbstractItemModelData : public QQmlDelegateModelItem
 {
     Q_OBJECT
     Q_PROPERTY(bool hasModelChildren READ hasModelChildren CONSTANT)
-    Q_PROPERTY(QVariant modelData READ modelData WRITE setModelData NOTIFY modelDataChanged)
+    Q_PROPERTY(QVariant modelData READ modelData WRITE setModelData NOTIFY modelDataChanged VIRTUAL)
     QT_ANONYMOUS_PROPERTY(QVariant READ modelData NOTIFY modelDataChanged FINAL)
 
 public:
@@ -70,7 +70,7 @@ private:
     void setValue(int role, const QVariant &value);
 
     VDMAbstractItemModelDataType *m_type;
-    QVector<QVariant> m_cachedData;
+    QList<QVariant> m_cachedData;
 };
 
 class VDMAbstractItemModelDataType final
@@ -86,23 +86,21 @@ public:
     {
     }
 
-    void notifyItem(
-            const QQmlGuard<QQmlDMAbstractItemModelData> &item,
-            const QVector<int> &indexes,
-            QQmlDelegateModel::DelegateModelAccess access) const
+    void notifyItems(
+            const QVarLengthArray<QQmlGuard<QQmlDMAbstractItemModelData>> &guardedItems,
+            int index, QQmlDelegateModel::DelegateModelAccess access) const
     {
-        for (const int index : indexes) {
+        for (const auto &item : guardedItems) {
+            if (item.isNull())
+                continue;
+
             if (access == QQmlDelegateModel::DelegateModelAccess::ReadWrite) {
                 QQmlDelegateModelReadOnlyMetaObject readOnly(item, index + propertyOffset);
                 QMetaObject::activate(item, index + signalOffset, nullptr);
             } else {
                 QMetaObject::activate(item, index + signalOffset, nullptr);
             }
-
-            if (item.isNull())
-                return;
         }
-        emit item->modelDataChanged();
     }
 
     bool notify(
@@ -110,7 +108,7 @@ public:
             const QList<QQmlDelegateModelItem *> &items,
             int index,
             int count,
-            const QVector<int> &roles) const override
+            const QList<int> &roles) const override
     {
         bool changed = roles.isEmpty() && !watchedRoles.isEmpty();
         if (!changed && !watchedRoles.isEmpty() && watchedRoleIds.isEmpty()) {
@@ -123,7 +121,14 @@ public:
             const_cast<VDMAbstractItemModelDataType *>(this)->watchedRoleIds = roleIds;
         }
 
-        QVector<int> indexes;
+        QVarLengthArray<QQmlGuard<QQmlDMAbstractItemModelData>> guardedItems;
+        for (const auto item : items) {
+            Q_ASSERT(qobject_cast<QQmlDMAbstractItemModelData *>(item) == item);
+            const int idx = item->modelIndex();
+            if (idx >= index && idx < index + count)
+                guardedItems.append(static_cast<QQmlDMAbstractItemModelData *>(item));
+        }
+
         for (int i = 0; i < roles.size(); ++i) {
             const int role = roles.at(i);
             if (!changed && watchedRoleIds.contains(role))
@@ -131,29 +136,20 @@ public:
 
             int propertyId = propertyRoles.indexOf(role);
             if (propertyId != -1)
-                indexes.append(propertyId);
-        }
-        if (roles.isEmpty()) {
-            const int propertyRolesCount = propertyRoles.size();
-            indexes.reserve(propertyRolesCount);
-            for (int propertyId = 0; propertyId < propertyRolesCount; ++propertyId)
-                indexes.append(propertyId);
+                notifyItems(guardedItems, propertyId, model.delegateModelAccess);
         }
 
-        QVarLengthArray<QQmlGuard<QQmlDMAbstractItemModelData>> guardedItems;
-        for (const auto item : items) {
-            Q_ASSERT(qobject_cast<QQmlDMAbstractItemModelData *>(item) == item);
-            guardedItems.append(static_cast<QQmlDMAbstractItemModelData *>(item));
+        if (roles.isEmpty()) {
+            const int propertyRolesCount = propertyRoles.size();
+            for (int propertyId = 0; propertyId < propertyRolesCount; ++propertyId)
+                notifyItems(guardedItems, propertyId, model.delegateModelAccess);
         }
 
         for (const auto &item : std::as_const(guardedItems)) {
-            if (item.isNull())
-                continue;
-
-            const int idx = item->modelIndex();
-            if (idx >= index && idx < index + count)
-                notifyItem(item, indexes, model.delegateModelAccess);
+            if (!item.isNull())
+                emit item->modelDataChanged();
         }
+
         return changed;
     }
 
@@ -177,12 +173,13 @@ public:
         if (!o)
             RETURN_RESULT(scope.engine->throwTypeError(QStringLiteral("Not a valid DelegateModel object")));
 
+        QQmlDelegateModelItem *item = o->d()->item();
         const QQmlAdaptorModel *const model
-                = static_cast<QQmlDMAbstractItemModelData *>(o->d()->item)->type()->model;
-        if (o->d()->item->modelIndex() >= 0) {
+                = static_cast<QQmlDMAbstractItemModelData *>(item)->type()->model;
+        if (item->modelIndex() >= 0) {
             if (const QAbstractItemModel *const aim = model->aim())
                 RETURN_RESULT(QV4::Encode(aim->hasChildren(
-                        aim->index(o->d()->item->modelIndex(), 0, model->rootIndex))));
+                        aim->index(item->modelIndex(), 0, model->rootIndex))));
         }
         RETURN_RESULT(QV4::Encode(false));
     }

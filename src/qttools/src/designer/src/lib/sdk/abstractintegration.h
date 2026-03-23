@@ -7,10 +7,11 @@
 #include <QtDesigner/sdk_global.h>
 
 #include <QtCore/qobject.h>
-#include <QtCore/qscopedpointer.h>
 #include <QtCore/qstringlist.h>
 #include <QtCore/qflags.h>
 #include <QtCore/qversionnumber.h>
+
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 
@@ -51,7 +52,7 @@ public:
     Q_DECLARE_FLAGS(Feature, FeatureFlag)
 
     explicit QDesignerIntegrationInterface(QDesignerFormEditorInterface *core, QObject *parent = nullptr);
-    virtual ~QDesignerIntegrationInterface();
+    ~QDesignerIntegrationInterface() override;
 
     QDesignerFormEditorInterface *core() const;
 
@@ -105,7 +106,7 @@ public Q_SLOTS:
     virtual void updateCustomWidgetPlugins() = 0;
 
 private:
-    QScopedPointer<QDesignerIntegrationInterfacePrivate> d;
+    std::unique_ptr<QDesignerIntegrationInterfacePrivate> d;
 };
 
 class QDESIGNER_SDK_EXPORT QDesignerIntegration: public QDesignerIntegrationInterface
@@ -113,7 +114,7 @@ class QDESIGNER_SDK_EXPORT QDesignerIntegration: public QDesignerIntegrationInte
     Q_OBJECT
 public:
     explicit QDesignerIntegration(QDesignerFormEditorInterface *core, QObject *parent = nullptr);
-    virtual ~QDesignerIntegration();
+    ~QDesignerIntegration() override;
 
     QString headerSuffix() const override;
     void setHeaderSuffix(const QString &headerSuffix) override;
@@ -122,12 +123,12 @@ public:
     void setHeaderLowercase(bool headerLowerCase) override;
 
     Feature features() const override;
-    virtual void setFeatures(Feature f) override;
+    void setFeatures(Feature f) override;
 
     ResourceFileWatcherBehaviour resourceFileWatcherBehaviour() const override;
     void setResourceFileWatcherBehaviour(ResourceFileWatcherBehaviour behaviour) override;
 
-    virtual QWidget *containerWindow(QWidget *widget) const override;
+    QWidget *containerWindow(QWidget *widget) const override;
 
     // Load plugins into widget database and factory.
     static void initializePlugins(QDesignerFormEditorInterface *formEditor);
@@ -150,7 +151,7 @@ public:
     void updateCustomWidgetPlugins() override;
 
 private:
-    QScopedPointer<qdesigner_internal::QDesignerIntegrationPrivate> d;
+    std::unique_ptr<qdesigner_internal::QDesignerIntegrationPrivate> d;
 };
 
 QT_END_NAMESPACE

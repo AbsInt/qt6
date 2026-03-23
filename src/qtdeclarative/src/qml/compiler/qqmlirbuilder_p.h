@@ -468,6 +468,9 @@ struct Q_QML_COMPILER_EXPORT Pragma
 
 struct Q_QML_COMPILER_EXPORT Document
 {
+    // disable it explicitly, it's implicitly deleted because of the Engine::_pool
+    Q_DISABLE_COPY_MOVE(Document)
+
     Document(const QString &fileName, const QString &finalUrl, bool debugMode);
     QString code;
     QQmlJS::Engine jsParserEngine;
@@ -475,7 +478,7 @@ struct Q_QML_COMPILER_EXPORT Document
     QList<const QV4::CompiledData::Import *> imports;
     QList<Pragma*> pragmas;
     QQmlJS::AST::UiProgram *program;
-    QVector<Object*> objects;
+    QList<Object*> objects;
     QV4::Compiler::JSUnitGenerator jsGenerator;
 
     QQmlRefPointer<QV4::CompiledData::CompilationUnit> javaScriptCompilationUnit;
@@ -517,15 +520,9 @@ public:
     using QQmlJS::AST::Visitor::visit;
     using QQmlJS::AST::Visitor::endVisit;
 
-    bool visit(QQmlJS::AST::UiArrayMemberList *ast) override;
     bool visit(QQmlJS::AST::UiImport *ast) override;
     bool visit(QQmlJS::AST::UiPragma *ast) override;
-    bool visit(QQmlJS::AST::UiHeaderItemList *ast) override;
-    bool visit(QQmlJS::AST::UiObjectInitializer *ast) override;
-    bool visit(QQmlJS::AST::UiObjectMemberList *ast) override;
-    bool visit(QQmlJS::AST::UiParameterList *ast) override;
     bool visit(QQmlJS::AST::UiProgram *) override;
-    bool visit(QQmlJS::AST::UiQualifiedId *ast) override;
     bool visit(QQmlJS::AST::UiArrayBinding *ast) override;
     bool visit(QQmlJS::AST::UiObjectBinding *ast) override;
     bool visit(QQmlJS::AST::UiObjectDefinition *ast) override;
@@ -614,7 +611,7 @@ public:
 
     QList<const QV4::CompiledData::Import *> _imports;
     QList<Pragma*> _pragmas;
-    QVector<Object*> _objects;
+    QList<Object*> _objects;
 
     QV4::CompiledData::TypeReferenceMap _typeReferences;
 
@@ -645,7 +642,7 @@ struct Q_QML_COMPILER_EXPORT JSCodeGen : public QV4::Compiler::Codegen
               bool storeSourceLocations = false);
 
     // Returns mapping from input functions to index in IR::Module::functions / compiledData->runtimeFunctions
-    QVector<int>
+    QList<int>
     generateJSCodeForFunctionsAndBindings(const QList<CompiledFunctionOrExpression> &functions);
 
     bool generateRuntimeFunctions(QmlIR::Object *object);

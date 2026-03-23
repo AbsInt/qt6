@@ -95,7 +95,7 @@ void QRubberBand::initStyleOption(QStyleOptionRubberBand *option) const
     semi-transparent filled selection rectangle.
 */
 QRubberBand::QRubberBand(Shape s, QWidget *p)
-    : QWidget(*new QRubberBandPrivate, p, (p && p->windowType() != Qt::Desktop) ? Qt::Widget : RUBBERBAND_WINDOW_TYPE)
+    : QWidget(*new QRubberBandPrivate, p, Qt::Widget)
 {
     Q_D(QRubberBand);
     d->shape = s;

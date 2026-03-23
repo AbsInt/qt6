@@ -1,5 +1,6 @@
 // Copyright (C) 2017 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QCOCOASCREEN_H
 #define QCOCOASCREEN_H
@@ -19,7 +20,7 @@ QT_BEGIN_NAMESPACE
 
 class QCocoaIntegration;
 
-class QCocoaScreen : public QPlatformScreen
+class QCocoaScreen : public QPlatformScreen, public QNativeInterface::QCocoaScreen
 {
 public:
     ~QCocoaScreen();
@@ -46,7 +47,7 @@ public:
     // ----------------------------------------------------
 
     static NSScreen *nativeScreenForDisplayId(CGDirectDisplayID displayId);
-    NSScreen *nativeScreen() const;
+    NSScreen *nativeScreen() const override;
 
     bool isOnline() const;
 

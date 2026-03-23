@@ -15,6 +15,7 @@ qt_commandline_option(prefix TYPE path CMAKE_VARIABLE CMAKE_INSTALL_PREFIX)
 qt_commandline_option(extprefix TYPE path CMAKE_VARIABLE CMAKE_STAGING_PREFIX)
 qt_commandline_option(archdatadir TYPE path CMAKE_VARIABLE CMAKE_ARCHDATADIR)
 qt_commandline_option(bindir TYPE path CMAKE_VARIABLE INSTALL_BINDIR)
+qt_commandline_option(cmakedir TYPE path CMAKE_VARIABLE INSTALL_CMAKEDIR)
 qt_commandline_option(datadir TYPE path CMAKE_VARIABLE INSTALL_DATADIR)
 qt_commandline_option(docdir TYPE path CMAKE_VARIABLE INSTALL_DOCDIR)
 qt_commandline_option(examplesdir TYPE path CMAKE_VARIABLE INSTALL_EXAMPLESDIR)
@@ -55,7 +56,6 @@ qt_commandline_option(unity-build-batch-size
     CMAKE_VARIABLE QT_UNITY_BUILD_BATCH_SIZE
 )
 qt_commandline_option(ccache TYPE boolean NAME ccache CMAKE_VARIABLE QT_USE_CCACHE)
-qt_commandline_option(vcpkg TYPE boolean CMAKE_VARIABLE QT_USE_VCPKG)
 qt_commandline_option(commercial TYPE void)
 qt_commandline_option(confirm-license TYPE void)
 qt_commandline_option(dbus TYPE optionalString VALUES no yes linked runtime)
@@ -92,16 +92,15 @@ qt_commandline_option(stack-clash-protection TYPE boolean NAME stack_clash_prote
 qt_commandline_option(libstdcpp-assertions TYPE boolean NAME libstdcpp_assertions)
 qt_commandline_option(libcpp-hardening TYPE boolean NAME libcpp_hardening)
 qt_commandline_option(relro-now-linker TYPE boolean NAME relro_now_linker)
-qt_commandline_option(make TYPE addString VALUES examples libs tests tools
-                      benchmarks manual-tests minimal-static-tests)
+set(allowed_build_parts examples tests benchmarks manual-tests minimal-static-tests doc-snippets)
+qt_commandline_option(make TYPE addString VALUES ${allowed_build_parts})
+qt_commandline_option(nomake TYPE addString VALUES ${allowed_build_parts})
 qt_commandline_option(install-examples-sources
     TYPE boolean
     CMAKE_VARIABLE QT_INSTALL_EXAMPLES_SOURCES
 )
 qt_commandline_option(mips_dsp TYPE boolean)
 qt_commandline_option(mips_dspr2 TYPE boolean)
-qt_commandline_option(nomake TYPE addString VALUES examples tests tools benchmarks
-                      manual-tests minimal-static-tests)
 qt_commandline_option(opensource TYPE void NAME commercial VALUE no)
 qt_commandline_option(optimize-debug TYPE boolean NAME optimize_debug)
 qt_commandline_option(optimize-size TYPE boolean NAME optimize_size)

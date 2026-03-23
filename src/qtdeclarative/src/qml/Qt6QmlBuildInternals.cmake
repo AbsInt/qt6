@@ -25,6 +25,7 @@ macro(qt_internal_get_internal_add_qml_module_keywords
         ENABLE_TYPE_COMPILER
         __QT_INTERNAL_STATIC_MODULE
         __QT_INTERNAL_SYSTEM_MODULE
+        __QT_INTERNAL_NO_GENERATE_QMLLS_BUILD_INI
     )
     set(${single_args}
         URI

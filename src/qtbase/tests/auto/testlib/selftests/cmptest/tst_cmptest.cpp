@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
+#include <QtCore/qatomicscopedvaluerollback.h>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QTimer>
 #ifdef QT_GUI_LIB
@@ -15,6 +16,8 @@
 #endif
 #include <QSet>
 #include <vector>
+
+using namespace std::chrono_literals;
 using namespace Qt::StringLiterals;
 
 /* XPM test data for QPixmap, QImage tests (use drag cursors as example) */
@@ -105,6 +108,9 @@ public:
     enum class MyClassEnum { MyClassEnumValue1, MyClassEnumValue2 };
     Q_ENUM(MyClassEnum)
 
+private:
+    void defaultTryTimeoutData();
+
 private slots:
     void compare_unregistered_enums();
     void compare_registered_enums();
@@ -152,6 +158,10 @@ private slots:
     void tryVerify();
     void tryVerify2();
     void verifyExplicitOperatorBool();
+    void defaultTryVerifyTimeout_data();
+    void defaultTryVerifyTimeout();
+    void defaultTryCompareTimeout_data();
+    void defaultTryCompareTimeout();
 };
 
 enum MyUnregisteredEnum { MyUnregisteredEnumValue1, MyUnregisteredEnumValue2 };
@@ -839,6 +849,57 @@ void tst_Cmptest::verifyExplicitOperatorBool()
 
     ExplicitOperatorBool val2(-273);
     QVERIFY(!val2);
+}
+
+void tst_Cmptest::defaultTryTimeoutData()
+{
+    QTest::addColumn<std::chrono::milliseconds>("timeout");
+    QTest::addRow("times-out") << 1ms;
+    QTest::addRow("ample-time") << 1000ms;
+}
+
+void tst_Cmptest::defaultTryVerifyTimeout_data()
+{
+    defaultTryTimeoutData();
+}
+
+void tst_Cmptest::defaultTryVerifyTimeout()
+{
+    QFETCH(const std::chrono::milliseconds, timeout);
+
+    // Check that the default is what expect.
+    QCOMPARE(QTest::defaultTryTimeout.load(std::memory_order_relaxed), 5s);
+
+    {
+        DeferredFlag trueEventually;
+        const auto innerScope = QAtomicScopedValueRollback(QTest::defaultTryTimeout, timeout, std::memory_order_relaxed);
+        QEXPECT_FAIL("times-out", "The timeout (std::chrono::milliseconds) is deliberately too short", Continue);
+        QTRY_VERIFY(trueEventually);
+    }
+
+    // innerScope has now been destroyed, so the timeout should be back to its default.
+    QCOMPARE(QTest::defaultTryTimeout.load(std::memory_order_relaxed), 5s);
+}
+
+void tst_Cmptest::defaultTryCompareTimeout_data()
+{
+    defaultTryTimeoutData();
+}
+
+void tst_Cmptest::defaultTryCompareTimeout()
+{
+    QFETCH(const std::chrono::milliseconds, timeout);
+
+    DeferredFlag trueAlready(true);
+    {
+        DeferredFlag trueEventually;
+        const auto innerScope = QAtomicScopedValueRollback(QTest::defaultTryTimeout, timeout, std::memory_order_relaxed);
+        QEXPECT_FAIL("times-out", "The timeout (std::chrono::milliseconds) is deliberately too short", Continue);
+        QTRY_COMPARE(trueEventually, trueAlready);
+    }
+
+    // innerScope has now been destroyed, so the timeout should be back to its default.
+    QCOMPARE(QTest::defaultTryTimeout.load(std::memory_order_relaxed), 5s);
 }
 
 QTEST_MAIN(tst_Cmptest)

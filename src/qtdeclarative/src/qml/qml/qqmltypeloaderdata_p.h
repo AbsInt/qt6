@@ -149,20 +149,20 @@ class QQmlTypeLoaderLockedData
 
     Q_DISABLE_COPY_MOVE(QQmlTypeLoaderLockedData)
 public:
-    QQmlTypeLoaderLockedData(QQmlEngine *engine);
+    QQmlTypeLoaderLockedData(QV4::ExecutionEngine *engine);
 
     QQmlTypeLoaderThread *thread() const { return m_thread; }
 
     void createThread(QQmlTypeLoader *loader)
     {
-        Q_ASSERT(m_engine->thread()->isCurrentThread());
+        Q_ASSERT(isCurrentJsEngineThread());
         m_thread = new QQmlTypeLoaderThread(loader);
         m_thread->startup();
     }
 
     void deleteThread()
     {
-        Q_ASSERT(m_engine->thread()->isCurrentThread());
+        Q_ASSERT(isCurrentJsEngineThread());
         Q_ASSERT(m_thread);
 
         // Shut it down first, then set it to nullptr, then delete it.
@@ -172,13 +172,23 @@ public:
         delete std::exchange(m_thread, nullptr);
     }
 
-    QQmlEngine *engine() const
+    QV4::ExecutionEngine *engine() const
     {
-        Q_ASSERT(m_engine->thread()->isCurrentThread());
+        Q_ASSERT(isCurrentJsEngineThread());
         return m_engine;
     }
 
 private:
+    bool isCurrentJsEngineThread() const
+    {
+        if (QJSEngine *jsEngine = m_engine->jsEngine())
+            return jsEngine->thread()->isCurrentThread();
+
+        // If we can't determine the thread, assume it's the right one
+        return true;
+    }
+
+
     QQmlTypeLoaderSharedData m_sharedData;
     QQmlTypeLoaderThreadData m_threadData;
     QQmlTypeLoaderConfiguredData m_configuredData;
@@ -186,7 +196,7 @@ private:
     QQmlTypeLoaderNetworkAccessManagerData m_networkAccessManagerData;
 #endif
 
-    QQmlEngine *m_engine = nullptr;
+    QV4::ExecutionEngine *m_engine = nullptr;
     QQmlTypeLoaderThread *m_thread = nullptr;
 };
 
@@ -212,6 +222,8 @@ public:
     Data &operator*() const { return data->m_sharedData; }
     Data *operator->() const { return &data->m_sharedData; }
     operator Data *() const { return &data->m_sharedData; }
+
+    QQmlTypeLoaderThread *thread() const { return data->thread(); }
 
 private:
     LockedData *data = nullptr;

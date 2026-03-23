@@ -369,7 +369,7 @@ void tst_QQmlSortFilterProxyModel::filterInverted()
     valueFilter->setValue(tableModel.data(tableModel.index(0, 0, QModelIndex()), Qt::UserRole));
     valueFilter->setColumn(0);
     valueFilter->setRoleName(QString::fromLatin1("column0"));
-    valueFilter->setInvert(true);
+    valueFilter->setInverted(true);
     auto filters = sfpmModel->property("filters").value<QQmlListProperty<QQmlFilterBase>>();
     QSignalSpy filterChangedSignal(sfpmModel, SIGNAL(filtersChanged()));
     sfpmModel->filters().append(&filters, valueFilter);

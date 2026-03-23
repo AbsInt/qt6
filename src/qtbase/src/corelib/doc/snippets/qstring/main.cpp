@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 #include <QtGui>
-#include <QApplication>
+#include <QWidget>
 #include <stdio.h>
 
 using namespace Qt::StringLiterals;
@@ -97,7 +97,7 @@ void Widget::constCharPointer()
 void Widget::constCharArray()
 {
     //! [1]
-    static const QChar data[4] = { 0x0055, 0x006e, 0x10e3, 0x03a3 };
+    static const QChar data[4] = {QChar(0x0055), QChar(0x006e), QChar(0x10e3), QChar(0x03a3) };
     QString str(data, 4);
     //! [1]
 }
@@ -287,9 +287,9 @@ void Widget::compareSensitiveFunction()
     //! [16]
 
     //! [QtPrivate::compareStrings-QSV-QSV]
-    int x = QtPrivate::compareStrings(u"aUtO", u"AuTo", Qt::CaseInsensitive);  // x == 0
-    int y = QtPrivate::compareStrings(u"auto", u"Car", Qt::CaseSensitive);     // y > 0
-    int z = QtPrivate::compareStrings(u"auto", u"Car", Qt::CaseInsensitive);   // z < 0
+    int a = QtPrivate::compareStrings(u"aUtO", u"AuTo", Qt::CaseInsensitive);  // a == 0
+    int b = QtPrivate::compareStrings(u"auto", u"Car", Qt::CaseSensitive);     // b > 0
+    int c = QtPrivate::compareStrings(u"auto", u"Car", Qt::CaseInsensitive);   // c < 0
     //! [QtPrivate::compareStrings-QSV-QSV]
 }
 
@@ -351,7 +351,7 @@ void Widget::fromRawDataFunction()
             0x1009, 0x0020, 0x0020};
 
     QString str = QString::fromRawData(unicode, std::size(unicode));
-    if (str.contains(pattern) {
+    if (str.contains(pattern)) {
         // ...
     //! [22] //! [23]
     }
@@ -376,7 +376,6 @@ void Widget::firstIndexOfFunction()
     QString str = "the minimum";
     str.indexOf(QRegularExpression("m[aeiou]"), 0);       // returns 4
 
-    QString str = "the minimum";
     QRegularExpressionMatch match;
     str.indexOf(QRegularExpression("m[aeiou]"), 0, &match);       // returns 4
     // match.captured() == mi
@@ -426,7 +425,6 @@ void Widget::lastIndexOfFunction()
     QString str = "the minimum";
     str.lastIndexOf(QRegularExpression("m[aeiou]"));      // returns 8
 
-    QString str = "the minimum";
     QRegularExpressionMatch match;
     str.lastIndexOf(QRegularExpression("m[aeiou]"), -1, &match);      // returns 8
     // match.captured() == mu
@@ -567,7 +565,7 @@ void Widget::resizeFunction()
 
     //! [46]
     QString t = "Hello";
-    r.resize(t.size() + 10, 'X');
+    t.resize(t.size() + 10, 'X');
     // t == "HelloXXXXXXXXXX"
     //! [46]
 
@@ -687,6 +685,7 @@ void Widget::splitFunction()
 
 void Widget::splitCaseSensitiveFunction()
 {
+    {
     //! [62]
     QString str = QStringLiteral("a,,b,c");
 
@@ -696,18 +695,23 @@ void Widget::splitCaseSensitiveFunction()
     QStringList list2 = str.split(u',', Qt::SkipEmptyParts);
     // list2: [ "a", "b", "c" ]
     //! [62]
+    }
 
+    {
     //! [62-empty]
     QString str = "abc";
     auto parts = str.split(QString());
     // parts: {"", "a", "b", "c", ""}
     //! [62-empty]
+    }
 
+    {
     //! [62-slashes]
     QString str = "/a/b/c/";
     auto parts = str.split(u'/');
     // parts: {"", "a", "b", "c", ""}
     //! [62-slashes]
+    }
 }
 
 void Widget::sprintfFunction()
@@ -918,13 +922,4 @@ void Widget::sliceFunction()
     x.slice(5);     // x == "pineapples"
     x.slice(4, 3);  // x == "app"
     //! [slice97]
-}
-
-
-int main(int argc, char *argv[])
-{
-    QApplication app(argc, argv);
-    Widget widget;
-    widget.show();
-    return app.exec();
 }

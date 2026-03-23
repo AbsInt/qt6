@@ -128,6 +128,11 @@ qt_feature("qml-debug" PUBLIC
     LABEL "QML debugging and profiling support"
     PURPOSE "Provides infrastructure and plugins for debugging and profiling."
 )
+qt_feature("qml-labs" PUBLIC
+    SECTION "QML"
+    LABEL "Qt Labs"
+    PURPOSE "Provides experimental features and components."
+)
 qt_feature("qml-profiler" PRIVATE
     SECTION "QML"
     LABEL "Command line QML Profiler"
@@ -186,9 +191,17 @@ qt_feature("qml-python" PRIVATE
     LABEL "python"
     CONDITION Python_Interpreter_FOUND
 )
+
+qt_feature("qmlcontextpropertydump" PRIVATE
+    LABEL "qmlcontextpropertydump"
+    PURPOSE "Enables qmlcontextpropertydump tooling"
+    CONDITION QT_FEATURE_settings
+)
+
 qt_configure_add_summary_section(NAME "Qt QML")
 qt_configure_add_summary_entry(ARGS "qml-network")
 qt_configure_add_summary_entry(ARGS "qml-debug")
+qt_configure_add_summary_entry(ARGS "qml-labs")
 qt_configure_add_summary_entry(ARGS "qml-jit")
 qt_configure_add_summary_entry(ARGS "qml-xml-http-request")
 qt_configure_add_summary_entry(ARGS "qml-locale")

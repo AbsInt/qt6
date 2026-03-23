@@ -26,13 +26,14 @@ void QSGRhiInternalTextNode::addDecorationNode(const QRectF &rect, const QColor 
     path.moveTo(QVector2D(rect.left(), c.y()));
     path.lineTo(QVector2D(rect.right(), c.y()));
 
-    QSGCurveProcessor::processStroke(path, 2, rect.height(), Qt::MiterJoin, Qt::FlatCap,
+    QSGCurveProcessor::processStroke(path, 2, rect.height(), false, Qt::MiterJoin, Qt::FlatCap,
                                      [&node](const std::array<QVector2D, 3> &s,
                                              const std::array<QVector2D, 3> &p,
                                              const std::array<QVector2D, 3> &n,
+                                             const std::array<float, 3> &ex,
                                              QSGCurveStrokeNode::TriangleFlags f) {
                                          Q_ASSERT(f.testFlag(QSGCurveStrokeNode::TriangleFlag::Line));
-                                         node->appendTriangle(s, std::array<QVector2D, 2>{p.at(0), p.at(2)}, n);
+                                         node->appendTriangle(s, std::array<QVector2D, 2>{p.at(0), p.at(2)}, n, ex);
                                      });
     node->cookGeometry();
     appendChildNode(node);

@@ -21,7 +21,6 @@ QmlTypeNode::QmlTypeNode(Aggregate *parent, const QString &name, NodeType type)
     : Aggregate(type, parent, name)
 {
     Q_ASSERT(type == NodeType::QmlType || type == NodeType::QmlValueType);
-    setTitle(name);
 }
 
 /*!
@@ -48,11 +47,18 @@ void QmlTypeNode::addInheritedBy(const Node *base, Node *sub)
 /*!
   Loads the list \a subs with the nodes of all the subclasses of \a base.
  */
-void QmlTypeNode::subclasses(const Node *base, NodeList &subs)
+void QmlTypeNode::subclasses(const Node *base, NodeList &subs, bool recurse)
 {
-    subs.clear();
     if (s_inheritedBy.count(base) > 0) {
-        subs = s_inheritedBy.values(base);
+        if (recurse) {
+            for (auto *sub : s_inheritedBy.values(base)) {
+                if (!subs.contains(sub)) {
+                    subs.append(sub);
+                    QmlTypeNode::subclasses(sub, subs, recurse);
+                }
+            }
+        } else
+            subs = s_inheritedBy.values(base);
     }
 }
 
@@ -126,19 +132,28 @@ void QmlTypeNode::resolveInheritance(NodeMap &previousSearches)
         return;
 
     auto *base = static_cast<QmlTypeNode *>(previousSearches.value(m_qmlBaseName));
-    if (!previousSearches.contains(m_qmlBaseName)) {
+
+    // If the cached base is from a different module, we need to search again
+    // to respect module context for disambiguation
+    bool needsSearch = !previousSearches.contains(m_qmlBaseName);
+    if (!needsSearch && base && logicalModule() && base->logicalModule() != logicalModule())
+        needsSearch = true;
+
+    if (needsSearch) {
         for (const auto &imp : std::as_const(m_importList)) {
-            base = QDocDatabase::qdocDB()->findQmlType(imp, m_qmlBaseName);
+            base = QDocDatabase::qdocDB()->findQmlType(imp, m_qmlBaseName, this);
             if (base)
                 break;
         }
         if (!base) {
             if (m_qmlBaseName.contains(':'))
-                base = QDocDatabase::qdocDB()->findQmlType(m_qmlBaseName);
+                base = QDocDatabase::qdocDB()->findQmlType(m_qmlBaseName, this);
             else
-                base = QDocDatabase::qdocDB()->findQmlType(QString(), m_qmlBaseName);
+                base = QDocDatabase::qdocDB()->findQmlType(QString(), m_qmlBaseName, this);
         }
-        previousSearches.insert(m_qmlBaseName, base);
+        // Only cache if we don't have a module (to avoid polluting cache with module-specific results)
+        if (!logicalModule())
+            previousSearches.insert(m_qmlBaseName, base);
     }
 
     if (base) {
@@ -149,7 +164,7 @@ void QmlTypeNode::resolveInheritance(NodeMap &previousSearches)
             if (base->isIndexNode())
                 base->resolveInheritance(previousSearches);
         } else
-            location().report(QStringLiteral("Type is its own base type: '%1'").arg(name()));
+            location().warning(QStringLiteral("Type is its own base type: '%1'").arg(name()));
     }
 
     if (!base)
@@ -167,7 +182,7 @@ void QmlTypeNode::checkInheritance()
     const QmlTypeNode *hare = qtn;
 
     // Record the previous type found by the hare for reporting.
-    QmlTypeNode *previous;
+    QmlTypeNode *previous = nullptr;
 
     while (qtn && hare) {
         // Examine the base node.
@@ -183,8 +198,8 @@ void QmlTypeNode::checkInheritance()
             }
 
         // Only report a cycle if both nodes are non-null and identical.
-        if (qtn && hare && qtn == hare) {
-            location().report(QStringLiteral("Circular type inheritance: '%1'").arg(previous->name()));
+        if (previous && qtn && hare && qtn == hare) {
+            location().warning(QStringLiteral("Cyclic type inheritance: '%1'").arg(previous->name()));
             previous->m_qmlBaseNode = nullptr;
             break;
         }

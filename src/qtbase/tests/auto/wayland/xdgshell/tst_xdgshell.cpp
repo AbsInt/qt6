@@ -38,6 +38,7 @@ private slots:
     void initiallySuspended();
     void modality();
     void modalityWithoutTransientParent();
+    void grabbingSiblingPopups();
 };
 
 void tst_xdgshell::initTestCase()
@@ -933,6 +934,68 @@ void tst_xdgshell::modalityWithoutTransientParent()
     child.show();
     child.setModality(Qt::NonModal);
     QCOMPOSITOR_TRY_VERIFY(!xdgDialog());
+}
+
+void tst_xdgshell::grabbingSiblingPopups()
+{
+    class Window : public QRasterWindow {
+    public:
+        void mousePressEvent(QMouseEvent *event) override
+        {
+            QRasterWindow::mousePressEvent(event);
+            auto popup = new QRasterWindow;
+            popup->setTransientParent(this);
+            popup->setFlags(Qt::Popup);
+            popup->resize(100, 100);
+            popup->show();
+            m_popups << popup;
+        }
+        QList<QRasterWindow*> m_popups;
+    };
+
+    Window window;
+    window.resize(200, 200);
+    window.show();
+
+    QCOMPOSITOR_TRY_VERIFY(xdgToplevel());
+    exec([&] { xdgToplevel()->sendCompleteConfigure(); });
+
+    auto triggerPopup = [&](int popupIndex) {
+        // we need a click to be able to create a grabbing popup
+        exec([&] {
+            auto *surface = xdgToplevel()->surface();
+            auto *p = pointer();
+            auto *c = client();
+            p->sendEnter(surface, {100, 100});
+            p->sendFrame(c);
+            p->sendButton(c, BTN_LEFT, Pointer::button_state_pressed);
+            p->sendButton(c, BTN_LEFT, Pointer::button_state_released);
+            p->sendFrame(c);
+        });
+
+        QCOMPOSITOR_TRY_VERIFY(xdgPopup(popupIndex));
+        exec([&] {
+            xdgPopup(popupIndex)->sendConfigure(QRect(100, 100, 100, 100));
+            xdgPopup(popupIndex)->m_xdgSurface->sendConfigure();
+        });
+    };
+
+    triggerPopup(0);
+    // QtWayland will make popup1 a child of popup0, despite them being siblings at a Qt level
+    triggerPopup(1);
+
+    // This is illegal from a wayland POV as popup2 is the latest grabbing popup
+    // popup2 must be closed first but we should handle it gracefully
+    // and not trigger an error in the compositor
+    delete window.m_popups.takeFirst();
+
+    // check the compositor does not throw an error when the popup is closed
+    auto native = qGuiApp->platformNativeInterface();
+    auto display = static_cast<struct ::wl_display *>(native->nativeResourceForIntegration("wl_display"));
+    wl_display_roundtrip(display);
+
+    // cleanup
+    delete window.m_popups.takeFirst();
 }
 
 QCOMPOSITOR_TEST_MAIN(tst_xdgshell)

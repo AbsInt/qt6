@@ -347,7 +347,7 @@ ReturnedValue FunctionPrototype::method_apply(const QV4::FunctionObject *b, cons
     const int len = v4->safeForAllocLength(arr->getLength());
     CHECK_EXCEPTION();
 
-    Value *arguments = scope.alloc<Scope::Uninitialized>(len);
+    Value *arguments = scope.alloc(len);
     if (len) {
         if (ArgumentsObject::isNonStrictArgumentsObject(arr) && !arr->cast<ArgumentsObject>()->fullyCreated()) {
             QV4::ArgumentsObject *a = arr->cast<ArgumentsObject>();

@@ -23,6 +23,7 @@
 // Instead let's define our own one that unconditionally logs...
 #define debugMsg QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, "qt.core.logging").debug
 #define warnMsg QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, "qt.core.logging").warning
+#define registryMsg QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, "_logging_categories").debug
 
 QT_BEGIN_NAMESPACE
 
@@ -555,6 +556,26 @@ void QLoggingRegistry::defaultCategoryFilter(QLoggingCategory *cat)
     cat->setEnabled(QtInfoMsg, info);
     cat->setEnabled(QtWarningMsg, warning);
     cat->setEnabled(QtCriticalMsg, critical);
+
+    for (const auto &ruleSet : reg->ruleSets) {
+        for (const auto &rule : ruleSet) {
+            // this must be an exact match
+            if (rule.messageType != QtDebugMsg && rule.flags != QLoggingRule::FullText)
+                continue;
+            if (rule.category != "_logging_categories"_L1)
+                continue;
+            if (rule.enabled) {
+                registryMsg("CATEGORY:%s %d %d %d %d",
+                    cat->categoryName(),
+                    cat->isDebugEnabled(),
+                    cat->isWarningEnabled(),
+                    cat->isCriticalEnabled(),
+                    cat->isInfoEnabled()
+                );
+            }
+            break;
+        }
+    }
 }
 
 

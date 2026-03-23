@@ -11,6 +11,12 @@
 
 QT_BEGIN_NAMESPACE
 
+QTransposeProxyModelPrivate::QTransposeProxyModelPrivate()
+    = default;
+
+QTransposeProxyModelPrivate::~QTransposeProxyModelPrivate()
+    = default;
+
 QModelIndex QTransposeProxyModelPrivate::uncheckedMapToSource(const QModelIndex &proxyIndex) const
 {
     if (!model || !proxyIndex.isValid())
@@ -173,14 +179,13 @@ void QTransposeProxyModel::setSourceModel(QAbstractItemModel* newSourceModel)
         return;
     beginResetModel();
     if (d->model) {
-        for (const QMetaObject::Connection& discIter : std::as_const(d->sourceConnections))
+        for (QMetaObject::Connection &discIter : d->sourceConnections)
             disconnect(discIter);
     }
-    d->sourceConnections.clear();
     QAbstractProxyModel::setSourceModel(newSourceModel);
     if (d->model) {
         using namespace std::placeholders;
-        d->sourceConnections = QList<QMetaObject::Connection>{
+        d->sourceConnections = std::array{
             connect(d->model, &QAbstractItemModel::modelAboutToBeReset, this, &QTransposeProxyModel::beginResetModel),
             connect(d->model, &QAbstractItemModel::modelReset, this, &QTransposeProxyModel::endResetModel),
             connect(d->model, &QAbstractItemModel::dataChanged, this, std::bind(&QTransposeProxyModelPrivate::onDataChanged, d, _1, _2, _3)),

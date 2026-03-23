@@ -21,6 +21,7 @@ QT_BEGIN_NAMESPACE
 class CollectionNode;
 class FunctionNode;
 class QDocDatabase;
+struct InclusionPolicy;
 
 struct TargetRec
 {
@@ -50,7 +51,7 @@ public:
 
 typedef QMultiMap<QString, TargetRec *> TargetMap;
 typedef QMultiMap<QString, PageNode *> PageNodeMultiMap;
-typedef QMap<QString, QmlTypeNode *> QmlTypeMap;
+typedef QMultiMap<QString, QmlTypeNode *> QmlTypeMap;
 typedef QMultiMap<QString, const ExampleNode *> ExampleNodeMap;
 
 class Tree
@@ -94,7 +95,7 @@ private: // The rest of the class is private.
                                   TargetRec::TargetType *targetType = nullptr) const;
     const Node *matchPathAndTarget(const QStringList &path, int idx, const QString &target,
                                    const Node *node, int flags, Genus genus,
-                                   QString &ref) const;
+                                   QString &ref, int duplicates = 0) const;
 
     const Node *findNode(const QStringList &path, const Node *relative, int flags,
                          Genus genus) const;
@@ -121,6 +122,7 @@ private: // The rest of the class is private.
     void resolveCppToQmlLinks();
     void resolveSince(Aggregate &aggregate);
     void resolveEnumValueSince(EnumNode &en);
+    void validatePropertyDocumentation(const Aggregate *aggregate) const;
     void removePrivateAndInternalBases(NamespaceNode *rootNode);
     NamespaceNode *root() { return &m_root; }
     [[nodiscard]] const NamespaceNode *root() const { return &m_root; }
@@ -150,10 +152,7 @@ private: // The rest of the class is private.
     CollectionNode *addToModule(const QString &name, Node *node);
     CollectionNode *addToQmlModule(const QString &name, Node *node);
 
-    [[nodiscard]] QmlTypeNode *lookupQmlType(const QString &name) const
-    {
-        return m_qmlTypeMap.value(name);
-    }
+    [[nodiscard]] QmlTypeNode *lookupQmlType(const QString &name, const Node *relative = nullptr) const;
     void insertQmlType(const QString &key, QmlTypeNode *n);
     void addExampleNode(ExampleNode *n) { m_exampleNodeMap.insert(n->title(), n); }
     ExampleNodeMap &exampleNodeMap() { return m_exampleNodeMap; }
@@ -163,6 +162,8 @@ private: // The rest of the class is private.
     FunctionNode *findMacroNode(const QString &t, const Aggregate *parent = nullptr);
 
 private:
+    void validatePropertyDocumentation(const Aggregate *aggregate, const InclusionPolicy &policy) const;
+
     QString m_camelCaseModuleName {};
     QString m_physicalModuleName {};
     QString m_indexFileName {};

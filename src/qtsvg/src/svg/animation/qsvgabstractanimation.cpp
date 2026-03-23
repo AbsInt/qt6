@@ -1,5 +1,7 @@
 // Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #include "qsvgabstractanimation_p.h"
 
@@ -11,12 +13,11 @@ QSvgAbstractAnimation::QSvgAbstractAnimation()
     , m_finished(false)
     , m_iterationCount(0)
 {
-
 }
 
 QSvgAbstractAnimation::~QSvgAbstractAnimation()
 {
-    for (auto prop : m_properties)
+    for (const QSvgAbstractAnimatedProperty *prop : std::as_const(m_properties))
         delete prop;
 }
 
@@ -57,14 +58,15 @@ void QSvgAbstractAnimation::evaluateAnimation(qreal elapsedTime)
 
     qreal fractionOfCurrentIterationTime = fractionOfTotalTime - std::trunc(fractionOfTotalTime);
 
-    for (QSvgAbstractAnimatedProperty *animProperty : m_properties) {
+    for (const QSvgAbstractAnimatedProperty *animProperty : std::as_const(m_properties)) {
         const QList<qreal> keyFrames = animProperty->keyFrames();
         for (int i = 1; i < keyFrames.size(); i++) {
             qreal from = keyFrames.at(i - 1);
             qreal to = keyFrames.at(i);
             if (fractionOfCurrentIterationTime >= from && fractionOfCurrentIterationTime < to) {
                 qreal currFraction = (fractionOfCurrentIterationTime - from) / (to - from);
-                animProperty->interpolate(i, currFraction);
+                qreal effectiveFraction = m_easing->progress(currFraction);
+                animProperty->interpolate(i, effectiveFraction);
             }
         }
     }
@@ -94,6 +96,16 @@ void QSvgAbstractAnimation::setIterationCount(int count)
 int QSvgAbstractAnimation::iterationCount() const
 {
     return m_iterationCount;
+}
+
+void QSvgAbstractAnimation::setEasing(QSvgEasingInterfacePtr easing)
+{
+    m_easing = std::move(easing);
+}
+
+QSvgEasingInterface *QSvgAbstractAnimation::easing() const
+{
+    return m_easing.get();
 }
 
 QT_END_NAMESPACE

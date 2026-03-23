@@ -301,6 +301,7 @@ bool operator<(LikelyPair lhs, LikelyPair rhs)
 } // anonymous namespace
 
 /*!
+    \internal
     Fill in blank fields of a locale ID.
 
     An ID in which some fields are zero stands for any locale that agrees with
@@ -528,6 +529,14 @@ bool QLocaleData::allLocaleDataRows(bool (*check)(qsizetype, const QLocaleData &
             return false;
     }
     return true;
+}
+
+// Internal: to enable tst_qlocaledata to access locales
+const QLocaleData *QLocaleData::dataForLocaleIndex(qsizetype index)
+{
+    Q_PRE(index >= 0);
+    Q_PRE(index < locale_data_size);
+    return locale_data + index;
 }
 
 #if QT_CONFIG(timezone) && QT_CONFIG(timezone_locale) && !QT_CONFIG(icu)
@@ -986,8 +995,7 @@ static QLocalePrivate *localePrivateByName(QStringView name)
     if (name == u"C")
         return c_private();
     const qsizetype index = QLocaleData::findLocaleIndex(QLocaleId::fromName(name));
-    Q_ASSERT(index >= 0 && index < locale_data_size);
-    return new QLocalePrivate(locale_data + index, index,
+    return new QLocalePrivate(QLocaleData::dataForLocaleIndex(index), index,
                               defaultNumberOptions(locale_data[index].m_language_id));
 }
 
@@ -998,8 +1006,7 @@ static QLocalePrivate *findLocalePrivate(QLocale::Language language, QLocale::Sc
         return c_private();
 
     qsizetype index = QLocaleData::findLocaleIndex(QLocaleId { language, script, territory });
-    Q_ASSERT(index >= 0 && index < locale_data_size);
-    const QLocaleData *data = locale_data + index;
+    const QLocaleData *data = QLocaleData::dataForLocaleIndex(index);
 
     QLocale::NumberOptions numberOptions = QLocale::DefaultNumberOptions;
 
@@ -1025,8 +1032,7 @@ bool comparesEqual(const QLocale &loc, QLocale::Language lang)
         return compareWithPrivate(c_private()->m_data, c_private()->m_numberOptions);
 
     qsizetype index = QLocaleData::findLocaleIndex(QLocaleId { lang });
-    Q_ASSERT(index >= 0 && index < locale_data_size);
-    const QLocaleData *data = locale_data + index;
+    const QLocaleData *data = QLocaleData::dataForLocaleIndex(index);
 
     QLocale::NumberOptions numberOptions = QLocale::DefaultNumberOptions;
 
@@ -1149,6 +1155,8 @@ QLocaleData::GroupSizes QLocaleData::groupSizes() const
  \internal
 */
 QLocale::QLocale(QLocalePrivate &dd)
+    // If this ever becomes explicitly noexcept(false),
+    // adjust QLocale::c() to not use this ctor anymore.
     : d(&dd)
 {}
 
@@ -3089,8 +3097,6 @@ QString QLocale::toString(double f, char format, int precision) const
 }
 
 /*!
-    \fn QLocale QLocale::c()
-
     Returns a QLocale object initialized to the "C" locale.
 
     This locale is based on en_US but with various quirks of its own, such as
@@ -3106,6 +3112,10 @@ QString QLocale::toString(double f, char format, int precision) const
 
     \sa system()
 */
+QLocale QLocale::c() noexcept
+{
+    return QLocale(*c_private());
+}
 
 /*!
     Returns a QLocale object initialized to the system locale.
@@ -3171,7 +3181,8 @@ QList<QLocale> QLocale::matchingLocales(Language language, Script script, Territ
 
     quint16 index = locale_index[language];
     // There may be no matches, for some languages (e.g. Abkhazian at CLDR v39).
-    while (filter.acceptLanguage(locale_data[index].m_language_id)) {
+    while (index < locale_data_size
+           && filter.acceptLanguage(locale_data[index].m_language_id)) {
         const QLocaleId id = locale_data[index].id();
         if (filter.acceptScriptTerritory(id)) {
             result.append(QLocale(*(id.language_id == C ? c_private()
@@ -4372,49 +4383,52 @@ QString QLocaleData::applyIntegerFormatting(QString &&numStr, bool negative, int
     return result;
 }
 
-inline QLocaleData::NumericData QLocaleData::numericData(QLocaleData::NumberMode mode) const
+// Most users of this class are in this file, but tests in developer builds also
+// instantiate it. So it needs to be out-of-line for those builds:
+#ifndef QT_BUILD_INTERNAL
+inline
+#endif // ... but can otherwise be inline.
+QLocaleData::NumericData::NumericData(const QLocaleData *data, QLocaleData::NumberMode mode)
+    : grouping(data->groupSizes()), isC(data == c())
+      // Note: actually test pointer equality to c(), not language == C, as
+      // system locale might be configured as C with tweaks.
 {
-    NumericData result;
-    if (this == c()) {
-        result.isC = true;
-        return result;
-    }
-    result.setZero(zero().viewData(single_character_data));
-    result.group = groupDelim().viewData(single_character_data);
+    if (isC)
+        return;
+    setZero(data->zero().viewData(single_character_data));
+    group = data->groupDelim().viewData(single_character_data);
     // Note: minus, plus and exponent might not actually be single characters.
-    result.minus = minus().viewData(single_character_data);
-    result.plus = plus().viewData(single_character_data);
+    minus = data->minus().viewData(single_character_data);
+    plus = data->plus().viewData(single_character_data);
     if (mode != IntegerMode)
-        result.decimal = decimalSeparator().viewData(single_character_data);
+        decimal = data->decimalSeparator().viewData(single_character_data);
     if (mode == DoubleScientificMode) {
-        result.exponent = exponential().viewData(single_character_data);
+        exponent = data->exponential().viewData(single_character_data);
         // exponentCyrillic means "apply the Cyrrilic-specific exponent hack"
-        result.exponentCyrillic = m_script_id == QLocale::CyrillicScript;
+        exponentCyrillic = data->m_script_id == QLocale::CyrillicScript;
     }
 #ifndef QT_NO_SYSTEMLOCALE
-    if (this == &systemLocaleData) {
+    if (data == &systemLocaleData) {
         const auto getString = [sys = systemLocale()](QSystemLocale::QueryType query) {
             return sys->query(query).toString();
         };
         if (mode != IntegerMode) {
-            result.sysDecimal = getString(QSystemLocale::DecimalPoint);
-            if (result.sysDecimal.size())
-                result.decimal = QStringView{result.sysDecimal};
+            sysDecimal = getString(QSystemLocale::DecimalPoint);
+            if (sysDecimal.size())
+                decimal = QStringView{sysDecimal};
         }
-        result.sysGroup = getString(QSystemLocale::GroupSeparator);
-        if (result.sysGroup.size())
-            result.group = QStringView{result.sysGroup};
-        result.sysMinus = getString(QSystemLocale::NegativeSign);
-        if (result.sysMinus.size())
-            result.minus = QStringView{result.sysMinus};
-        result.sysPlus = getString(QSystemLocale::PositiveSign);
-        if (result.sysPlus.size())
-            result.plus = QStringView{result.sysPlus};
-        result.setZero(getString(QSystemLocale::ZeroDigit));
+        sysGroup = getString(QSystemLocale::GroupSeparator);
+        if (sysGroup.size())
+            group = QStringView{sysGroup};
+        sysMinus = getString(QSystemLocale::NegativeSign);
+        if (sysMinus.size())
+            minus = QStringView{sysMinus};
+        sysPlus = getString(QSystemLocale::PositiveSign);
+        if (sysPlus.size())
+            plus = QStringView{sysPlus};
+        setZero(getString(QSystemLocale::ZeroDigit));
     }
 #endif
-
-    return result;
 }
 
 namespace {
@@ -4429,166 +4443,170 @@ class NumericTokenizer
     static constexpr auto matchInfNaN = QtPrivate::makeCharacterSetMatch<lettersInfNaN>();
     const QStringView m_text;
     const QLocaleData::NumericData m_guide;
-    qsizetype m_index = 0;
+    qsizetype m_index;
     const QLocaleData::NumberMode m_mode;
     static_assert('+' + 1 == ',' && ',' + 1 == '-' && '-' + 1 == '.');
     char lastMark; // C locale accepts '+' through lastMark.
 public:
     NumericTokenizer(QStringView text, QLocaleData::NumericData &&guide,
-                     QLocaleData::NumberMode mode)
-        : m_text(text), m_guide(guide), m_mode(mode),
+                     QLocaleData::NumberMode mode, qsizetype from = 0)
+        : m_text(text), m_guide(guide), m_index(from), m_mode(mode),
           lastMark(mode == QLocaleData::IntegerMode ? '-' : '.')
     {
         Q_ASSERT(m_guide.isValid(mode));
     }
     bool done() const { return !(m_index < m_text.size()); }
     qsizetype index() const { return m_index; }
-    inline int asBmpDigit(char16_t digit) const;
-    inline bool isInfNanChar(char ch) const { return matchInfNaN.matches(ch); }
+    int digitValue(char32_t digit) const { return m_guide.digitValue(digit); }
+    bool isInfNanChar(char ch) const { return matchInfNaN.matches(ch); }
     char nextToken();
     bool fractionGroupClash() const
     {
         // If the user's hand-configuration of the system makes group and
         // fractional part separators coincide, we have some kludges to apply,
         // though we can skip them in integer mode.
-        return Q_UNLIKELY(m_mode != QLocaleData::IntegerMode && m_guide.group == m_guide.decimal);
+        return Q_UNLIKELY(m_mode != QLocaleData::IntegerMode && m_guide.fractionalIsGroup());
     }
+    const QLocaleData::GroupSizes &groupSizes() { return m_guide.groupSizes(); }
 };
-
-int NumericTokenizer::asBmpDigit(char16_t digit) const
-{
-    // If digit *is* a digit, result will be in range 0 through 9; otherwise not.
-    // Must match qlocale_tools.h's unicodeForDigit()
-    if (m_guide.zeroUcs != u'\u3007' || digit == m_guide.zeroUcs)
-        return digit - m_guide.zeroUcs;
-
-    // QTBUG-85409: Suzhou's digits aren't contiguous !
-    if (digit == u'\u3020') // U+3020 POSTAL MARK FACE is not a digit.
-        return -1;
-    // ... but is followed by digits 1 through 9.
-    return digit - u'\u3020';
-}
 
 char NumericTokenizer::nextToken()
 {
     // As long as caller stops iterating on a zero return, those don't need to
     // keep m_index correctly updated.
     Q_ASSERT(!done());
-    // Mauls non-letters above 'Z' but we don't care:
-    const auto asciiLower = [](unsigned char c) { return c >= 'A' ? c | 0x20 : c; };
-    const QStringView tail = m_text.sliced(m_index);
-    const QChar ch = tail.front();
-    if (ch == u'\u2212') {
-        // Special case: match the "proper" minus sign, for all locales.
-        ++m_index;
-        return '-';
-    }
-    if (m_guide.isC) {
-        // "Conversion" to C locale is just a filter:
-        ++m_index;
-        if (Q_LIKELY(ch.unicode() < 256)) {
-            unsigned char ascii = asciiLower(ch.toLatin1());
-            if (Q_LIKELY(isAsciiDigit(ascii) || ('+' <= ascii && ascii <= lastMark)
-                         // No caller presently (6.5) passes DoubleStandardMode,
-                         // so !IntegerMode implies scientific, for now.
-                         || (m_mode != QLocaleData::IntegerMode && isInfNanChar(ascii))
-                         || (m_mode == QLocaleData::DoubleScientificMode && ascii == 'e'))) {
+    do {
+        // Mauls non-letters above 'Z' but we don't care:
+        const auto asciiLower = [](unsigned char c) { return c >= 'A' ? c | 0x20 : c; };
+        const QStringView tail = m_text.sliced(m_index);
+        const QChar ch = tail.front();
+        if (ch == u'\u2212') {
+            // Special case: match the "proper" minus sign, for all locales.
+            ++m_index;
+            return '-';
+        }
+        if (m_guide.isC) {
+            // "Conversion" to C locale is just a filter:
+            if (Q_LIKELY(ch.unicode() < 256)) {
+                unsigned char ascii = asciiLower(ch.toLatin1());
+                if (Q_LIKELY(isAsciiDigit(ascii) || ('+' <= ascii && ascii <= lastMark)
+                             // No caller presently (6.5) passes DoubleStandardMode,
+                             // so !IntegerMode implies scientific, for now.
+                             || (m_mode != QLocaleData::IntegerMode && isInfNanChar(ascii))
+                             || (m_mode == QLocaleData::DoubleScientificMode && ascii == 'e'))) {
+                    ++m_index;
+                    return ascii;
+                }
+            }
+            return 0;
+        }
+        if (ch.unicode() < 256) {
+            // Accept the C locale's digits and signs in all locales:
+            char ascii = asciiLower(ch.toLatin1());
+            if (isAsciiDigit(ascii) || ascii == '-' || ascii == '+'
+                // Also its Inf and NaN letters:
+                || (m_mode != QLocaleData::IntegerMode && isInfNanChar(ascii))) {
+                ++m_index;
                 return ascii;
             }
         }
-        return 0;
-    }
-    if (ch.unicode() < 256) {
-        // Accept the C locale's digits and signs in all locales:
-        char ascii = asciiLower(ch.toLatin1());
-        if (isAsciiDigit(ascii) || ascii == '-' || ascii == '+'
-            // Also its Inf and NaN letters:
-            || (m_mode != QLocaleData::IntegerMode && isInfNanChar(ascii))) {
-            ++m_index;
-            return ascii;
+
+        // Other locales may be trickier:
+        if (tail.startsWith(m_guide.minus)) {
+            m_index += m_guide.minus.size();
+            return '-';
         }
-    }
-
-    // Other locales may be trickier:
-    if (tail.startsWith(m_guide.minus)) {
-        m_index += m_guide.minus.size();
-        return '-';
-    }
-    if (tail.startsWith(m_guide.plus)) {
-        m_index += m_guide.plus.size();
-        return '+';
-    }
-    if (!m_guide.group.isEmpty() && tail.startsWith(m_guide.group)) {
-        m_index += m_guide.group.size();
-        // When group and decimal coincide, and a fractional part is not
-        // unexpected, treat the last as a fractional part separator (and leave
-        // the caller to special-case the situations where that causes a
-        // parse-fail that we can dodge by not reading it that way).
-        if (fractionGroupClash() && tail.indexOf(m_guide.decimal, m_guide.group.size()) == -1)
+        if (tail.startsWith(m_guide.plus)) {
+            m_index += m_guide.plus.size();
+            return '+';
+        }
+        if (!m_guide.group.isEmpty() && tail.startsWith(m_guide.group)) {
+            m_index += m_guide.group.size();
+            // When group and decimal coincide, and a fractional part is not
+            // unexpected, treat the last as a fractional part separator (and leave
+            // the caller to special-case the situations where that causes a
+            // parse-fail that we can dodge by not reading it that way).
+            if (fractionGroupClash() && tail.indexOf(m_guide.decimal, m_guide.group.size()) == -1)
+                return '.';
+            return ',';
+        }
+        if (m_mode != QLocaleData::IntegerMode && tail.startsWith(m_guide.decimal)) {
+            m_index += m_guide.decimal.size();
             return '.';
-        return ',';
-    }
-    if (m_mode != QLocaleData::IntegerMode && tail.startsWith(m_guide.decimal)) {
-        m_index += m_guide.decimal.size();
-        return '.';
-    }
-    if (m_mode == QLocaleData::DoubleScientificMode
-        && tail.startsWith(m_guide.exponent, Qt::CaseInsensitive)) {
-        m_index += m_guide.exponent.size();
-        return 'e';
-    }
+        }
+        if (m_mode == QLocaleData::DoubleScientificMode
+            && tail.startsWith(m_guide.exponent, Qt::CaseInsensitive)) {
+            m_index += m_guide.exponent.size();
+            return 'e';
+        }
 
-    // Must match qlocale_tools.h's unicodeForDigit()
-    if (m_guide.zeroLen == 1) {
-        if (!ch.isSurrogate()) {
-            const int gap = asBmpDigit(ch.unicode());
-            if (gap >= 0 && gap < 10) {
-                ++m_index;
-                return '0' + gap;
+        // Must match qlocale_tools.h's unicodeForDigit()
+        if (m_guide.zeroLen == 1) {
+            if (!ch.isSurrogate()) {
+                if (const int gap = digitValue(char32_t(ch.unicode())); gap >= 0) {
+                    ++m_index;
+                    return '0' + gap;
+                }
+            } else if (ch.isHighSurrogate() && tail.size() > 1 && tail.at(1).isLowSurrogate()) {
+                return 0;
             }
-        } else if (ch.isHighSurrogate() && tail.size() > 1 && tail.at(1).isLowSurrogate()) {
+            // There remain one or two things a non-surrogate might be ...
+        } else if (ch.isHighSurrogate()) {
+            // None of the corner cases below matches a surrogate, so return
+            // early if we don't have a digit.
+            if (tail.size() > 1) {
+                if (const QChar low = tail.at(1); low.isLowSurrogate()) {
+                    if (const int gap = digitValue(QChar::surrogateToUcs4(ch, low)); gap >= 0) {
+                        m_index += 2;
+                        return '0' + gap;
+                    }
+                }
+            }
             return 0;
         }
-    } else if (ch.isHighSurrogate()) {
-        // None of the corner cases below matches a surrogate, so (update
-        // already and) return early if we don't have a digit.
-        if (tail.size() > 1) {
-            QChar low = tail.at(1);
-            if (low.isLowSurrogate()) {
-                m_index += 2;
-                const uint gap = QChar::surrogateToUcs4(ch, low) - m_guide.zeroUcs;
-                return gap < 10u ? '0' + gap : 0;
+
+        // All cases where tail starts with properly-matched surrogate pair
+        // have been handled by this point.
+        Q_ASSERT(!(ch.isHighSurrogate() && tail.size() > 1 && tail.at(1).isLowSurrogate()));
+
+        // Weird corner cases (code above assumes these match no surrogates):
+        switch (ch.unicode()) {
+            // Skip over inivisble marks commonly found in numeric forms:
+        case 0x061C: // Arabic Letter Mark (before signs in standard Arabic)
+        case 0x200E: // Left-to-Right marker
+        case 0x200F: // Right-to-Left marker
+            ++m_index;
+            continue;
+
+        case u' ':
+            // Some locales use a non-breaking space (U+00A0) or its thin
+            // version (U+202f) for grouping. These look like spaces, so people
+            // (and thus some of our tests) use a regular space instead and
+            // complain if it doesn't work.
+            // Should this be extended generally to any case where group is a space ?
+            if (m_guide.group == u"\u00a0" || m_guide.group == u"\u202f") {
+                ++m_index;
+                return ',';
             }
+            break;
+
+            // Case-insensitive match:
+        case u'E':
+        case u'e':
+        case u'\u0415': // Cyrillic E
+        case u'\u0435': // Cyrillic e
+            // Cyrillic E is used by Ukrainian as exponent; but others writing
+            // Cyrillic may well use that; and Ukrainians might well use E.
+            // All other Cyrillic locales (officially) use plain ASCII E.
+            if (m_guide.exponentCyrillic) { // Only true in scientific float mode.
+                ++m_index;
+                return 'e';
+            }
+            break;
         }
-        return 0;
-    }
 
-    // All cases where tail starts with properly-matched surrogate pair
-    // have been handled by this point.
-    Q_ASSERT(!(ch.isHighSurrogate() && tail.size() > 1 && tail.at(1).isLowSurrogate()));
-
-    // Weird corner cases follow (code above assumes these match no surrogates).
-
-    // Some locales use a non-breaking space (U+00A0) or its thin version
-    // (U+202f) for grouping. These look like spaces, so people (and thus some
-    // of our tests) use a regular space instead and complain if it doesn't
-    // work.
-    // Should this be extended generally to any case where group is a space ?
-    if ((m_guide.group == u"\u00a0" || m_guide.group == u"\u202f") && tail.startsWith(u' ')) {
-        ++m_index;
-        return ',';
-    }
-
-    // Cyrillic has its own E, used by Ukrainian as exponent; but others
-    // writing Cyrillic may well use that; and Ukrainians might well use E.
-    // All other Cyrillic locales (officially) use plain ASCII E.
-    if (m_guide.exponentCyrillic // Only true in scientific float mode.
-        && (tail.startsWith(u"\u0415", Qt::CaseInsensitive)
-            || tail.startsWith(u"E", Qt::CaseInsensitive))) {
-        ++m_index;
-        return 'e';
-    }
-
+        break;
+    } while (!done());
     return 0;
 }
 } // namespace with no name
@@ -4617,7 +4635,7 @@ bool QLocaleData::numberToCLocale(QStringView s, QLocale::NumberOptions number_o
     s = s.trimmed();
     if (s.size() < 1)
         return false;
-    NumericTokenizer tokens(s, numericData(mode), mode);
+    NumericTokenizer tokens(s, NumericData(this, mode), mode);
 
     // Reflects order constraints on possible parts of a number:
     enum { Whole, Grouped, Fraction, Exponent, Name } stage = Whole;
@@ -4631,7 +4649,7 @@ bool QLocaleData::numberToCLocale(QStringView s, QLocale::NumberOptions number_o
     // Digit-grouping details (all modes):
     bool needHigherGroup = false; // Set when first group is too short to be the only one
     qsizetype digitsInGroup = 0;
-    const QLocaleData::GroupSizes grouping = groupSizes();
+    const QLocaleData::GroupSizes &grouping = tokens.groupSizes();
     const auto badLeastGroup = [&]() {
         // In principle we could object to a complete absence of grouping, when
         // digitsInGroup >= qMax(grouping.first, grouping.least), unless the
@@ -4781,7 +4799,7 @@ QLocaleData::validateChars(QStringView str, NumberMode numMode, int decDigits,
 
     enum { Whole, Fractional, Exponent } state = Whole;
     const bool scientific = numMode == DoubleScientificMode;
-    NumericTokenizer tokens(str, numericData(numMode), numMode);
+    NumericTokenizer tokens(str, NumericData(this, numMode), numMode);
     char last = '\0';
 
     while (!tokens.done()) {

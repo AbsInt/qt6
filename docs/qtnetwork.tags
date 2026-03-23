@@ -375,6 +375,12 @@
             <anchor>KeyAlgorithm-enum</anchor>
             <arglist></arglist>
         </member>
+        <member kind="enumvalue">
+            <name>MlDsa</name>
+            <anchorfile>qssl.html</anchorfile>
+            <anchor>KeyAlgorithm-enum</anchor>
+            <arglist></arglist>
+        </member>
         <member kind="enumeration">
             <name>KeyType</name>
             <anchorfile>qssl.html</anchorfile>
@@ -950,6 +956,24 @@
             <anchor>SocketOption-enum</anchor>
             <arglist></arglist>
         </member>
+        <member kind="enumvalue">
+            <name>KeepAliveIdleOption</name>
+            <anchorfile>qabstractsocket.html</anchorfile>
+            <anchor>SocketOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>KeepAliveIntervalOption</name>
+            <anchorfile>qabstractsocket.html</anchorfile>
+            <anchor>SocketOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>KeepAliveCountOption</name>
+            <anchorfile>qabstractsocket.html</anchorfile>
+            <anchor>SocketOption-enum</anchor>
+            <arglist></arglist>
+        </member>
         <member kind="enumeration">
             <name>SocketState</name>
             <anchorfile>qabstractsocket.html</anchorfile>
@@ -1461,6 +1485,13 @@
             <anchorfile>qauthenticator.html</anchorfile>
             <anchor>QAuthenticator-1</anchor>
             <arglist>(const QAuthenticator &amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>clear</name>
+            <anchorfile>qauthenticator.html</anchorfile>
+            <anchor>clear</anchor>
+            <arglist>()</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
@@ -10051,6 +10082,27 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setTcpKeepAliveIdleTimeBeforeProbes</name>
+            <anchorfile>qnetworkrequest.html</anchorfile>
+            <anchor>setTcpKeepAliveIdleTimeBeforeProbes</anchor>
+            <arglist>(std::chrono::seconds idle)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setTcpKeepAliveIntervalBetweenProbes</name>
+            <anchorfile>qnetworkrequest.html</anchorfile>
+            <anchor>setTcpKeepAliveIntervalBetweenProbes</anchor>
+            <arglist>(std::chrono::seconds interval)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setTcpKeepAliveProbeCount</name>
+            <anchorfile>qnetworkrequest.html</anchorfile>
+            <anchor>setTcpKeepAliveProbeCount</anchor>
+            <arglist>(int probes)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setTransferTimeout</name>
             <anchorfile>qnetworkrequest.html</anchorfile>
             <anchor>setTransferTimeout</anchor>
@@ -10198,6 +10250,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>int</type>
+            <name>tcpKeepAliveProbeCount</name>
+            <anchorfile>qnetworkrequest.html</anchorfile>
+            <anchor>tcpKeepAliveProbeCount</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>int</type>
             <name>transferTimeout</name>
             <anchorfile>qnetworkrequest.html</anchorfile>
             <anchor>transferTimeout</anchor>
@@ -10215,6 +10274,20 @@
             <name>transferTimeoutAsDuration</name>
             <anchorfile>qnetworkrequest.html</anchorfile>
             <anchor>transferTimeoutAsDuration</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::chrono::seconds</type>
+            <name>tcpKeepAliveIdleTimeBeforeProbes</name>
+            <anchorfile>qnetworkrequest.html</anchorfile>
+            <anchor>tcpKeepAliveIdleTimeBeforeProbes</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>std::chrono::seconds</type>
+            <name>tcpKeepAliveIntervalBetweenProbes</name>
+            <anchorfile>qnetworkrequest.html</anchorfile>
+            <anchor>tcpKeepAliveIntervalBetweenProbes</anchor>
             <arglist>() const const</arglist>
         </member>
     </compound>

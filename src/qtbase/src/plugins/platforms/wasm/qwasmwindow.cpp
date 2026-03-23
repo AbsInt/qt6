@@ -41,13 +41,12 @@ QT_BEGIN_NAMESPACE
 
 Q_GUI_EXPORT int qt_defaultDpiX();
 
-QWasmWindow::QWasmWindow(QWindow *w, QWasmDeadKeySupport *deadKeySupport,
+QWasmWindow::QWasmWindow(QWindow *w,
                          QWasmCompositor *compositor, QWasmBackingStore *backingStore,
                          WId nativeHandle)
     : QPlatformWindow(w),
       m_compositor(compositor),
       m_backingStore(backingStore),
-      m_deadKeySupport(deadKeySupport),
       m_document(dom::document()),
       m_decoratedWindow(m_document.call<emscripten::val>("createElement", emscripten::val("div"))),
       m_window(m_document.call<emscripten::val>("createElement", emscripten::val("div"))),
@@ -123,8 +122,10 @@ QWasmWindow::QWasmWindow(QWindow *w, QWasmDeadKeySupport *deadKeySupport,
     m_inputElement["style"].set("display", "");
     m_window.call<void>("appendChild", m_inputElement);
 
-    // Hide the canvas from screen readers.
+    // The canvas displays graphics only, and is not accessible or an event target
     m_canvas.call<void>("setAttribute", std::string("aria-hidden"), std::string("true"));
+    m_canvas["style"].set("pointerEvents", "none");
+
     m_window.call<void>("appendChild", m_canvas);
 
     m_a11yContainer["classList"].call<void>("add", emscripten::val("qt-window-a11y-container"));
@@ -202,7 +203,14 @@ void QWasmWindow::registerEventHandlers()
     m_dragEndCallback = QWasmEventHandler(m_window, "dragend",
         [this](emscripten::val event) {
             DragEvent dragEvent(EventType::DragEnd, event, window());
-            QWasmDrag::instance()->onNativeDragFinished(&dragEvent);
+            QWasmDrag::instance()->onNativeDragFinished(&dragEvent, platformScreen());
+            releasePointerGrab(dragEvent);
+        }
+    );
+    m_dragEnterCallback = QWasmEventHandler(m_window, "dragenter",
+        [this](emscripten::val event) {
+            DragEvent dragEvent(EventType::DragEnter, event, window());
+            QWasmDrag::instance()->onNativeDragEnter(&dragEvent);
         }
     );
     m_dragLeaveCallback = QWasmEventHandler(m_window, "dragleave",
@@ -217,9 +225,9 @@ void QWasmWindow::registerEventHandlers()
         [this](emscripten::val event) { this->handleWheelEvent(event); });
 
     m_keyDownCallback = QWasmEventHandler(m_window, "keydown",
-        [this](emscripten::val event) { this->handleKeyEvent(KeyEvent(EventType::KeyDown, event, m_deadKeySupport)); });
+        [this](emscripten::val event) { this->handleKeyEvent(KeyEvent(EventType::KeyDown, event)); });
     m_keyUpCallback =QWasmEventHandler(m_window, "keyup",
-        [this](emscripten::val event) {this->handleKeyEvent(KeyEvent(EventType::KeyUp, event, m_deadKeySupport)); });
+        [this](emscripten::val event) {this->handleKeyEvent(KeyEvent(EventType::KeyUp, event)); });
 
     m_inputCallback = QWasmEventHandler(m_window, "input",
         [this](emscripten::val event){ handleInputEvent(event); });
@@ -797,12 +805,28 @@ bool QWasmWindow::processPointerEnterLeave(const PointerEvent &event)
     return false;
 }
 
+void QWasmWindow::releasePointerGrab(const MouseEvent &event)
+{
+    // We check hasPointerCapture due to the implicit release
+    // browsers do.
+    if (m_capturedPointerId && event.isTargetedForElement(m_window) &&
+        m_window.call<bool>("hasPointerCapture", *m_capturedPointerId)) {
+        m_window.call<void>("releasePointerCapture", *m_capturedPointerId);
+        m_capturedPointerId = std::nullopt;
+    }
+}
+
 void QWasmWindow::processPointer(const PointerEvent &event)
 {
+    // Process pointer events targeted at the window only, and not
+    // for instance events for the accessibility elements.
+    if (!event.isTargetedForElement(m_window))
+        return;
+
     switch (event.type) {
     case EventType::PointerDown:
-        if (event.isTargetedForQtElement())
-            m_window.call<void>("setPointerCapture", event.pointerId);
+        m_capturedPointerId = event.pointerId;
+        m_window.call<void>("setPointerCapture", event.pointerId);
 
         if ((window()->flags() & Qt::WindowDoesNotAcceptFocus)
                     != Qt::WindowDoesNotAcceptFocus
@@ -810,8 +834,7 @@ void QWasmWindow::processPointer(const PointerEvent &event)
                 window()->requestActivate();
         break;
     case EventType::PointerUp:
-        if (event.isTargetedForQtElement())
-            m_window.call<void>("releasePointerCapture", event.pointerId);
+        releasePointerGrab(event);
         break;
     default:
         break;
@@ -1079,6 +1102,9 @@ void QWasmWindow::requestActivateWindow()
 
 void QWasmWindow::focus()
 {
+    if (QWasmAccessibility::isEnabled())
+        return;
+
     m_focusHelper.call<void>("focus");
 }
 

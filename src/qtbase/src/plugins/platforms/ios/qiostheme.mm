@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qiostheme.h"
 
@@ -11,6 +12,7 @@
 #include <QtGui/private/qcoregraphics_p.h>
 
 #include <QtGui/private/qcoretextfontdatabase_p.h>
+#include <QtGui/private/qapplefileiconengine_p.h>
 #include <QtGui/private/qappleiconengine_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <qpa/qplatformintegration.h>
@@ -233,5 +235,11 @@ QIconEngine *QIOSTheme::createIconEngine(const QString &iconName) const
 {
     return new QAppleIconEngine(iconName);
 }
+
+QIcon QIOSTheme::fileIcon(const QFileInfo &fileInfo, QPlatformTheme::IconOptions iconOptions) const
+{
+    return QIcon(new QAppleFileIconEngine(fileInfo, iconOptions));
+}
+
 
 QT_END_NAMESPACE

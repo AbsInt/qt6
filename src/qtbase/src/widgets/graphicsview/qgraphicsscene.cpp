@@ -1087,6 +1087,12 @@ void QGraphicsScenePrivate::enableMouseTrackingOnViews()
 }
 
 /*!
+    \class QGraphicsScenePrivate
+    \inmodule QtWidgets
+    \internal
+*/
+
+/*!
     Returns all items for the screen position in \a event.
 */
 QList<QGraphicsItem *> QGraphicsScenePrivate::itemsAtPosition(const QPoint &screenPos,

@@ -53,6 +53,7 @@ static inline int classify2(QStringView s, int parseModeFlags) {
 }
 
 static inline int classify3(QStringView s, int parseModeFlags) {
+    Q_UNUSED(parseModeFlags);
   if (s[0].unicode() == 'f') {
     if (s[1].unicode() == 'o') {
       if (s[2].unicode() == 'r') {
@@ -64,13 +65,6 @@ static inline int classify3(QStringView s, int parseModeFlags) {
     if (s[1].unicode() == 'e') {
       if (s[2].unicode() == 't') {
         return Lexer::T_GET;
-      }
-    }
-  }
-  else if (s[0].unicode() == 'i') {
-    if (s[1].unicode() == 'n') {
-      if (s[2].unicode() == 't') {
-        return (parseModeFlags & Lexer::QmlMode) ? int(Lexer::T_INT) : int(Lexer::T_IDENTIFIER);
       }
     }
   }
@@ -113,27 +107,12 @@ static inline int classify3(QStringView s, int parseModeFlags) {
 }
 
 static inline int classify4(QStringView s, int parseModeFlags) {
-  if (s[0].unicode() == 'b') {
-    if (s[1].unicode() == 'y') {
-      if (s[2].unicode() == 't') {
-        if (s[3].unicode() == 'e') {
-          return (parseModeFlags & Lexer::QmlMode) ? int(Lexer::T_BYTE) : int(Lexer::T_IDENTIFIER);
-        }
-      }
-    }
-  }
-  else if (s[0].unicode() == 'c') {
+    Q_UNUSED(parseModeFlags);
+  if (s[0].unicode() == 'c') {
     if (s[1].unicode() == 'a') {
       if (s[2].unicode() == 's') {
         if (s[3].unicode() == 'e') {
           return Lexer::T_CASE;
-        }
-      }
-    }
-    else if (s[1].unicode() == 'h') {
-      if (s[2].unicode() == 'a') {
-        if (s[3].unicode() == 'r') {
-          return (parseModeFlags & Lexer::QmlMode) ? int(Lexer::T_CHAR) : int(Lexer::T_IDENTIFIER);
         }
       }
     }
@@ -149,7 +128,7 @@ static inline int classify4(QStringView s, int parseModeFlags) {
     else if (s[1].unicode() == 'n') {
       if (s[2].unicode() == 'u') {
         if (s[3].unicode() == 'm') {
-          return (parseModeFlags & Lexer::QmlMode) ? int(Lexer::T_ENUM) : int(Lexer::T_RESERVED_WORD);
+          return int(Lexer::T_ENUM);
         }
       }
     }
@@ -159,24 +138,6 @@ static inline int classify4(QStringView s, int parseModeFlags) {
       if (s[2].unicode() == 'o') {
         if (s[3].unicode() == 'm') {
           return int(Lexer::T_FROM);
-        }
-      }
-    }
-  }
-  else if (s[0].unicode() == 'g') {
-    if (s[1].unicode() == 'o') {
-      if (s[2].unicode() == 't') {
-        if (s[3].unicode() == 'o') {
-          return (parseModeFlags & Lexer::QmlMode) ? int(Lexer::T_GOTO) : int(Lexer::T_IDENTIFIER);
-        }
-      }
-    }
-  }
-  else if (s[0].unicode() == 'l') {
-    if (s[1].unicode() == 'o') {
-      if (s[2].unicode() == 'n') {
-        if (s[3].unicode() == 'g') {
-          return (parseModeFlags & Lexer::QmlMode) ? int(Lexer::T_LONG) : int(Lexer::T_IDENTIFIER);
         }
       }
     }
@@ -287,27 +248,9 @@ static inline int classify5(QStringView s, int parseModeFlags) {
         }
       }
     }
-    else if (s[1].unicode() == 'l') {
-      if (s[2].unicode() == 'o') {
-        if (s[3].unicode() == 'a') {
-          if (s[4].unicode() == 't') {
-            return (parseModeFlags & Lexer::QmlMode) ? int(Lexer::T_FLOAT) : int(Lexer::T_IDENTIFIER);
-          }
-        }
-      }
-    }
   }
   else if (s[0].unicode() == 's') {
-    if (s[1].unicode() == 'h') {
-      if (s[2].unicode() == 'o') {
-        if (s[3].unicode() == 'r') {
-          if (s[4].unicode() == 't') {
-            return (parseModeFlags & Lexer::QmlMode) ? int(Lexer::T_SHORT) : int(Lexer::T_IDENTIFIER);
-          }
-        }
-      }
-    }
-    else if (s[1].unicode() == 'u') {
+    if (s[1].unicode() == 'u') {
       if (s[2].unicode() == 'p') {
         if (s[3].unicode() == 'e') {
           if (s[4].unicode() == 'r') {
@@ -361,17 +304,6 @@ static inline int classify6(QStringView s, int parseModeFlags) {
           if (s[4].unicode() == 't') {
             if (s[5].unicode() == 'e') {
               return Lexer::T_DELETE;
-            }
-          }
-        }
-      }
-    }
-    else if (s[1].unicode() == 'o') {
-      if (s[2].unicode() == 'u') {
-        if (s[3].unicode() == 'b') {
-          if (s[4].unicode() == 'l') {
-            if (s[5].unicode() == 'e') {
-              return (parseModeFlags & Lexer::QmlMode) ? int(Lexer::T_DOUBLE) : int(Lexer::T_IDENTIFIER);
             }
           }
         }
@@ -517,22 +449,7 @@ static inline int classify6(QStringView s, int parseModeFlags) {
 }
 
 static inline int classify7(QStringView s, int parseModeFlags) {
-  if (s[0].unicode() == 'b') {
-    if (s[1].unicode() == 'o') {
-      if (s[2].unicode() == 'o') {
-        if (s[3].unicode() == 'l') {
-          if (s[4].unicode() == 'e') {
-            if (s[5].unicode() == 'a') {
-              if (s[6].unicode() == 'n') {
-                return (parseModeFlags & Lexer::QmlMode) ? int(Lexer::T_BOOLEAN) : int(Lexer::T_IDENTIFIER);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  else if (s[0].unicode() == 'd') {
+  if (s[0].unicode() == 'd') {
     if (s[1].unicode() == 'e') {
       if (s[2].unicode() == 'f') {
         if (s[3].unicode() == 'a') {
@@ -605,6 +522,11 @@ static inline int classify7(QStringView s, int parseModeFlags) {
       }
     }
   }
+  else if ((parseModeFlags & Lexer::QmlMode) && s[0].unicode() == 'v') {
+      if (s.slice(1) == QLatin1StringView("irtual")) {
+          return Lexer::T_VIRTUAL;
+      }
+  }
   return Lexer::T_IDENTIFIER;
 }
 
@@ -676,6 +598,11 @@ static inline int classify8(QStringView s, int parseModeFlags) {
         }
       }
     }
+  }
+  else if ((parseModeFlags & Lexer::QmlMode) && s[0].unicode() == 'o') {
+      if (s.slice(1) == QLatin1StringView("verride")) {
+          return Lexer::T_OVERRIDE;
+      }
   }
   else if ((parseModeFlags & Lexer::QmlMode) && s[0].unicode() == 'p') {
     if (s[1].unicode() == 'r') {

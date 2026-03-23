@@ -59,6 +59,9 @@ enum IdentifierType : quint8 {
     EnumeratorIdentifier,
     EnumeratorValueIdentifier,
     AttachedTypeIdentifier,
+    // qqmljsimportvisitor creates extra attached type scopes for `Type.property: ...` compared to
+    // other usages of attached types, like for example `p: Type.property`
+    AttachedTypeIdentifierInBindingTarget,
     GroupedPropertyIdentifier,
     QmlComponentIdentifier,
     QualifiedModuleIdentifier,
@@ -264,7 +267,7 @@ QByteArray qmlUrlToLspUri(const QByteArray &url);
 QLspSpecification::Range qmlLocationToLspLocation(Location qmlLocation);
 DomItem baseObject(const DomItem &qmlObject);
 std::optional<Location> findTypeDefinitionOf(const DomItem &item);
-std::optional<Location> findDefinitionOf(const DomItem &item);
+std::optional<Location> findDefinitionOf(const DomItem &item, const QStringList &headerDirectories);
 Usages findUsagesOf(const DomItem &item);
 
 std::optional<ErrorMessage>
@@ -275,7 +278,7 @@ RenameUsages renameUsagesOf(const DomItem &item, const QString &newName,
 std::optional<ExpressionType> resolveExpressionType(const DomItem &item, ResolveOptions);
 bool isValidEcmaScriptIdentifier(QStringView view);
 
-std::pair<QString, QStringList> cmakeBuildCommand(const QString &path);
+std::pair<QString, QStringList> cmakeBuildCommand(const QString &path, int cmakeJobs = 0);
 
 bool isFieldMemberExpression(const DomItem &item);
 bool isFieldMemberAccess(const DomItem &item);
@@ -294,6 +297,10 @@ QQmlJSScope::ConstPtr findDefiningScopeForEnumeration(const QQmlJSScope::ConstPt
                                                             const QString &nameToCheck);
 QQmlJSScope::ConstPtr findDefiningScopeForEnumerationKey(const QQmlJSScope::ConstPtr &referrerScope,
                                                         const QString &nameToCheck);
+QStringList findFilePathsFromFileNames(const QString &rootDir, const QStringList &fileNamesToSearch,
+                                       const QSet<QString> &ignoredPaths);
+QString findFilePathFromFileName(const QStringList &rootDirs, const QString &fileNameToSearch,
+                                 const QSet<QString> &ignoredPaths);
 } // namespace QQmlLSUtils
 
 QT_END_NAMESPACE

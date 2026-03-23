@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #import <UIKit/UIKit.h>
 
@@ -48,14 +49,10 @@ bool QIOSFileDialog::show(Qt::WindowFlags windowFlags, Qt::WindowModality window
     // when converted to QUrl, it becames a scheme.
     const QString scheme = initialDir.scheme();
 
-    if (acceptOpen) {
-        if (directory.startsWith("assets-library:"_L1) || scheme == "assets-library"_L1)
-            return showImagePickerDialog(parent);
-        else
-            return showNativeDocumentPickerDialog(parent);
-    }
+    if (acceptOpen && (directory.startsWith("assets-library:"_L1) || scheme == "assets-library"_L1))
+        return showImagePickerDialog(parent);
 
-    return false;
+    return showNativeDocumentPickerDialog(parent);
 }
 
 void QIOSFileDialog::showImagePickerDialog_helper(QWindow *parent)

@@ -75,9 +75,9 @@ public:
 
     The only function that we need to implement is the constructor:
 
-    \snippet qsignalmapper/buttonwidget.cpp 0
-    \snippet qsignalmapper/buttonwidget.cpp 1
-    \snippet qsignalmapper/buttonwidget.cpp 2
+    \snippet qsignalmapper/buttonwidget.cpp OpenCtor
+    \snippet qsignalmapper/buttonwidget.cpp OldNotation
+    \snippet qsignalmapper/buttonwidget.cpp CloseBrackets
 
     A list of texts is passed to the constructor. A signal mapper is
     constructed and for each text in the list a QPushButton is
@@ -93,7 +93,9 @@ public:
     slots. The example above can be rewritten simpler without QSignalMapper
     by connecting to a lambda function.
 
-    \snippet qsignalmapper/buttonwidget.cpp 3
+    \snippet qsignalmapper/buttonwidget.cpp OpenCtor
+    \snippet qsignalmapper/buttonwidget.cpp ModernNotation
+    \snippet qsignalmapper/buttonwidget.cpp CloseBrackets
 
     \sa QObject, QButtonGroup, QActionGroup
 */

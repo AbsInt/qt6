@@ -3,41 +3,42 @@
 // Qt-Security score:significant
 
 #include "qjsengine.h"
-#include "qjsengine_p.h"
-#include "qjsvalue.h"
-#include "qjsvalue_p.h"
 
-#include "private/qv4engine_p.h"
-#include "private/qv4mm_p.h"
-#include "private/qv4errorobject_p.h"
-#include "private/qv4globalobject_p.h"
-#include "private/qv4script_p.h"
-#include "private/qv4runtime_p.h"
-#include <private/qv4dateobject_p.h>
+#include <private/qjsengine_p.h>
+#include <private/qjsvalue_p.h>
 #include <private/qqmlbuiltinfunctions_p.h>
 #include <private/qqmldebugconnector_p.h>
-#include <private/qv4qobjectwrapper_p.h>
-#include <private/qv4qmetaobjectwrapper_p.h>
-#include <private/qv4stackframe_p.h>
+#include <private/qqmlglobal_p.h>
+#include <private/qqmlscriptblob_p.h>
+#include <private/qqmltypeloader_p.h>
+#include <private/qv4dateobject_p.h>
+#include <private/qv4engine_p.h>
+#include <private/qv4errorobject_p.h>
+#include <private/qv4globalobject_p.h>
+#include <private/qv4mm_p.h>
 #include <private/qv4module_p.h>
+#include <private/qv4qmetaobjectwrapper_p.h>
+#include <private/qv4qobjectwrapper_p.h>
+#include <private/qv4runtime_p.h>
+#include <private/qv4script_p.h>
+#include <private/qv4stackframe_p.h>
 #include <private/qv4symbol_p.h>
 
-#include <QtCore/qdatetime.h>
-#include <QtCore/qmetaobject.h>
-#include <QtCore/qstringlist.h>
-#include <QtCore/qvariant.h>
-#include <QtCore/qdatetime.h>
+#include <QtQml/qjsvalue.h>
+#include <QtQml/qqmlengine.h>
 
 #include <QtCore/qcoreapplication.h>
+#include <QtCore/qdatetime.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qfileinfo.h>
+#include <QtCore/qmetaobject.h>
+#include <QtCore/qmutex.h>
 #include <QtCore/qpluginloader.h>
-#include <qthread.h>
-#include <qmutex.h>
-#include <qwaitcondition.h>
-#include <private/qqmlglobal_p.h>
-#include <qqmlengine.h>
+#include <QtCore/qstringlist.h>
+#include <QtCore/qthread.h>
+#include <QtCore/qvariant.h>
+#include <QtCore/qwaitcondition.h>
 
 Q_DECLARE_METATYPE(QList<int>)
 
@@ -357,8 +358,9 @@ QJSEngine::QJSEngine(QObject *parent)
 */
 QJSEngine::QJSEngine(QJSEnginePrivate &dd, QObject *parent)
     : QObject(dd, parent)
-    , m_v4Engine(new QV4::ExecutionEngine(this))
 {
+    dd.v4Engine = std::make_unique<QV4::ExecutionEngine>(this);
+    m_v4Engine = dd.v4Engine.get();
     checkForApplicationInstance();
 }
 
@@ -373,7 +375,7 @@ QJSEngine::~QJSEngine()
 {
     m_v4Engine->inShutdown = true;
     QJSEnginePrivate::removeFromDebugServer(this);
-    delete m_v4Engine;
+    m_v4Engine->publicEngine = nullptr;
 }
 
 /*!
@@ -521,12 +523,12 @@ QJSValue QJSEngine::evaluate(const QString& program, const QString& fileName, in
     QV4::ScopedValue result(scope);
 
     QV4::Script script(v4->rootContext(), QV4::Compiler::ContextType::Global, program, urlForFileName(fileName).toString(), lineNumber);
-    script.strictMode = false;
+    script.setStrictMode(false);
     if (v4->currentStackFrame)
-        script.strictMode = v4->currentStackFrame->v4Function->isStrict();
+        script.setStrictMode(v4->currentStackFrame->v4Function->isStrict());
     else if (v4->globalCode)
-        script.strictMode = v4->globalCode->isStrict();
-    script.inheritContext = true;
+        script.setStrictMode(v4->globalCode->isStrict());
+    script.setInheritContext();
     script.parse();
     if (!scope.hasException())
         result = script.run();
@@ -548,8 +550,8 @@ QJSValue QJSEngine::evaluate(const QString& program, const QString& fileName, in
     if (v4->isInterrupted.loadRelaxed())
         result = v4->newErrorObject(QStringLiteral("Interrupted"));
 
-    if (script.compilationUnit)
-        v4->trimCompilationUnitsForUrl(script.compilationUnit->finalUrl());
+    if (const auto cu = script.compilationUnit())
+        v4->trimCompilationUnitsForUrl(cu->finalUrl());
     return QJSValuePrivate::fromReturnedValue(result->asReturnedValue());
 }
 
@@ -577,10 +579,40 @@ QJSValue QJSEngine::evaluate(const QString& program, const QString& fileName, in
  */
 QJSValue QJSEngine::importModule(const QString &fileName)
 {
-    const QUrl url = urlForFileName(QFileInfo(fileName).canonicalFilePath());
-    const auto module = m_v4Engine->loadModule(url);
-    if (m_v4Engine->hasException)
-        return QJSValuePrivate::fromReturnedValue(m_v4Engine->catchException());
+    QUrl url = urlForFileName(QFileInfo(fileName).canonicalFilePath());
+    if (!fileName.endsWith(QLatin1String(".mjs")))
+        url.setFragment(QLatin1String("module"));
+
+    QQmlRefPointer<QQmlScriptBlob> scriptBlob = m_v4Engine->typeLoader()->getScript(url);
+
+    if (scriptBlob->isError()) {
+        const QList<QQmlError> errors = scriptBlob->errors();
+        switch (errors.length()) {
+        case 0:
+            Q_UNREACHABLE_RETURN(QJSValue());
+        case 1: {
+            const QQmlError &error = errors[0];
+            m_v4Engine->throwSyntaxError(
+                    error.description(), error.url().toString(), error.line(), error.column());
+            return QJSValuePrivate::fromReturnedValue(m_v4Engine->catchException());
+        }
+        default: {
+            QString errorString = QStringLiteral("Importing module failed:");
+            for (const QQmlError &error : errors) {
+                errorString += QLatin1String("\n    ");
+                errorString += error.toString();
+            }
+            m_v4Engine->throwSyntaxError(errorString);
+            return QJSValuePrivate::fromReturnedValue(m_v4Engine->catchException());
+        }
+        }
+    }
+
+    // We've just created the URL from a local file. So it has to be synchronous.
+    Q_ASSERT(scriptBlob->isComplete());
+
+    const auto module
+            = m_v4Engine->executableCompilationUnit(scriptBlob->scriptData()->compilationUnit());
 
     // If there is neither a native nor a compiled module, we should have seen an exception
     Q_ASSERT(module);
@@ -1233,10 +1265,7 @@ QJSEnginePrivate *QJSEnginePrivate::get(QV4::ExecutionEngine *e)
     return e->jsEngine()->d_func();
 }
 
-QJSEnginePrivate::~QJSEnginePrivate()
-{
-    QQmlMetaType::freeUnusedTypesAndCaches();
-}
+QJSEnginePrivate::~QJSEnginePrivate() = default;
 
 void QJSEnginePrivate::addToDebugServer(QJSEngine *q)
 {
@@ -1246,6 +1275,10 @@ void QJSEnginePrivate::addToDebugServer(QJSEngine *q)
     QQmlDebugConnector *server = QQmlDebugConnector::instance();
     if (!server || server->hasEngine(q))
         return;
+
+    // Initialize the type loader before attaching debug services. We'll need it anyway and
+    // we don't want the preview service to block on resolving some paths from QLibraryInfo.
+    QQmlTypeLoader::get(q);
 
     server->open();
     server->addEngine(q);

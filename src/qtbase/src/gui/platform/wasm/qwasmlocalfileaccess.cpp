@@ -35,10 +35,12 @@ void showOpenViaHTMLPolyfill(const QStringList &accept, FileSelectMode fileSelec
     Q_UNUSED(accept);
     input.set("multiple", emscripten::val(fileSelectMode == FileSelectMode::MultipleFiles));
 
-    // Note: there is no event in case the user cancels the file dialog.
     static std::unique_ptr<qstdweb::EventCallback> changeEvent;
+    static std::unique_ptr<qstdweb::EventCallback> cancelEvent;
     auto callback = [=](emscripten::val) { onFilesSelected.thenFunc(input["files"]); };
+    auto cancelCallback = [=](emscripten::val) { onFilesSelected.catchFunc(emscripten::val::undefined()); };
     changeEvent = std::make_unique<qstdweb::EventCallback>(input, "change", callback);
+    cancelEvent = std::make_unique<qstdweb::EventCallback>(input, "cancel", cancelCallback);
 
     // Activate file input
     emscripten::val body = document["body"];
@@ -282,6 +284,44 @@ void saveFile(const char *content, size_t size, const std::string &fileNameHint)
         .thenFunc = [=](emscripten::val result) {
             saveDataToFileInChunks(result, data);
         },
+    });
+}
+
+void showOpenFileDialog(const std::string &accept,
+    const std::function<void (bool accepted, std::vector<qstdweb::File> files)> fileDialogClosed)
+{
+    FileDialog::showOpen(makeFilterList(accept), FileSelectMode::MultipleFiles, {
+        .thenFunc = [=](emscripten::val result) {
+            if (result.isUndefined() || result.isNull()) {
+                fileDialogClosed(false, std::vector<qstdweb::File>());
+            } else {
+                std::vector<qstdweb::File> files;
+                int length = result["length"].as<int>();
+                files.reserve(length);
+                for (int i = 0; i < length; ++i) {
+                    emscripten::val fileVal = result[i];
+                    if (!fileVal.isUndefined() && !fileVal.isNull()) {
+                        files.push_back(qstdweb::File(fileVal));
+                    }
+                }
+                fileDialogClosed(true, files);
+            }
+        },
+        .catchFunc = [=](emscripten::val) {
+            fileDialogClosed(false, std::vector<qstdweb::File>());
+        }
+    });
+}
+
+void showSaveFileDialog(const std::string &fileNameHint, const std::function<void (bool accepted, qstdweb::FileSystemFileHandle fileHandle)> fileDialogClosed)
+{
+    FileDialog::showSave(fileNameHint, {
+        .thenFunc = [=](emscripten::val result) {
+            fileDialogClosed(true, qstdweb::FileSystemFileHandle(result));
+        },
+        .catchFunc = [=](emscripten::val) {
+            fileDialogClosed(false, qstdweb::FileSystemFileHandle());
+        }
     });
 }
 

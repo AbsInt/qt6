@@ -10,6 +10,7 @@
 #include "namespacenode.h"
 #include "propertynode.h"
 #include "qmlpropertynode.h"
+#include "template_declaration.h"
 #include "text.h"
 #include "tree.h"
 #include "typedefnode.h"
@@ -21,6 +22,138 @@
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
+
+/*!
+    \internal
+
+    Returns a marked-up representation of a single template parameter
+    with proper type markup for link generation.
+
+    Types (in non-type parameters and initializers) are wrapped with
+    \c{<@type>} tags so the HTML generator can create hyperlinks to
+    documented types.
+*/
+QString CppCodeMarker::formatTemplateParameter(const RelaxedTemplateParameter &param)
+{
+    QString result;
+    const auto &decl = param.valued_declaration;
+
+    if (param.template_declaration)
+        result += formatTemplateDeclStorage(*param.template_declaration, TemplateFormat::SingleLine) + ' '_L1;
+
+    // TODO: RelaxedTemplateParameter doesn't preserve whether the original
+    // declaration used 'class' or 'typename'. This would require parser changes.
+    switch (param.kind) {
+    case RelaxedTemplateParameter::Kind::TypeTemplateParameter:
+        result += "typename"_L1;
+        break;
+    case RelaxedTemplateParameter::Kind::NonTypeTemplateParameter:
+        if (!decl.type.empty())
+            result += typified(QString::fromStdString(decl.type), false);
+        break;
+    case RelaxedTemplateParameter::Kind::TemplateTemplateParameter:
+        result += "typename"_L1;
+        break;
+    }
+
+    if (param.is_parameter_pack)
+        result += "..."_L1;
+
+    if (!decl.name.empty()) {
+        if (!result.isEmpty() && !result.endsWith(' '_L1))
+            result += ' '_L1;
+        result += protect(QString::fromStdString(decl.name));
+    }
+
+    if (!decl.initializer.empty()) {
+        result += " = "_L1;
+        if (param.kind == RelaxedTemplateParameter::Kind::TypeTemplateParameter
+            || param.kind == RelaxedTemplateParameter::Kind::TemplateTemplateParameter) {
+            result += typified(QString::fromStdString(decl.initializer), false);
+        } else {
+            result += protect(QString::fromStdString(decl.initializer));
+        }
+    }
+
+    return result;
+}
+
+/*!
+    \internal
+
+    Returns a marked-up representation of a template declaration storage,
+    handling the common case for both top-level and nested (template template
+    parameter) declarations.
+
+    When \a format is MultiLine, parameters are formatted one per line with
+    indentation. Nested template declarations (called from formatTemplateParameter)
+    are always single-line.
+
+    This helper formats the core \c{template <...>} content without wrapper tags
+    or requires clause. The caller (formatTemplateDecl) handles those for
+    top-level declarations.
+
+    \sa formatTemplateParameter()
+*/
+QString CppCodeMarker::formatTemplateDeclStorage(const TemplateDeclarationStorage &templateDecl,
+                                                  TemplateFormat format)
+{
+    const bool multiline = (format == TemplateFormat::MultiLine);
+
+    QString result = "template &lt;"_L1;
+
+    if (multiline)
+        result += '\n'_L1;
+
+    for (qsizetype i = 0; i < static_cast<qsizetype>(templateDecl.parameters.size()); ++i) {
+        if (i > 0)
+            result += multiline ? ",\n"_L1 : ", "_L1;
+        if (multiline)
+            result += "    "_L1;  // indentation for multiline format
+
+        result += formatTemplateParameter(templateDecl.parameters[i]);
+    }
+
+    if (multiline)
+        result += '\n'_L1;
+
+    result += "&gt;"_L1;
+
+    return result;
+}
+
+/*!
+    Returns a marked-up representation of the template declaration suitable
+    for synopsis output. For declarations above the multiline threshold,
+    a multiline format is used for improved readability.
+
+    Types within template parameters (non-type parameter types and default
+    value initializers) are wrapped with \c{<@type>} tags to enable link
+    generation to documented types.
+*/
+QString CppCodeMarker::formatTemplateDecl(const RelaxedTemplateDeclaration *templateDecl)
+{
+    const bool multiline = templateDecl->parameters.size() > QDoc::MultilineTemplateParamThreshold;
+    const auto format = multiline ? TemplateFormat::MultiLine : TemplateFormat::SingleLine;
+
+    QString content = formatTemplateDeclStorage(*templateDecl, format);
+
+    QString result;
+    if (multiline)
+        result = "<@template-block>"_L1;
+
+    result += content;
+
+    if (templateDecl->requires_clause && !templateDecl->requires_clause->empty())
+        result += " requires "_L1 + protect(QString::fromStdString(*templateDecl->requires_clause));
+
+    if (multiline)
+        result += '\n'_L1 + "</@template-block>"_L1;
+    else
+        result += ' '_L1;
+
+    return result;
+}
 
 /*!
   Returns \c true.
@@ -43,11 +176,11 @@ bool CppCodeMarker::recognizeExtension(const QString &extension)
 }
 
 /*!
-  Returns \c true if \a lang is either "C" or "Cpp".
+  Returns \c true if \a lang is either "c" or "cpp".
  */
 bool CppCodeMarker::recognizeLanguage(const QString &lang)
 {
-    return lang == QLatin1String("C") || lang == QLatin1String("Cpp");
+    return lang == QLatin1String("c") || lang == QLatin1String("cpp");
 }
 
 /*!
@@ -97,9 +230,8 @@ QString CppCodeMarker::markedUpSynopsis(const Node *node, const Node * /* relati
     case NodeType::Function:
         func = (const FunctionNode *)node;
         if (style == Section::Details) {
-            auto templateDecl = node->templateDecl();
-            if (templateDecl)
-                synopsis = protect((*templateDecl).to_qstring()) + QLatin1Char(' ');
+            if (auto templateDecl = node->templateDecl())
+                synopsis = formatTemplateDecl(&*templateDecl);
         }
         if (style != Section::AllMembers && !func->returnType().isEmpty())
             synopsis += typified(func->returnTypeString(), true);
@@ -148,6 +280,8 @@ QString CppCodeMarker::markedUpSynopsis(const Node *node, const Node * /* relati
                 synopsis.append(" &");
             else if (func->isRefRef())
                 synopsis.append(" &&");
+            if (const auto &req = func->trailingRequiresClause(); req && !req->isEmpty())
+                synopsis.append(" requires " + protect(*req));
         }
         break;
     case NodeType::Enum:
@@ -188,9 +322,8 @@ QString CppCodeMarker::markedUpSynopsis(const Node *node, const Node * /* relati
         break;
     case NodeType::TypeAlias:
         if (style == Section::Details) {
-            auto templateDecl = node->templateDecl();
-            if (templateDecl)
-                synopsis += protect((*templateDecl).to_qstring()) + QLatin1Char(' ');
+            if (auto templateDecl = node->templateDecl())
+                synopsis += formatTemplateDecl(&*templateDecl);
         }
         synopsis += name;
         break;

@@ -6,8 +6,36 @@
 
 QT_BEGIN_NAMESPACE
 
-QQmlProfilerEventReceiver::~QQmlProfilerEventReceiver()
-    = default;
+QQmlProfilerEventReceiver::~QQmlProfilerEventReceiver() = default;
+
+bool QQmlProfilerEventReceiver::save(const QString &filename)
+{
+    Q_UNUSED(filename);
+    return false;
+}
+
+void QQmlProfilerEventReceiver::startTrace(qint64 time, const QList<int> &engineIds)
+{
+    Q_UNUSED(time);
+    Q_UNUSED(engineIds);
+}
+
+void QQmlProfilerEventReceiver::endTrace(qint64 time, const QList<int> &engineIds)
+{
+    Q_UNUSED(time);
+    Q_UNUSED(engineIds);
+}
+
+void QQmlProfilerEventReceiver::complete(qint64 maximumTime)
+{
+    Q_UNUSED(maximumTime);
+    emit dataReady();
+}
+
+QQmlProfilerEventReceiver::QQmlProfilerEventReceiver(QObjectPrivate &dd, QObject *parent)
+    : QObject(dd, parent)
+{
+}
 
 QT_END_NAMESPACE
 

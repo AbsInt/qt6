@@ -199,6 +199,8 @@ struct Options
     QHash<QString, QStringList> archExtraLibs;
     QStringList extraPlugins;
     QHash<QString, QStringList> archExtraPlugins;
+    bool useLegacyPackaging = false;
+    bool createSymlinksOnly = false;
 
     // Signing information
     bool releasePackage;
@@ -724,10 +726,10 @@ bool alwaysOverwritableFile(const QString &fileName)
             || fileName.endsWith("/src/org/qtproject/qt/android/bindings/QtActivity.java"_L1));
 }
 
-
 bool copyFileIfNewer(const QString &sourceFileName,
                      const QString &destinationFileName,
                      const Options &options,
+                     bool createSymlinksOnly = false,
                      bool forceOverwrite = false)
 {
     dependenciesForDepfile << sourceFileName;
@@ -754,7 +756,15 @@ bool copyFileIfNewer(const QString &sourceFileName,
         return false;
     }
 
-    if (!QFile::exists(destinationFileName) && !QFile::copy(sourceFileName, destinationFileName)) {
+    auto copyFunction = [createSymlinksOnly, sourceFileName, destinationFileName]() {
+        if (createSymlinksOnly)
+            return QFile::link(sourceFileName, destinationFileName);
+        else
+            return QFile::copy(sourceFileName, destinationFileName);
+    };
+
+    if (!QFile::exists(destinationFileName) && !copyFunction()) {
+        qWarning() << "symlink creation failed";
         fprintf(stderr, "Failed to copy %s to %s.\n", qPrintable(sourceFileName), qPrintable(destinationFileName));
         return false;
     } else if (options.verbose) {
@@ -1416,6 +1426,18 @@ bool readInputFile(Options *options)
     }
 
     {
+        const QJsonValue androidlegacyPackaging = jsonObject.value("android-legacy-packaging"_L1);
+        if (!androidlegacyPackaging.isUndefined())
+            options->useLegacyPackaging = androidlegacyPackaging.toBool();
+    }
+
+    {
+        const QJsonValue createSymlinksOnly = jsonObject.value("android-create-symlinks-only"_L1);
+        if (!createSymlinksOnly.isUndefined())
+            options->createSymlinksOnly = createSymlinksOnly.toBool();
+    }
+
+    {
         using ItFlag = QDirListing::IteratorFlag;
         const QJsonValue deploymentDependencies = jsonObject.value("deployment-dependencies"_L1);
         if (!deploymentDependencies.isUndefined()) {
@@ -1479,10 +1501,23 @@ bool readInputFile(Options *options)
             for (const QJsonValue &value : permissions) {
                 if (value.isObject()) {
                     QJsonObject permissionObj = value.toObject();
-                    QString name = permissionObj.value("name"_L1).toString();
+                    QString name;
                     QString extras;
-                    if (permissionObj.contains("extras"_L1))
-                        extras = permissionObj.value("extras"_L1).toString().trimmed();
+                    for (auto it = permissionObj.begin(); it != permissionObj.end(); ++it) {
+                        if (it.key() == "name"_L1) {
+                            name = it.value().toString();
+                        } else {
+                            extras.append(" android:"_L1)
+                                    .append(it.key())
+                                    .append("=\""_L1)
+                                    .append(it.value().toString())
+                                    .append("\""_L1);
+                        }
+                    }
+                    if (name.isEmpty()) {
+                        fprintf(stderr, "Missing permission 'name' in permission specification");
+                        return false;
+                    }
                     options->applicationPermissions.insert(name, extras);
                 }
             }
@@ -1515,8 +1550,10 @@ bool copyFiles(const QDir &sourceDirectory, const QDir &destinationDirectory, co
                 return false;
         } else {
             QString destination = destinationDirectory.absoluteFilePath(entry.fileName());
-            if (!copyFileIfNewer(entry.absoluteFilePath(), destination, options, forceOverwrite))
+            if (!copyFileIfNewer(entry.absoluteFilePath(), destination,
+                options, false, forceOverwrite)) {
                 return false;
+            }
         }
     }
 
@@ -1584,8 +1621,11 @@ bool copyAndroidTemplate(const Options &options)
     if (options.verbose)
         fprintf(stdout, "Copying Android package template.\n");
 
-    if (!copyGradleTemplate(options))
-        return false;
+    if (!options.auxMode) {
+        // Gradle is not configured and is not running in aux mode
+        if (!copyGradleTemplate(options))
+            return false;
+    }
 
     if (!copyAndroidTemplate(options, "/src/android/templates"_L1))
         return false;
@@ -1652,7 +1692,8 @@ bool copyAndroidExtraLibs(Options *options)
                                 + extraLibInfo.fileName());
 
         if (isDeployment(options, Options::Bundled)
-                && !copyFileIfNewer(extraLib, destinationFile, *options)) {
+                && !copyFileIfNewer(extraLib, destinationFile,
+                    *options, options->createSymlinksOnly)) {
             return false;
         }
         options->archExtraLibs[options->currentArchitecture] += extraLib;
@@ -1710,8 +1751,11 @@ bool copyAndroidExtraResources(Options *options)
                 destinationFile = libsDir + resourceFile;
                 options->archExtraPlugins[options->currentArchitecture] += resourceFile;
             }
-            if (!copyFileIfNewer(originFile, destinationFile, *options))
+
+            if (!copyFileIfNewer(originFile, destinationFile,
+                *options, options->createSymlinksOnly)) {
                 return false;
+            }
         }
     }
 
@@ -2827,6 +2871,7 @@ bool copyQtFiles(Options *options)
         QString sourceFileName = qtDependency.absolutePath;
         QString destinationFileName;
         bool isSharedLibrary = qtDependency.relativePath.endsWith(".so"_L1);
+        bool createSymlinksOnly = options->createSymlinksOnly;
         if (isSharedLibrary) {
             QString garbledFileName = qtDependency.relativePath.mid(
                 qtDependency.relativePath.lastIndexOf(u'/') + 1);
@@ -2834,6 +2879,8 @@ bool copyQtFiles(Options *options)
         } else if (QDir::fromNativeSeparators(qtDependency.relativePath).startsWith("jar/"_L1)) {
             destinationFileName = libsDirectory + qtDependency.relativePath.mid(sizeof("jar/") - 1);
         } else {
+            // rcc resouces compilation doesn't support using symlinks
+            createSymlinksOnly = false;
             destinationFileName = assetsDestinationDirectory + qtDependency.relativePath;
         }
 
@@ -2860,7 +2907,7 @@ bool copyQtFiles(Options *options)
         if ((isDeployment(options, Options::Bundled) || !isSharedLibrary)
                 && !copyFileIfNewer(sourceFileName,
                                     options->outputDirectory + u'/' + destinationFileName,
-                                    *options)) {
+                                    *options, createSymlinksOnly)) {
             return false;
         }
         options->bundledFiles[options->currentArchitecture] += std::make_pair(destinationFileName, qtDependency.relativePath);
@@ -3049,6 +3096,7 @@ bool buildAndroidProject(const Options &options)
     gradleProperties["androidNdkVersion"] = options.ndkVersion.toUtf8();
     if (gradleProperties["androidBuildToolsVersion"].isEmpty())
         gradleProperties["androidBuildToolsVersion"] = options.sdkBuildToolsVersion.toLocal8Bit();
+    gradleProperties["legacyPackaging"] = options.useLegacyPackaging ? "true" : "false";
     QString abiList;
     for (auto it = options.architectures.constBegin(); it != options.architectures.constEnd(); ++it) {
         if (!it->enabled)
@@ -3249,7 +3297,7 @@ bool copyStdCpp(Options *options)
     const QString destinationFile = "%1/libs/%2/lib%3.so"_L1.arg(options->outputDirectory,
                                                                  options->currentArchitecture,
                                                                  options->stdCppName);
-    return copyFileIfNewer(stdCppPath, destinationFile, *options);
+    return copyFileIfNewer(stdCppPath, destinationFile, *options, options->createSymlinksOnly);
 }
 
 static QString zipalignPath(const Options &options, bool *ok)
@@ -3774,11 +3822,13 @@ int generateJavaQmlComponents(const Options &options)
                << indent << "}\n";
     };
 
+    enum class MethodType { Signal = 0, Function = 1 };
+
     const auto beginSignalBlock = [firstCharToUpper](QTextStream &stream,
                                                      const QJsonObject &methodData,
                                                      int indentWidth = 8) {
         const QString indent(indentWidth, u' ');
-        if (methodData["methodType"_L1] != 0)
+        if (MethodType(methodData["methodType"_L1].toInt()) != MethodType::Signal)
             return;
         const QJsonArray parameters = methodData["parameters"_L1].toArray();
 
@@ -3855,10 +3905,58 @@ int generateJavaQmlComponents(const Options &options)
                    << "public int connect%1(%2 signalListener) {\n"_L1.arg(
                               firstCharToUpper(signalInterfaceName), signalInterfaceName)
                    << indent
-                   << "    return connectSignalListener(\"%1\", new Class[]{ %2 }, signalListener);\n"_L1
+                   << "    return connectSignalListener(\"%1\", new Class<?>[]{ %2 }, signalListener);\n"_L1
                               .arg(methodName, javaParamsClassesString)
                    << indent << "}\n\n";
         }
+    };
+
+    const auto writeFunctionBlock = [](QTextStream &stream, const QJsonObject &methodData,
+                                       int indentWidth = 8) {
+        const QString indent(indentWidth, u' ');
+        if (MethodType(methodData["methodType"_L1].toInt()) != MethodType::Function)
+            return;
+
+        const QJsonArray params = methodData["parameters"_L1].toArray();
+        const QString functionName = methodData["name"_L1].toString();
+
+        QList<QString> javaFunctionParams; // e.g. { "Object param", "String thing" }
+        QList<QString> javaParams; // e.g. "param, thing"
+        for (const auto &value : params) {
+            const auto object = value.toObject();
+            if (!object.contains("typeName"_L1)) {
+                qWarning() << "  -- Skipping function" << functionName
+                           << "due to untyped function parameter detected while generating Java "
+                              "code for QML methods.";
+                return;
+            }
+
+            const auto qmlParamType = object["typeName"_L1].toString();
+            if (!qmlToJavaType.contains(qmlParamType)) {
+                qWarning() << "  -- Skipping function" << functionName
+                           << "due to unsupported type detected in parameters:" << qmlParamType;
+                return;
+            }
+
+            const auto javaTypeName{ qmlToJavaType.value(object["typeName"_L1].toString(),
+                                                         "Object"_L1) };
+            const auto javaParamName = object["name"_L1].toString();
+            javaFunctionParams.push_back(
+                    QString{ "%1 %2"_L1 }.arg(javaTypeName).arg(javaParamName));
+            javaParams.append(javaParamName);
+        }
+
+        const auto functionSignature {
+            "public void %1(%2) {\n"_L1.arg(functionName).arg(javaFunctionParams.join(", "_L1))
+        };
+        const auto functionCallParams {
+            javaParams.isEmpty() ? ""_L1 : ", new Object[] { %1 }"_L1.arg(javaParams.join(", "_L1))
+        };
+
+        stream << indent << functionSignature
+               << indent << "   invokeMethod(\"%1\"%2);\n"_L1.arg(functionName)
+                                                             .arg(functionCallParams)
+               << indent << "}\n";
     };
 
     constexpr static auto markerFileName = "qml_java_contents"_L1;
@@ -3953,6 +4051,9 @@ int generateJavaQmlComponents(const Options &options)
             const QJsonArray methods = getMethods(component);
             for (const QJsonValue &m : std::as_const(methods))
                 beginSignalBlock(outputStream, m.toObject(), indentBase);
+
+            for (const QJsonValue &m : std::as_const(methods))
+                writeFunctionBlock(outputStream, m.toObject(), indentBase);
 
             indentBase -= 4;
             endBlock(outputStream, indentBase);
@@ -4100,13 +4201,7 @@ int main(int argc, char *argv[])
     if (!createRcc(options))
         return CannotCreateRcc;
 
-    if (options.auxMode) {
-        if (!updateAndroidFiles(options))
-            return CannotUpdateAndroidFiles;
-        return 0;
-    }
-
-    if (options.build) {
+    if (options.auxMode || options.build) {
         if (!copyAndroidSources(options))
             return CannotCopyAndroidSources;
 
@@ -4118,7 +4213,12 @@ int main(int argc, char *argv[])
 
         if (Q_UNLIKELY(options.timing))
             fprintf(stdout, "[TIMING] %lld ns: Updated files\n", options.timer.nsecsElapsed());
+    }
 
+    if (options.auxMode)
+        return 0;
+
+    if (options.build) {
         if (Q_UNLIKELY(options.timing))
             fprintf(stdout, "[TIMING] %lld ns: Created project\n", options.timer.nsecsElapsed());
 

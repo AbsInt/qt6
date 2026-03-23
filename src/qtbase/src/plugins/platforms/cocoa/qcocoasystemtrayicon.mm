@@ -2,6 +2,7 @@
 // Copyright (C) 2012 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Christoph Schleifenbaum <christoph.schleifenbaum@kdab.com>
 // Copyright (c) 2007-2008, Apple, Inc.
 // SPDX-License-Identifier: BSD-3-Clause
+// Qt-Security score:significant reason:default
 
 #include <AppKit/AppKit.h>
 

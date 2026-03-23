@@ -15,6 +15,7 @@
 // We mean it.
 //
 
+#include <QtCore/qspan.h>
 #include <QtCore/qvarlengtharray.h>
 #include <QtGui/private/qtguiglobal_p.h>
 #include "QtGui/qbrush.h"
@@ -242,6 +243,8 @@ public:
     std::unique_ptr<QEmulationPaintEngine> emulationEngine;
     QPaintEngineEx *extended = nullptr;
     QBrush colorBrush;          // for fill with solid color
+
+    Q_GUI_EXPORT void setEngineDirtyFlags(QSpan<const QPaintEngine::DirtyFlags>);
 };
 
 Q_GUI_EXPORT void qt_draw_helper(QPainterPrivate *p, const QPainterPath &path, QPainterPrivate::DrawOperation operation);

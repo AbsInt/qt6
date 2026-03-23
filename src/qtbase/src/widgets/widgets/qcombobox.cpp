@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:significant reason:default
 
-#include "qcombobox.h"
+#include "qcombobox_p.h"
 
 #include <qstylepainter.h>
 #include <qpa/qplatformtheme.h>
 #include <qpa/qplatformmenu.h>
+#include <qpa/qplatformwindow.h>
+#include <qpa/qplatformwindow_p.h>
+
 #include <qlineedit.h>
 #include <qapplication.h>
 #include <qlistview.h>
@@ -34,7 +37,6 @@
 #include <private/qguiapplication_p.h>
 #include <private/qhighdpiscaling_p.h>
 #include <private/qapplication_p.h>
-#include <private/qcombobox_p.h>
 #include <private/qabstractitemmodel_p.h>
 #include <private/qabstractscrollarea_p.h>
 #include <private/qlineedit_p.h>
@@ -46,14 +48,18 @@
 # include <private/qeffects_p.h>
 #endif
 #include <private/qstyle_p.h>
+
 #if QT_CONFIG(accessibility)
 #include "qaccessible.h"
 #endif
+#include <QtWidgets/qstyleoption.h>
 
-#include <array>
+#include <QtGui/qstandarditemmodel.h>
+#include <QtGui/qpainter.h>
 
 #include <QtCore/qpointer.h>
 
+#include <array>
 #include <chrono>
 
 QT_BEGIN_NAMESPACE
@@ -823,6 +829,12 @@ QAbstractItemView *QComboBoxPrivateContainer::itemView() const
 }
 
 /*!
+    \class QComboBoxPrivateContainer
+    \inmodule QtWidgets
+    \internal
+*/
+
+/*!
     Sets the item view to be used for the combobox popup.
 */
 void QComboBoxPrivateContainer::setItemView(QAbstractItemView *itemView)
@@ -862,8 +874,10 @@ void QComboBoxPrivateContainer::setItemView(QAbstractItemView *itemView)
     if (usePopup)
         view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 #endif
-    if (combo->style()->styleHint(QStyle::SH_ComboBox_ListMouseTracking, &opt, combo) ||
-        usePopup) {
+    if (usePopup ||
+        combo->style()->styleHint(QStyle::SH_ComboBox_ListMouseTracking_Current, &opt, combo) ||
+        combo->style()->styleHint(QStyle::SH_ComboBox_ListMouseTracking_Active, &opt, combo)
+        ) {
         view->setMouseTracking(true);
     }
     view->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -994,13 +1008,15 @@ bool QComboBoxPrivateContainer::eventFilter(QObject *o, QEvent *e)
         if (isVisible()) {
             QMouseEvent *m = static_cast<QMouseEvent *>(e);
             QWidget *widget = static_cast<QWidget *>(o);
-            QPoint vector = widget->mapToGlobal(m->position().toPoint()) - initialClickPosition;
+            const QPoint vector = widget->mapToGlobal(m->position()).toPoint() - initialClickPosition;
             if (vector.manhattanLength() > 9 && blockMouseReleaseTimer.isActive())
                 blockMouseReleaseTimer.stop();
-            QModelIndex indexUnderMouse = view->indexAt(m->position().toPoint());
-            if (indexUnderMouse.isValid()
-                     && !QComboBoxDelegate::isSeparator(indexUnderMouse)) {
-                view->setCurrentIndex(indexUnderMouse);
+            if (combo->style()->styleHint(QStyle::SH_ComboBox_ListMouseTracking_Current, nullptr, combo)) {
+                QModelIndex indexUnderMouse = view->indexAt(m->position().toPoint());
+                if (indexUnderMouse.isValid()
+                         && !QComboBoxDelegate::isSeparator(indexUnderMouse)) {
+                    view->setCurrentIndex(indexUnderMouse);
+                }
             }
         }
         break;
@@ -1052,7 +1068,7 @@ void QComboBoxPrivateContainer::mousePressEvent(QMouseEvent *e)
     opt.subControls = QStyle::SC_All;
     opt.activeSubControls = QStyle::SC_ComboBoxArrow;
     QStyle::SubControl sc = combo->style()->hitTestComplexControl(QStyle::CC_ComboBox, &opt,
-                                                           combo->mapFromGlobal(e->globalPosition().toPoint()),
+                                                           combo->mapFromGlobal(e->globalPosition()).toPoint(),
                                                            combo);
     if ((combo->isEditable() && sc == QStyle::SC_ComboBoxArrow)
         || (!combo->isEditable() && sc != QStyle::SC_None))
@@ -3085,6 +3101,17 @@ void QComboBox::showPopup()
             container->hide();
         }
     }
+
+#if QT_CONFIG(wayland)
+    if (auto waylandWindow = dynamic_cast<QNativeInterface::Private::QWaylandWindow*>(container->windowHandle()->handle())) {
+        const QRect popup(style->subControlRect(QStyle::CC_ComboBox, &opt,
+                                         QStyle::SC_ComboBoxListBoxPopup, this));
+        const QRect controlGeometry = QRect(mapTo(window(), popup.topLeft()), popup.size());
+        waylandWindow->setParentControlGeometry(controlGeometry);
+        waylandWindow->setExtendedWindowType(QNativeInterface::Private::QWaylandWindow::ComboBox);
+    }
+#endif
+
     container->show();
     if (!neededHorizontalScrollBar && needHorizontalScrollBar()) {
         listRect.adjust(0, 0, 0, sb->height());
@@ -3442,7 +3469,7 @@ void QComboBoxPrivate::showPopupFromMouseEvent(QMouseEvent *e)
 #endif
             // We've restricted the next couple of lines, because by not calling
             // viewContainer(), we avoid creating the QComboBoxPrivateContainer.
-            viewContainer()->initialClickPosition = q->mapToGlobal(e->position().toPoint());
+            viewContainer()->initialClickPosition = q->mapToGlobal(e->position()).toPoint();
         }
         QPointer<QComboBox> guard = q;
         q->showPopup();

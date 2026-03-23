@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:significant reason:default
 
-#include <QtCore/qmetacontainer.h>
+#include <QtCore/qmetaassociation.h>
 #include <QtCore/qmetatype.h>
 
 QT_BEGIN_NAMESPACE
@@ -288,7 +288,6 @@ QMetaType QMetaAssociation::mappedMetaType() const
     Returns \c true if the QMetaAssociation \a lhs represents the same container type
     as the QMetaAssociation \a rhs, otherwise returns \c false.
 */
-
 /*!
     \fn bool QMetaAssociation::operator!=(const QMetaAssociation &lhs, const QMetaAssociation &rhs)
 
@@ -296,5 +295,197 @@ QMetaType QMetaAssociation::mappedMetaType() const
     type than the QMetaAssociation \a rhs, otherwise returns \c false.
 */
 
+/*!
+    \class QMetaAssociation::Iterable
+    \inherits QIterable
+    \since 6.11
+    \inmodule QtCore
+    \brief QMetaAssociation::Iterable is an iterable interface for an associative container in a QVariant.
+
+    This class allows several methods of accessing the elements of an
+    associative container held within a QVariant. An instance of
+    QMetaAssociation::Iterable can be extracted from a QVariant if it can be
+    converted to a QVariantHash or QVariantMap or if a custom mutable view has
+    been registered.
+
+    \snippet code/src_corelib_kernel_qvariant.cpp 10
+
+    The container itself is not copied before iterating over it.
+
+    \sa QVariant
+*/
+
+/*!
+    \typealias QMetaAssociation::Iterable::RandomAccessIterator
+    Exposes an iterator using std::random_access_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaAssociation::Iterable::BidirectionalIterator
+    Exposes an iterator using std::bidirectional_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaAssociation::Iterable::ForwardIterator
+    Exposes an iterator using std::forward_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaAssociation::Iterable::InputIterator
+    Exposes an iterator using std::input_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaAssociation::Iterable::RandomAccessConstIterator
+    Exposes a const_iterator using std::random_access_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaAssociation::Iterable::BidirectionalConstIterator
+    Exposes a const_iterator using std::bidirectional_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaAssociation::Iterable::ForwardConstIterator
+    Exposes a const_iterator using std::forward_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaAssociation::Iterable::InputConstIterator
+    Exposes a const_iterator using std::input_iterator_tag.
+*/
+
+/*!
+    \class QMetaAssociation::Iterable::ConstIterator
+    \inherits QConstIterator
+    \since 6.11
+    \inmodule QtCore
+    \brief QMetaAssociation::Iterable::ConstIterator allows iteration over a container in a QVariant.
+
+    A QMetaAssociation::Iterable::ConstIterator can only be created by a
+    QMetaAssociation::Iterable instance, and can be used in a way similar to
+    other stl-style iterators.
+
+    \snippet code/src_corelib_kernel_qvariant.cpp 10
+
+    \sa QMetaAssociation::Iterable
+*/
+
+/*!
+    \class QMetaAssociation::Iterable::Iterator
+    \inherits QIterator
+    \since 6.11
+    \inmodule QtCore
+    \brief The QMetaAssociation::Iterable::Iterator allows iteration over a container in a QVariant.
+
+    A QMetaAssociation::Iterable::Iterator can only be created by a
+    QMetaAssociation::Iterable instance, and can be used in a way similar to
+    other stl-style iterators.
+
+    \sa QMetaAssociation::Iterable
+*/
+
+/*!
+    \fn QMetaAssociation::Iterable::ConstIterator QMetaAssociation::Iterable::find(const QVariant &key) const
+    Retrieves a ConstIterator pointing to the element at the given \a key, or
+    the end of the container if that key does not exist. If the \a key isn't
+    convertible to the expected type, the end of the container is returned.
+ */
+
+/*!
+    \fn QMetaAssociation::Iterable::Iterator QMetaAssociation::Iterable::mutableFind(const QVariant &key)
+    Retrieves an iterator pointing to the element at the given \a key, or
+    the end of the container if that key does not exist. If the \a key isn't
+    convertible to the expected type, the end of the container is returned.
+ */
+
+/*!
+    \fn bool QMetaAssociation::Iterable::containsKey(const QVariant &key) const
+    Returns \c true if the container has an entry with the given \a key, or
+    \c false otherwise. If the \a key isn't convertible to the expected type,
+    \c false is returned.
+ */
+
+/*!
+    \fn void QMetaAssociation::Iterable::insertKey(const QVariant &key)
+    Inserts a new entry with the given \a key, or resets the mapped value of
+    any existing entry with the given \a key to the default constructed
+    mapped value. The \a key is coerced to the expected type: If it isn't
+    convertible, a default value is inserted.
+ */
+
+/*!
+    \fn void QMetaAssociation::Iterable::removeKey(const QVariant &key)
+    Removes the entry with the given \a key from the container. The \a key is
+    coerced to the expected type: If it isn't convertible, the default value
+    is removed.
+ */
+
+/*!
+    \fn QVariant QMetaAssociation::Iterable::value(const QVariant &key) const
+    Retrieves the mapped value at the given \a key, or a QVariant of a
+    default-constructed instance of the mapped type, if the key does not
+    exist. If the \a key is not convertible to the key type, the mapped value
+    associated with the default-constructed key is returned.
+ */
+
+/*!
+    \fn void QMetaAssociation::Iterable::setValue(const QVariant &key, const QVariant &mapped)
+    Sets the mapped value associated with \a key to \a mapped, if possible.
+    Inserts a new entry if none exists yet, for the given \a key. If the
+    \a key is not convertible to the key type, the value for the
+    default-constructed key type is overwritten.
+ */
+
+
+/*!
+    \fn QVariant QMetaAssociation::Iterable::Iterator::key() const
+    Returns the key this iterator points to.
+*/
+
+/*!
+    \fn QVariant::Reference<QMetaAssociation::Iterable::Iterator> QMetaAssociation::Iterable::Iterator::value() const
+    Returns the mapped value this iterator points to. If the container does not
+    provide a mapped value (for example a set), returns an invalid
+    QVariant::Reference.
+*/
+
+/*!
+    \fn QVariant::Reference<QMetaAssociation::Iterable::Iterator> QMetaAssociation::Iterable::Iterator::operator*() const
+    Returns the current item, converted to a QVariant::Reference. The resulting
+    QVariant::Reference resolves to the mapped value if there is one, or to the
+    key value if not.
+*/
+
+/*!
+    \fn QVariant::Pointer<QMetaAssociation::Iterable::Iterator> QMetaAssociation::Iterable::Iterator::operator->() const
+    Returns the current item, converted to a QVariant::Pointer. The resulting
+    QVariant::Pointer resolves to the mapped value if there is one, or to the
+    key value if not.
+*/
+
+/*!
+    \fn QVariant QMetaAssociation::Iterable::ConstIterator::key() const
+    Returns the key this iterator points to.
+*/
+
+/*!
+    \fn QVariant QMetaAssociation::Iterable::ConstIterator::value() const
+    Returns the mapped value this iterator points to, or an invalid QVariant if
+    there is no mapped value.
+*/
+
+/*!
+    \fn QVariant QMetaAssociation::Iterable::ConstIterator::operator*() const
+    Returns the current item, converted to a QVariant. The returned value is the
+    mapped value at the current iterator if there is one, or otherwise the key.
+*/
+
+/*!
+    \fn QVariant::ConstPointer<QMetaAssociation::Iterable::ConstIterator> QMetaAssociation::Iterable::ConstIterator::operator->() const
+    Returns the current item, converted to a QVariant::ConstPointer. The
+    QVariant::ConstPointer will resolve to the mapped value at the current
+    iterator if there is one, or otherwise the key.
+*/
 
 QT_END_NAMESPACE

@@ -547,6 +547,7 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 GLbitfield barriers;
             } barrier;
             struct {
+                GLuint fbo;
                 int attCount;
                 GLenum att[3];
             } invalidateFramebuffer;
@@ -592,6 +593,7 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
         } blend[16];
         bool depthTest;
         bool depthWrite;
+        bool depthClamp;
         GLenum depthFunc;
         bool stencilTest;
         GLuint stencilReadMask;
@@ -1013,6 +1015,7 @@ public:
               baseVertex(false),
               compute(false),
               textureCompareMode(false),
+              depthClamp(false),
               properMapBuffer(false),
               nonBaseLevelFramebufferTexture(false),
               texelFetch(false),
@@ -1074,6 +1077,7 @@ public:
         uint baseVertex : 1;
         uint compute : 1;
         uint textureCompareMode : 1;
+        uint depthClamp : 1;
         uint properMapBuffer : 1;
         uint nonBaseLevelFramebufferTexture : 1;
         uint texelFetch : 1;

@@ -1392,6 +1392,13 @@
             <anchor>setItemDelegateForRow</anchor>
             <arglist>(int row, QAbstractItemDelegate *delegate)</arglist>
         </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setKeyboardSearchFlags</name>
+            <anchorfile>qabstractitemview.html</anchorfile>
+            <anchor>keyboardSearchFlags-prop</anchor>
+            <arglist>(Qt::MatchFlags searchFlags)</arglist>
+        </member>
         <member kind="function" protection="public" virtualness="virtual" static="no">
             <type>virtual void</type>
             <name>setModel</name>
@@ -1715,6 +1722,13 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type>Qt::MatchFlags</type>
+            <name>keyboardSearchFlags</name>
+            <anchorfile>qabstractitemview.html</anchorfile>
+            <anchor>keyboardSearchFlags-prop</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type>Qt::TextElideMode</type>
             <name>textElideMode</name>
             <anchorfile>qabstractitemview.html</anchorfile>
@@ -1890,6 +1904,12 @@
             <name>iconSize</name>
             <anchorfile>qabstractitemview.html</anchorfile>
             <anchor>iconSize-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="Qt::MatchFlags">
+            <name>keyboardSearchFlags</name>
+            <anchorfile>qabstractitemview.html</anchorfile>
+            <anchor>keyboardSearchFlags-prop</anchor>
             <arglist></arglist>
         </member>
         <member kind="property" type="SelectionBehavior">
@@ -5387,6 +5407,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setPreviewColumnVisible</name>
+            <anchorfile>qcolumnview.html</anchorfile>
+            <anchor>previewColumnVisible-prop</anchor>
+            <arglist>(bool visible)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setPreviewWidget</name>
             <anchorfile>qcolumnview.html</anchorfile>
             <anchor>setPreviewWidget</anchor>
@@ -5485,6 +5512,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
+            <name>isPreviewColumnVisible</name>
+            <anchorfile>qcolumnview.html</anchorfile>
+            <anchor>previewColumnVisible-prop</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
             <name>resizeGripsVisible</name>
             <anchorfile>qcolumnview.html</anchorfile>
             <anchor>resizeGripsVisible-prop</anchor>
@@ -5510,6 +5544,12 @@
             <anchorfile>qcolumnview.html</anchorfile>
             <anchor>initializeColumn</anchor>
             <arglist>(QAbstractItemView *column) const const</arglist>
+        </member>
+        <member kind="property" type="bool">
+            <name>previewColumnVisible</name>
+            <anchorfile>qcolumnview.html</anchorfile>
+            <anchor>previewColumnVisible-prop</anchor>
+            <arglist></arglist>
         </member>
         <member kind="property" type="bool">
             <name>resizeGripsVisible</name>
@@ -7255,6 +7295,13 @@
             <anchorfile>qdateedit.html</anchorfile>
             <anchor>QDateEdit</anchor>
             <arglist>(QWidget *parent)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>userDateChanged</name>
+            <anchorfile>qdateedit.html</anchorfile>
+            <anchor>date-prop</anchor>
+            <arglist>(QDate date)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="virtual" static="no">
             <type>virtual </type>
@@ -24072,6 +24119,12 @@
             <anchor>getContentsMargins</anchor>
             <arglist>(int *left, int *top, int *right, int *bottom) const const</arglist>
         </member>
+        <member kind="property" type="QMargins">
+            <name>contentsMargins</name>
+            <anchorfile>qlayout.html</anchorfile>
+            <anchor>contentsMargins-prop</anchor>
+            <arglist></arglist>
+        </member>
         <member kind="property" type="SizeConstraint">
             <name>horizontalSizeConstraint</name>
             <anchorfile>qlayout.html</anchorfile>
@@ -33477,13 +33530,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qsizepolicy.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>Qt::Orientations</type>
             <name>expandingDirections</name>
             <anchorfile>qsizepolicy.html</anchorfile>
@@ -33537,6 +33583,13 @@
             <name>verticalStretch</name>
             <anchorfile>qsizepolicy.html</anchorfile>
             <anchor>verticalStretch</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qsizepolicy.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="typedef" type="QSizePolicy::ControlType">
@@ -37290,6 +37343,12 @@
             <arglist></arglist>
         </member>
         <member kind="enumvalue">
+            <name>SH_ComboBox_ListMouseTracking_Current</name>
+            <anchorfile>qstyle.html</anchorfile>
+            <anchor>StyleHint-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
             <name>SH_Menu_MouseTracking</name>
             <anchorfile>qstyle.html</anchorfile>
             <anchor>StyleHint-enum</anchor>
@@ -37885,6 +37944,12 @@
         </member>
         <member kind="enumvalue">
             <name>SH_SpinBox_SelectOnStep</name>
+            <anchorfile>qstyle.html</anchorfile>
+            <anchor>StyleHint-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>SH_ComboBox_ListMouseTracking_Active</name>
             <anchorfile>qstyle.html</anchorfile>
             <anchor>StyleHint-enum</anchor>
             <arglist></arglist>
@@ -39834,6 +39899,25 @@
             <anchorfile>qstyleoptionmenuitem.html</anchorfile>
             <anchor>QStyleOptionMenuItem-1</anchor>
             <arglist>(const QStyleOptionMenuItem &amp;other)</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QStyleOptionMenuItemV2</name>
+        <filename>qstyleoptionmenuitemv2.html</filename>
+        <base>QStyleOptionMenuItem</base>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QStyleOptionMenuItemV2</name>
+            <anchorfile>qstyleoptionmenuitemv2.html</anchorfile>
+            <anchor>QStyleOptionMenuItemV2</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>QStyleOptionMenuItemV2</name>
+            <anchorfile>qstyleoptionmenuitemv2.html</anchorfile>
+            <anchor>QStyleOptionMenuItemV2-1</anchor>
+            <arglist>(const QStyleOptionMenuItemV2 &amp;other)</arglist>
         </member>
     </compound>
     <compound kind="class">
@@ -45615,6 +45699,13 @@
             <anchorfile>qtimeedit.html</anchorfile>
             <anchor>QTimeEdit</anchor>
             <arglist>(QWidget *parent)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>userTimeChanged</name>
+            <anchorfile>qtimeedit.html</anchorfile>
+            <anchor>time-prop</anchor>
+            <arglist>(QTime time)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="virtual" static="no">
             <type>virtual </type>
@@ -51572,6 +51663,12 @@
         </member>
         <member kind="enumvalue">
             <name>NoCancelButtonOnLastPage</name>
+            <anchorfile>qwizard.html</anchorfile>
+            <anchor>WizardOption-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>StretchBanner</name>
             <anchorfile>qwizard.html</anchorfile>
             <anchor>WizardOption-enum</anchor>
             <arglist></arglist>

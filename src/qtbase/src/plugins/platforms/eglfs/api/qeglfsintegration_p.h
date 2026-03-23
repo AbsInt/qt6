@@ -113,6 +113,7 @@ private:
     QScopedPointer<QFbVtHandler> m_vtHandler;
     QPointer<QWindow> m_pointerWindow;
     bool m_disableInputHandlers;
+    mutable QPlatformBackingStore *m_bs = nullptr;
 };
 
 QT_END_NAMESPACE

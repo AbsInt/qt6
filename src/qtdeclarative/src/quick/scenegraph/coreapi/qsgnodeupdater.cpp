@@ -9,6 +9,11 @@ QT_BEGIN_NAMESPACE
 
 // #define QSG_UPDATER_DEBUG
 
+/*!
+    \class QSGNodeUpdater
+    \inmodule QtQuick
+    \internal
+*/
 QSGNodeUpdater::QSGNodeUpdater()
     : m_combined_matrix_stack(64)
     , m_opacity_stack(64)

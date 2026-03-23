@@ -19,6 +19,7 @@
 #include <qdebug.h>
 #include <qmetaobject.h>
 #include <qscopeguard.h>
+#include <private/qlatch_p.h>
 #include <private/qobject_p.h>
 #include <private/qthread_p.h>
 
@@ -1190,23 +1191,6 @@ void tst_QThread::wait3_slowDestructor()
     QVERIFY(thread.wait(one_minute));
 }
 
-class Barrier
-{
-    std::mutex mtx;
-    std::condition_variable cnd;
-    int current;
-public:
-    Barrier(int target) : current(target) {}
-    void arriveAndWait()
-    {
-        std::unique_lock l(mtx);
-        if (--current)
-            cnd.wait(l);
-        else
-            cnd.notify_all();
-    }
-};
-
 void tst_QThread::multiThreadWait_data()
 {
     QTest::addColumn<QList<int>>("deadlines");
@@ -1308,7 +1292,7 @@ void tst_QThread::multiThreadWait()
     // the expected runtime of the test (2s vs ~10 ms).
     class WaiterThread : public QThread {
     public:
-        Barrier *barrier;
+        QLatch *barrier;
         QSemaphore *endSema;
         QThread *target;
         QDeadlineTimer deadline;
@@ -1332,7 +1316,7 @@ void tst_QThread::multiThreadWait()
     TargetThread target;
     target.start();
 
-    Barrier barrier(deadlines.size() + 1);      // plus the main thread
+    QLatch barrier(deadlines.size() + 1);      // plus the main thread
     QSemaphore timeoutSema, successSema;
     std::array<std::unique_ptr<WaiterThread>, 5> threads;   // 5 threads is enough
     int expectedTimeoutCount = 0;

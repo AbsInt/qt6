@@ -92,9 +92,15 @@
 
     \value ResolveSymlinks
         Filter symbolic links based on the type of the target of the link,
-        rather than the symbolic link itself. With this flag, broken symbolic
-        links (where the target doesn't exist) are excluded. This flag is
-        ignored on operating systems that don't support symbolic links.
+        rather than the symbolic link itself. Broken symbolic links (where
+        the target doesn't exist) are excluded, set IncludeBrokenSymlinks
+        to include them.
+        This flag is ignored on operating systems that don't support symbolic links.
+
+    \value IncludeBrokenSymlinks [since 6.11]
+        Lists broken symbolic links, where the target doesn't exist, regardless
+        of the status of the ResolveSymlinks flag.
+        This flag is ignored on operating systems that don't support symbolic links.
 
     \value FilesOnly
         Only regular files will be listed. When combined with ResolveSymlinks,
@@ -124,6 +130,8 @@
         When combined with Recursive, symbolic links to directories will be
         iterated too. Symbolic link loops (e.g., link => . or link => ..) are
         automatically detected and ignored.
+
+    \omitvalue NoNameFiltersForDirs
 */
 
 #include "qdirlisting.h"
@@ -152,21 +160,6 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
-static QDirListing::IteratorFlags toDirListingFlags(QDirIterator::IteratorFlags flags)
-{
-    using F = QDirListing::IteratorFlag;
-    QDirListing::IteratorFlags listerFlags;
-
-    if (flags & QDirIterator::NoIteratorFlags)
-        listerFlags.setFlag(F::Default);
-    if (flags & QDirIterator::FollowSymlinks)
-        listerFlags.setFlag(F::FollowDirSymlinks);
-    if (flags & QDirIterator::Subdirectories)
-        listerFlags.setFlag(F::Recursive);
-
-    return listerFlags;
-}
-
 class QDirListingPrivate
 {
     Q_DISABLE_COPY_MOVE(QDirListingPrivate)
@@ -182,7 +175,7 @@ public:
         void clear() { this->c.clear(); } // std::stack is also missing clear()
     };
 
-    void init(bool resolveEngine);
+    void init();
     void advance();
     void beginIterating();
 
@@ -194,22 +187,11 @@ public:
     bool matchesFilters(QDirEntryInfo &data) const;
     bool hasIterators() const;
 
-    bool matchesLegacyFilters(QDirEntryInfo &data) const;
-    void setLegacyFilters(QDir::Filters dirFilters, QDirIterator::IteratorFlags dirIteratorFlags)
-    {
-        useLegacyFilters = true;
-        legacyDirFilters = dirFilters;
-        iteratorFlags = toDirListingFlags(dirIteratorFlags);
-    }
-
     std::unique_ptr<QAbstractFileEngine> engine;
     QDirEntryInfo initialEntryInfo;
     QStringList nameFilters;
     QDirListing::IteratorFlags iteratorFlags;
     QDirEntryInfo currentEntryInfo;
-
-    bool useLegacyFilters = false;
-    QDir::Filters legacyDirFilters;
 
 #if QT_CONFIG(regularexpression)
     std::vector<QRegularExpression> nameRegExps;
@@ -233,34 +215,22 @@ public:
     QDuplicateTracker<QString> visitedLinks;
 };
 
-void QDirListingPrivate::init(bool resolveEngine = true)
+void QDirListingPrivate::init()
 {
     if (nameFilters.contains("*"_L1))
         nameFilters.clear();
 
-    if (useLegacyFilters) {
-        if (legacyDirFilters == QDir::NoFilter)
-            legacyDirFilters = QDir::AllEntries;
-    }
-
 #if QT_CONFIG(regularexpression)
     nameRegExps.reserve(size_t(nameFilters.size()));
 
-    const bool isCase = [this] {
-        if (useLegacyFilters)
-            return legacyDirFilters.testAnyFlags(QDir::CaseSensitive);
-        return iteratorFlags.testAnyFlags(QDirListing::IteratorFlag::CaseSensitive);
-    }();
-
+    const bool isCase = iteratorFlags.testAnyFlags(QDirListing::IteratorFlag::CaseSensitive);
     const auto cs = isCase ? Qt::CaseSensitive : Qt::CaseInsensitive;
     for (const auto &filter : std::as_const(nameFilters))
         nameRegExps.emplace_back(QRegularExpression::fromWildcard(filter, cs));
 #endif
 
-    if (resolveEngine) {
-        engine = QFileSystemEngine::createLegacyEngine(initialEntryInfo.entry,
-                                                       initialEntryInfo.metaData);
-    }
+    engine = QFileSystemEngine::createLegacyEngine(initialEntryInfo.entry,
+                                                   initialEntryInfo.metaData);
 }
 
 /*!
@@ -320,8 +290,6 @@ void QDirListingPrivate::pushDirectory(QDirEntryInfo &entryInfo)
 bool QDirListingPrivate::entryMatches(QDirEntryInfo &entryInfo)
 {
     checkAndPushDirectory(entryInfo);
-    if (useLegacyFilters)
-        return matchesLegacyFilters(entryInfo);
     return matchesFilters(entryInfo);
 }
 
@@ -344,11 +312,11 @@ void QDirListingPrivate::advance()
     if (engine) {
         while (!fileEngineIterators.empty()) {
             // Find the next valid iterator that matches the filters.
-            QAbstractFileEngineIterator *it;
-            while (it = fileEngineIterators.top().get(), it->advance()) {
+            // Always use top() because entryMatches() may modify `fileEngineIterators`!
+            while (fileEngineIterators.top()->advance()) {
                 QDirEntryInfo entryInfo;
-                entryInfo.fileInfoOpt = it->currentFileInfo();
-                if (entryMatches(entryInfo)) { // modifies `fileEngineIterators`!
+                entryInfo.fileInfoOpt = fileEngineIterators.top()->currentFileInfo();
+                if (entryMatches(entryInfo)) {
                     currentEntryInfo = std::move(entryInfo);
                     return;
                 }
@@ -361,10 +329,9 @@ void QDirListingPrivate::advance()
         QDirEntryInfo entryInfo;
         while (!nativeIterators.empty()) {
             // Find the next valid iterator that matches the filters.
-            QFileSystemIterator *it;
-            while (it = nativeIterators.top().get(),
-                   it->advance(entryInfo.entry, entryInfo.metaData)) {
-                if (entryMatches(entryInfo)) { // modifies `nativeIterators`!
+            // Always use top() because entryMatches() may modify `nativeIterators`!
+            while (nativeIterators.top()->advance(entryInfo.entry, entryInfo.metaData)) {
+                if (entryMatches(entryInfo)) {
                     currentEntryInfo = std::move(entryInfo);
                     return;
                 }
@@ -398,11 +365,7 @@ void QDirListingPrivate::checkAndPushDirectory(QDirEntryInfo &entryInfo)
         return;
 
     // No hidden directories unless requested
-    const bool includeHidden = [this]() {
-        if (useLegacyFilters)
-            return legacyDirFilters.testAnyFlags(QDir::AllDirs | QDir::Hidden);
-        return iteratorFlags.testAnyFlags(QDirListing::IteratorFlag::IncludeHidden);
-    }();
+    const bool includeHidden = iteratorFlags.testAnyFlags(QDirListing::IteratorFlag::IncludeHidden);
     if (!includeHidden && entryInfo.isHidden())
         return;
 
@@ -411,87 +374,6 @@ void QDirListingPrivate::checkAndPushDirectory(QDirEntryInfo &entryInfo)
         return;
 
     pushDirectory(entryInfo);
-}
-
-/*!
-    \internal
-
-    Works the same as matchesFilters() but for the old QDir::Filters.
-*/
-bool QDirListingPrivate::matchesLegacyFilters(QDirEntryInfo &entryInfo) const
-{
-    Q_ASSERT(useLegacyFilters);
-
-    const QString &fileName = entryInfo.fileName();
-    if (fileName.isEmpty())
-        return false;
-
-    auto &filters = legacyDirFilters;
-
-    // filter . and ..?
-    const bool dotOrDotDot = isDotOrDotDot(fileName);
-    const qsizetype fileNameSize = fileName.size();
-    if ((filters & QDir::NoDot) && dotOrDotDot && fileNameSize == 1)
-        return false;
-    if ((filters & QDir::NoDotDot) && dotOrDotDot && fileNameSize == 2)
-        return false;
-
-    // name filter
-#if QT_CONFIG(regularexpression)
-    // Pass all entries through name filters, except dirs if AllDirs is set
-    if (!(filters.testAnyFlags(QDir::AllDirs) && entryInfo.isDir())) {
-        if (!regexMatchesName(fileName))
-            return false;
-    }
-#endif
-    // skip symlinks
-    const bool skipSymlinks = filters.testAnyFlag(QDir::NoSymLinks);
-    const bool includeSystem = filters.testAnyFlag(QDir::System);
-    if (skipSymlinks && entryInfo.isSymLink()) {
-        // The only reason to save this file is if it is a broken link and we are requesting system files.
-        if (!includeSystem || entryInfo.exists())
-            return false;
-    }
-
-    // filter hidden
-    const bool includeHidden = filters.testAnyFlag(QDir::Hidden);
-    if (!includeHidden && !dotOrDotDot && entryInfo.isHidden())
-        return false;
-
-    // filter system files
-    if (!includeSystem) {
-        if (!entryInfo.isFile() && !entryInfo.isDir() && !entryInfo.isSymLink())
-            return false;
-        if (entryInfo.isSymLink() && !entryInfo.exists())
-            return false;
-    }
-
-    // skip directories
-    const bool skipDirs = !(filters & (QDir::Dirs | QDir::AllDirs));
-    if (skipDirs && entryInfo.isDir())
-        return false;
-
-    // skip files
-    const bool skipFiles    = !(filters & QDir::Files);
-    if (skipFiles && entryInfo.isFile())
-        // Basically we need a reason not to exclude this file otherwise we just eliminate it.
-        return false;
-
-    // filter permissions
-    const auto perms = filters & QDir::PermissionMask;
-    const bool filterPermissions = perms != 0 && perms != QDir::PermissionMask;
-    if (filterPermissions) {
-        const bool doWritable = filters.testAnyFlags(QDir::Writable);
-        const bool doExecutable = filters.testAnyFlags(QDir::Executable);
-        const bool doReadable = filters.testAnyFlags(QDir::Readable);
-        if ((doReadable && !entryInfo.isReadable())
-            || (doWritable && !entryInfo.isWritable())
-            || (doExecutable && !entryInfo.isExecutable())) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 /*!
@@ -511,8 +393,12 @@ bool QDirListingPrivate::matchesFilters(QDirEntryInfo &entryInfo) const
 
     // name filter
 #if QT_CONFIG(regularexpression)
-    if (!regexMatchesName(fileName))
-        return false;
+    const bool skipNameFilters = iteratorFlags.testAnyFlags(F::NoNameFiltersForDirs)
+                                 && entryInfo.isDir();
+    if (!skipNameFilters) {
+        if (!regexMatchesName(fileName))
+            return false;
+    }
 #endif // QT_CONFIG(regularexpression)
 
     if (isDotOrDotDot(fileName))
@@ -521,14 +407,18 @@ bool QDirListingPrivate::matchesFilters(QDirEntryInfo &entryInfo) const
     if (!iteratorFlags.testAnyFlag(F::IncludeHidden) && entryInfo.isHidden())
         return false;
 
-    // With ResolveSymlinks, we look at the type of the link's target,
-    // and exclude broken symlinks (where the target doesn't exist).
-    if (iteratorFlags.testAnyFlag(F::ResolveSymlinks)) {
+    const bool includeBrokenSymlinks = iteratorFlags.testAnyFlags(F::IncludeBrokenSymlinks);
+    if (includeBrokenSymlinks && entryInfo.isSymLink() && !entryInfo.exists())
+        return true;
+
+    if (iteratorFlags.testFlag(F::ResolveSymlinks)) {
         if (entryInfo.isSymLink() && !entryInfo.exists())
+            return false; // Exclude broken symlinks; anything else will be filtered below
+    } else {
+        constexpr auto f = F::ExcludeFiles | F::ExcludeDirs | F::ExcludeOther;
+        const bool filterByTargetType = iteratorFlags.testAnyFlags(f);
+        if (filterByTargetType && entryInfo.isSymLink())
             return false;
-    } else if ((iteratorFlags.testAnyFlags(F::FilesOnly)
-               || iteratorFlags.testAnyFlags(F::DirsOnly)) && entryInfo.isSymLink()) {
-        return false; // symlink is not a file or dir
     }
 
     if (iteratorFlags.testAnyFlag(F::ExcludeOther)
@@ -604,28 +494,6 @@ QDirListing::QDirListing(const QString &path, const QStringList &nameFilters, It
     d->initialEntryInfo.entry = QFileSystemEntry(path);
     d->nameFilters = nameFilters;
     d->iteratorFlags = flags;
-    d->init();
-}
-
-/*!
-    \internal
-
-    Only used by classes that still have to use QDir::Filters; for example,
-    QDir, such usage may be deprecated at some point.
-
-    \a qdirFilters is converted to QDir::Filters and \a qdirIteratorFlags is
-    converted to QDirIterator::IteratorFlags (qdirlisting.h can't include
-    qdir.h or qdiriterator.h) and used to control the filtering of the
-    dir entries.
-*/
-QDirListing::QDirListing(const QString &path, const QStringList &nameFilters, uint qdirFilters,
-                         uint qdirIteratorFlags)
-    : d(new QDirListingPrivate)
-{
-    d->initialEntryInfo.entry = QFileSystemEntry(path);
-    d->nameFilters = nameFilters;
-    d->setLegacyFilters(QDir::Filters::fromInt(qdirFilters),
-                        QDirIterator::IteratorFlags::fromInt(qdirIteratorFlags));
     d->init();
 }
 

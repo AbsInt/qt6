@@ -730,6 +730,11 @@ bool TestLogger::shouldIgnoreTest(const QString &test) const
     }
 #endif
 
+    if (!QT_CONFIG(signaling_nan) && test == "float") {
+        WARN("Test output was designed for machines with signaling NaN");
+        return true;
+    }
+
     if (logger != QTestLog::Plain || outputMode == FileOutput) {
         // The following tests only work with plain text output to stdout,
         // either because they execute multiple test objects or because

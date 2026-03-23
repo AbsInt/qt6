@@ -261,6 +261,7 @@ function(qt_internal_add_docs)
         "QT_VER=${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
         "QT_VERSION_TAG=${PROJECT_VERSION_MAJOR}${PROJECT_VERSION_MINOR}${PROJECT_VERSION_PATCH}"
         "BUILDDIR=${target_bin_dir}"
+        "QDOC_PROJECT_ROOT=${PROJECT_SOURCE_DIR}"
     )
     if(arg_DEFINES)
         foreach(define ${arg_DEFINES})

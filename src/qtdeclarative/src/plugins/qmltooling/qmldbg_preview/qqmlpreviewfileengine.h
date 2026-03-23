@@ -65,7 +65,6 @@ public:
     bool setSize(qint64 size) override;
     bool caseSensitive() const override;
     bool isRelativePath() const override;
-    QStringList entryList(QDir::Filters filters, const QStringList &filterNames) const override;
     bool setPermissions(uint perms) override;
     QByteArray id() const override;
     QString owner(FileOwner) const override;

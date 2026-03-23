@@ -276,6 +276,8 @@ void tst_WaylandClient::events()
     exec([&] {
         pointer()->sendEnter(s, window.frameOffset() + mousePressPos);
         pointer()->sendFrame(client());
+        pointer()->sendMotion(client(), window.frameOffset() + mousePressPos / 2);
+        pointer()->sendFrame(client());
         pointer()->sendMotion(client(), window.frameOffset() + mousePressPos);
         pointer()->sendFrame(client());
         pointer()->sendButton(client(), BTN_LEFT, Pointer::button_state_pressed);

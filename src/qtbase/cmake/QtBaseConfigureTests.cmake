@@ -197,7 +197,7 @@ function(qt_run_linker_version_script_support)
     # subsequently executed by xcodebuild, ignores the linker flag, and thus the test
     # seemingly succeeds. Explicitly disable the version script test on darwin platforms.
     # Also makes no sense with MSVC-style command-line
-    if(NOT APPLE AND NOT MSVC)
+    if(NOT APPLE AND NOT (MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC"))
         file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version_flag.map" [=[
             VERS_1 { global: sym1; };
             VERS_2 { global: sym2; } VERS_1;

@@ -18,6 +18,8 @@ class tst_QTextBoundaryFinder : public QObject
 {
     Q_OBJECT
 private slots:
+    void moveSemantics();
+
 #ifdef QT_BUILD_INTERNAL
     void graphemeBoundariesDefault_data();
     void graphemeBoundariesDefault();
@@ -72,6 +74,38 @@ inline char *toString(const QList<int> &list)
 
 } // namespace QTest
 QT_END_NAMESPACE
+
+void tst_QTextBoundaryFinder::moveSemantics()
+{
+    const QStringView string = u"Trivial text.";
+
+    // move-construction:
+    QTextBoundaryFinder orig(QTextBoundaryFinder::BoundaryType::Grapheme, string);
+    QTextBoundaryFinder moved = std::move(orig);
+
+    QCOMPARE(moved.string(), string);
+
+    moved.toStart();
+    moved.toNextBoundary();
+    QCOMPARE(moved.position(), 1);
+
+    // Hinnant Criterion:
+    {
+        auto &alias = orig;
+        alias = std::move(orig);
+        alias.swap(orig);
+    }
+
+    // move-assignment:
+
+    orig = std::move(moved);
+
+    QCOMPARE(orig.position(), 1);
+    orig.toNextBoundary();
+    QCOMPARE(orig.position(), 2);
+
+    // moved-from `moved` can be destroyed
+}
 
 #ifdef QT_BUILD_INTERNAL
 static void generateDataFromFile(const QString &fname, const QSet<QString> &skipSet = {})
@@ -197,10 +231,12 @@ static void doTestData(const QString &testString, const QList<int> &expectedBrea
     QVERIFY(!boundaryFinder.isAtBoundary());
     QVERIFY(boundaryFinder.boundaryReasons() == QTextBoundaryFinder::NotAtBoundary);
 
+    auto moved = std::move(boundaryFinder);
+
     // test boundaryReasons()
     for (int i = 0; i <= testString.size(); ++i) {
-        boundaryFinder.setPosition(i);
-        QCOMPARE(!!(boundaryFinder.boundaryReasons() & reasons), expectedBreakPositions.contains(i));
+        moved.setPosition(i);
+        QCOMPARE(!!(moved.boundaryReasons() & reasons), expectedBreakPositions.contains(i));
     }
 }
 

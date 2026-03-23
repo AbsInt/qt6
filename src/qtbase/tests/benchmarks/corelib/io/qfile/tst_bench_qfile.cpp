@@ -41,7 +41,6 @@ const int sp_size = sizeof(seekpos)/sizeof(int);
 
 class tst_qfile: public QObject
 {
-Q_ENUMS(BenchmarkType)
 Q_OBJECT
 public:
     enum BenchmarkType {
@@ -53,6 +52,7 @@ public:
         PosixBenchmark,
         QFileFromPosixBenchmark
     };
+    Q_ENUM(BenchmarkType)
 private slots:
     void initTestCase();
 

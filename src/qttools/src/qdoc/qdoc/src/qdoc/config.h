@@ -19,6 +19,7 @@
 QT_BEGIN_NAMESPACE
 
 class Config;
+struct InclusionPolicy;
 
 /*
  Contains information about a location
@@ -108,6 +109,10 @@ public:
     [[nodiscard]] bool getDebug() const { return m_debug; }
     [[nodiscard]] bool getAtomsDump() const { return m_atomsDump; }
     [[nodiscard]] bool showInternal() const { return m_showInternal; }
+    [[nodiscard]] bool includePrivate() const;
+    [[nodiscard]] bool includePrivateFunction() const;
+    [[nodiscard]] bool includePrivateType() const;
+    [[nodiscard]] bool includePrivateVariable() const;
 
     void clear();
     void reset();
@@ -187,6 +192,16 @@ public:
         QSet<QString> excluded_files;
     };
     const ExcludedPaths& getExcludedPaths();
+    [[nodiscard]] QSet<QString> getInternalFilePatterns() const;
+
+    struct InternalFilePatterns {
+        QSet<QString> exactMatches;                 // Patterns without wildcards
+        QList<QRegularExpression> globPatterns;     // Glob patterns (match filename only)
+        QList<QRegularExpression> regexPatterns;    // Regex patterns (match full path)
+    };
+    const InternalFilePatterns& getInternalFilePatternsCompiled();
+    static bool matchesInternalFilePattern(const QString &filePath,
+                                          const InternalFilePatterns &patterns) noexcept;
 
     struct SourceLink {
         QString baseUrl;
@@ -206,6 +221,8 @@ public:
     };
     std::set<HeaderFilePath> getHeaderFiles();
 
+    InclusionPolicy createInclusionPolicy() const;
+
 private:
     void processCommandLineOptions(const QStringList &args);
     void setIncludePaths();
@@ -222,6 +239,7 @@ private:
     QString m_previousCurrentDir {};
     std::optional<ExcludedPaths> m_excludedPaths{};
     std::optional<SourceLink> m_sourceLink{};
+    std::optional<InternalFilePatterns> m_internalFilePatterns{};
 
     bool m_showInternal { false };
     static bool m_debug;
@@ -254,6 +272,7 @@ struct ConfigStrings
     static QString AUTOLINKERRORS;
     static QString BUILDVERSION;
     static QString CODEINDENT;
+    static QString CODELANGUAGES;
     static QString CODEPREFIX;
     static QString CODESUFFIX;
     static QString CPPCLASSESPAGE;
@@ -283,8 +302,11 @@ struct ConfigStrings
     static QString IGNORESINCE;
     static QString IGNOREWORDS;
     static QString IMAGEDIRS;
+    static QString IMAGESOUTPUTDIR;
     static QString IMAGES;
     static QString INCLUDEPATHS;
+    static QString INCLUDEPRIVATE;
+    static QString INTERNALFILEPATTERNS;
     static QString INCLUSIVE;
     static QString INDEXES;
     static QString LANDINGPAGE;
@@ -292,6 +314,8 @@ struct ConfigStrings
     static QString LANGUAGE;
     static QString LOCATIONINFO;
     static QString LOGPROGRESS;
+    static QString LOGWARNINGS;
+    static QString LOGWARNINGSDISABLECLIARGS;
     static QString MACRO;
     static QString MANIFESTMETA;
     static QString MODULEHEADER;
@@ -304,6 +328,7 @@ struct ConfigStrings
     static QString OUTPUTSUFFIXES;
     static QString PRODUCTNAME;
     static QString PROJECT;
+    static QString PROJECTROOT;
     static QString REDIRECTDOCUMENTATIONTODEVNULL;
     static QString REPORTMISSINGALTTEXTFORIMAGES;
     static QString QHP;
@@ -339,6 +364,7 @@ struct ConfigStrings
 #define CONFIG_AUTOLINKERRORS ConfigStrings::AUTOLINKERRORS
 #define CONFIG_BUILDVERSION ConfigStrings::BUILDVERSION
 #define CONFIG_CODEINDENT ConfigStrings::CODEINDENT
+#define CONFIG_CODELANGUAGES ConfigStrings::CODELANGUAGES
 #define CONFIG_CODEPREFIX ConfigStrings::CODEPREFIX
 #define CONFIG_CODESUFFIX ConfigStrings::CODESUFFIX
 #define CONFIG_CPPCLASSESPAGE ConfigStrings::CPPCLASSESPAGE
@@ -368,7 +394,10 @@ struct ConfigStrings
 #define CONFIG_IGNORETOKENS ConfigStrings::IGNORETOKENS
 #define CONFIG_IGNOREWORDS ConfigStrings::IGNOREWORDS
 #define CONFIG_IMAGEDIRS ConfigStrings::IMAGEDIRS
+#define CONFIG_IMAGESOUTPUTDIR ConfigStrings::IMAGESOUTPUTDIR
 #define CONFIG_INCLUDEPATHS ConfigStrings::INCLUDEPATHS
+#define CONFIG_INCLUDEPRIVATE ConfigStrings::INCLUDEPRIVATE
+#define CONFIG_INTERNALFILEPATTERNS ConfigStrings::INTERNALFILEPATTERNS
 #define CONFIG_INCLUSIVE ConfigStrings::INCLUSIVE
 #define CONFIG_INDEXES ConfigStrings::INDEXES
 #define CONFIG_LANDINGPAGE ConfigStrings::LANDINGPAGE
@@ -376,6 +405,8 @@ struct ConfigStrings
 #define CONFIG_LANGUAGE ConfigStrings::LANGUAGE
 #define CONFIG_LOCATIONINFO ConfigStrings::LOCATIONINFO
 #define CONFIG_LOGPROGRESS ConfigStrings::LOGPROGRESS
+#define CONFIG_LOGWARNINGS ConfigStrings::LOGWARNINGS
+#define CONFIG_LOGWARNINGSDISABLECLIARGS ConfigStrings::LOGWARNINGSDISABLECLIARGS
 #define CONFIG_MACRO ConfigStrings::MACRO
 #define CONFIG_MANIFESTMETA ConfigStrings::MANIFESTMETA
 #define CONFIG_MODULEHEADER ConfigStrings::MODULEHEADER
@@ -388,6 +419,7 @@ struct ConfigStrings
 #define CONFIG_OUTPUTSUFFIXES ConfigStrings::OUTPUTSUFFIXES
 #define CONFIG_PRODUCTNAME ConfigStrings::PRODUCTNAME
 #define CONFIG_PROJECT ConfigStrings::PROJECT
+#define CONFIG_PROJECTROOT ConfigStrings::PROJECTROOT
 #define CONFIG_REDIRECTDOCUMENTATIONTODEVNULL ConfigStrings::REDIRECTDOCUMENTATIONTODEVNULL
 #define CONFIG_REPORTMISSINGALTTEXTFORIMAGES ConfigStrings::REPORTMISSINGALTTEXTFORIMAGES
 #define CONFIG_QHP ConfigStrings::QHP
@@ -427,6 +459,29 @@ inline bool Config::singleExec() const
 inline bool Config::dualExec() const
 {
     return !m_configVars.value(CONFIG_SINGLEEXEC).asBool();
+}
+
+inline bool Config::includePrivate() const
+{
+    return m_configVars.value(CONFIG_INCLUDEPRIVATE).asBool();
+}
+
+inline bool Config::includePrivateFunction() const
+{
+    const auto val{m_configVars.value(CONFIG_INCLUDEPRIVATE + ".functions")};
+    return val.asString().isNull() ? includePrivate() : val.asBool();
+}
+
+inline bool Config::includePrivateType() const
+{
+    const auto val{m_configVars.value(CONFIG_INCLUDEPRIVATE + ".types")};
+    return val.asString().isNull() ? includePrivate() : val.asBool();
+}
+
+inline bool Config::includePrivateVariable() const
+{
+    const auto val{m_configVars.value(CONFIG_INCLUDEPRIVATE + ".variables")};
+    return val.asString().isNull() ? includePrivate() : val.asBool();
 }
 
 QT_END_NAMESPACE

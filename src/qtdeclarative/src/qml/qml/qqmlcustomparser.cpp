@@ -222,7 +222,7 @@ QQmlTypeLoader *QQmlCustomParser::typeLoader() const
     if (!engine && !validator)
         return nullptr;
 
-    return validator ? validator->typeLoader() : &engine->typeLoader;
+    return validator ? validator->typeLoader() : QQmlTypeLoader::get(engine);
 }
 
 QT_END_NAMESPACE

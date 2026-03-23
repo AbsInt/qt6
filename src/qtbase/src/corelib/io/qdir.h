@@ -32,8 +32,9 @@ public:
                   Writable    = 0x020,
                   Executable  = 0x040,
                   PermissionMask    = 0x070,
-
-                  Modified    = 0x080,
+#if QT_DEPRECATED_SINCE(6, 11)
+                  Modified QT_DEPRECATED_VERSION_X_6_11("This flag is not handled in QDir; you can simply remove it from your code.") = 0x080,
+#endif
                   Hidden      = 0x100,
                   System      = 0x200,
 

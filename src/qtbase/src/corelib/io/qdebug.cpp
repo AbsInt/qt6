@@ -1067,7 +1067,15 @@ QDebug &QDebug::resetFormat()
     \fn template <class T> QString QDebug::toString(const T &object)
     \since 6.0
 
-    \include qdebug-toString.qdocinc
+    Streams \a object into a QDebug instance that operates on a string,
+    and then returns that string.
+
+    This function is useful for cases where you need the textual representation
+    of an object for debugging, but cannot use \c {operator<<}. For example:
+
+    \snippet code/src_corelib_io_qdebug.cpp toString
+
+    The string is streamed using \l nospace().
 
     \sa toBytes()
 */

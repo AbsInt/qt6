@@ -1,7 +1,3 @@
-[openglContextCreatedSignal]
-opensuse-42.3
-opensuse-leap
-
 # QTBUG-103078
 [defaultState]
 android
@@ -9,9 +5,12 @@ android
 android
 [requestActivate]
 android
+wayland
 [contentItemSize]
 android
 [attachedProperty]
 android
 [visibilityDoesntClobberWindowState]
 xcb ubuntu-24.04 # QTBUG-129030
+wayland
+

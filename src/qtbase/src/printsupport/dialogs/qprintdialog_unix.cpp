@@ -473,6 +473,7 @@ bool QPrintPropertiesDialog::createAdvancedOptionsWidget()
                             choicesCbWithLabelLayout->addWidget(warningLabel);
 
                             QLabel *optionLabel = new QLabel(toUnicode(option->text));
+                            optionLabel->setBuddy(choicesCb);
                             groupLayout->addRow(optionLabel, choicesCbWithLabel);
                             anyWidgetCreated = true;
                             choicesCb->setProperty(ppdOptionProperty, QVariant::fromValue(option));

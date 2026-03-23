@@ -41,8 +41,8 @@
 
     \table
     \row
-    \li \inlineimage coordinatesystem-rect.png
-    \li \inlineimage coordinatesystem-line.png
+    \li \inlineimage coordinatesystem-rect.svg
+    \li \inlineimage coordinatesystem-line.svg
     \row
     \li QRect(QPoint(1, 2), QPoint(7, 6))
     \li QLine(QPoint(2, 7), QPoint(6, 1))
@@ -73,8 +73,8 @@
 
     \table
     \row
-    \li \inlineimage coordinatesystem-rect-raster.png
-    \li \inlineimage coordinatesystem-line-raster.png
+    \li \inlineimage coordinatesystem-rect-raster.svg
+    \li \inlineimage coordinatesystem-line-raster.svg
 
     \row
     \li
@@ -139,8 +139,8 @@
 
     \table
     \row
-    \li \inlineimage coordinatesystem-rect-antialias.png
-    \li \inlineimage coordinatesystem-line-antialias.png
+    \li \inlineimage coordinatesystem-rect-antialias.svg
+    \li \inlineimage coordinatesystem-line-antialias.svg
     \row
     \li
 

@@ -43,7 +43,8 @@ sudo zypper -nq install libicu-devel
 sudo zypper -nq install alsa-devel dbus-1-devel libxkbfile-devel \
          libXcomposite-devel libXcursor-devel libXrandr-devel libXtst-devel \
          mozilla-nspr-devel mozilla-nss-devel glproto-devel \
-         libxshmfence-devel libXdamage-devel
+         libxshmfence-devel libXdamage-devel \
+         'cargo<1.93' rust-bindgen
 
 # qtwebkit
 sudo zypper -nq install libxml2-devel libxslt-devel
@@ -82,7 +83,7 @@ sudo zypper -nq install cifs-utils
 sudo zypper -nq install libtommath-devel
 
 # Java
-sudo zypper -nq install java-17-openjdk
+sudo zypper -nq install java-21-openjdk-devel-21.0.9.0-150600.3.18.2
 
 # For tst_license.pl with all the machines generating SBOM
 sudo zypper -nq install perl-JSON

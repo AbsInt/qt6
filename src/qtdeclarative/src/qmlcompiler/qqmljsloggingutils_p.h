@@ -38,8 +38,9 @@ class Q_QMLCOMPILER_EXPORT LoggerCategory
 
 public:
     LoggerCategory();
-    LoggerCategory(QString name, QString settingsName, QString description, QtMsgType level,
-                   bool ignored = false, bool isDefault = false);
+    LoggerCategory(
+            const QString &name, const QString &settingsName, const QString &description,
+            QtMsgType level, bool ignored = false, bool isDefault = false);
     LoggerCategory(const LoggerCategory &);
     LoggerCategory(LoggerCategory &&) noexcept;
     LoggerCategory &operator=(const LoggerCategory &);
@@ -64,21 +65,26 @@ private:
 
 class LoggerCategoryPrivate
 {
-    friend class QT_PREPEND_NAMESPACE(QQmlJS::LoggerCategory);
-
 public:
+    LoggerCategoryPrivate() = default;
+    LoggerCategoryPrivate(const QString &name, const QString &settingsName,
+                          const QString &description, QtMsgType level, bool isIgnored,
+                          bool isDefault);
+
     LoggerWarningId id() const { return LoggerWarningId(m_name); }
 
+    QString name() const { return m_name; }
+    QString settingsName() const { return m_settingsName; }
+    QString description() const { return m_description; }
+    bool isDefault() const { return m_isDefault; }
+
+    QtMsgType level() const { return m_level; }
     void setLevel(QtMsgType);
+
+    bool isIgnored() const { return m_isIgnored; }
     void setIgnored(bool);
 
-    QString name() const;
-    QString settingsName() const;
-    QString description() const;
-    QtMsgType level() const;
-    bool isIgnored() const;
-    bool isDefault() const;
-    bool hasChanged() const;
+    bool hasChanged() const { return m_changed; }
 
     static LoggerCategoryPrivate *get(LoggerCategory *);
 
@@ -100,7 +106,7 @@ private:
     QString m_settingsName;
     QString m_description;
     QtMsgType m_level = QtDebugMsg;
-    bool m_ignored = false;
+    bool m_isIgnored = false;
     bool m_isDefault = false; // Whether or not the category can be disabled
     bool m_changed = false;
 };

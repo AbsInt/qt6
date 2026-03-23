@@ -105,7 +105,7 @@ void tst_qmllint_benchmark::runOnFile(const QString &fileName, PluginSelection a
 
     QQmlJSLinter linter(imports);
 
-    QList<QQmlJS::LoggerCategory> categories = QQmlJSLogger::defaultCategories();
+    QList<QQmlJS::LoggerCategory> categories = QQmlJSLogger::builtinCategories();
     switch (allowedPlugins) {
     case CompilerWarnings:
         for (auto &category : categories) {

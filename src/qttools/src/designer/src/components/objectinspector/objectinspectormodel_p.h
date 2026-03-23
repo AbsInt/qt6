@@ -56,10 +56,10 @@ namespace qdesigner_internal {
         explicit ObjectData(QObject *parent, QObject *object, const ModelRecursionContext &ctx);
         ObjectData();
 
-        inline Type     type()       const { return m_type; }
-        inline QObject *object()     const { return m_object; }
-        inline QObject *parent()     const { return m_parent; }
-        inline QString  objectName() const { return m_objectName; }
+        Type     type()       const { return m_type; }
+        QObject *object()     const { return m_object; }
+        QObject *parent()     const { return m_parent; }
+        QString  objectName() const { return m_objectName; }
 
         bool equals(const ObjectData & me) const;
 
@@ -107,7 +107,7 @@ namespace qdesigner_internal {
         enum UpdateResult { NoForm, Rebuilt, Updated };
         UpdateResult update(QDesignerFormWindowInterface *fw);
 
-        const QModelIndexList indexesOf(QObject *o) const { return m_objectIndexMultiMap.values(o); }
+        QModelIndexList indexesOf(QObject *o) const { return m_objectIndexMultiMap.values(o); }
         QObject *objectAt(const QModelIndex &index) const;
 
         QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;

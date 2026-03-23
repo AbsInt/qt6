@@ -45,7 +45,6 @@ public:
     QString m_unTrPrefix; // QM specific
     QString m_sourceFileName;
     QString m_targetFileName;
-    QString m_compilationDatabaseDir;
     QVector<QRegularExpression> m_excludes;
     QDir m_sourceDir;
     QDir m_targetDir; // FIXME: TS specific
@@ -60,7 +59,6 @@ public:
     bool m_sortMessages = false;
     bool m_noUiLines = false;
     TranslatorSaveMode m_saveMode = SaveEverything;
-    QStringList m_rootDirs;
 };
 
 class TMMKey {
@@ -209,6 +207,11 @@ private:
 
 bool getNumerusInfo(QLocale::Language language, QLocale::Territory territory, QByteArray *rules,
                     QStringList *forms, const char **gettextRules);
+
+bool getCountNeed(QLocale::Language lang, QLocale::Territory territory, QList<bool> &countRefNeeds,
+                  QStringList *forms);
+
+QString friendlyString(const QString &str);
 
 QString getNumerusInfoString();
 

@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include <AppKit/AppKit.h>
 
@@ -234,13 +235,32 @@ bool QCocoaIntegration::hasCapability(QPlatformIntegration::Capability cap) cons
         // layer-backed.
         return false;
     case OpenGL:
+#if defined(Q_PROCESSOR_ARM)
+        if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::MacOSTahoe) {
+            // Tahoe has issues with software-backed GL, crashing in common operations
+            static bool isSoftwareContext = []{
+                QOpenGLContext context;
+                context.create();
+                auto *cocoaContext = static_cast<QCocoaGLContext*>(context.handle());
+                if (cocoaContext->isSoftwareContext()) {
+                    qWarning() << "Detected software OpenGL backend,"
+                        << "which is known to be broken on"
+                        << qUtf8Printable(QSysInfo::prettyProductName());
+                    return true;
+                } else {
+                    return false;
+                }
+            }();
+            return !isSoftwareContext;
+        }
+#endif
+        Q_FALLTHROUGH();
     case BufferQueueingOpenGL:
 #endif
     case ThreadedPixmaps:
     case WindowMasks:
     case MultipleWindows:
     case ForeignWindows:
-    case RasterGLSurface:
     case ApplicationState:
     case ApplicationIcon:
     case BackingStoreStaticContents:

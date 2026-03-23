@@ -4,6 +4,7 @@
 
 import QtQuick
 import QtQuick.Controls.impl
+import QtQuick.Controls.Basic.impl
 import QtQuick.Templates as T
 
 T.TextArea {
@@ -23,6 +24,10 @@ T.TextArea {
     placeholderTextColor: control.palette.placeholderText
     selectionColor: control.palette.highlight
     selectedTextColor: control.palette.highlightedText
+
+    ContextMenu.menu: TextEditingContextMenu {
+        editor: control
+    }
 
     background: Rectangle {
         visible: Qt.styleHints.accessibility.contrastPreference === Qt.HighContrast

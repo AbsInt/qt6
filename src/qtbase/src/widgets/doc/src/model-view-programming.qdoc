@@ -47,7 +47,7 @@
     customized.
 
     \table
-    \row \li \inlineimage modelview-overview.png
+    \row \li \inlineimage modelview-overview.svg
              {Model, view, and delegate interaction diagram}
     \li \b{The model/view architecture}
 
@@ -276,7 +276,7 @@
     of data in the model, but they are not restricted in the way that they
     present this information to the user.
 
-    \image modelview-models.png {List model, table model, and tree model}
+    \image modelview-models.svg {List model, table model, and tree model}
 
     Models also notify any attached views about changes to data through the
     signals and slots mechanism.
@@ -333,7 +333,7 @@
     a model index.
 
     \table 70%
-    \row \li \inlineimage modelview-tablemodel.png
+    \row \li \inlineimage modelview-tablemodel.svg
               {Structure of the table model using rows and columns}
     \li \b{Rows and columns}
 
@@ -366,7 +366,7 @@
     \snippet code/doc_src_model-view-programming.cpp 3
 
     \table 70%
-    \row \li \inlineimage modelview-treemodel.png
+    \row \li \inlineimage modelview-treemodel.svg
              {Structure of the tree model with parent, row, and column items}
     \li \b{Parents, rows, and columns}
 
@@ -1489,7 +1489,6 @@
     regardless of its location:
 
     \snippet qtreewidget-using/mainwindow.cpp 10
-    \snippet qtreewidget-using/mainwindow.cpp 11
 
     Inserting the item somewhere else in the tree widget follows the same
     pattern:
@@ -1506,7 +1505,7 @@
     Tables can be created with a set number of rows and columns, or these
     can be added to an unsized table as they are needed.
 
-    \snippet qtablewidget-using/mainwindow.h 0
+    \snippet include/mainwindow.h 0
     \snippet qtablewidget-using/mainwindow.cpp 0
 
     Items are constructed outside the table before being added to the table

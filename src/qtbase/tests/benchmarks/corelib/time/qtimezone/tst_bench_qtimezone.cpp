@@ -41,15 +41,17 @@ static QList<QByteArray> enoughZones()
         QByteArray("UTC"),
         // Those named overtly in tst_QDateTime - special cases first:
         QByteArray("UTC-02:00"), QByteArray("UTC+02:00"), QByteArray("UTC+12:00"),
-        QByteArray("Etc/GMT+3"), QByteArray("GMT-2"), QByteArray("GMT"),
+        QByteArray("Etc/GMT+3"), QByteArray("GMT-0"), QByteArray("GMT"),
         // ... then ordinary names in alphabetic order:
+        QByteArray("America/Anchorage"), QByteArray("America/Metlakatla"),
         QByteArray("America/New_York"), QByteArray("America/Sao_Paulo"),
-        QByteArray("America/Vancouver"),
-        QByteArray("Asia/Kathmandu"), QByteArray("Asia/Singapore"),
+        QByteArray("America/Toronto"), QByteArray("America/Vancouver"),
+        QByteArray("Asia/Kathmandu"), QByteArray("Asia/Manila"), QByteArray("Asia/Singapore"),
         QByteArray("Australia/Brisbane"), QByteArray("Australia/Eucla"),
         QByteArray("Australia/Sydney"),
         QByteArray("Europe/Berlin"), QByteArray("Europe/Helsinki"),
-        QByteArray("Europe/Rome"), QByteArray("Europe/Oslo"),
+        QByteArray("Europe/Lisbon"), QByteArray("Europe/Oslo"),
+        QByteArray("Europe/Rome"),
         QByteArray("Pacific/Apia"), QByteArray("Pacific/Auckland"),
         QByteArray("Pacific/Kiritimati")
     };

@@ -128,6 +128,7 @@ private slots:
     void mousePropagationWithinPopup();
     void shortcutInNestedSubMenuAction();
     void animationOnHeight();
+    void dontDeleteDelegates();
     void loadMenuAsynchronously();
     void visibleTrue();
     void resetContentItem();
@@ -2198,7 +2199,7 @@ void tst_QQuickMenu::subMenuFlipsPositionWhenOutOfBounds()
     mainMenu->setPopupType(popupType);
 
     window->show();
-    QVERIFY(QTest::qWaitForWindowExposed(window));
+    QVERIFY(QTest::qWaitForWindowActive(window));
 
     mainMenu->open();
     QTRY_VERIFY(mainMenu->isOpened());
@@ -3516,6 +3517,30 @@ void tst_QQuickMenu::animationOnHeight()
     const qreal itemHeight = menu->itemAt(0)->height();
     QCOMPARE(listView->contentHeight(), itemHeight * 2 + listView->spacing());
     QCOMPARE_GE(listView->height(), listView->contentHeight());
+}
+
+void tst_QQuickMenu::dontDeleteDelegates()
+{
+    QQuickControlsApplicationHelper helper(this, QLatin1String("dontDeleteDelegates.qml"));
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickApplicationWindow *window = helper.appWindow;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    auto *menu = window->property("menu").value<QQuickMenu*>();
+    QVERIFY(menu);
+    QPointer<QQmlComponent> delegateComponent1 = window->property("delegateComponent1").value<QQmlComponent *>();
+    QVERIFY(delegateComponent1);
+    QPointer<QQmlComponent> delegateComponent2 = window->property("delegateComponent2").value<QQmlComponent *>();
+    QVERIFY(delegateComponent2);
+
+    // When setting a new delegate, the old one shouldn't be destroyed.
+    menu->setDelegate(delegateComponent2);
+    QVERIFY(delegateComponent1);
+
+    // The same goes for the new delegate: it shouldn't be destroyed when setting the old one.
+    menu->setDelegate(delegateComponent1);
+    QVERIFY(delegateComponent2);
 }
 
 void tst_QQuickMenu::loadMenuAsynchronously()

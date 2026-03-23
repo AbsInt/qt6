@@ -285,7 +285,7 @@ QStringList Parser::findEnumValues(const QString &name, const QStringList &inclu
         }
 
         if (valid) {
-            QRegularExpression macro(QStringLiteral("enum +([A-Za-z0-9_]*)"));
+            QRegularExpression macro(QStringLiteral("enum\\s+(?:struct|class)?\\s*+([A-Za-z0-9_]*)"));
             QRegularExpressionMatchIterator m = macro.globalMatch(data);
             while (m.hasNext()) {
                 QRegularExpressionMatch match = m.next();

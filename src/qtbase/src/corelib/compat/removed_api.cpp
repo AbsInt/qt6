@@ -1481,3 +1481,63 @@ bool QObject::doSetProperty(const char *name, const QVariant *lvalue, QVariant *
 // order sections alphabetically to reduce chances of merge conflicts
 
 #endif // QT_CORE_REMOVED_SINCE(6, 10)
+
+#if QT_CORE_REMOVED_SINCE(6, 11)
+
+#include "qbytearray.h"
+
+QByteArray QByteArray::percentDecoded(char percent) const
+{
+    return fromPercentEncoding(*this, percent);
+}
+
+#if QT_CONFIG(thread)
+// some of the previously inlined API became removed
+#include "qreadwritelock.h"
+
+void QReadWriteLock::lockForRead()
+{
+    tryLockForRead(QDeadlineTimer(QDeadlineTimer::Forever));
+}
+
+bool QReadWriteLock::tryLockForRead(QDeadlineTimer timeout)
+{
+    return QBasicReadWriteLock::tryLockForRead(timeout);
+}
+
+void QReadWriteLock::lockForWrite()
+{
+    tryLockForWrite(QDeadlineTimer(QDeadlineTimer::Forever));
+}
+
+bool QReadWriteLock::tryLockForWrite(QDeadlineTimer timeout)
+{
+    return QBasicReadWriteLock::tryLockForWrite(timeout);
+}
+
+void QReadWriteLock::unlock()
+{
+    QBasicReadWriteLock::unlock();
+}
+#endif // QT_CONFIG(thread)
+
+#include "qsavefile.h"
+
+QSaveFile::QSaveFile(const QString &name)
+    : QSaveFile(name, nullptr)
+{
+}
+
+#include "qtimer.h"
+
+void QTimer::singleShotImpl(int msec, Qt::TimerType timerType,
+                            const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj)
+{
+    singleShotImpl(std::chrono::milliseconds{msec}, timerType, receiver, slotObj);
+}
+
+// #include "qotherheader.h"
+// // implement removed functions from qotherheader.h
+// order sections alphabetically to reduce chances of merge conflicts
+
+#endif // QT_CORE_REMOVED_SINCE(6, 11)

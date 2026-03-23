@@ -2484,6 +2484,10 @@ void tst_QByteArray::fromPercentEncoding()
     QFETCH(QByteArray, decodedString);
 
     QCOMPARE(encodedString.percentDecoded(), decodedString);
+    QCOMPARE(QByteArray::fromPercentEncoding(encodedString), decodedString);
+    QCOMPARE(QByteArray{encodedString}.percentDecoded(), decodedString); // rvalue, shared
+    encodedString.detach();
+    QCOMPARE(std::move(encodedString).percentDecoded(), decodedString); // rvalue, detached
 }
 
 void tst_QByteArray::toPercentEncoding_data()
@@ -2545,6 +2549,9 @@ void tst_QByteArray::pecentEncodingRoundTrip()
     QByteArray encodedData = original.toPercentEncoding(excludeInEncoding, includeInEncoding);
     QCOMPARE(encodedData, encoded);
     QCOMPARE(encodedData.percentDecoded(), original);
+    QCOMPARE(QByteArray{encodedData}.percentDecoded(), original); // rvalue, shared
+    encodedData.detach();
+    QCOMPARE(std::move(encodedData).percentDecoded(), original); // rvalue, detached
 }
 
 struct StringComparisonData

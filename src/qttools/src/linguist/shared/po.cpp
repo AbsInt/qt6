@@ -423,7 +423,8 @@ bool loadPO(Translator &translator, QIODevice &dev, ConversionData &cd)
                 QHash<QString, QByteArray> extras;
                 QList<QByteArray> hdrOrder;
                 QByteArray pluralForms;
-                for (const QByteArray &hdr : item.msgStr.first().split('\n')) {
+                const auto &headers = item.msgStr.constFirst().split('\n');
+                for (const QByteArray &hdr : headers) {
                     if (hdr.isEmpty())
                         continue;
                     int idx = hdr.indexOf(':');
@@ -519,16 +520,16 @@ bool loadPO(Translator &translator, QIODevice &dev, ConversionData &cd)
             msg.setContext(toUnicode(item.context));
             if (!item.references.isEmpty()) {
                 QString xrefs;
-                for (const QString &ref :
-                     QString(toUnicode(item.references))
-                             .split(QRegularExpression("\\s"_L1), Qt::SkipEmptyParts)) {
+                const auto &refs = QString(toUnicode(item.references))
+                                           .split(QRegularExpression("\\s"_L1), Qt::SkipEmptyParts);
+                for (const QString &ref : refs) {
                     int pos = ref.indexOf(u':');
                     int lpos = ref.lastIndexOf(u':');
                     if (pos != -1 && pos == lpos) {
                         bool ok;
                         int lno = ref.mid(pos + 1).toInt(&ok);
                         if (ok) {
-                            msg.addReference(ref.left(pos), lno);
+                            msg.addReference(ref.left(pos), lno, -1, -1);
                             continue;
                         }
                     }

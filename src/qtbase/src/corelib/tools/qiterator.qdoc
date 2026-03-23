@@ -165,7 +165,7 @@
     position between the second and third item, and returns the second
     item; and so on.
 
-    \image javaiterators1.png
+    \image javaiterators1.svg Java-style iterators point between items
 
     Here's how to iterate over the elements in reverse order:
 
@@ -211,7 +211,7 @@
     position between the second and third item, returning the second
     item; and so on.
 
-    \image javaiterators1.png
+    \image javaiterators1.svg Java-style iterators point between items
 
     If you want to find all occurrences of a particular value, use
     findNext() in a loop.
@@ -260,7 +260,7 @@
     position between the second and third item, returning the second
     item; and so on.
 
-    \image javaiterators1.png
+    \image javaiterators1.svg Java-style iterators point between items
 
     Here's how to iterate over the elements in reverse order:
 
@@ -321,7 +321,7 @@
     position between the second and third item, returning the second
     item; and so on.
 
-    \image javaiterators1.png
+    \image javaiterators1.svg Java-style iterators point between items
 
     If you want to remove items as you iterate over the set, use
     remove().
@@ -718,7 +718,7 @@
     next() advances the iterator to the position between the second
     and third item; and so on.
 
-    \image javaiterators1.png
+    \image javaiterators1.svg Java-style iterators point between items
 
     Here's how to iterate over the elements in reverse order:
 
@@ -768,7 +768,7 @@
     next() advances the iterator to the position between the second
     and third item; and so on.
 
-    \image javaiterators1.png
+    \image javaiterators1.svg Java-style iterators point between items
 
     Here's how to iterate over the elements in reverse order:
 
@@ -819,7 +819,7 @@
     next() advances the iterator to the position between the second
     and third item; and so on.
 
-    \image javaiterators1.png
+    \image javaiterators1.svg Java-style iterators point between items
 
     If you want to find all occurrences of a particular value, use
     findNext() in a loop. For example:
@@ -867,7 +867,7 @@
     next() advances the iterator to the position between the second
     and third item; and so on.
 
-    \image javaiterators1.png
+    \image javaiterators1.svg Java-style iterators point between items
 
     Here's how to iterate over the elements in reverse order:
 
@@ -931,7 +931,7 @@
     next() advances the iterator to the position between the second
     and third item; and so on.
 
-    \image javaiterators1.png
+    \image javaiterators1.svg Java-style iterators point between items
 
     Here's how to iterate over the elements in reverse order:
 
@@ -994,7 +994,7 @@
     next() advances the iterator to the position between the second
     and third item; and so on.
 
-    \image javaiterators1.png
+    \image javaiterators1.svg Java-style iterators point between items
 
     If you want to find all occurrences of a particular value, use
     findNext() in a loop. For example:
@@ -1188,7 +1188,7 @@
     \sa hasNext(), next(), peekPrevious()
 */
 
-/*! \fn template <class Key, class T> QMutableMapIterator<Key, T>::Item QMutableMapIterator<Key, T>::peekNext() const
+/*!
     \fn template <class Key, class T> QMutableMultiMapIterator<Key, T>::Item QMutableMultiMapIterator<Key, T>::peekNext() const
 
     Returns a reference to the next item without moving the iterator.

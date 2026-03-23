@@ -106,7 +106,7 @@ QByteArray composePreprocessorOutput(const Symbols &symbols) {
                 output.chop(2);
             else
                 break;
-            output += sym.lexem().mid(1);
+            output += sym.lexemView().mid(1);
             secondlast = last;
             last = PP_STRING_LITERAL;
             continue;

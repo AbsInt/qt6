@@ -39,13 +39,26 @@ public:
     static emscripten::val suspendResumeControlJs();
 
     void suspend();
+    // Accept events for all handlers, start to process events on last handler in list
+    void suspendExclusive(QList<uint32_t> eventHandlerIndices);
     int sendPendingEvents();
+
+    emscripten::val currentEvent() const
+    {
+        return m_currentEvent;
+    }
+    void setCurrentEvent(emscripten::val currentEvent)
+    {
+        m_currentEvent = currentEvent;
+    }
 
 private:
     friend void qtSendPendingEvents();
 
     static QWasmSuspendResumeControl *s_suspendResumeControl;
     std::map<int, std::function<void(emscripten::val)>> m_eventHandlers;
+    std::function<bool(int)> m_eventFilter = [](int) { return true; };
+    emscripten::val m_currentEvent = emscripten::val::undefined();
 };
 
 class Q_CORE_EXPORT QWasmEventHandler
@@ -80,6 +93,39 @@ private:
     QWasmSuspendResumeControl *m_suspendResume;
     uint32_t m_handlerIndex;
     uint64_t m_timerId = 0;
+};
+
+class Q_CORE_EXPORT QWasmAnimationFrameMultiHandler
+{
+public:
+    using Callback = std::function<void(double)>;
+
+    static QWasmAnimationFrameMultiHandler *instance();
+
+    uint32_t registerAnimateCallback(Callback callback);
+    uint32_t registerDrawCallback(Callback callback);
+
+    void unregisterAnimateCallback(uint32_t handle);
+    void unregisterDrawCallback(uint32_t handle);
+
+    QWasmAnimationFrameMultiHandler();
+    ~QWasmAnimationFrameMultiHandler();
+    QWasmAnimationFrameMultiHandler(const QWasmAnimationFrameMultiHandler&) = delete;
+    QWasmAnimationFrameMultiHandler& operator=(const QWasmAnimationFrameMultiHandler&) = delete;
+
+private:
+    void handleAnimationFrame(double timestamp);
+    void ensureAnimationFrameRequested();
+    void cancelAnimationFrameRequest();
+
+    static QWasmAnimationFrameMultiHandler *s_instance;
+
+    std::map<uint32_t, Callback> m_animateCallbacks;
+    std::map<uint32_t, Callback> m_drawCallbacks;
+    uint32_t m_nextAnimateHandle = 0;
+    uint32_t m_nextDrawHandle = 0;
+    uint32_t m_handlerIndex = 0;
+    int64_t m_requestId = -1;
 };
 
 #endif

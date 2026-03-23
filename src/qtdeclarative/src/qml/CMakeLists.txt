@@ -295,6 +295,7 @@ qt_internal_add_qml_module(Qml
         qml/qqmlmetatypedata.cpp qml/qqmlmetatypedata_p.h
         qml/qqmlmoduleregistration.cpp qml/qqmlmoduleregistration.h
         qml/qqmlnetworkaccessmanagerfactory.cpp qml/qqmlnetworkaccessmanagerfactory.h
+        qml/qqmlnotifyingblob.cpp qml/qqmlnotifyingblob_p.h
         qml/qqmlnotifier.cpp qml/qqmlnotifier_p.h
         qml/qqmlobjectcreator.cpp qml/qqmlobjectcreator_p.h
         qml/qqmlobjectorgadget.cpp qml/qqmlobjectorgadget_p.h
@@ -523,7 +524,7 @@ set_source_files_properties(compat/removed_api.cpp
 #    ""
 #)
 
-set(_qt_qlalr_flags "--no-debug" "--qt")
+set(_qt_qlalr_flags "--no-debug" "--qt" "--exit-on-warn")
 qt_process_qlalr(Qml "${CMAKE_CURRENT_SOURCE_DIR}/parser/qqmljs.g" "${_qt_qlalr_flags}")
 qt_declarative_generate_reg_exp_jit_tables(Qml)
 # special case end

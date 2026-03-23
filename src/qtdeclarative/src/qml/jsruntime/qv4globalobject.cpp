@@ -299,6 +299,17 @@ void Heap::EvalFunction::init(QV4::ExecutionEngine *engine)
     f->defineReadonlyConfigurableProperty(s.engine->id_length(), Value::fromInt32(1));
 }
 
+static ExecutionContext *evalContext(QV4::ExecutionEngine *v4, bool directCall)
+{
+    // In case of !directCall, the context for eval should be the global scope
+    if (!directCall)
+        return v4->scriptContext();
+
+    // Otherwise there has to be a current stack frame. We need to be called from somewhere.
+    Q_ASSERT(v4->currentStackFrame);
+    return v4->currentContext();
+}
+
 ReturnedValue EvalFunction::evalCall(const Value *, const Value *argv, int argc, bool directCall) const
 {
     if (argc < 1)
@@ -312,8 +323,7 @@ ReturnedValue EvalFunction::evalCall(const Value *, const Value *argv, int argc,
 
     Scope scope(v4);
 
-    // In case of !directCall, the context for eval should be the global scope
-    ScopedContext ctx(scope, directCall ? v4->currentContext() : v4->scriptContext());
+    ScopedContext ctx(scope, evalContext(v4, directCall));
 
     String *scode = argv[0].stringValue();
     if (!scode)
@@ -323,8 +333,8 @@ ReturnedValue EvalFunction::evalCall(const Value *, const Value *argv, int argc,
     bool inheritContext = !isStrict;
 
     Script script(ctx, QV4::Compiler::ContextType::Eval, code, QStringLiteral("eval code"));
-    script.strictMode = (directCall && isStrict);
-    script.inheritContext = inheritContext;
+    script.setStrictMode(directCall && isStrict);
+    script.setInheritContext(inheritContext);
     script.parse();
     if (v4->hasException)
         return Encode::undefined();

@@ -35,6 +35,7 @@ public:
     static void updateSelectors();
     static QStringList platformSelectors();
     static void addStatics(const QStringList &); //For loading GUI statics from other Qt modules
+    static qsizetype removeStatics(const QStringList &);
     static QString selectionHelper(const QString &path, const QString &fileName,
                                    const QStringList &selectors, QChar indicator = u'+');
     QFileSelectorPrivate();

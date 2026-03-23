@@ -5,9 +5,9 @@
 #define QMLPROFILERAPPLICATION_H
 
 #include "qmlprofilerclient.h"
-#include "qmlprofilerdata.h"
 
 #include <private/qqmldebugconnection_p.h>
+#include <private/qqmlprofilereventreceiver_p.h>
 
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qprocess.h>
@@ -84,7 +84,7 @@ private:
 
     QScopedPointer<QQmlDebugConnection> m_connection;
     QScopedPointer<QmlProfilerClient> m_qmlProfilerClient;
-    QScopedPointer<QmlProfilerData> m_profilerData;
+    QScopedPointer<QQmlProfilerEventReceiver> m_profilerData;
     QTimer m_connectTimer;
     uint m_connectionAttempts;
 };

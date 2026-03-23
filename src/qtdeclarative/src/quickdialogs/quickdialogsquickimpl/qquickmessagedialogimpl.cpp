@@ -94,6 +94,18 @@ void QQuickMessageDialogImpl::toggleShowDetailedText()
     emit showDetailedTextChanged();
 }
 
+void QQuickMessageDialogImpl::itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &data)
+{
+    Q_D(QQuickMessageDialogImpl);
+    QQuickDialog::itemChange(change, data);
+
+    if (change != QQuickItem::ItemVisibleHasChanged || !isComponentComplete() || !data.boolValue)
+        return;
+
+    if (QQuickMessageDialogImplAttached *attached = d->attachedOrWarn(); attached && attached->buttonBox())
+        attached->buttonBox()->forceActiveFocus(Qt::OtherFocusReason);
+}
+
 QQuickMessageDialogImplAttached *QQuickMessageDialogImpl::qmlAttachedProperties(QObject *object)
 {
     return new QQuickMessageDialogImplAttached(object);

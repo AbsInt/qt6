@@ -187,6 +187,7 @@ private slots:
     void mapFromAndTo();
     void focusChainOnHide();
     void focusChainOnReparent();
+    void focusChainOnReparentNoChange();
     void focusAbstraction();
     void defaultTabOrder();
     void reverseTabOrder();
@@ -734,9 +735,7 @@ void tst_QWidget::initTestCase()
 
 void tst_QWidget::cleanup()
 {
-    QTRY_COMPARE(QApplication::topLevelWidgets(), QWidgetList());
-    if (!QTest::qWaitFor([]{ return QApplication::allWidgets().isEmpty(); }, 50ms))
-        qWarning() << "Test function has leaked" << QApplication::allWidgets();
+    QTRY_COMPARE(QApplication::allWidgets(), QWidgetList());
 }
 
 template <typename T>
@@ -1985,6 +1984,82 @@ void tst_QWidget::focusChainOnReparent()
     }
 }
 
+//#define DEBUG_FOCUS_CHAIN
+static void dumpFocusChain(QWidget *start, bool bForward, const char *desc = nullptr)
+{
+#ifdef DEBUG_FOCUS_CHAIN
+    qDebug() << "Dump focus chain, start:" << start << "isForward:" << bForward << desc;
+    QWidget *cur = start;
+    do {
+        qDebug() << "-" << cur << cur->objectName();
+        auto widgetPrivate = static_cast<QWidgetPrivate *>(qt_widget_private(cur));
+        cur = bForward ? widgetPrivate->focus_next : widgetPrivate->focus_prev;
+    } while (cur != start);
+#else
+    Q_UNUSED(start);
+    Q_UNUSED(bForward);
+    Q_UNUSED(desc);
+#endif
+}
+
+void tst_QWidget::focusChainOnReparentNoChange()
+{
+    QWidget window;
+
+    auto new_QWidget = [](QWidget *parent, const char *name) {
+        QWidget *w = new QWidget(parent);
+        w->setObjectName(name);
+        return w;
+    };
+    QWidget *child1 = new_QWidget(&window, "child1");
+    QWidget *child2 = new_QWidget(&window, "child2");
+    QWidget *child3 = new_QWidget(&window, "child3");
+    QWidget *child21 = new_QWidget(child2, "child21");
+    QWidget *child22 = new_QWidget(child2, "child22");
+    QWidget *child4 = new_QWidget(&window, "child4");
+
+    dumpFocusChain(&window, true);
+
+    QWidget *expectedOriginalChain[8] = {&window, child1,  child2,  child3,  child21, child22, child4, &window};
+    QWidget *w = &window;
+    for (auto expectedOriginal : expectedOriginalChain) {
+        QCOMPARE(w, expectedOriginal);
+        w = w->nextInFocusChain();
+    }
+    for (int i = 7; i >= 0; --i) {
+        w = w->previousInFocusChain();
+        QCOMPARE(w, expectedOriginalChain[i]);
+    }
+
+    child2->setParent(child4);
+    child22->setParent(&window);
+    dumpFocusChain(&window, true);
+
+    /*
+     *  child2 and child22 was reparented *within* the &window hierarchy
+     *  Hierarchy is now:
+     *
+     *  - window
+     *      - child1
+     *      - child3
+     *      - child4
+     *          - child2
+     *              - child21
+     *      - child22
+     *
+     *  but focus chain remains the same (it depends on the order of widget construction)
+     */
+    QWidget *expectedNewChain[8] = {&window, child1,  child2,  child3,  child21, child22, child4, &window};
+    w = &window;
+    for (auto expectedNew : expectedNewChain) {
+        QCOMPARE(w, expectedNew);
+        w = w->nextInFocusChain();
+    }
+    for (int i = 7; i >= 0; --i) {
+        w = w->previousInFocusChain();
+        QCOMPARE(w, expectedNewChain[i]);
+    }
+}
 
 void tst_QWidget::focusChainOnHide()
 {
@@ -2536,24 +2611,6 @@ void tst_QWidget::tabOrderWithProxyDisabled()
              qPrintable(focusWidgetName()));
     QVERIFY2(lineEdit1.hasFocus(),
              qPrintable(focusWidgetName()));
-}
-
-//#define DEBUG_FOCUS_CHAIN
-static void dumpFocusChain(QWidget *start, bool bForward, const char *desc = nullptr)
-{
-#ifdef DEBUG_FOCUS_CHAIN
-    qDebug() << "Dump focus chain, start:" << start << "isForward:" << bForward << desc;
-    QWidget *cur = start;
-    do {
-        qDebug() << "-" << cur;
-        auto widgetPrivate = static_cast<QWidgetPrivate *>(qt_widget_private(cur));
-        cur = bForward ? widgetPrivate->focus_next : widgetPrivate->focus_prev;
-    } while (cur != start);
-#else
-    Q_UNUSED(start);
-    Q_UNUSED(bForward);
-    Q_UNUSED(desc);
-#endif
 }
 
 void tst_QWidget::tabOrderWithCompoundWidgets()
@@ -11279,7 +11336,7 @@ void tst_QWidget::destroyBackingStore()
 #endif // QT_BUILD_INTERNAL
 
 // Helper function
-QWidgetRepaintManager* repaintManager(QWidget &widget)
+QWidgetRepaintManager* repaintManager([[maybe_unused]] QWidget &widget)
 {
     QWidgetRepaintManager *repaintManager = nullptr;
 #ifdef QT_BUILD_INTERNAL

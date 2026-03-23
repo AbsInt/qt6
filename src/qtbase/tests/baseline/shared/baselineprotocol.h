@@ -29,6 +29,10 @@ extern const QString PI_QtBuildMode;
 extern const QString PI_GitCommit;
 extern const QString PI_GitBranch;
 
+// Baseline server
+class Report;
+class BaselineHandler;
+
 class PlatformInfo : public QMap<QString, QString>
 {
 public:
@@ -68,13 +72,20 @@ struct ImageItem
     QImage image;
     QList<quint64> imageChecksums;
     quint16 itemChecksum = 0;
-    QByteArray misc;
+
+    QMap<QString, QVariant> metaData;
+
+private:
+    QByteArray misc; // Note, only used server side
+    friend class Report;
+    friend class BaselineHandler;
 
     void writeImageToStream(QDataStream &stream) const;
     void readImageFromStream(QDataStream &stream);
+
+    friend QDataStream & operator<<(QDataStream &stream, const ImageItem &ii);
+    friend QDataStream & operator>>(QDataStream &stream, ImageItem& ii);
 };
-QDataStream & operator<< (QDataStream &stream, const ImageItem &ii);
-QDataStream & operator>> (QDataStream &stream, ImageItem& ii);
 
 Q_DECLARE_METATYPE(ImageItem);
 

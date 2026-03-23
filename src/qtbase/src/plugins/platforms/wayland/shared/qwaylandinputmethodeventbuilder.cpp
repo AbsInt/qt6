@@ -1,5 +1,6 @@
 // Copyright (C) 2016 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qwaylandinputmethodeventbuilder_p.h"
 
@@ -96,7 +97,7 @@ QInputMethodEvent *QWaylandInputMethodEventBuilder::buildCommit(const QString &t
 {
     QList<QInputMethodEvent::Attribute> attributes;
 
-    const QPair<int, int> replacement = replacementForDeleteSurrounding();
+    const std::pair<int, int> replacement = replacementForDeleteSurrounding();
 
     if (m_cursor != 0 || m_anchor != 0) {
         QString surrounding = QInputMethod::queryFocusObject(Qt::ImSurroundingText, QVariant()).toString();
@@ -140,16 +141,16 @@ QInputMethodEvent *QWaylandInputMethodEventBuilder::buildPreedit(const QString &
 
     QInputMethodEvent *event = new QInputMethodEvent(text, attributes);
 
-    const QPair<int, int> replacement = replacementForDeleteSurrounding();
+    const std::pair<int, int> replacement = replacementForDeleteSurrounding();
     event->setCommitString(QString(), replacement.first, replacement.second);
 
     return event;
 }
 
-QPair<int, int> QWaylandInputMethodEventBuilder::replacementForDeleteSurrounding()
+std::pair<int, int> QWaylandInputMethodEventBuilder::replacementForDeleteSurrounding()
 {
     if (m_deleteBefore == 0 && m_deleteAfter == 0)
-        return QPair<int, int>(0, 0);
+        return {0, 0};
 
     const QString &surrounding = QInputMethod::queryFocusObject(Qt::ImSurroundingText, QVariant()).toString();
     const int cursor = QInputMethod::queryFocusObject(Qt::ImCursorPosition, QVariant()).toInt();
@@ -161,7 +162,7 @@ QPair<int, int> QWaylandInputMethodEventBuilder::replacementForDeleteSurrounding
     const int deleteBefore = selectionStart - indexFromWayland(surrounding, -m_deleteBefore, selectionStart);
     const int deleteAfter = indexFromWayland(surrounding, m_deleteAfter, selectionEnd) - selectionEnd;
 
-    return QPair<int, int>(-deleteBefore, deleteBefore + deleteAfter);
+    return {-deleteBefore, deleteBefore + deleteAfter};
 }
 
 QWaylandInputMethodContentType QWaylandInputMethodContentType::convert(Qt::InputMethodHints hints)

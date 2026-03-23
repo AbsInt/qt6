@@ -8,12 +8,18 @@ qt_exclude_tool_directories_from_default_target(
 if(NOT QT_FEATURE_linguist)
     return()
 endif()
+
+add_subdirectory(shared/qmake-parser)
+add_subdirectory(shared/trlib)
+add_subdirectory(shared/linguistproject)
+
 add_subdirectory(lconvert)
-add_subdirectory(lprodump)
+add_subdirectory(lcheck)
 add_subdirectory(lrelease)
 add_subdirectory(lrelease-pro)
 add_subdirectory(lupdate)
 add_subdirectory(lupdate-pro)
+add_subdirectory(ltext2id)
 if(QT_FEATURE_process AND QT_FEATURE_pushbutton AND QT_FEATURE_toolbutton
     AND QT_FEATURE_png AND QT_FEATURE_mdiarea AND QT_FEATURE_syntaxhighlighter
     AND TARGET Qt::Widgets AND TARGET Qt::Quick)

@@ -230,6 +230,7 @@ Q_STATIC_LOGGING_CATEGORY(lcAccessibilityCore, "qt.accessibility.core");
     \value ParentChanged                    An object's parent object changed.
     \value PopupMenuEnd                     A pop-up menu has closed.
     \value PopupMenuStart                   A pop-up menu has opened.
+    \value [since 6.11] RoleChanged         The role of an object has changed.
     \value ScrollingEnd                     A scrollbar scroll operation has ended (the mouse has
                                             released the slider handle).
     \value ScrollingStart                   A scrollbar scroll operation is about to start; this may
@@ -341,6 +342,7 @@ Q_STATIC_LOGGING_CATEGORY(lcAccessibilityCore, "qt.accessibility.core");
     \value Splitter         A splitter distributing available space between its child widgets.
     \value StaticText       Static text, such as labels for other widgets.
     \value StatusBar        A status bar.
+    \value [since 6.11] Switch  A switch that can be toggled on or off.
     \value Table            A table representing data in a grid of rows and columns.
     \value Terminal         A terminal or command line interface.
     \value TitleBar         The title bar caption of a window.
@@ -456,6 +458,9 @@ Q_STATIC_LOGGING_CATEGORY(lcAccessibilityCore, "qt.accessibility.core");
                                 differs from the application's default locale, e.g. for documents
                                 or paragraphs within a document that use a language that differs
                                 from the application's user interface language.
+    \value [since 6.11] Orientation value type: \a Qt::Orientation
+                                Orientation of the element. This attribute conceptually matches
+                                the "aria-orientation" property in ARIA.
 
     \sa QAccessibleAttributesInterface
 */
@@ -948,14 +953,15 @@ void QAccessible::updateAccessibility(QAccessibleEvent *event)
     // during construction of widgets. If you see cases where the
     // cache seems wrong, this call is "to blame", but the code that
     // caches dynamic data should be updated to handle change events.
-    QAccessibleInterface *iface = event->accessibleInterface();
-    if (isActive() && iface) {
-        if (event->type() == QAccessible::TableModelChanged) {
-            if (iface->tableInterface())
-                iface->tableInterface()->modelChange(static_cast<QAccessibleTableModelChangeEvent*>(event));
+    if (isActive()) {
+        QAccessibleInterface *iface = event->accessibleInterface();
+        if (iface) {
+            if (event->type() == QAccessible::TableModelChanged) {
+                if (iface->tableInterface())
+                    iface->tableInterface()->modelChange(static_cast<QAccessibleTableModelChangeEvent*>(event));
+            }
         }
     }
-
     if (updateHandler) {
         updateHandler(event);
         return;
@@ -963,6 +969,18 @@ void QAccessible::updateAccessibility(QAccessibleEvent *event)
 
     if (QPlatformAccessibility *pfAccessibility = platformAccessibility())
         pfAccessibility->notifyAccessibilityUpdate(event);
+}
+
+static std::pair<int, int> qAccessibleTextBoundaryHelperHelper(QTextCursor &cursor,
+                                                               QTextCursor::MoveOperation start,
+                                                               QTextCursor::MoveOperation end)
+{
+    std::pair<int, int> result;
+    cursor.movePosition(start, QTextCursor::MoveAnchor);
+    result.first = cursor.position();
+    cursor.movePosition(end, QTextCursor::KeepAnchor);
+    result.second = cursor.position();
+    return result;
 }
 
 /*!
@@ -976,32 +994,20 @@ std::pair< int, int > QAccessible::qAccessibleTextBoundaryHelper(const QTextCurs
 {
     Q_ASSERT(!offsetCursor.isNull());
 
-    QTextCursor endCursor = offsetCursor;
-    endCursor.movePosition(QTextCursor::End);
-    int characterCount = endCursor.position();
-
-    std::pair<int, int> result;
     QTextCursor cursor = offsetCursor;
     switch (boundaryType) {
     case CharBoundary:
-        result.first = cursor.position();
-        cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
-        result.second = cursor.position();
-        break;
+        return qAccessibleTextBoundaryHelperHelper(cursor, QTextCursor::NoMove,
+                                                   QTextCursor::NextCharacter);
     case WordBoundary:
-        cursor.movePosition(QTextCursor::StartOfWord, QTextCursor::MoveAnchor);
-        result.first = cursor.position();
-        cursor.movePosition(QTextCursor::EndOfWord, QTextCursor::KeepAnchor);
-        result.second = cursor.position();
-        break;
+        return qAccessibleTextBoundaryHelperHelper(cursor, QTextCursor::StartOfWord,
+                                                   QTextCursor::EndOfWord);
     case SentenceBoundary: {
         // QCursor does not provide functionality to move to next sentence.
         // We therefore find the current block, then go through the block using
         // QTextBoundaryFinder and find the sentence the \offset represents
-        cursor.movePosition(QTextCursor::StartOfBlock, QTextCursor::MoveAnchor);
-        result.first = cursor.position();
-        cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
-        result.second = cursor.position();
+        std::pair<int, int> result = qAccessibleTextBoundaryHelperHelper(
+                cursor, QTextCursor::StartOfBlock, QTextCursor::EndOfBlock);
         QString blockText = cursor.selectedText();
         const int offsetWithinBlockText = offsetCursor.position() - result.first;
         QTextBoundaryFinder sentenceFinder(QTextBoundaryFinder::Sentence, blockText);
@@ -1015,25 +1021,19 @@ std::pair< int, int > QAccessible::qAccessibleTextBoundaryHelper(const QTextCurs
             result.second = result.first + nextBoundary;
         if (prevBoundary != -1)
             result.first += prevBoundary;
-        break; }
-    case LineBoundary:
-        cursor.movePosition(QTextCursor::StartOfLine, QTextCursor::MoveAnchor);
-        result.first = cursor.position();
-        cursor.movePosition(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
-        result.second = cursor.position();
-        break;
-    case ParagraphBoundary:
-        cursor.movePosition(QTextCursor::StartOfBlock, QTextCursor::MoveAnchor);
-        result.first = cursor.position();
-        cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
-        result.second = cursor.position();
-        break;
-    case NoBoundary:
-        result.first = 0;
-        result.second = characterCount;
-        break;
+        return result;
     }
-    return result;
+    case LineBoundary:
+        return qAccessibleTextBoundaryHelperHelper(cursor, QTextCursor::StartOfLine,
+                                                   QTextCursor::EndOfLine);
+    case ParagraphBoundary:
+        return qAccessibleTextBoundaryHelperHelper(cursor, QTextCursor::StartOfBlock,
+                                                   QTextCursor::EndOfBlock);
+    case NoBoundary:
+        return qAccessibleTextBoundaryHelperHelper(cursor, QTextCursor::Start, QTextCursor::End);
+    }
+
+    Q_UNREACHABLE_RETURN({});
 }
 
 /*!
@@ -1469,6 +1469,14 @@ QAccessible::Id QAccessibleEvent::uniqueId() const
     return QAccessible::uniqueId(iface);
 }
 
+void QAccessibleEvent::setChild(int chld)
+{
+    if (m_type == QAccessible::ObjectDestroyed)
+        qCWarning(lcAccessibilityCore) << "Calling QAccessibleEvent::setChild on ObjectDestroyed event " <<
+            "is not supported";
+    m_child = chld;
+}
+
 /*!
     \class QAccessibleValueChangeEvent
     \ingroup accessibility
@@ -1501,6 +1509,7 @@ QAccessible::Id QAccessibleEvent::uniqueId() const
 
     Returns the new value of the accessible object of this event.
 */
+
 /*!
     \internal
 */
@@ -1905,7 +1914,7 @@ QAccessibleInterface *QAccessibleEvent::accessibleInterface() const
         if (child) {
             iface = child;
         } else {
-            qCWarning(lcAccessibilityCore) << "Cannot create accessible child interface for object: " << m_object << " index: " << m_child;
+            qCWarning(lcAccessibilityCore) << "Cannot create accessible child interface for object: " << m_object << " index: " << m_child << "type: " << m_type;
         }
     }
     return iface;

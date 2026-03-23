@@ -329,6 +329,8 @@ void QQuickMonthGrid::setTitle(const QString &title)
     delegate. It can be used as a starting point for implementing custom
     delegates.
 
+    \include delegate-ownership.qdocinc {no-ownership} {MonthGrid}
+
     \snippet basic/MonthGrid.qml delegate
 */
 QQmlComponent *QQuickMonthGrid::delegate() const

@@ -65,6 +65,8 @@ private Q_SLOTS:
     void julianDaysLimits();
     void addDays_data();
     void addDays();
+    void incrementable_data() { addDays_data(); }
+    void incrementable();
     void addMonths_data();
     void addMonths();
     void addYears_data();
@@ -99,6 +101,7 @@ private Q_SLOTS:
 #endif
     void roundtrip() const;
     void qdebug() const;
+
 private:
     QDate defDate() const { return QDate(1900, 1, 1); }
 
@@ -892,6 +895,79 @@ void tst_QDate::addDays_data()
     QTest::newRow( "invalid" ) << 0 << 0 << 0 << 1 << 0 << 0 << 0;
 }
 
+void tst_QDate::incrementable()
+{
+#ifdef __cpp_concepts
+    static_assert(std::weakly_incrementable<QDate>);
+#endif
+
+    QFETCH(int, year);
+    QFETCH(int, month);
+    QFETCH(int, day);
+    QFETCH(int, amountToAdd);
+    QFETCH(int, expectedYear);
+    QFETCH(int, expectedMonth);
+    QFETCH(int, expectedDay);
+
+    const QDate dt( year, month, day);
+
+    QDate pre = dt;
+
+    if (amountToAdd < 0) {
+        for (int i = amountToAdd; i < 0; ++i) {
+            const auto old = pre;
+            const auto now = --pre;
+            QCOMPARE(now, pre); // We got the new value.
+            if (old.isValid())
+                QCOMPARE_LT(now, old);
+            else
+                QVERIFY(!now.isValid());
+        }
+    } else {
+        for (int i = 0; i < amountToAdd; ++i) {
+            const auto old = pre;
+            const auto now = ++pre;
+            QCOMPARE(now, pre); // We got the new value.
+            if (old.isValid())
+                QCOMPARE_GT(now, old);
+            else
+                QVERIFY(!now.isValid());
+        }
+    }
+
+    QCOMPARE(pre.year(), expectedYear);
+    QCOMPARE(pre.month(), expectedMonth);
+    QCOMPARE(pre.day(), expectedDay);
+
+    QDate post = dt;
+
+    if (amountToAdd < 0) {
+        for (int i = amountToAdd; i < 0; ++i) {
+            const auto old = post;
+            const auto now = post--;
+            QCOMPARE(now, old); // We got the prior value.
+            if (old.isValid())
+                QCOMPARE_GT(now, pre);
+            else
+                QVERIFY(!now.isValid());
+        }
+    } else {
+        for (int i = 0; i < amountToAdd; ++i) {
+            const auto old = post;
+            const auto now = post++;
+            QCOMPARE(now, old); // We got the prior value.
+            if (old.isValid())
+                QCOMPARE_LT(now, post);
+            else
+                QVERIFY(!now.isValid());
+        }
+    }
+
+    QCOMPARE(post.year(), expectedYear);
+    QCOMPARE(post.month(), expectedMonth);
+    QCOMPARE(post.day(), expectedDay);
+}
+
 void tst_QDate::addMonths()
 {
     QFETCH( int, year );
@@ -1161,38 +1237,23 @@ void tst_QDate::operator_insert_extract_data()
     QTest::addColumn<QDate>("date");
     QTest::addColumn<QDataStream::Version>("dataStreamVersion");
 
-    QMap<QDataStream::Version, QByteArray> versionsToTest;
-    versionsToTest.insert(QDataStream::Qt_1_0, "Qt_1_0"_ba);
-    versionsToTest.insert(QDataStream::Qt_2_0, "Qt_2_0"_ba);
-    versionsToTest.insert(QDataStream::Qt_2_1, "Qt_2_1"_ba);
-    versionsToTest.insert(QDataStream::Qt_3_0, "Qt_3_0"_ba);
-    versionsToTest.insert(QDataStream::Qt_3_1, "Qt_3_1"_ba);
-    versionsToTest.insert(QDataStream::Qt_3_3, "Qt_3_3"_ba);
-    versionsToTest.insert(QDataStream::Qt_4_0, "Qt_4_0"_ba);
-    versionsToTest.insert(QDataStream::Qt_4_1, "Qt_4_1"_ba);
-    versionsToTest.insert(QDataStream::Qt_4_2, "Qt_4_2"_ba);
-    versionsToTest.insert(QDataStream::Qt_4_3, "Qt_4_3"_ba);
-    versionsToTest.insert(QDataStream::Qt_4_4, "Qt_4_4"_ba);
-    versionsToTest.insert(QDataStream::Qt_4_5, "Qt_4_5"_ba);
-    versionsToTest.insert(QDataStream::Qt_4_6, "Qt_4_6"_ba);
-    versionsToTest.insert(QDataStream::Qt_4_7, "Qt_4_7"_ba);
-    versionsToTest.insert(QDataStream::Qt_4_8, "Qt_4_8"_ba);
-    versionsToTest.insert(QDataStream::Qt_4_9, "Qt_4_9"_ba);
-    versionsToTest.insert(QDataStream::Qt_5_0, "Qt_5_0"_ba);
-
-    for (auto it = versionsToTest.constBegin(); it != versionsToTest.constEnd(); ++it) {
-        const QByteArray &version(it.value());
-        const char *const tag = version.constData();
-        QTest::addRow("(invalid) %s", tag) << invalidDate() << it.key();
-        QTest::addRow("(1, 1, 1) %s", tag) << QDate(1, 1, 1) << it.key();
-        QTest::addRow("(-1, 1, 1) %s", tag) << QDate(-1, 1, 1) << it.key();
-        QTest::addRow("(1995, 5, 20) %s", tag) << QDate(1995, 5, 20) << it.key();
+    const QMetaEnum e = QMetaEnum::fromType<QDataStream::Version>();
+    for (int version = QDataStream::Qt_1_0; version <= QDataStream::Qt_DefaultCompiledVersion;
+         ++version) {
+        if (e.value(version) == -1 || qstrcmp(e.key(version), "Qt_DefaultCompiledVersion") == 0)
+            continue;
+        const auto dataStreamVersion = static_cast<QDataStream::Version>(version);
+        const char *const tag = e.key(version);
+        QTest::addRow("(invalid) %s", tag) << invalidDate() << dataStreamVersion;
+        QTest::addRow("(1, 1, 1) %s", tag) << QDate(1, 1, 1) << dataStreamVersion;
+        QTest::addRow("(-1, 1, 1) %s", tag) << QDate(-1, 1, 1) << dataStreamVersion;
+        QTest::addRow("(1995, 5, 20) %s", tag) << QDate(1995, 5, 20) << dataStreamVersion;
 
         // Test minimums for quint32/qint64.
-        if (it.key() >= QDataStream::Qt_5_0)
-            QTest::addRow("(-4714, 11, 24) %s", tag) << QDate(-4714, 11, 24) << it.key();
+        if (dataStreamVersion >= QDataStream::Qt_5_0)
+            QTest::addRow("(-4714, 11, 24) %s", tag) << QDate(-4714, 11, 24) << dataStreamVersion;
         else
-            QTest::addRow("(-4713, 1, 2) %s", tag) << QDate(-4713, 1, 2) << it.key();
+            QTest::addRow("(-4713, 1, 2) %s", tag) << QDate(-4713, 1, 2) << dataStreamVersion;
     }
 }
 

@@ -20,19 +20,29 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 class QSGCurveStrokeNode;
 class QSGCurveStrokeMaterial;
 
 class Q_QUICK_EXPORT QSGCurveStrokeMaterialShader : public QSGMaterialShader
 {
 public:
-    QSGCurveStrokeMaterialShader(bool useDerivatives, int viewCount)
+    enum class Variant { // flags
+        Default = 0,
+        Expanding = 0x01,
+        Derivatives = 0x02
+    };
+
+    QSGCurveStrokeMaterialShader(int variant, int viewCount)
     {
-        QString baseName(u":/qt-project.org/scenegraph/shaders_ng/shapestroke");
-        if (useDerivatives)
-            baseName += u"_derivatives";
-        setShaderFileName(VertexStage, baseName + u".vert.qsb", viewCount);
-        setShaderFileName(FragmentStage, baseName + u".frag.qsb", viewCount);
+        static constexpr auto baseName = u":/qt-project.org/scenegraph/shaders_ng/shapestroke"_sv;
+        setShaderFileName(VertexStage, baseName +
+                                  (variant & int(Variant::Expanding) ? u"_expanding"_sv : u""_sv)
+                                  + u".vert.qsb"_sv, viewCount);
+        setShaderFileName(FragmentStage, baseName +
+                                  (variant & int(Variant::Derivatives) ? u"_derivatives"_sv : u""_sv)
+                                  + u".frag.qsb"_sv, viewCount);
     }
 
     bool updateUniformData(RenderState &state, QSGMaterial *newEffect, QSGMaterial *oldEffect) override;
@@ -42,8 +52,8 @@ public:
 class Q_QUICK_EXPORT QSGCurveStrokeMaterial : public QSGMaterial
 {
 public:
-    QSGCurveStrokeMaterial(QSGCurveStrokeNode *node)
-        : m_node(node)
+    QSGCurveStrokeMaterial(QSGCurveStrokeNode *node, bool strokeExpanding = false)
+        : m_node(node), m_strokeExpanding(strokeExpanding)
     {
         setFlag(Blending, true);
     }
@@ -58,15 +68,14 @@ public:
 protected:
     QSGMaterialType *type() const override
     {
-        static QSGMaterialType t;
-        return &t;
+        static QSGMaterialType legacyType;
+        static QSGMaterialType strokeExpandingType;
+        return m_strokeExpanding ? &strokeExpandingType : &legacyType;
     }
-    QSGMaterialShader *createShader(QSGRendererInterface::RenderMode renderMode) const override
-    {
-        return new QSGCurveStrokeMaterialShader(renderMode == QSGRendererInterface::RenderMode3D, viewCount());
-    }
+    QSGMaterialShader *createShader(QSGRendererInterface::RenderMode renderMode) const override;
 
     QSGCurveStrokeNode *m_node;
+    bool m_strokeExpanding = false;
 };
 
 QT_END_NAMESPACE

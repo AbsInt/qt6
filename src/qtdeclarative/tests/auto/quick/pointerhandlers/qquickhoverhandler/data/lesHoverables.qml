@@ -115,6 +115,7 @@ Rectangle {
         HoverHandler {
             id: paddleHH
             objectName: "paddleHH"
+            cursorShape: Qt.SizeVerCursor
         }
     }
 

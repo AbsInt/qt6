@@ -9,6 +9,10 @@ qt_get_tool_target_name(target_name svgtoqml)
 qt_internal_add_tool(${target_name}
     TARGET_DESCRIPTION "SVG to QML Converter"
     TOOLS_TARGET Quick
+    EXTRA_CMAKE_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/${QT_CMAKE_EXPORT_NAMESPACE}SvgToQmlMacros.cmake"
+    EXTRA_CMAKE_INCLUDES
+        "${QT_CMAKE_EXPORT_NAMESPACE}SvgToQmlMacros.cmake"
     SOURCES
         main.cpp
     LIBRARIES

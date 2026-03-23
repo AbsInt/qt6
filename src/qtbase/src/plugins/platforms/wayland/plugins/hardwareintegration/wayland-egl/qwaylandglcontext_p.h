@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #pragma once
 
@@ -36,8 +37,6 @@ public:
     void endFrame() override;
 
     GLuint defaultFramebufferObject(QPlatformSurface *surface) const override;
-
-    QFunctionPointer getProcAddress(const char *procName) override;
 
 protected:
     EGLSurface eglSurfaceForPlatformSurface(QPlatformSurface *surface) override;

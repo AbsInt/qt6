@@ -321,7 +321,7 @@ void Http2Server::incomingConnection(qintptr socketDescriptor)
     } else {
 #if QT_CONFIG(ssl)
         socket.reset(new QSslSocket);
-        QSslSocket *sslSocket = static_cast<QSslSocket *>(socket.data());
+        QSslSocket *sslSocket = static_cast<QSslSocket *>(socket.get());
 
         if (connectionType == H2Type::h2Alpn) {
             // Add HTTP2 as supported protocol:
@@ -392,7 +392,7 @@ bool Http2Server::readMethodLine()
 
 bool Http2Server::verifyProtocolUpgradeRequest()
 {
-    Q_ASSERT(protocolUpgradeHandler.data());
+    Q_ASSERT(protocolUpgradeHandler);
 
     bool connectionOk = false;
     bool upgradeOk = false;
@@ -431,7 +431,7 @@ void Http2Server::connectionEstablished()
     // and then continue with whatever logic we have (testingGOAWAY or not),
     // otherwise our 'peer' cannot process HTTP/2 frames yet.
 
-    connect(socket.data(), SIGNAL(readyRead()),
+    connect(socket.get(), SIGNAL(readyRead()),
             this, SLOT(readReady()));
 
     waitingClientPreface = true;
@@ -457,7 +457,7 @@ void Http2Server::connectionEstablished()
 void Http2Server::ignoreErrorSlot()
 {
 #ifndef QT_NO_SSL
-    static_cast<QSslSocket *>(socket.data())->ignoreSslErrors();
+    static_cast<QSslSocket *>(socket.get())->ignoreSslErrors();
 #endif
 }
 
@@ -512,7 +512,7 @@ void Http2Server::handleProtocolUpgrade()
     using ReplyPrivate = QHttpNetworkReplyPrivate;
     Q_ASSERT(upgradeProtocol);
 
-    if (!protocolUpgradeHandler.data())
+    if (!protocolUpgradeHandler)
         protocolUpgradeHandler.reset(new Http11Reply);
 
     QHttpNetworkReplyPrivate *firstRequestReader = protocolUpgradeHandler->d_func();
@@ -536,9 +536,9 @@ void Http2Server::handleProtocolUpgrade()
         return;
 
     if (firstRequestReader->state == ReplyPrivate::ReadingHeaderState)
-        firstRequestReader->readHeader(socket.data());
+        firstRequestReader->readHeader(socket.get());
     else if (firstRequestReader->state == ReplyPrivate::ReadingDataState)
-        firstRequestReader->readBodyFast(socket.data(), &firstRequestReader->responseData);
+        firstRequestReader->readBodyFast(socket.get(), &firstRequestReader->responseData);
 
     switch (firstRequestReader->state) {
     case ReplyPrivate::ReadingHeaderState:

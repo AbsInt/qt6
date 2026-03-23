@@ -82,6 +82,30 @@ ColumnLayout {
                     text: qsTr("Pick a font")
                     Layout.fillWidth: false
                 }
+                Label {
+                    text: qsTr("popupType")
+                }
+                ButtonGroup {
+                    id: popupTypeButtonGroup
+                    buttons: popupTypeColumnLayout.children
+                }
+                ColumnLayout {
+                    id: popupTypeColumnLayout
+
+                    RadioButton {
+                        text: qsTr("Popup.Item")
+                        Layout.fillWidth: false
+
+                        readonly property int popupType: Popup.Item
+                    }
+                    RadioButton {
+                        text: qsTr("Popup.Window")
+                        checked: true
+                        Layout.fillWidth: false
+
+                        readonly property int popupType: Popup.Window
+                    }
+                }
             }
         }
 
@@ -175,6 +199,7 @@ ColumnLayout {
 
             modality: modalityButtonGroup.checkedButton.modality
             title: titleTextField.text
+            popupType: popupTypeButtonGroup.checkedButton.popupType
             options: noButtons.fontOption
                 | scalableFonts.fontOption
                 | nonScalableFonts.fontOption

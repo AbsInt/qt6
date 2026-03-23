@@ -1,19 +1,12 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
-#include <QtGui>
-#include <iostream>
+#include <QtCore>
+
 using namespace std;
 using namespace Qt::StringLiterals;
 
-class Widget : public QWidget
-{
-public:
-    Widget(QWidget *parent = nullptr);
-};
-
-Widget::Widget(QWidget *parent)
-    : QWidget(parent)
+void examples()
 {
 //! [0a]
     QStringList fonts = { "Arial", "Helvetica", "Times" };
@@ -109,12 +102,4 @@ Widget::Widget(QWidget *parent)
     QStringList filtered = veryLargeList.filter(matcher);
 //! [19]
     }
-}
-
-int main(int argc, char *argv[])
-{
-    QApplication app(argc, argv);
-    Widget widget;
-    widget.show();
-    return app.exec();
 }

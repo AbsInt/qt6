@@ -307,8 +307,7 @@ void GlobalInspector::processMessage(const QByteArray &message)
         } else if (command == SET_ANIMATION_SPEED) {
             qreal speed;
             ds >> speed;
-            QUnifiedTimer::instance()->setSlowModeEnabled(speed != 1.0);
-            QUnifiedTimer::instance()->setSlowdownFactor(speed);
+            QUnifiedTimer::instance()->setSpeedModifier(1 / speed);
         } else if (command == SHOW_APP_ON_TOP) {
             bool showOnTop;
             ds >> showOnTop;

@@ -64,7 +64,7 @@ instructions:
       env_vars["VXWORKS_CERTS_DIR"]="$WIND_CC_SYSROOT/certs"
       env_vars["HOME"]="/home/qt/work/vxworkshome"
       env_vars["QML_LOADERTHREAD_STACK_SIZE"]="131072"
-      env_vars["QTEST_FUNCTION_TIMEOUT"]="600000"
+      env_vars["QTEST_FUNCTION_TIMEOUT"]="1000000"
       env_vars["QT_PLUGIN_PATH"]="/home/qt/work/install/target/plugins"
       env_vars["QT_QPA_PLATFORM_PLUGIN_PATH"]="/home/qt/work/install/target/plugins/platforms"
       env_vars["TZ"]="UTC"

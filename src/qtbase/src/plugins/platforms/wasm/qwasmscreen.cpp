@@ -16,7 +16,6 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <QtCore/qcoreapplication.h>
 #include <QtGui/qguiapplication.h>
-#include <private/qhighdpiscaling_p.h>
 
 #include <tuple>
 
@@ -31,8 +30,7 @@ QWasmScreen::QWasmScreen(const emscripten::val &containerOrCanvas)
     : m_container(containerOrCanvas),
       m_intermediateContainer(emscripten::val::undefined()),
       m_shadowContainer(emscripten::val::undefined()),
-      m_compositor(new QWasmCompositor(this)),
-      m_deadKeySupport(std::make_unique<QWasmDeadKeySupport>())
+      m_compositor(new QWasmCompositor(this))
 {
     auto document = m_container["ownerDocument"];
 

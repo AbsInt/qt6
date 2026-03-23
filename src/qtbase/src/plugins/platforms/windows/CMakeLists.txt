@@ -38,6 +38,8 @@ qt_internal_add_plugin(QWindowsIntegrationPlugin
         qwindowstheme.cpp qwindowstheme.h
         qwindowsthreadpoolrunner.h
         qwindowswindow.cpp qwindowswindow.h
+        qwindowswindowclassdescription.cpp qwindowswindowclassdescription.h
+        qwindowswindowclassregistry.cpp qwindowswindowclassregistry.h
     NO_UNITY_BUILD_SOURCES
         qwindowspointerhandler.cpp
     DEFINES
@@ -201,7 +203,9 @@ qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION QT_FEATURE_accessi
 )
 
 # This is loaded dynamically when using MINGW as its import library is incomplete
-qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION MSVC AND QT_FEATURE_accessibility
+qt_internal_extend_target(
+    QWindowsIntegrationPlugin
+        CONDITION (MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC") AND QT_FEATURE_accessibility
     LIBRARIES
         uiautomationcore
 )

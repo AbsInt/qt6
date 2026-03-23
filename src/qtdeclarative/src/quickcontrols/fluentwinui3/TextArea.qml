@@ -39,6 +39,10 @@ T.TextArea {
     ].filter(Boolean).join("_") || "normal"
     readonly property var __config: Config.controls.textarea[__currentState] || {}
 
+    ContextMenu.menu: Impl.TextEditingContextMenu {
+        editor: control
+    }
+
     PlaceholderText {
         id: placeholder
         x: control.leftPadding

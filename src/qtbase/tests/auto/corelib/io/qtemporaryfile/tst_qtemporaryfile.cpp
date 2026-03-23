@@ -574,10 +574,12 @@ void tst_QTemporaryFile::stressTest()
 void tst_QTemporaryFile::rename_data()
 {
     QTest::addColumn<bool>("targetExists");
+    QTest::addColumn<bool>("overwrite");
     QTest::addColumn<bool>("expectedRenameResult");
 
-    QTest::addRow("success") << false << true;
-    QTest::addRow("failure") << true  << false;
+    QTest::addRow("success") << false << false << true;
+    QTest::addRow("failure") << true  << false << false;
+    QTest::addRow("overwrite") << true << true << true;
 }
 
 static QByteArray read_all(const QString &fileName)
@@ -592,6 +594,7 @@ static QByteArray read_all(const QString &fileName)
 void tst_QTemporaryFile::rename()
 {
     QFETCH(const bool, targetExists);
+    QFETCH(const bool, overwrite);
     QFETCH(const bool, expectedRenameResult);
 
     QDir dir;
@@ -622,9 +625,13 @@ void tst_QTemporaryFile::rename()
         }
 
 #ifdef Q_OS_ANDROID
-        QEXPECT_FAIL("failure", "QTBUG-138610", Abort);
+        if (!overwrite)
+            QEXPECT_FAIL("failure", "QTBUG-138610", Abort);
 #endif
-        QCOMPARE(file.rename("temporary-file.txt"_L1), expectedRenameResult);
+        if (overwrite)
+            QCOMPARE(file.renameOverwrite("temporary-file.txt"_L1), expectedRenameResult);
+        else
+            QCOMPARE(file.rename("temporary-file.txt"_L1), expectedRenameResult);
         QCOMPARE(dir.exists(tempname), !expectedRenameResult);
         QVERIFY(dir.exists("temporary-file.txt"));
         QCOMPARE(read_all(dir.filePath("temporary-file.txt"_L1)),

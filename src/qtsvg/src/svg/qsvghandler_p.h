@@ -1,5 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QSVGHANDLER_P_H
 #define QSVGHANDLER_P_H
@@ -22,15 +24,17 @@
 #if QT_CONFIG(cssparser)
 #include <QtSvg/private/qsvgcsshandler_p.h>
 #include <QtSvg/private/qsvgcssproperties_p.h>
+#include <QtSvg/private/qsvgcssvalues_p.h>
 #endif
 #include "qsvggraphics_p.h"
 #include "qtsvgglobal_p.h"
 #include "qsvgutils_p.h"
+#include "qtsvgglobal.h"
 
 QT_BEGIN_NAMESPACE
 
 class QSvgNode;
-class QSvgTinyDocument;
+class QSvgDocument;
 class QSvgHandler;
 class QColor;
 
@@ -46,7 +50,7 @@ public:
     ~QSvgHandler();
 
     QIODevice *device() const;
-    QSvgTinyDocument *document() const;
+    QSvgDocument *document() const;
 
     inline bool ok() const {
         return document() != 0 && !xml->hasError();
@@ -89,7 +93,7 @@ public:
 private:
     void init();
 
-    QSvgTinyDocument *m_doc;
+    QSvgDocument *m_doc;
     QStack<QSvgNode *> m_nodes;
     // TODO: This is only needed during parsing, so it unnecessarily takes up space after that.
     // Temporary container for :

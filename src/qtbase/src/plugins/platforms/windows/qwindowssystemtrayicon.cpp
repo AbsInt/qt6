@@ -9,6 +9,7 @@
 #include "qwindowstheme.h"
 #include "qwindowsmenu.h"
 #include "qwindowsscreen.h"
+#include "qwindowswindowclassregistry.h"
 
 #include <QtGui/qguiapplication.h>
 #include <QtGui/qpixmap.h>
@@ -115,13 +116,13 @@ LRESULT QT_WIN_CALLBACK qWindowsTrayIconWndProc(HWND hwnd, UINT message, WPARAM 
 // will not receive the "TaskbarCreated" message.
 static inline HWND createTrayIconMessageWindow()
 {
-    QWindowsContext *ctx = QWindowsContext::instance();
+    QWindowsWindowClassRegistry *ctx = QWindowsWindowClassRegistry::instance();
     if (!ctx)
         return nullptr;
     // Register window class in the platform plugin.
-    const QString className =
-        ctx->registerWindowClass(QWindowsContext::classNamePrefix() + "TrayIconMessageWindowClass"_L1,
-                                 qWindowsTrayIconWndProc);
+    const QString className = ctx->registerWindowClass(
+        "TrayIconMessageWindowClass"_L1,
+        qWindowsTrayIconWndProc);
     const wchar_t windowName[] = L"QTrayIconMessageWindow";
     return CreateWindowEx(0, reinterpret_cast<const wchar_t *>(className.utf16()),
                           windowName, WS_OVERLAPPED,

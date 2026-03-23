@@ -1,5 +1,7 @@
 // Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #include "qsvganimate_p.h"
 
@@ -11,6 +13,7 @@ QSvgAnimateNode::QSvgAnimateNode(QSvgNode *parent)
     , m_fill(Fill::Freeze)
     , m_additive(Additive::Replace)
 {
+    m_easing = std::make_unique<QSvgLinearEasing>();
 }
 
 void QSvgAnimateNode::setRunningTime(int startMs, int durMs, int endMs, int by)

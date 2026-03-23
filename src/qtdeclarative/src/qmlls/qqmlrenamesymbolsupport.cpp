@@ -9,7 +9,9 @@
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
-QQmlRenameSymbolSupport::QQmlRenameSymbolSupport(QmlLsp::QQmlCodeModel *model) : BaseT(model) { }
+QQmlRenameSymbolSupport::QQmlRenameSymbolSupport(QmlLsp::QQmlCodeModelManager *model) : BaseT(model)
+{
+}
 
 QString QQmlRenameSymbolSupport::name() const
 {

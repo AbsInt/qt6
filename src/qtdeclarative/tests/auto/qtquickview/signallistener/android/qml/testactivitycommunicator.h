@@ -23,6 +23,10 @@ public:
 
     static TestActivityCommunicator *instance();
 
+public slots:
+    void registerSignals() const;
+    void unregisterSignals() const;
+
 signals:
     void basicSignal();
     void intSignal(int value);
@@ -30,6 +34,9 @@ signals:
     void doubleSignal(double value);
     void stringSignal(QString value);
     void manyTypeSignal(int intValue, bool boolValue, double doubleValue, QString stringValue);
+
+    void earlyRegistrationQuickViewSignal(int value);
+    void earlyRegistrationQuickViewContentSignal(int value);
 
 private:
     QtJniTypes::TestActivity m_activity;
@@ -51,6 +58,12 @@ private:
                                 QtJniTypes::Double doubleValue,
                                 QtJniTypes::String stringValue);
     Q_DECLARE_JNI_NATIVE_METHOD_IN_CURRENT_SCOPE(onManyTypeSignal)
+
+    static void onEarlyRegistrationQuickViewContentSignal(JNIEnv *, jclass,
+                                                          QtJniTypes::Integer value);
+    Q_DECLARE_JNI_NATIVE_METHOD_IN_CURRENT_SCOPE(onEarlyRegistrationQuickViewContentSignal)
+    static void onEarlyRegistrationQuickViewSignal(JNIEnv *, jclass, QtJniTypes::Integer value);
+    Q_DECLARE_JNI_NATIVE_METHOD_IN_CURRENT_SCOPE(onEarlyRegistrationQuickViewSignal)
 };
 
 #endif // TESTACTIVITYCOMMUNICATOR_H

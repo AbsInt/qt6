@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qmlprofilerclient.h"
-#include "qmlprofilerdata.h"
 
 #include <private/qqmlprofilerclient_p_p.h>
 
@@ -15,19 +14,19 @@ class QmlProfilerClientPrivate : public QQmlProfilerClientPrivate
 {
     Q_DECLARE_PUBLIC(QmlProfilerClient)
 public:
-    QmlProfilerClientPrivate(QQmlDebugConnection *connection, QmlProfilerData *data);
+    QmlProfilerClientPrivate(QQmlDebugConnection *connection, QQmlProfilerEventReceiver *data);
 
-    QmlProfilerData *data;
+    QQmlProfilerEventReceiver *data;
     bool enabled;
 };
 
 QmlProfilerClientPrivate::QmlProfilerClientPrivate(QQmlDebugConnection *connection,
-                                                   QmlProfilerData *data) :
+                                                   QQmlProfilerEventReceiver *data) :
     QQmlProfilerClientPrivate(connection, data), data(data), enabled(false)
 {
 }
 
-QmlProfilerClient::QmlProfilerClient(QQmlDebugConnection *connection, QmlProfilerData *data) :
+QmlProfilerClient::QmlProfilerClient(QQmlDebugConnection *connection, QQmlProfilerEventReceiver *data) :
     QQmlProfilerClient(*(new QmlProfilerClientPrivate(connection, data)))
 {
     Q_D(QmlProfilerClient);
@@ -35,11 +34,11 @@ QmlProfilerClient::QmlProfilerClient(QQmlDebugConnection *connection, QmlProfile
     connect(this, &QQmlDebugClient::stateChanged,
             this, &QmlProfilerClient::onStateChanged);
     connect(this, &QQmlProfilerClient::traceStarted,
-            d->data, &QmlProfilerData::setTraceStartTime);
+            d->data, &QQmlProfilerEventReceiver::startTrace);
     connect(this, &QQmlProfilerClient::traceFinished,
-            d->data, &QmlProfilerData::setTraceEndTime);
+            d->data, &QQmlProfilerEventReceiver::endTrace);
     connect(this, &QQmlProfilerClient::complete,
-            d->data, &QmlProfilerData::complete);
+            d->data, &QQmlProfilerEventReceiver::complete);
 }
 
 void QmlProfilerClient::onStateChanged(State state)

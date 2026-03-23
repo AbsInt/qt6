@@ -87,16 +87,45 @@ openNeedUpdate() checks if there is work to do, and if yes ensure that a
 worker thread (or more) that work on it exist.
 */
 
-QQmlCodeModel::QQmlCodeModel(QObject *parent, QQmlToolingSettings *settings)
-    : QObject { parent },
-      m_importPaths(QLibraryInfo::path(QLibraryInfo::QmlImportsPath)),
+QQmlCodeModel::QQmlCodeModel(const QByteArray &rootUrl, QObject *parent,
+                             QQmlToolingSharedSettings *settings)
+    : QObject{ parent },
+      m_rootUrl(rootUrl),
       m_currentEnv(std::make_shared<DomEnvironment>(
-              m_importPaths, DomEnvironment::Option::SingleThreaded, DomCreationOption::Extended)),
+              QLibraryInfo::paths(QLibraryInfo::QmlImportsPath),
+              DomEnvironment::Option::SingleThreaded, DomCreationOption::Extended)),
       m_validEnv(std::make_shared<DomEnvironment>(
-              m_importPaths, DomEnvironment::Option::SingleThreaded, DomCreationOption::Extended)),
-      m_settings(settings),
-      m_pluginLoader(QmlLSPluginInterface_iid, u"/qmlls"_s)
+              m_currentEnv.ownerAs<DomEnvironment>()->loadPaths(),
+              DomEnvironment::Option::SingleThreaded, DomCreationOption::Extended)),
+      m_settings(settings)
 {
+}
+
+/*!
+\internal
+Enable and initialize the functionality that uses CMake, if CMake exists. Runs the build once.
+*/
+void QQmlCodeModel::tryEnableCMakeCalls(QProcessScheduler *scheduler)
+{
+    Q_ASSERT(scheduler);
+    if (cmakeStatus() == DoesNotHaveCMake)
+        return;
+
+    if (m_settings) {
+        const QString cmakeCalls = u"no-cmake-calls"_s;
+        m_settings->search(url2Path(m_rootUrl), { QString(), verbose() });
+        if (m_settings->isSet(cmakeCalls) && m_settings->value(cmakeCalls).toBool()) {
+            disableCMakeCalls();
+            return;
+        }
+    }
+
+    QObject::connect(scheduler, &QProcessScheduler::done, this,
+                     &QQmlCodeModel::onCMakeProcessFinished);
+    QObject::connect(&m_cppFileWatcher, &QFileSystemWatcher::fileChanged, scheduler,
+                     [this, scheduler] { callCMakeBuild(scheduler); });
+    setCMakeStatus(HasCMake);
+    callCMakeBuild(scheduler);
 }
 
 /*!
@@ -105,8 +134,10 @@ Disable the functionality that uses CMake, and remove the already watched paths 
 */
 void QQmlCodeModel::disableCMakeCalls()
 {
+    QMutexLocker guard(&m_mutex);
     m_cmakeStatus = DoesNotHaveCMake;
-    m_cppFileWatcher.removePaths(m_cppFileWatcher.files());
+    if (const QStringList toRemove = m_cppFileWatcher.files(); !toRemove.isEmpty())
+        m_cppFileWatcher.removePaths(toRemove);
     QObject::disconnect(&m_cppFileWatcher, &QFileSystemWatcher::fileChanged, nullptr, nullptr);
 }
 
@@ -116,8 +147,8 @@ void QQmlCodeModel::prepareForShutdown()
         bool shouldWait;
         {
             QMutexLocker l(&m_mutex);
-            m_state = State::Stopping;
             m_openDocumentsToUpdate.clear();
+            m_state = State::Stopping;
             shouldWait = m_nUpdateInProgress != 0;
         }
         if (!shouldWait)
@@ -137,8 +168,9 @@ OpenDocumentSnapshot QQmlCodeModel::snapshotByUrl(const QByteArray &url)
     return openDocumentByUrl(url).snapshot;
 }
 
-void QQmlCodeModel::removeDirectory(const QString &path)
+void QQmlCodeModel::removeDirectory(const QByteArray &url)
 {
+    const QString path = url2Path(url);
     if (auto validEnvPtr = m_validEnv.ownerAs<DomEnvironment>())
         validEnvPtr->removePath(path);
     if (auto currentEnvPtr = m_currentEnv.ownerAs<DomEnvironment>())
@@ -180,7 +212,7 @@ void QQmlCodeModel::newOpenFile(const QByteArray &url, int version, const QStrin
         openDoc.textDocument->setVersion(version);
         openDoc.textDocument->setPlainText(docText);
     }
-    addOpenToUpdate(url);
+    addOpenToUpdate(url, NormalUpdate);
     openNeedUpdate();
 }
 
@@ -188,6 +220,12 @@ OpenDocument QQmlCodeModel::openDocumentByUrl(const QByteArray &url)
 {
     QMutexLocker l(&m_mutex);
     return m_openDocuments.value(url);
+}
+
+bool QQmlCodeModel::isEmpty() const
+{
+    QMutexLocker l(&m_mutex);
+    return m_openDocuments.isEmpty();
 }
 
 RegisteredSemanticTokens &QQmlCodeModel::registeredTokens()
@@ -226,6 +264,7 @@ bool QQmlCodeModel::openUpdateSome()
 {
     qCDebug(codeModelLog) << "openUpdateSome start";
     QByteArray toUpdate;
+    UpdatePolicy policy;
     {
         QMutexLocker l(&m_mutex);
         Q_ASSERT(QThread::currentThread() == m_openUpdateThread);
@@ -235,13 +274,9 @@ bool QQmlCodeModel::openUpdateSome()
                 openUpdateEnd();
             return false;
         }
-        auto it = m_openDocumentsToUpdate.find(m_lastOpenDocumentUpdated);
-        auto end = m_openDocumentsToUpdate.end();
-        if (it == end)
-            it = m_openDocumentsToUpdate.begin();
-        else if (++it == end)
-            it = m_openDocumentsToUpdate.begin();
-        toUpdate = *it;
+        const auto it = m_openDocumentsToUpdate.begin();
+        toUpdate = it.key();
+        policy = it.value();
         m_openDocumentsToUpdate.erase(it);
     }
     bool hasMore = false;
@@ -256,7 +291,7 @@ bool QQmlCodeModel::openUpdateSome()
                 hasMore = true;
             }
         });
-        openUpdate(toUpdate);
+        openUpdate(toUpdate, policy);
     }
     return hasMore;
 }
@@ -271,73 +306,74 @@ void QQmlCodeModel::openUpdateEnd()
     qCDebug(codeModelLog) << "openUpdateEnd";
 }
 
-/*!
-\internal
-Performs initialization for m_cmakeStatus, including testing for CMake on the current system.
-*/
-void QQmlCodeModel::initializeCMakeStatus(const QString &pathForSettings)
+QStringList QQmlCodeModel::buildPathsForOpenedFiles()
 {
-    if (m_settings) {
-        const QString cmakeCalls = u"no-cmake-calls"_s;
-        m_settings->search(pathForSettings);
-        if (m_settings->isSet(cmakeCalls) && m_settings->value(cmakeCalls).toBool()) {
-            qWarning() << "Disabling CMake calls via .qmlls.ini setting.";
-            m_cmakeStatus = DoesNotHaveCMake;
-            return;
-        }
+    QStringList result;
+
+    std::vector<QByteArray> urls = { m_rootUrl };
+    {
+        QMutexLocker guard(&m_mutex);
+        for (auto it = m_openDocuments.begin(), end = m_openDocuments.end(); it != end; ++it)
+            urls.push_back(it.key());
     }
 
-    QProcess process;
-    process.setProgram(u"cmake"_s);
-    process.setArguments({ u"--version"_s });
-    process.start();
-    process.waitForFinished();
-    m_cmakeStatus = process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0
-            ? HasCMake
-            : DoesNotHaveCMake;
+    for (const auto &url : urls)
+        result.append(buildPathsForFileUrl(url));
 
-    if (m_cmakeStatus == DoesNotHaveCMake) {
-        qWarning() << "Disabling CMake calls because CMake was not found.";
-        return;
-    }
-
-    QObject::connect(&m_cppFileWatcher, &QFileSystemWatcher::fileChanged, this,
-                     &QQmlCodeModel::onCppFileChanged);
+    // remove duplicates
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+    return result;
 }
 
-/*!
-\internal
-For each build path that is a also a CMake build path, call CMake with \l cmakeBuildCommand to
-generate/update the .qmltypes, qmldir and .qrc files.
-It is assumed here that the number of build folders is usually no more than one, so execute the
-CMake builds one at a time.
-
-If CMake cannot be executed, false is returned. This may happen when CMake does not exist on the
-current system, when the target executed by CMake does not exist (for example when something else
-than qt_add_qml_module is used to setup the module in CMake), or the when the CMake build itself
-fails.
-*/
-bool QQmlCodeModel::callCMakeBuild(const QStringList &buildPaths)
+static int cmakeJobsFromSettings(QQmlToolingSharedSettings *settings, const QString &rootPath,
+                                 int defaultValue)
 {
-    bool success = true;
+    if (!settings)
+        return defaultValue;
+    const auto result = settings->search(rootPath);
+    if (!result.isValid())
+        return defaultValue;
+
+    bool ok = false;
+    const QString valueString = settings->value("CMakeJobs"_L1).toString();
+    if (valueString == QQmlCodeModel::s_maxCMakeJobs)
+        return QThread::idealThreadCount();
+
+    const int cmakeJobs = settings->value("CMakeJobs"_L1).toInt(&ok);
+    if (!ok || cmakeJobs < 1)
+        return defaultValue;
+    return cmakeJobs;
+}
+
+void QQmlCodeModel::callCMakeBuild(QProcessScheduler *scheduler)
+{
+    const QStringList buildPaths = buildPathsForOpenedFiles();
+    const int cmakeJobs = cmakeJobsFromSettings(m_settings, url2Path(m_rootUrl), m_cmakeJobs);
+
+    QList<QProcessScheduler::Command> commands;
     for (const auto &path : buildPaths) {
         if (!QFileInfo::exists(path + u"/.cmake"_s))
             continue;
 
-        QProcess process;
-        const auto command = QQmlLSUtils::cmakeBuildCommand(path);
-        process.setProgram(command.first);
-        process.setArguments(command.second);
-        qCDebug(codeModelLog) << "Running" << process.program() << process.arguments();
-        process.start();
-
-        // TODO: run process concurrently instead of blocking qmlls
-        success &= process.waitForFinished();
-        success &= (process.exitCode() == 0);
-        qCDebug(codeModelLog) << process.program() << process.arguments() << "terminated with"
-                              << process.exitCode();
+        auto [program, arguments] = QQmlLSUtils::cmakeBuildCommand(path, cmakeJobs);
+        commands.append({ std::move(program), std::move(arguments) });
     }
-    return success;
+    if (commands.isEmpty())
+        return;
+    scheduler->schedule(commands, m_rootUrl);
+}
+
+void QQmlCodeModel::onCMakeProcessFinished(const QByteArray &id)
+{
+    if (id != m_rootUrl)
+        return;
+
+    QMutexLocker guard(&m_mutex);
+    for (auto it = m_openDocuments.begin(), end = m_openDocuments.end(); it != end; ++it)
+        m_openDocumentsToUpdate[it.key()] = ForceUpdate;
+    guard.unlock();
+    openNeedUpdate();
 }
 
 /*!
@@ -347,45 +383,34 @@ return all the found file paths.
 
 This is an overapproximation and might find unrelated files with the same name.
 */
-QStringList QQmlCodeModel::findFilePathsFromFileNames(const QStringList &_fileNamesToSearch)
+QStringList QQmlCodeModel::findFilePathsFromFileNames(const QStringList &_fileNamesToSearch,
+                                                      const QSet<QString> &ignoredFilePaths)
 {
+    Q_ASSERT(!m_rootUrl.isEmpty());
     QStringList fileNamesToSearch{ _fileNamesToSearch };
 
-    // ignore files that were not found last time
-    fileNamesToSearch.erase(std::remove_if(fileNamesToSearch.begin(), fileNamesToSearch.end(),
-                                           [this](const QString &fileName) {
-                                               return m_ignoreForWatching.contains(fileName);
-                                           }),
-                            fileNamesToSearch.end());
-
-    // early return:
-    if (fileNamesToSearch.isEmpty())
-        return {};
-
-    QSet<QString> foundFiles;
-    foundFiles.reserve(fileNamesToSearch.size());
-
-    QStringList result;
-
-    for (const auto &rootUrl : m_rootUrls) {
-        const QString rootDir = QUrl(QString::fromUtf8(rootUrl)).toLocalFile();
-
-        if (rootDir.isEmpty())
-            continue;
-
-        qCDebug(codeModelLog) << "Searching for files to watch in workspace folder" << rootDir;
-        QDirIterator it(rootDir, fileNamesToSearch, QDir::Files, QDirIterator::Subdirectories);
-        while (it.hasNext()) {
-            const QFileInfo info = it.nextFileInfo();
-            const QString fileName = info.fileName();
-            foundFiles.insert(fileName);
-            result << info.absoluteFilePath();
-        }
+    {
+        QMutexLocker guard(&m_mutex);
+        // ignore files that were not found last time
+        fileNamesToSearch.erase(std::remove_if(fileNamesToSearch.begin(), fileNamesToSearch.end(),
+                                               [this](const QString &fileName) {
+                                                   return m_ignoreForWatching.contains(fileName);
+                                               }),
+                                fileNamesToSearch.end());
     }
 
-    for (const auto& fileName: fileNamesToSearch) {
-        if (!foundFiles.contains(fileName))
+    const QString rootDir = QUrl(QString::fromUtf8(m_rootUrl)).toLocalFile();
+    qCDebug(codeModelLog) << "Searching for files to watch in workspace folder" << rootDir;
+
+    const QStringList result =
+            QQmlLSUtils::findFilePathsFromFileNames(rootDir, fileNamesToSearch, ignoredFilePaths);
+
+    QMutexLocker guard(&m_mutex);
+    for (const auto &fileName : fileNamesToSearch) {
+        if (std::none_of(result.begin(), result.end(),
+                         [&fileName](const QString &path) { return path.endsWith(fileName); })) {
             m_ignoreForWatching.insert(fileName);
+        }
     }
     return result;
 }
@@ -430,14 +455,24 @@ QStringList QQmlCodeModel::fileNamesToWatch(const DomItem &qmlFile)
 /*!
 \internal
 Add watches for all C++ files that this qmlFile relies on, so a rebuild can be triggered when they
-are modified.
+are modified. Is a no op if this is the fallback codemodel with empty root url.
 */
 void QQmlCodeModel::addFileWatches(const DomItem &qmlFile)
 {
+    if (m_rootUrl.isEmpty())
+        return;
     const auto filesToWatch = fileNamesToWatch(qmlFile);
-    const QStringList filepathsToWatch = findFilePathsFromFileNames(filesToWatch);
+
+    // remove already watched files to avoid a warning later on
+    const QStringList alreadyWatchedFiles = m_cppFileWatcher.files();
+    const QSet<QString> alreadyWatchedFilesSet(alreadyWatchedFiles.begin(),
+                                               alreadyWatchedFiles.end());
+    QStringList filepathsToWatch = findFilePathsFromFileNames(filesToWatch, alreadyWatchedFilesSet);
+
     if (filepathsToWatch.isEmpty())
         return;
+
+    QMutexLocker guard(&m_mutex);
     const auto unwatchedPaths = m_cppFileWatcher.addPaths(filepathsToWatch);
     if (!unwatchedPaths.isEmpty()) {
         qCDebug(codeModelLog) << "Cannot watch paths" << unwatchedPaths << "from requested"
@@ -445,37 +480,98 @@ void QQmlCodeModel::addFileWatches(const DomItem &qmlFile)
     }
 }
 
-void QQmlCodeModel::onCppFileChanged(const QString &)
+enum VersionCheckResult {
+    ClosedDocument,
+    VersionLowerThanDocument,
+    VersionLowerThanSnapshot,
+    VersionOk,
+};
+
+enum VersionCheckResultForValidDocument {
+    VersionLowerThanValidSnapshot,
+    VersionOkForValidDocument,
+};
+
+VersionCheckResult checkVersion(const OpenDocument& doc, int version)
 {
-    m_rebuildRequired = true;
+    if (!doc.textDocument)
+        return ClosedDocument;
+
+    {
+        QMutexLocker guard2(doc.textDocument->mutex());
+        if (doc.textDocument->version() && *doc.textDocument->version() > version)
+            return VersionLowerThanDocument;
+    }
+
+    if (doc.snapshot.docVersion && *doc.snapshot.docVersion >= version)
+        return VersionLowerThanSnapshot;
+
+    return VersionOk;
 }
 
-void QQmlCodeModel::newDocForOpenFile(const QByteArray &url, int version, const QString &docText)
+static VersionCheckResultForValidDocument checkVersionForValidDocument(const OpenDocument &doc,
+                                                                       int version)
+{
+    if (doc.snapshot.validDocVersion && *doc.snapshot.validDocVersion >= version)
+        return VersionLowerThanValidSnapshot;
+
+    return VersionOkForValidDocument;
+}
+
+static void updateItemInSnapshot(const DomItem &item, const DomItem &validItem,
+                                 const QByteArray &url, OpenDocument *doc, int version,
+                                 UpdatePolicy policy)
+{
+    switch (policy == ForceUpdate ? VersionOk : checkVersion(*doc, version)) {
+    case ClosedDocument:
+        qCWarning(lspServerLog) << "Ignoring update to closed document" << QString::fromUtf8(url);
+        return;
+    case VersionLowerThanDocument:
+        qCWarning(lspServerLog) << "Version" << version << "of document" << QString::fromUtf8(url)
+                                << "is not the latest anymore";
+        return;
+    case VersionLowerThanSnapshot:
+        qCWarning(lspServerLog) << "Skipping update of current doc to obsolete version" << version
+                                << "of document" << QString::fromUtf8(url);
+        return;
+    case VersionOk:
+        doc->snapshot.docVersion = version;
+        doc->snapshot.doc = item;
+        break;
+    }
+
+    if (!item.field(Fields::isValid).value().toBool(false)) {
+        qCWarning(lspServerLog) << "avoid update of validDoc to " << version << "of document"
+                                << QString::fromUtf8(url) << "as it is invalid";
+        return;
+    }
+
+    switch (policy == ForceUpdate ? VersionOkForValidDocument
+                                  : checkVersionForValidDocument(*doc, version)) {
+    case VersionLowerThanValidSnapshot:
+        qCWarning(lspServerLog) << "Skipping update of valid doc to obsolete version" << version
+                                << "of document" << QString::fromUtf8(url);
+        return;
+    case VersionOkForValidDocument:
+        doc->snapshot.validDocVersion = version;
+        doc->snapshot.validDoc = validItem;
+        break;
+    }
+}
+
+void QQmlCodeModel::newDocForOpenFile(const QByteArray &url, int version, const QString &docText,
+                                      QmlLsp::UpdatePolicy policy)
 {
     Q_ASSERT(QThread::currentThread() == m_openUpdateThread);
     qCDebug(codeModelLog) << "updating doc" << url << "to version" << version << "("
                           << docText.size() << "chars)";
 
     const QString fPath = url2Path(url, UrlLookup::ForceLookup);
-    if (m_cmakeStatus == RequiresInitialization)
-        initializeCMakeStatus(fPath);
-
     DomItem newCurrent = m_currentEnv.makeCopy(DomItem::CopyOption::EnvConnected).item();
-    QStringList loadPaths = buildPathsForFileUrl(url);
-
-    if (m_cmakeStatus == HasCMake && !loadPaths.isEmpty() && m_rebuildRequired) {
-        callCMakeBuild(loadPaths);
-        m_rebuildRequired = false;
-    }
-
-    loadPaths.append(importPathsForFile(fPath));
-    if (std::shared_ptr<DomEnvironment> newCurrentPtr = newCurrent.ownerAs<DomEnvironment>()) {
-        newCurrentPtr->setLoadPaths(loadPaths);
-    }
 
     // if the documentation root path is not set through the commandline,
     // try to set it from the settings file (.qmlls.ini file)
-    if (m_documentationRootPath.isEmpty() && m_settings) {
+    if (documentationRootPath().isEmpty() && m_settings) {
         // note: settings already searched current file in importPathsForFile() call above
         const QString docDir = QStringLiteral(u"docDir");
         if (m_settings->isSet(docDir))
@@ -484,63 +580,33 @@ void QQmlCodeModel::newDocForOpenFile(const QByteArray &url, int version, const 
 
     Path p;
     auto newCurrentPtr = newCurrent.ownerAs<DomEnvironment>();
+    newCurrentPtr->setLoadPaths(importPathsForUrl(url));
+    newCurrentPtr->setResourceFiles(m_resourceFiles);
     newCurrentPtr->loadFile(FileToLoad::fromMemory(newCurrentPtr, fPath, docText),
                             [&p, this](Path, const DomItem &, const DomItem &newValue) {
                                 const DomItem file = newValue.fileObject();
                                 p = file.canonicalPath();
-                                if (m_cmakeStatus == HasCMake)
+                                // Force population of the file by accessing isValid field. We
+                                // don't want to populate the file after adding the file to the
+                                // snapshot in updateItemInSnapshot.
+                                file.field(Fields::isValid);
+                                if (cmakeStatus() == HasCMake)
                                     addFileWatches(file);
                             });
     newCurrentPtr->loadPendingDependencies();
     if (p) {
         newCurrent.commitToBase(m_validEnv.ownerAs<DomEnvironment>());
-        DomItem item = m_currentEnv.path(p);
-        {
-            QMutexLocker l(&m_mutex);
-            OpenDocument &doc = m_openDocuments[url];
-            if (!doc.textDocument) {
-                qCWarning(lspServerLog)
-                        << "ignoring update to closed document" << QString::fromUtf8(url);
-                return;
-            } else {
-                QMutexLocker l(doc.textDocument->mutex());
-                if (doc.textDocument->version() && *doc.textDocument->version() > version) {
-                    qCWarning(lspServerLog)
-                            << "docUpdate: version" << version << "of document"
-                            << QString::fromUtf8(url) << "is not the latest anymore";
-                    return;
-                }
-            }
-            if (!doc.snapshot.docVersion || *doc.snapshot.docVersion < version) {
-                doc.snapshot.docVersion = version;
-                doc.snapshot.doc = item;
-            } else {
-                qCWarning(lspServerLog) << "skipping update of current doc to obsolete version"
-                                        << version << "of document" << QString::fromUtf8(url);
-            }
-            if (item.field(Fields::isValid).value().toBool(false)) {
-                if (!doc.snapshot.validDocVersion || *doc.snapshot.validDocVersion < version) {
-                    DomItem vDoc = m_validEnv.path(p);
-                    doc.snapshot.validDocVersion = version;
-                    doc.snapshot.validDoc = vDoc;
-                } else {
-                    qCWarning(lspServerLog) << "skippig update of valid doc to obsolete version"
-                                            << version << "of document" << QString::fromUtf8(url);
-                }
-            } else {
-                qCWarning(lspServerLog)
-                        << "avoid update of validDoc to " << version << "of document"
-                        << QString::fromUtf8(url) << "as it is invalid";
-            }
-        }
+        QMutexLocker l(&m_mutex);
+        updateItemInSnapshot(m_currentEnv.path(p), m_validEnv.path(p), url, &m_openDocuments[url],
+                             version, policy);
     }
     if (codeModelLog().isDebugEnabled()) {
-        qCDebug(codeModelLog) << "finished update doc of " << url << "to version" << version;
+        qCDebug(codeModelLog) << "Finished update doc of " << url << "to version" << version;
         snapshotByUrl(url).dump(qDebug() << "postSnapshot",
                                 OpenDocumentSnapshot::DumpOption::AllCode);
     }
     // we should update the scope in the future thus call addOpen(url)
-    emit updatedSnapshot(url);
+    emit updatedSnapshot(url, policy);
 }
 
 void QQmlCodeModel::closeOpenFile(const QByteArray &url)
@@ -549,222 +615,161 @@ void QQmlCodeModel::closeOpenFile(const QByteArray &url)
     m_openDocuments.remove(url);
 }
 
-void QQmlCodeModel::setRootUrls(const QList<QByteArray> &urls)
+QByteArray QQmlCodeModel::rootUrl() const
 {
     QMutexLocker l(&m_mutex);
-    m_rootUrls = urls;
+    return m_rootUrl;
 }
 
-void QQmlCodeModel::addRootUrls(const QList<QByteArray> &urls)
+QStringList QQmlCodeModel::buildPaths()
 {
     QMutexLocker l(&m_mutex);
-    for (const QByteArray &url : urls) {
-        if (!m_rootUrls.contains(url))
-            m_rootUrls.append(url);
-    }
+    return m_buildPaths;
 }
 
-void QQmlCodeModel::removeRootUrls(const QList<QByteArray> &urls)
-{
-    QMutexLocker l(&m_mutex);
-    for (const QByteArray &url : urls)
-        m_rootUrls.removeOne(url);
-}
-
-QList<QByteArray> QQmlCodeModel::rootUrls() const
-{
-    QMutexLocker l(&m_mutex);
-    return m_rootUrls;
-}
-
-QStringList QQmlCodeModel::buildPathsForRootUrl(const QByteArray &url)
-{
-    QMutexLocker l(&m_mutex);
-    return m_buildPathsForRootUrl.value(url);
-}
-
-static bool isNotSeparator(char c)
-{
-    return c != '/';
-}
-
-QStringList QQmlCodeModel::importPathsForFile(const QString &fileName)
+QStringList QQmlCodeModel::importPathsForUrl(const QByteArray &url)
 {
     QStringList result = importPaths();
 
-    const QString importPaths = u"importPaths"_s;
-    if (m_settings && m_settings->search(fileName) && m_settings->isSet(importPaths)) {
-        result.append(m_settings->valueAsAbsolutePathList(importPaths, fileName));
+    // fallback for projects targeting Qt < 6.10, that don't have .qmlls.build.ini files
+    if (result.isEmpty() || result == QLibraryInfo::paths(QLibraryInfo::QmlImportsPath))
+        result << buildPathsForFileUrl(url);
+
+    const QString importPathsKey = u"importPaths"_s;
+    const QString fileName = url2Path(url);
+    if (m_settings && m_settings->search(fileName, { QString(), verbose() }).isValid()
+        && m_settings->isSet(importPathsKey)) {
+        result.append(m_settings->valueAsAbsolutePathList(importPathsKey, fileName));
     }
-
-    const QStringList buildPath = buildPathsForFileUrl(m_path2url[fileName]);
-    m_buildInformation.loadSettingsFrom(buildPath);
-    result.append(m_buildInformation.importPathsFor(fileName));
-
     return result;
 }
 
-QStringList QQmlCodeModel::buildPathsForFileUrl(const QByteArray &url)
+void QQmlCodeModel::setImportPaths(const QStringList &importPaths)
 {
-    QList<QByteArray> roots;
-    {
-        QMutexLocker l(&m_mutex);
-        roots = m_buildPathsForRootUrl.keys();
-    }
-    // we want to longest match to be first, as it should override shorter matches
-    std::sort(roots.begin(), roots.end(), [](const QByteArray &el1, const QByteArray &el2) {
-        if (el1.size() > el2.size())
-            return true;
-        if (el1.size() < el2.size())
-            return false;
-        return el1 < el2;
-    });
-    QStringList buildPaths;
-    QStringList defaultValues;
-    if (!roots.isEmpty() && roots.last().isEmpty())
-        roots.removeLast();
-    QByteArray urlSlash(url);
-    if (!urlSlash.isEmpty() && isNotSeparator(urlSlash.at(urlSlash.size() - 1)))
-        urlSlash.append('/');
-    // look if the file has a know prefix path
-    for (const QByteArray &root : roots) {
-        if (urlSlash.startsWith(root)) {
-            buildPaths += buildPathsForRootUrl(root);
-            break;
-        }
-    }
-    QString path = url2Path(url);
+    QMutexLocker guard(&m_mutex);
+    m_importPaths = importPaths;
 
-    // fallback to the empty root, if is has an entry.
-    // This is the buildPath that is passed to qmlls via --build-dir.
-    if (buildPaths.isEmpty()) {
-        buildPaths += buildPathsForRootUrl(QByteArray());
-    }
+    if (const auto &env = m_currentEnv.ownerAs<DomEnvironment>())
+        env->setLoadPaths(importPaths);
+    if (const auto &env = m_validEnv.ownerAs<DomEnvironment>())
+        env->setLoadPaths(importPaths);
+}
 
-    // look in the QMLLS_BUILD_DIRS environment variable
-    if (buildPaths.isEmpty()) {
-        QStringList envPaths = qEnvironmentVariable("QMLLS_BUILD_DIRS")
-                                       .split(QDir::listSeparator(), Qt::SkipEmptyParts);
-        buildPaths += envPaths;
-    }
+QStringList QQmlCodeModel::resourceFiles() const
+{
+    QMutexLocker guard(&m_mutex);
+    return m_resourceFiles;
+}
 
-    // look in the settings.
-    // This is the one that is passed via the .qmlls.ini file.
-    if (buildPaths.isEmpty() && m_settings) {
-        m_settings->search(path);
-        QString buildDir = QStringLiteral(u"buildDir");
-        if (m_settings->isSet(buildDir))
-            buildPaths += m_settings->value(buildDir).toString().split(QDir::listSeparator(),
-                                                                       Qt::SkipEmptyParts);
-    }
+void QQmlCodeModel::setResourceFiles(const QStringList &resourceFiles)
+{
+    QMutexLocker guard(&m_mutex);
+    m_resourceFiles = resourceFiles;
 
-    // heuristic to find build directory
-    if (buildPaths.isEmpty()) {
-        QDir d(path);
-        d.setNameFilters(QStringList({ u"build*"_s }));
-        const int maxDirDepth = 8;
-        int iDir = maxDirDepth;
-        QString dirName = d.dirName();
-        QDateTime lastModified;
-        while (d.cdUp() && --iDir > 0) {
-            for (const QFileInfo &fInfo : d.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-                if (fInfo.completeBaseName() == u"build"
-                    || fInfo.completeBaseName().startsWith(u"build-%1"_s.arg(dirName))) {
-                    if (iDir > 1)
-                        iDir = 1;
-                    if (!lastModified.isValid() || lastModified < fInfo.lastModified()) {
-                        buildPaths.clear();
-                        buildPaths.append(fInfo.absoluteFilePath());
-                    }
-                }
-            }
-        }
-    }
+    if (const auto &env = m_currentEnv.ownerAs<DomEnvironment>())
+        env->setResourceFiles(resourceFiles);
+    if (const auto &env = m_validEnv.ownerAs<DomEnvironment>())
+        env->setResourceFiles(resourceFiles);
+}
+
+QStringList QQmlCodeModel::importPaths() const
+{
+    QMutexLocker guard(&m_mutex);
+    return m_importPaths;
+}
+
+static QStringList withDependentBuildDirectories(QStringList &&buildPaths)
+{
     // add dependent build directories
     QStringList res;
     std::reverse(buildPaths.begin(), buildPaths.end());
     const int maxDeps = 4;
     while (!buildPaths.isEmpty()) {
-        QString bPath = buildPaths.last();
-        buildPaths.removeLast();
-        res += bPath;
-        if (QFile::exists(bPath + u"/_deps") && bPath.split(u"/_deps/"_s).size() < maxDeps) {
-            QDir d(bPath + u"/_deps");
-            for (const QFileInfo &fInfo : d.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot))
-                buildPaths.append(fInfo.absoluteFilePath());
+        res += buildPaths.takeLast();
+        const QString &bPath = res.constLast();
+        const QString bPathExtended = bPath + u"/_deps";
+        if (QFile::exists(bPathExtended) && bPath.count(u"/_deps/"_s) < maxDeps) {
+            for (const auto &fileInfo :
+                 QDirListing{ bPathExtended, QDirListing::IteratorFlag::DirsOnly }) {
+                buildPaths.append(fileInfo.absoluteFilePath());
+            }
         }
     }
     return res;
 }
 
+QStringList QQmlCodeModel::buildPathsForFileUrl(const QByteArray &url)
+{
+    if (QStringList result = buildPaths(); !result.isEmpty())
+        return withDependentBuildDirectories(std::move(result));
+
+    // fallback: look in the user settings (.qmlls.ini files in the source directory)
+    if (!m_settings || !m_settings->search(url2Path(url), { QString(), verbose() }).isValid())
+        return {};
+
+    constexpr QLatin1String buildDir = "buildDir"_L1;
+    if (!m_settings->isSet(buildDir))
+        return {};
+
+    const QString fileName = url2Path(url);
+    return withDependentBuildDirectories(m_settings->valueAsAbsolutePathList(buildDir, fileName));
+}
+
 void QQmlCodeModel::setDocumentationRootPath(const QString &path)
 {
-    QMutexLocker l(&m_mutex);
-    if (m_documentationRootPath != path) {
+    {
+        QMutexLocker l(&m_mutex);
+        if (m_documentationRootPath == path)
+            return;
         m_documentationRootPath = path;
-        emit documentationRootPathChanged(path);
     }
+    m_helpManager.setDocumentationRootPath(path);
 }
 
-void QQmlCodeModel::setBuildPathsForRootUrl(QByteArray url, const QStringList &paths)
+void QQmlCodeModel::setBuildPaths(const QStringList &paths)
 {
     QMutexLocker l(&m_mutex);
-    if (!url.isEmpty() && isNotSeparator(url.at(url.size() - 1)))
-        url.append('/');
-    if (paths.isEmpty())
-        m_buildPathsForRootUrl.remove(url);
-    else
-        m_buildPathsForRootUrl.insert(url, paths);
+    m_buildPaths = paths;
 }
 
-void QQmlCodeModel::openUpdate(const QByteArray &url)
+void QQmlCodeModel::openUpdate(const QByteArray &url, UpdatePolicy policy)
 {
-    bool updateDoc = false;
-    bool updateScope = false;
     std::optional<int> rNow = 0;
     QString docText;
-    DomItem validDoc;
-    std::shared_ptr<Utils::TextDocument> document;
+
     {
         QMutexLocker l(&m_mutex);
         Q_ASSERT(QThread::currentThread() == m_openUpdateThread);
         OpenDocument &doc = m_openDocuments[url];
-        document = doc.textDocument;
+        std::shared_ptr<Utils::TextDocument> document = doc.textDocument;
         if (!document)
             return;
         {
             QMutexLocker l2(document->mutex());
             rNow = document->version();
         }
-        if (rNow && (!doc.snapshot.docVersion || *doc.snapshot.docVersion != *rNow))
-            updateDoc = true;
-        else if (doc.snapshot.validDocVersion
-                 && (!doc.snapshot.scopeVersion
-                     || *doc.snapshot.scopeVersion != *doc.snapshot.validDocVersion))
-            updateScope = true;
-        else
+        if (!rNow
+            || (policy != ForceUpdate && doc.snapshot.docVersion
+                && *doc.snapshot.docVersion == *rNow)) {
             return;
-        if (updateDoc) {
+        }
+
+        {
             QMutexLocker l2(doc.textDocument->mutex());
             rNow = doc.textDocument->version();
             docText = doc.textDocument->toPlainText();
-        } else {
-            validDoc = doc.snapshot.validDoc;
-            rNow = doc.snapshot.validDocVersion;
         }
     }
-    if (updateDoc) {
-        newDocForOpenFile(url, *rNow, docText);
-    }
-    if (updateScope) {
-        // to do
-    }
+    newDocForOpenFile(url, *rNow, docText, policy);
 }
 
-void QQmlCodeModel::addOpenToUpdate(const QByteArray &url)
+void QQmlCodeModel::addOpenToUpdate(const QByteArray &url, UpdatePolicy policy)
 {
-    QMutexLocker l(&m_mutex);
-    m_openDocumentsToUpdate.insert(url);
+    {
+        QMutexLocker l(&m_mutex);
+        m_openDocumentsToUpdate[url] = policy;
+    }
+    openNeedUpdate();
 }
 
 QDebug OpenDocumentSnapshot::dump(QDebug dbg, DumpOptions options)
@@ -792,19 +797,31 @@ QDebug OpenDocumentSnapshot::dump(QDebug dbg, DumpOptions options)
                          : u"*none*"_s)
             << "\n";
     }
-    dbg << "  scopeVersion:" << (scopeVersion ? QString::number(*scopeVersion) : u"*none*"_s)
-        << "\n";
     dbg << "  scopeDependenciesLoadTime:" << scopeDependenciesLoadTime << "\n";
     dbg << "  scopeDependenciesChanged" << scopeDependenciesChanged << "\n";
     dbg << "}";
     return dbg;
 }
 
-void QQmllsBuildInformation::loadSettingsFrom(const QStringList &buildPaths)
+static ModuleSetting *moduleSettingFor(const QString &sourceFolder, ModuleSettings *moduleSettings,
+                                       UpdatePolicy policy)
+{
+    if (policy != ForceUpdate)
+        return &moduleSettings->emplaceBack();
+
+    auto it = std::find_if(
+            moduleSettings->begin(), moduleSettings->end(),
+            [&sourceFolder](const ModuleSetting s) { return s.sourceFolder == sourceFolder; });
+    if (it == moduleSettings->end())
+        return &moduleSettings->emplaceBack();
+    return &*it;
+}
+
+void QQmllsBuildInformation::loadSettingsFrom(const QStringList &buildPaths, UpdatePolicy policy)
 {
 #if QT_CONFIG(settings)
     for (const QString &path : buildPaths) {
-        if (m_seenSettings.contains(path))
+        if (policy != ForceUpdate && m_seenSettings.contains(path))
             continue;
         m_seenSettings.insert(path);
 
@@ -817,13 +834,17 @@ void QQmllsBuildInformation::loadSettingsFrom(const QStringList &buildPaths)
         for (const QString &group : settings.childGroups()) {
             settings.beginGroup(group);
 
-            ModuleSetting moduleSetting;
-            moduleSetting.sourceFolder = group;
-            moduleSetting.sourceFolder.replace("<SLASH>"_L1, "/"_L1);
-            moduleSetting.importPaths = settings.value("importPaths"_L1)
-                                                .toString()
-                                                .split(QDir::listSeparator(), Qt::SkipEmptyParts);
-            m_moduleSettings.append(moduleSetting);
+            const QString sourceFolder = QString(group).replace("<SLASH>"_L1, "/"_L1);
+            ModuleSetting *moduleSetting =
+                    moduleSettingFor(sourceFolder, &m_moduleSettings, policy);
+            moduleSetting->sourceFolder = sourceFolder;
+            moduleSetting->importPaths = settings.value("importPaths"_L1)
+                                                 .toString()
+                                                 .split(QDir::listSeparator(), Qt::SkipEmptyParts);
+            moduleSetting->resourceFiles =
+                    settings.value("resourceFiles"_L1)
+                            .toString()
+                            .split(QDir::listSeparator(), Qt::SkipEmptyParts);
             settings.endGroup();
         }
     }
@@ -834,16 +855,26 @@ void QQmllsBuildInformation::loadSettingsFrom(const QStringList &buildPaths)
 
 QStringList QQmllsBuildInformation::importPathsFor(const QString &filePath)
 {
-    QStringList result;
+    return settingFor(filePath).importPaths;
+}
+
+QStringList QQmllsBuildInformation::resourceFilesFor(const QString &filePath)
+{
+    return settingFor(filePath).resourceFiles;
+}
+
+ModuleSetting QQmllsBuildInformation::settingFor(const QString &filePath)
+{
+    ModuleSetting result;
     qsizetype longestMatch = 0;
     for (const ModuleSetting &setting : m_moduleSettings) {
         const qsizetype matchLength = setting.sourceFolder.size();
         if (filePath.startsWith(setting.sourceFolder) && matchLength > longestMatch) {
-            result = setting.importPaths;
+            result = setting;
             longestMatch = matchLength;
         }
     }
-    QQmlToolingSettings::resolveRelativeImportPaths(filePath, &result);
+    QQmlToolingSettings::resolveRelativeImportPaths(filePath, &result.importPaths);
     return result;
 }
 

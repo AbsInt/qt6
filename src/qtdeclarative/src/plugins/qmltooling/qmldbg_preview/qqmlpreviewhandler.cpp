@@ -14,6 +14,7 @@
 #include <QtQuick/qquickitem.h>
 #include <QtQml/qqmlcomponent.h>
 
+#include <private/qabstractanimation_p.h>
 #include <private/qhighdpiscaling_p.h>
 #include <private/qqmlmetatype_p.h>
 #include <private/qquickpixmap_p.h>
@@ -171,6 +172,11 @@ void QQmlPreviewHandler::zoom(qreal newFactor)
 {
     m_zoomFactor = newFactor;
     QTimer::singleShot(0, this, &QQmlPreviewHandler::doZoom);
+}
+
+void QQmlPreviewHandler::setAnimationSpeed(qreal newFactor)
+{
+    QUnifiedTimer::instance()->setSpeedModifier(newFactor);
 }
 
 void QQmlPreviewHandler::doZoom()

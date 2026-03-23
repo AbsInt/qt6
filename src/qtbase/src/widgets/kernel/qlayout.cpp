@@ -345,6 +345,17 @@ void QLayout::getContentsMargins(int *left, int *top, int *right, int *bottom) c
 }
 
 /*!
+    \property QLayout::contentsMargins
+    \since 4.6
+    \brief the margins used around the layout
+
+    By default, QLayout uses the values provided by the style. On
+    most platforms, the margin is 11 pixels in all directions.
+
+    \sa setContentsMargins(), getContentsMargins()
+*/
+
+/*!
     \since 4.6
 
     Returns the margins used around the layout.
@@ -758,6 +769,12 @@ void QLayoutPrivate::reparentChildWidgets(QWidget *mw)
         }
     }
 }
+
+/*!
+    \class QLayoutPrivate
+    \inmodule QtWidgets
+    \internal
+*/
 
 /*!
     Returns \c true if the \a widget can be added to the \a layout;

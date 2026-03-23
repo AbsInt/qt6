@@ -141,6 +141,7 @@ int String::length() const {
 
 struct Q_QML_EXPORT StringOrSymbol : public Managed {
     V4_MANAGED(StringOrSymbol, Managed)
+    Q_MANAGED_TYPE(StringOrSymbol);
     V4_NEEDS_DESTROY
     enum {
         IsStringOrSymbol = true

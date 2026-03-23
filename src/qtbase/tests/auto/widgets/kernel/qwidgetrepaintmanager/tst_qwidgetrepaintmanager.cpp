@@ -654,8 +654,9 @@ void tst_QWidgetRepaintManager::evaluateRhi()
     }
 
 #if QT_CONFIG(opengl)
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::OpenGL))
+        return;
 
-#if QT_CONFIG(run_opengl_tests)
     {
         // Non-native child RHI widget enables RHI for top level regular widget
         QWidget topLevel;
@@ -769,7 +770,6 @@ void tst_QWidgetRepaintManager::evaluateRhi()
         QVERIFY(!QWidgetPrivate::get(&rhiChild)->usesRhiFlush);
         QVERIFY(QWidgetPrivate::get(&rhiChild)->rhi());
     }
-#endif // QT_CONFIG(run_opengl_tests)
 
 #if QT_CONFIG(metal)
     QRhiMetalInitParams metalParams;
@@ -805,10 +805,6 @@ void tst_QWidgetRepaintManager::evaluateRhi()
 
 void tst_QWidgetRepaintManager::rhiRecreateMaintainsWindowProperties()
 {
-#if !QT_CONFIG(run_opengl_tests)
-    QSKIP("Skip test as run-opengl-tests feature is off.");
-#endif
-
     const auto *integration = QGuiApplicationPrivate::platformIntegration();
     if (!integration->hasCapability(QPlatformIntegration::RhiBasedRendering))
         QSKIP("Platform does not support RHI based rendering");
@@ -816,6 +812,9 @@ void tst_QWidgetRepaintManager::rhiRecreateMaintainsWindowProperties()
 #if !QT_CONFIG(opengl)
     QSKIP("Platform does not support OpenGL RHI based rendering");
 #endif
+
+    if (!integration->hasCapability(QPlatformIntegration::OpenGL))
+        QSKIP("OpenGL is not supported on this platform.");
 
     // Reparenting Rhi widget into a window causes the window to be
     // recreated, but after recreation the window properties such as

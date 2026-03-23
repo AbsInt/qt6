@@ -16,8 +16,10 @@
 // We mean it.
 //
 
+#include "qqmldiffer_p.h"
 #include <QtLanguageServer/private/qlanguageserverspec_p.h>
 #include <QtQmlDom/private/qqmldomitem_p.h>
+
 #include <QtCore/qlist.h>
 #include <QtCore/qmap.h>
 
@@ -65,13 +67,15 @@ enum class QmlHighlightKind {
     Unknown, // Used for the unknown tokens
 };
 
-enum class QmlHighlightModifier {
+enum class QmlHighlightModifier : uint32_t {
     None = 0,
     QmlPropertyDefinition = 1 << 0,
     QmlDefaultProperty = 1 << 1,
-    QmlFinalProperty = 1 << 2,
-    QmlRequiredProperty = 1 << 3,
-    QmlReadonlyProperty = 1 << 4,
+    QmlRequiredProperty = 1 << 2,
+    QmlReadonlyProperty = 1 << 3,
+    QmlFinalProperty = 1 << 4,
+    QmlVirtualProperty = 1 << 5,
+    QmlOverrideProperty = 1 << 6,
 };
 Q_DECLARE_FLAGS(QmlHighlightModifiers, QmlHighlightModifier)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QmlHighlightModifiers)
@@ -158,13 +162,13 @@ void addModifier(QLspSpecification::SemanticTokenModifiers modifier, int *baseMo
 bool rangeOverlapsWithSourceLocation(const QQmlJS::SourceLocation &loc, const HighlightsRange &r);
 QList<QLspSpecification::SemanticTokensEdit> computeDiff(const QList<int> &, const QList<int> &);
 void updateResultID(QByteArray &resultID);
-QList<int> collectTokens(const QQmlJS::Dom::DomItem &item,
-                            const std::optional<HighlightsRange> &range,
-                            HighlightingMode mode = HighlightingMode::Default);
 HighlightsContainer visitTokens(const QQmlJS::Dom::DomItem &item,
                                 const std::optional<HighlightsRange> &range);
 void addHighlight(HighlightsContainer &out, const QQmlJS::SourceLocation &loc, QmlHighlightKind,
                     QmlHighlightModifiers = QmlHighlightModifier::None);
+void applyDiffs(HighlightsContainer &highlights, const QList<QQmlLSUtils::Diff> &diffs);
+HighlightsContainer shiftHighlights(const HighlightsContainer &cachedHighlights,
+                                    const QString &lastValidCode, const QString &currentCode);
 } // namespace Utils
 
 class HighlightingVisitor

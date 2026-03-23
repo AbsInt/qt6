@@ -44,8 +44,8 @@ void wrapper4(int typeId) {
 }
 
 void wrapper5() {
-///! [5]
+//! [5]
     QQmlEngine engine;
     MySingleton *singleton = engine.singletonInstance<MySingleton *>("mymodule", "MySingleton");
-///! [5]
+//! [5]
 }

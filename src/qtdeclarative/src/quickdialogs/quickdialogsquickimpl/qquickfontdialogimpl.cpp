@@ -147,6 +147,18 @@ void QQuickFontDialogImpl::focusOutEvent(QFocusEvent *event)
     attached->clearSearch();
 }
 
+void QQuickFontDialogImpl::itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &data)
+{
+    Q_D(QQuickFontDialogImpl);
+    QQuickDialog::itemChange(change, data);
+
+    if (change != QQuickItem::ItemVisibleHasChanged || !isComponentComplete() || !data.boolValue)
+        return;
+
+    if (QQuickFontDialogImplAttached *attached = d->attachedOrWarn(); attached && attached->buttonBox())
+        attached->buttonBox()->forceActiveFocus(Qt::OtherFocusReason);
+}
+
 QQuickFontDialogImplAttached::QQuickFontDialogImplAttached(QObject *parent)
     : QObject(*(new QQuickFontDialogImplAttachedPrivate), parent),
       m_writingSystem(QFontDatabase::Any),

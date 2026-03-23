@@ -36,6 +36,10 @@ class Q_QUICKEFFECTS_EXPORT QQuickRectangularShadow : public QQuickItem
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged FINAL)
     Q_PROPERTY(qreal blur READ blur WRITE setBlur NOTIFY blurChanged FINAL)
     Q_PROPERTY(qreal radius READ radius WRITE setRadius NOTIFY radiusChanged FINAL)
+    Q_PROPERTY(qreal topLeftRadius READ topLeftRadius WRITE setTopLeftRadius NOTIFY topLeftRadiusChanged RESET resetTopLeftRadius REVISION(6, 11))
+    Q_PROPERTY(qreal topRightRadius READ topRightRadius WRITE setTopRightRadius NOTIFY topRightRadiusChanged RESET resetTopRightRadius REVISION(6, 11))
+    Q_PROPERTY(qreal bottomLeftRadius READ bottomLeftRadius WRITE setBottomLeftRadius NOTIFY bottomLeftRadiusChanged RESET resetBottomLeftRadius REVISION(6, 11))
+    Q_PROPERTY(qreal bottomRightRadius READ bottomRightRadius WRITE setBottomRightRadius NOTIFY bottomRightRadiusChanged RESET resetBottomRightRadius REVISION(6, 11))
     Q_PROPERTY(qreal spread READ spread WRITE setSpread NOTIFY spreadChanged FINAL)
     Q_PROPERTY(bool cached READ isCached WRITE setCached NOTIFY cachedChanged FINAL)
     Q_PROPERTY(QQuickItem *material READ material WRITE setMaterial NOTIFY materialChanged FINAL)
@@ -59,6 +63,19 @@ public:
     QQuickItem *material() const;
     void setMaterial(QQuickItem *item);
 
+    qreal topLeftRadius() const;
+    void setTopLeftRadius(qreal radius);
+    void resetTopLeftRadius();
+    qreal topRightRadius() const;
+    void setTopRightRadius(qreal radius);
+    void resetTopRightRadius();
+    qreal bottomLeftRadius() const;
+    void setBottomLeftRadius(qreal radius);
+    void resetBottomLeftRadius();
+    qreal bottomRightRadius() const;
+    void setBottomRightRadius(qreal radius);
+    void resetBottomRightRadius();
+
 Q_SIGNALS:
     void offsetChanged();
     void colorChanged();
@@ -67,6 +84,10 @@ Q_SIGNALS:
     void spreadChanged();
     void cachedChanged();
     void materialChanged();
+    Q_REVISION(6, 11) void topLeftRadiusChanged();
+    Q_REVISION(6, 11) void topRightRadiusChanged();
+    Q_REVISION(6, 11) void bottomLeftRadiusChanged();
+    Q_REVISION(6, 11) void bottomRightRadiusChanged();
 
 protected:
     void componentComplete() override;

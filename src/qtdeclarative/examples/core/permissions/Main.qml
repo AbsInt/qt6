@@ -55,7 +55,7 @@ Window {
                 readonly property string statusAsString: locationPermission.status === Qt.Granted ? qsTr("Granted") :
                                                          locationPermission.status === Qt.Undetermined ? qsTr("Undetermined")
                                                                                                        : qsTr("Denied")
-                text: qsTr(`Location services, status: ${statusAsString}`)
+                text: qsTr("Location services, status: %1").arg(statusAsString)
 
                 font.bold: true
                 font.pointSize: 16

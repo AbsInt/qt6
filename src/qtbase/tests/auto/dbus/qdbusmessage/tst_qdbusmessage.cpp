@@ -23,6 +23,7 @@ class tst_QDBusMessage : public QObject
     Q_OBJECT
 private Q_SLOTS:
     void moveAssign();
+    void moveConstruct();
 };
 
 void tst_QDBusMessage::moveAssign()
@@ -45,6 +46,31 @@ void tst_QDBusMessage::moveAssign()
 
         // and move-assign back
         copy = std::move(other);
+        COMPARE_MESSAGES(copy, referenceMessage);
+    }
+}
+
+void tst_QDBusMessage::moveConstruct()
+{
+    QDBusMessage referenceMessage =
+            QDBusMessage::createMethodCall("org.kde.selftest"_L1, "/org/kde/selftest"_L1,
+                                           "org.kde.selftest"_L1, "Ping"_L1);
+    referenceMessage << "ping"_L1;
+
+    // moved-from object can be destroyed...
+    {
+        QDBusMessage copy = referenceMessage;
+        QDBusMessage other = std::move(copy);
+        COMPARE_MESSAGES(other, referenceMessage);
+    }
+    // ... or assigned-to
+    {
+        QDBusMessage copy = referenceMessage;
+        QDBusMessage other = std::move(copy);
+        COMPARE_MESSAGES(other, referenceMessage);
+        other << "other_arg"_L1; // also affects referenceMessage
+        copy = other;
+        COMPARE_MESSAGES(copy, other);
         COMPARE_MESSAGES(copy, referenceMessage);
     }
 }

@@ -13,12 +13,13 @@ Item {
     property color backgroundColor: setBackground.checked ? Qt.rgba(bgColor.color.r, bgColor.color.g, bgColor.color.b, 1.0) : Qt.rgba(0,0,0,0)
 
     property color outlineColor: enableOutline.checked ? Qt.rgba(outlineColor.color.r, outlineColor.color.g, outlineColor.color.b, outlineAlpha) : Qt.rgba(0,0,0,0)
-    property color fillColor: Qt.rgba(fillColor.color.r, fillColor.color.g, fillColor.color.b, pathAlpha)
+    property color fillColor: enableFill.checked ? Qt.rgba(fillColor.color.r, fillColor.color.g, fillColor.color.b, pathAlpha) : Qt.rgba(0,0,0,0)
     property alias pathAlpha: alphaSlider.value
     property alias fillRule: fillRule.currentValue
     property alias outlineAlpha: outlineAlphaSlider.value
-    property real outlineWidth: cosmeticPen.checked ? outlineWidthEdit.text / scale : outlineWidthEdit.text
+    property real outlineWidth: outlineWidthEdit.text
     property alias outlineStyle: outlineStyle.currentValue
+    property alias cosmeticPen: cosmeticPen.checked
     property alias capStyle: capStyle.currentValue
     property alias joinStyle: joinStyle.currentValue
     property alias debugCurves: enableDebug.checked
@@ -26,6 +27,7 @@ Item {
     property alias painterComparison: painterComparison.currentIndex
     property alias painterComparisonColor: painterComparisonColor.color
     property alias painterComparisonAlpha: painterComparisonColorAlpha.value
+    property alias fillEnabled: enableFill.checked
     property alias outlineEnabled: enableOutline.checked
     property alias gradientType: gradientType.currentIndex
     property alias fillScaleX: fillTransformSlider.value
@@ -39,6 +41,7 @@ Item {
     property real pathMargin: marginEdit.text
 
     Settings {
+        property alias enableFill: enableFill.checked
         property alias enableOutline: enableOutline.checked
         property alias outlineColor: outlineColor.color
         property alias outlineWidth: outlineWidthEdit.text
@@ -222,6 +225,14 @@ Item {
             }
         }
         RowLayout {
+            CheckBox {
+                id: enableFill
+                text: "Enable fill"
+                palette.windowText: "white"
+                Layout.fillWidth: false
+            }
+            RowLayout {
+                opacity: enableFill.checked ? 1 : 0
             Label {
                 text: "Fill color"
                 color: "white"
@@ -286,6 +297,7 @@ Item {
                 from: 0.0
                 to: 1.0
                 value: 1.0
+            }
             }
         }
         RowLayout {
@@ -376,16 +388,12 @@ Item {
             }
             TextField {
                 id: outlineWidthEdit
-                text: (cosmeticPen.checked ? outlineWidthSlider.value: outlineWidthSlider.value ** 2).toFixed(2)
+                text: (outlineWidthSlider.value ** 2).toFixed(2)
                 Layout.fillWidth: false
                 onEditingFinished: {
                     let val = +text
-                    if (val > 0) {
-                        if (cosmeticPen.checked)
-                            outlineWidth.value = val * scale
-                        else
-                            outlineWidth.value = Math.sqrt(val)
-                    }
+                    if (val >= 0)
+                        outlineWidthSlider.value = Math.sqrt(val)
                 }
             }
             Slider {
@@ -393,7 +401,7 @@ Item {
                 Layout.fillWidth: true
                 from: 0.0
                 to: 10.0
-                value: Math.sqrt(10)
+                Component.onCompleted: outlineWidthSlider.value = Math.sqrt(outlineWidthEdit.text)
             }
             CheckBox {
                 id: cosmeticPen

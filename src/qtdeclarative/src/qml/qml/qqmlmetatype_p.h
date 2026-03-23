@@ -66,6 +66,14 @@ public:
                 && aUrl.query() == bUrl.query();
     }
 
+    static QUrl normalizedUrl(const QUrl &unNormalizedUrl)
+    {
+        QUrl normalized(unNormalizedUrl);
+        if (normalized.scheme() == QLatin1String("qrc"))
+            normalized.setHost(QString()); // map qrc:///a.qml to qrc:/a.qml
+        return normalized;
+    }
+
     enum CompositeTypeLookupMode {
         NonSingleton,
         Singleton,
@@ -99,9 +107,9 @@ public:
                                                   const QString &uri, const QString &typeNamespace,
                                                   QTypeRevision version, QList<QQmlError> *errors);
 
-    static QQmlType typeForUrl(const QString &urlString, const QHashedStringRef& typeName,
-                               CompositeTypeLookupMode mode, QList<QQmlError> *errors,
-                               QTypeRevision version = QTypeRevision());
+    static QQmlType typeForUrl(
+            const QUrl &url, const QHashedStringRef &typeName, CompositeTypeLookupMode mode,
+            QList<QQmlError> *errors, QTypeRevision version = QTypeRevision());
 
     static QQmlType fetchOrCreateInlineComponentTypeForUrl(const QUrl &url);
     static QQmlType inlineComponentType(const QQmlType &outerType, const QString &name)
@@ -174,8 +182,8 @@ public:
     static QObject *toQObject(const QVariant &, bool *ok = nullptr);
 
     static QMetaType listValueType(QMetaType type);
-    static QQmlAttachedPropertiesFunc attachedPropertiesFunc(QQmlEnginePrivate *,
-                                                             const QMetaObject *);
+    static QQmlAttachedPropertiesFunc attachedPropertiesFunc(
+            QQmlTypeLoader *typeLoader, const QMetaObject *);
     static bool isInterface(QMetaType type);
     static const char *interfaceIId(QMetaType type);
     static bool isList(QMetaType type);

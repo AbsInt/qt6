@@ -49,6 +49,7 @@ private slots:
     void requiredModelData();
     void nestedRequired();
     void overriddenModelData();
+    void overriddenModelData2();
     void deleteRace();
     void persistedItemsStayInCache();
     void unknownContainersAsModel();
@@ -62,6 +63,9 @@ private slots:
     void delegateModelAccess();
 
     void recursiveDrain();
+
+    void deleteFromItemsChanged();
+    void releaseWhileStrongRef();
 };
 
 class BaseAbstractItemModel : public QAbstractItemModel
@@ -105,7 +109,7 @@ public:
     }
 
 protected:
-    QVector<QString> mValues;
+    QList<QString> mValues;
 };
 
 class AbstractItemModel : public BaseAbstractItemModel
@@ -649,10 +653,32 @@ void tst_QQmlDelegateModel::nestedRequired()
     QVERIFY(!delegate5);
 }
 
+static QLoggingCategory::CategoryFilter parentFilter;
+void logFilter(QLoggingCategory *category)
+{
+    if (qstrcmp(category->categoryName(), "qt.qml.propertyCache.append") == 0)
+        category->setEnabled(QtDebugMsg, true);
+    else if (parentFilter)
+        parentFilter(category);
+}
+
 void tst_QQmlDelegateModel::overriddenModelData()
 {
+    parentFilter = QLoggingCategory::installFilter(logFilter);
+    const auto restoreFilter = qScopeGuard([]() { QLoggingCategory::installFilter(parentFilter); });
+
     QTest::failOnWarning(QRegularExpression(
             "Final member [^ ]+ is overridden in class [^\\.]+. The override won't be used."));
+    const auto overridenProperies = { "index", "column", "row", "hasModelChildren", "model" };
+    for (const auto &property : overridenProperies) {
+        QTest::ignoreMessage(
+                QtDebugMsg,
+                qPrintable(QLatin1String("Member ") + QLatin1String(property)
+                           + QLatin1String(" of the object QQmlDMAbstractItemModelData overrides a "
+                                           "non-virtual member. Consider renaming it or mark it "
+                                           "virtual in the "
+                                           "base object")));
+    }
 
     QQmlEngine engine;
     QQmlComponent c(&engine, testFileUrl("overriddenModelData.qml"));
@@ -676,6 +702,43 @@ void tst_QQmlDelegateModel::overriddenModelData()
             QCOMPARE(delegate->objectName(), QLatin1String("a b c d e f"));
         }
     }
+}
+
+class ModelWithModelDataRole : public QAbstractListModel
+{
+    Q_OBJECT
+    QML_ELEMENT
+public:
+    ModelWithModelDataRole() { }
+
+    int rowCount(const QModelIndex &parent = {}) const override
+    {
+        Q_UNUSED(parent);
+        return 1;
+    }
+
+    QVariant data(const QModelIndex &index, int role) const override
+    {
+        Q_UNUSED(index);
+        Q_UNUSED(role);
+        return QVariant();
+    }
+
+    QHash<int, QByteArray> roleNames() const override { return { { Qt::UserRole, "modelData" } }; }
+};
+
+void tst_QQmlDelegateModel::overriddenModelData2()
+{
+    QTest::failOnWarning();
+
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("overriddenModelData2.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+
+    const auto newModel = std::make_unique<ModelWithModelDataRole>();
+
+    o->setProperty("model", QVariant::fromValue(newModel.get()));
 }
 
 void tst_QQmlDelegateModel::deleteRace()
@@ -830,7 +893,7 @@ class ProxyModel : public QSortFilterProxyModel
 {
     Q_OBJECT
     QML_ELEMENT
-    Q_PROPERTY(QAbstractItemModel *sourceModel READ sourceModel WRITE setSourceModel)
+    Q_PROPERTY(QAbstractItemModel *sourceModelTest READ sourceModel WRITE setSourceModel)
 
 public:
     explicit ProxyModel(QObject *parent = nullptr)
@@ -1038,6 +1101,120 @@ void tst_QQmlDelegateModel::recursiveDrain()
     QVERIFY(!o.isNull());
 
     QTRY_VERIFY(o->property("height").toDouble() < 4.0);
+}
+
+class ChangingModel : public QAbstractListModel
+{
+    Q_OBJECT
+    QML_ELEMENT
+public:
+    ChangingModel()
+    {
+        QTimer::singleShot(1, this, [this]{
+            value = "Bla";
+            Q_EMIT dataChanged(index(0), index(rowCount()-1), {Qt::UserRole});
+        });
+    }
+
+    int rowCount(const QModelIndex &parent = {}) const override
+    {
+        Q_UNUSED(parent);
+        return 1;
+    }
+
+    QVariant data(const QModelIndex &index, int role) const override
+    {
+        Q_UNUSED(index);
+        return role == Qt::UserRole ? QVariant::fromValue(value) : QVariant();
+    }
+
+    QHash<int, QByteArray> roleNames() const override
+    {
+        return {{Qt::UserRole, "theRole"}};
+    }
+
+private:
+    QString value = "Foo";
+};
+
+void tst_QQmlDelegateModel::deleteFromItemsChanged()
+{
+    static const bool initialized = []() {
+        qmlRegisterTypesAndRevisions<ChangingModel>("Test", 1);
+        return true;
+    }();
+    Q_UNUSED(initialized);
+
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("deleteFromItemsChanged.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+    std::unique_ptr<QObject> object(component.create());
+    QVERIFY(object);
+    QCOMPARE(object->objectName(), "Foo");
+    QTRY_COMPARE(object->objectName(), "Bla");
+}
+
+static QQmlDelegateModelItem *dataForObject(QObject *object)
+{
+    for (QQmlRefPointer<QQmlContextData> context = QQmlData::get(object)->context; context;
+            context = context->parent()) {
+        if (QObject *extraObject = context->extraObject())
+            return static_cast<QQmlDelegateModelItem *>(extraObject);
+        if (QObject *contextObject = context->contextObject())
+            return static_cast<QQmlDelegateModelItem *>(contextObject);
+    }
+    return nullptr;
+}
+
+void tst_QQmlDelegateModel::releaseWhileStrongRef()
+{
+    QQmlEngine engine;
+    QQmlComponent modelComponent(&engine);
+    modelComponent.setData("import QtQml.Models\nDelegateModel {}\n", QUrl());
+    QVERIFY2(modelComponent.isReady(), qPrintable(modelComponent.errorString()));
+
+    std::unique_ptr<QObject> o(modelComponent.create());
+    QQmlDelegateModel *delegateModel = qobject_cast<QQmlDelegateModel*>(o.get());
+    QVERIFY(delegateModel);
+
+    QQmlComponent delegateComponent(&engine);
+    delegateComponent.setData("import QtQml\nQtObject {}\n", QUrl());
+    QVERIFY2(delegateComponent.isReady(), qPrintable(delegateComponent.errorString()));
+    delegateModel->setDelegate(&delegateComponent);
+
+    const QStringList model({"item0", "item1", "item2"});
+    delegateModel->setModel(QVariant::fromValue(model));
+    QCOMPARE(delegateModel->count(), 3);
+
+    QObject *object = delegateModel->object(0, QQmlIncubator::Synchronous);
+    QVERIFY(object);
+
+    QQmlDelegateModelItem *delegateModelItem = dataForObject(object);
+    QVERIFY(delegateModelItem);
+    QCOMPARE(delegateModelItem->object(), object);
+
+    QCOMPARE(delegateModelItem->objectWeakRef(), 1);
+    QCOMPARE(delegateModelItem->objectStrongRef(), 0);
+
+    {
+        // Create a strong reference (simulates ObjectReference guard on stack)
+        QQmlDelegateModelItem::ObjectReference guard(delegateModelItem);
+        QCOMPARE(delegateModelItem->objectStrongRef(), 1);
+
+        // Try to release while strong reference exists. It mustn't crash here.
+        // We can't teach all possible views to avoid this situation.
+        QCOMPARE(delegateModel->release(object), QQmlDelegateModel::Referenced);
+
+        // Object should still be valid
+        QVERIFY(delegateModelItem->object());
+    }
+
+    // After guard is destroyed, strongRef=0
+    QCOMPARE(delegateModelItem->objectStrongRef(), 0);
+
+    // Now release should succeed
+    QCOMPARE(delegateModel->release(object), QQmlDelegateModel::Destroyed);
 }
 
 QTEST_MAIN(tst_QQmlDelegateModel)

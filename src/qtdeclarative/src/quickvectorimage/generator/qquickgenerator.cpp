@@ -41,17 +41,21 @@ QQuickVectorImageGenerator::GeneratorFlags QQuickGenerator::generatorFlags()
 
 bool QQuickGenerator::generate()
 {
+    m_errorState = QQuickVectorImageGenerator::NoError;
     QSvgVisitorImpl loader(m_fileName, this, m_flags.testFlag(QQuickVectorImageGenerator::AssumeTrustedSource));
-    return loader.traverse();
+    return loader.doTraversal();
 }
 
 void QQuickGenerator::optimizePaths(const PathNodeInfo &info, const QRectF &overrideBoundingRect)
 {
-    QPainterPath pathCopy = info.painterPath;
+    if (Q_UNLIKELY(errorState()))
+        return;
+
+    QPainterPath pathCopy = info.path.defaultValue().value<QPainterPath>();
     pathCopy.setFillRule(info.fillRule);
 
     const QRectF &boundingRect = overrideBoundingRect.isNull() ? pathCopy.boundingRect() : overrideBoundingRect;
-    if (m_flags.testFlag(QQuickVectorImageGenerator::GeneratorFlag::OptimizePaths)) {
+    if (m_flags.testFlag(QQuickVectorImageGenerator::GeneratorFlag::OptimizePaths) && !info.path.isAnimated()) {
         QQuadPath strokePath = QQuadPath::fromPainterPath(pathCopy);
         bool fillPathNeededClose;
         QQuadPath fillPath = strokePath.subPathsClosed(&fillPathNeededClose);
@@ -77,6 +81,13 @@ bool QQuickGenerator::isNodeVisible(const NodeInfo &info)
         return false;
 
     return true;
+}
+
+void QQuickGenerator::checkSanityLimit_helper(quint64 limit, QLatin1StringView limitObject)
+{
+    qCWarning(lcQuickVectorImage) << "QML generation of untrusted source" << m_fileName
+                                  << "failed: exceeded sanity limit of" << limit << limitObject;
+    m_errorState = QQuickVectorImageGenerator::SanityLimitsExceeded;
 }
 
 QT_END_NAMESPACE

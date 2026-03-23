@@ -38,6 +38,7 @@ namespace QSsl {
         Dsa,
         Ec,
         Dh,
+        MlDsa,
     };
     Q_ENUM_NS(KeyAlgorithm)
 

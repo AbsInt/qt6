@@ -337,7 +337,10 @@ public:
     enum StyleOptionType { Type = SO_MenuItem };
     enum StyleOptionVersion { Version = 1 };
 
-    enum MenuItemType { Normal, DefaultItem, Separator, SubMenu, Scroller, TearOff, Margin,
+    enum MenuItemType { Normal, DefaultItem, Separator, SubMenu, Scroller, TearOff,
+#if QT_DEPRECATED_SINCE(6, 11)
+                        Margin Q_DECL_ENUMERATOR_DEPRECATED_X("Not used anywhere"),
+#endif
                         EmptyArea };
     enum CheckType { NotCheckable, Exclusive, NonExclusive };
 
@@ -358,6 +361,23 @@ public:
 
 protected:
     QStyleOptionMenuItem(int version);
+};
+
+// ### Qt7: merge with QStyleOptionMenuItem
+class QStyleOptionMenuItemV2 : public QStyleOptionMenuItem
+{
+public:
+    enum StyleOptionVersion { Version = 2 };
+
+    QStyleOptionMenuItemV2() : QStyleOptionMenuItemV2(Version) {}
+    QStyleOptionMenuItemV2(const QStyleOptionMenuItemV2 &other) : QStyleOptionMenuItem(Version) { *this = other; }
+    QStyleOptionMenuItemV2 &operator=(const QStyleOptionMenuItemV2 &) = default;
+
+    bool mouseDown : 1;
+    Q_DECL_UNUSED_MEMBER
+    int unused : 31;
+protected:
+    Q_WIDGETS_EXPORT QStyleOptionMenuItemV2(int version);
 };
 
 class Q_WIDGETS_EXPORT QStyleOptionDockWidget : public QStyleOption

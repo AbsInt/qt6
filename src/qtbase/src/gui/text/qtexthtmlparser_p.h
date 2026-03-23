@@ -88,6 +88,7 @@ enum QTextHTMLElements {
     Html_dd,
     Html_u,
     Html_s,
+    Html_del,
     Html_nobr,
 
     // tables

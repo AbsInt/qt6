@@ -280,6 +280,10 @@ void tst_QQuickFontDialogImpl::clickAroundInTheFamilyListView()
         const QString expected2 = fontListModel[i],
                       actual2 = dialogHelper.dialog->selectedFont().family();
         QVERIFY2(expected2 == actual2, qPrintable(err.arg(expected2, actual2).append(", FONT ").append(fontDelegate->text())));
+
+        if (QSysInfo::productType() == "opensuse-leap" && QSysInfo::productVersion() == QLatin1String("16.0") && i == 5)
+            QEXPECT_FAIL("", "QTBUG-142384: opensuse-leap 16.0 fails with font Adwaita Mono (selectedFontSpyCount=2 and not 1)", Continue);
+
         const int selectedFontSpyCount = selectedFontSpy.size();
         QVERIFY2(selectedFontSpyCount == 1, qPrintable(err.arg(1).arg(selectedFontSpyCount).append(", FONT ").append(fontDelegate->text())));
         QVERIFY2((oldStyleModel == fontStyleListView->model()) != (styleModelSpy.size() == 1),
@@ -389,7 +393,12 @@ void tst_QQuickFontDialogImpl::changeDialogTitle()
     QQuickAbstractButton *cancelButton = findDialogButton(dialogButtonBox, "Cancel");
     QVERIFY(cancelButton);
 
-    const QQuickLabel *titleLabel = dialogHelper.quickDialog->header()->findChild<QQuickLabel *>();
+    const auto *header = dialogHelper.quickDialog->header();
+    const QQuickLabel *titleLabel = [header]() {
+        if (auto *label = qobject_cast<const QQuickLabel *>(header))
+            return label;
+        return header->findChild<const QQuickLabel *>();
+    }();
     QVERIFY(titleLabel);
 
     QCOMPARE(titleLabel->text(), QString());
@@ -489,7 +498,7 @@ void tst_QQuickFontDialogImpl::searchFamily()
     const QPoint familyEditCenterPos =
             familyEdit->mapToScene({ familyEdit->width() / 2, familyEdit->height() / 2 }).toPoint();
     QTest::mouseClick(dialogHelper.popupWindow(), Qt::LeftButton, Qt::NoModifier, familyEditCenterPos);
-    QVERIFY_ACTIVE_FOCUS(familyEdit);
+    QTRY_VERIFY_ACTIVE_FOCUS(familyEdit);
 
     QSignalSpy familyListViewCurrentIndexSpy(fontFamilyListView, SIGNAL(currentIndexChanged()));
     QVERIFY(familyListViewCurrentIndexSpy.isValid());

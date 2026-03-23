@@ -44,7 +44,7 @@
         \li \l{C++ Documentation Style}
         \li \l{QML Documentation Style}
         \endlist
-    \li \l{How to Resolve QDoc Warnings}
+    \li \l{Troubleshooting QDoc Warnings}
     \endlist
 
 */
@@ -164,7 +164,6 @@
     \badcode
         HTML.postheader
         HTML.postpostheader
-        HTML.postheader
         HTML.footer
 
         HTML.headerstyles
@@ -353,7 +352,7 @@
         \l{Topic Commands}{topic commands}.
 
         \li Give the topic a context - QDoc can associate certain topics to other
-        pages such as associating deprecated functions when the documentation is
+        pages such as associating deprecated elements when the documentation is
         marked with \l{deprecated-command}{\\deprecated}.
 
         \li Mark sections of the document with
@@ -394,7 +393,7 @@
     \page qdoc-categories.html
     \title Categories of Documentation
     \previouspage Writing Documentation
-    \nextpage How to Resolve QDoc Warnings
+    \nextpage Troubleshooting QDoc Warnings
     \brief Describes the different types of documentation pages.
 
     There are several types of predefined documentation \e categories or

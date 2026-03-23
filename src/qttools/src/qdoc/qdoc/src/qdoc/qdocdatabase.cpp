@@ -9,6 +9,7 @@
 #include "generator.h"
 #include "genustypes.h"
 #include "qdocindexfiles.h"
+#include "qmltypenode.h"
 #include "tree.h"
 
 #include <QtCore/qregularexpression.h>
@@ -269,9 +270,9 @@ void QDocForest::newPrimaryTree(const QString &module)
   title as a fallback if no higher-priority targets are found.
  */
 const Node *QDocForest::findNodeForTarget(QStringList &targetPath, const Node *relative,
-                                          Genus genus, QString &ref)
+                                          Genus genus, QString &ref, int findFlags)
 {
-    int flags = SearchBaseClasses | SearchEnumValues;
+    int flags = SearchBaseClasses | SearchEnumValues | findFlags;
 
     QString entity = targetPath.takeFirst();
     QStringList entityPath = entity.split("::");
@@ -635,13 +636,18 @@ void QDocDatabase::initializeDB()
   If the QML module id is empty, looks up the QML type by
   \a name only.
  */
-QmlTypeNode *QDocDatabase::findQmlType(const QString &qmid, const QString &name)
+QmlTypeNode *QDocDatabase::findQmlType(const QString &qmid, const QString &name, const Node *relative)
 {
     if (!qmid.isEmpty()) {
-        if (auto *qcn = m_forest.lookupQmlType(qmid + u"::"_s + name); qcn)
+        if (auto *qcn = m_forest.lookupQmlType(qmid + u"::"_s + name, relative); qcn)
             return qcn;
     }
 
+    // Try unqualified lookup first (uses context-aware disambiguation)
+    if (auto *qcn = m_forest.lookupQmlType(name, relative); qcn)
+        return qcn;
+
+    // Fallback to path-based search
     QStringList path(name);
     return static_cast<QmlTypeNode *>(m_forest.findNodeByNameAndType(path, &Node::isQmlType));
 }
@@ -651,7 +657,7 @@ QmlTypeNode *QDocDatabase::findQmlType(const QString &qmid, const QString &name)
   constructed from the strings in the import \a record and the
   QML type \a name. Returns \c nullptr if no type was not found.
  */
-QmlTypeNode *QDocDatabase::findQmlType(const ImportRec &record, const QString &name)
+QmlTypeNode *QDocDatabase::findQmlType(const ImportRec &record, const QString &name, const Node *relative)
 {
     if (record.isEmpty())
         return nullptr;
@@ -668,7 +674,7 @@ QmlTypeNode *QDocDatabase::findQmlType(const ImportRec &record, const QString &n
     }
 
     const QString qmName = record.m_importUri.isEmpty() ? record.m_moduleName : record.m_importUri;
-    return m_forest.lookupQmlType(qmName + u"::"_s + type);
+    return m_forest.lookupQmlType(qmName + u"::"_s + type, relative);
 }
 
 /*!
@@ -909,6 +915,7 @@ void QDocDatabase::resolveStuff()
         primaryTree()->markDontDocumentNodes();
         primaryTree()->removePrivateAndInternalBases(primaryTreeRoot());
         primaryTree()->resolveProperties();
+        primaryTree()->validatePropertyDocumentation(primaryTreeRoot());
         primaryTreeRoot()->markUndocumentedChildrenInternal();
         primaryTreeRoot()->resolveQmlInheritance();
         primaryTree()->resolveTargets(primaryTreeRoot());
@@ -937,6 +944,8 @@ void QDocDatabase::resolveBaseClasses()
     Tree *t = m_forest.firstTree();
     while (t) {
         t->resolveBaseClasses(t->root());
+        if (t != primaryTree())
+            t->root()->resolveQmlInheritance();
         t = m_forest.nextTree();
     }
 }
@@ -1119,6 +1128,46 @@ const FunctionNode *QDocDatabase::findFunctionNode(const QString &target, const 
  */
 const Node *QDocDatabase::findTypeNode(const QString &type, const Node *relative, Genus genus)
 {
+    // For QML contexts with qualified names containing ".", try import-aware lookup first
+    if ((genus == Genus::QML || (relative && relative->genus() == Genus::QML)) &&
+        type.contains('.') && !type.contains("::")) {
+        if (relative && relative->isQmlType()) {
+            const QmlTypeNode *qmlType = static_cast<const QmlTypeNode*>(relative);
+            const ImportList &imports = qmlType->importList();
+
+            for (const auto &import : imports) {
+                if (QmlTypeNode *found = findQmlType(import, type)) {
+                    return found;
+                }
+            }
+        }
+
+        // Fall back to regular path-based lookup for QML qualified names
+        QStringList path = type.split(".");
+        if ((path.size() == 1) && (path.at(0)[0].isLower() || path.at(0) == QString("T"))) {
+            auto it = s_typeNodeMap.find(path.at(0));
+            if (it != s_typeNodeMap.end())
+                return it.value();
+        }
+
+        // Try the full qualified path first
+        const Node *node = m_forest.findTypeNode(path, relative, genus);
+        if (node)
+            return node;
+
+        // If the full path fails and we have multiple segments, try just the last segment
+        // This handles cases like "TM.BaseType" where "TM" is an alias we can't resolve
+        // but "BaseType" might be findable as a QML type
+        if (path.size() > 1) {
+            const Node *lastSegmentNode = m_forest.findTypeNode(QStringList{path.last()}, relative, genus);
+            if (lastSegmentNode && lastSegmentNode->isQmlType())
+                return lastSegmentNode;
+        }
+
+        return nullptr;
+    }
+
+    // For C++ contexts or QML types with "::" notation, use C++ path splitting
     QStringList path = type.split("::");
     if ((path.size() == 1) && (path.at(0)[0].isLower() || path.at(0) == QString("T"))) {
         auto it = s_typeNodeMap.find(path.at(0));
@@ -1474,8 +1523,24 @@ const Node *QDocDatabase::findNodeForAtom(const Atom *a, const Node *relative, Q
             node = findNodeByNameAndType(QStringList(first), &Node::isPageNode);
         else if (first.endsWith(QChar(')')))
             node = findFunctionNode(first, relative, genus);
-        if (node == nullptr)
-            return findNodeForTarget(targetPath, relative, genus, ref);
+        if (node == nullptr) {
+            // For QML contexts with qualified names containing ".", use the same logic as findTypeNode
+            if (genus == Genus::QML && first.contains('.') && !first.contains("::")) {
+                // Try import-aware lookup using findTypeNode logic
+                node = findTypeNode(first, relative, genus);
+                if (node) {
+                    // Handle any fragment reference
+                    targetPath.removeFirst();
+                    if (!targetPath.isEmpty()) {
+                        ref = node->root()->tree()->getRef(targetPath.first(), node);
+                        if (ref.isEmpty())
+                            node = nullptr;
+                    }
+                    return node;
+                }
+            }
+            return findNodeForTarget(targetPath, relative, genus, ref, atom->flags());
+        }
     }
 
     if (node != nullptr && ref.isEmpty()) {
@@ -1695,8 +1760,10 @@ void QDocDatabase::updateNavigation()
                             // their nav. parent.
                             for (auto *m : members) {
                                 auto *page = static_cast<PageNode *>(m);
-                                prev.first->setLink(Node::NextLink, page->title(), page->fullName());
-                                page->setLink(Node::PreviousLink, prev.first->title(), prev.second);
+                                if (prev.first) {
+                                    prev.first->setLink(Node::NextLink, page->title(), page->fullName());
+                                    page->setLink(Node::PreviousLink, prev.first->title(), prev.second);
+                                }
                                 prev = { page, page->fullName() };
                             }
                         }

@@ -90,8 +90,12 @@
     \l{VectorImage}, but instead of building it at run-time, it creates a \c{QML} file which can
     be included in the application project.
 
-    In this example, the \c{heart.svg} file has been pre-converted to a file called \c{Heart.qml}.
-    This can be instantiated in the scene as any other Qt Quick item.
+    In this example, the \c{heart.svg} file is converted to \c{Heart.qml} automatically during
+    the build.
+
+    \snippet vectorimage/CMakeLists.txt svgtoqml
+
+    This component can be instantiated in the scene like any other Qt Quick item.
 
     \snippet vectorimage/Main.qml svgtoqml
 

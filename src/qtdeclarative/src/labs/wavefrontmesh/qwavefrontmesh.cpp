@@ -37,9 +37,9 @@ public:
         return mesh->d_func();
     }
 
-    QVector<std::pair<ushort, ushort> > indexes;
-    QVector<QVector3D> vertexes;
-    QVector<QVector2D> textureCoordinates;
+    QList<std::pair<ushort, ushort> > indexes;
+    QList<QVector3D> vertexes;
+    QList<QVector2D> textureCoordinates;
 
     QUrl source;
     QWavefrontMesh::Error lastError;
@@ -94,6 +94,7 @@ public:
     \table
     \row
     \li \image qtlabs-wavefrontmesh.png
+              {Torus shape with gradient texture coordinates}
     \li \qml
         import QtQuick 2.\1
         import Qt.labs.wavefrontmesh 1.\1

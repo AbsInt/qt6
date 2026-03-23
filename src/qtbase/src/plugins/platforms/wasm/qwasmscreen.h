@@ -23,7 +23,6 @@ class QPlatformOpenGLContext;
 class QWasmWindow;
 class QWasmBackingStore;
 class QWasmCompositor;
-class QWasmDeadKeySupport;
 class QOpenGLContext;
 
 class QWasmScreen : public QObject, public QPlatformScreen, public QWasmWindowTreeNode<>
@@ -42,7 +41,6 @@ public:
     QPointingDevice *tabletDevice() { return m_tabletDevice.get(); }
 
     QWasmCompositor *compositor();
-    QWasmDeadKeySupport *deadKeySupport() { return m_deadKeySupport.get(); }
 
     QList<QWasmWindow *> allWindows() const;
 
@@ -84,7 +82,6 @@ private:
     std::unique_ptr<QWasmCompositor> m_compositor;
     std::unique_ptr<QPointingDevice> m_touchDevice;
     std::unique_ptr<QPointingDevice> m_tabletDevice;
-    std::unique_ptr<QWasmDeadKeySupport> m_deadKeySupport;
     QRect m_geometry = QRect(0, 0, 100, 100);
     int m_depth = 32;
     QImage::Format m_format = QImage::Format_RGB32;

@@ -959,54 +959,22 @@ QPoint QAccessibleTextWidget::scrollBarPosition() const
 QString QAccessibleTextWidget::textBeforeOffset(int offset, QAccessible::TextBoundaryType boundaryType,
                                                 int *startOffset, int *endOffset) const
 {
-    Q_ASSERT(startOffset);
-    Q_ASSERT(endOffset);
-
-    QTextCursor cursor = textCursor();
-    cursor.setPosition(offset);
-    std::pair<int, int> boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
-    cursor.setPosition(boundaries.first - 1);
-    boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
-
-    *startOffset = boundaries.first;
-    *endOffset = boundaries.second;
-
-    return text(boundaries.first, boundaries.second);
- }
-
+    return qt_accTextBeforeOffsetHelper(*this, textCursor(), offset, boundaryType, startOffset,
+                                        endOffset);
+}
 
 QString QAccessibleTextWidget::textAfterOffset(int offset, QAccessible::TextBoundaryType boundaryType,
                                               int *startOffset, int *endOffset) const
 {
-    Q_ASSERT(startOffset);
-    Q_ASSERT(endOffset);
-
-    QTextCursor cursor = textCursor();
-    cursor.setPosition(offset);
-    std::pair<int, int> boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
-    cursor.setPosition(boundaries.second);
-    boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
-
-    *startOffset = boundaries.first;
-    *endOffset = boundaries.second;
-
-    return text(boundaries.first, boundaries.second);
+    return qt_accTextAfterOffsetHelper(*this, textCursor(), offset, boundaryType, startOffset,
+                                       endOffset);
 }
 
 QString QAccessibleTextWidget::textAtOffset(int offset, QAccessible::TextBoundaryType boundaryType,
                                             int *startOffset, int *endOffset) const
 {
-    Q_ASSERT(startOffset);
-    Q_ASSERT(endOffset);
-
-    QTextCursor cursor = textCursor();
-    cursor.setPosition(offset);
-    std::pair<int, int> boundaries = QAccessible::qAccessibleTextBoundaryHelper(cursor, boundaryType);
-
-    *startOffset = boundaries.first;
-    *endOffset = boundaries.second;
-
-    return text(boundaries.first, boundaries.second);
+    return qt_accTextAtOffsetHelper(*this, textCursor(), offset, boundaryType, startOffset,
+                                    endOffset);
 }
 
 void QAccessibleTextWidget::setCursorPosition(int position)

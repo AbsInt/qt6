@@ -10,6 +10,7 @@ const QString QV4DebugService::s_key = QStringLiteral("V8Debugger");
 const QString QQmlEngineDebugService::s_key = QStringLiteral("QmlDebugger");
 const QString QQmlInspectorService::s_key = QStringLiteral("QmlInspector");
 const QString QQmlProfilerService::s_key = QStringLiteral("CanvasFrameRate");
+const QString QQuickEventReplayService::s_key = QStringLiteral("EventReplay");
 const QString QDebugMessageService::s_key = QStringLiteral("DebugMessages");
 const QString QQmlEngineControlService::s_key = QStringLiteral("EngineControl");
 const QString QQmlNativeDebugService::s_key = QStringLiteral("NativeQmlDebugger");
@@ -24,6 +25,8 @@ QQmlEngineDebugService::~QQmlEngineDebugService()
 QQmlInspectorService::~QQmlInspectorService()
     = default;
 QQmlProfilerService::~QQmlProfilerService()
+    = default;
+QQuickEventReplayService::~QQuickEventReplayService()
     = default;
 QDebugMessageService::~QDebugMessageService()
     = default;

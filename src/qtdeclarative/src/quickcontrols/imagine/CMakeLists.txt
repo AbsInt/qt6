@@ -16,6 +16,7 @@ set(qml_files
     "Dial.qml"
     "Dialog.qml"
     "DialogButtonBox.qml"
+    "DoubleSpinBox.qml"
     "Drawer.qml"
     "Frame.qml"
     "GroupBox.qml"
@@ -92,6 +93,12 @@ set_source_files_properties(VerticalHeaderView.qml PROPERTIES
 )
 set_source_files_properties(VerticalHeaderViewDelegate.qml PROPERTIES
     QT_QML_SOURCE_VERSIONS "6.10"
+)
+set_source_files_properties(SearchField.qml PROPERTIES
+    QT_QML_SOURCE_VERSIONS "6.10"
+)
+set_source_files_properties(DoubleSpinBox.qml PROPERTIES
+    QT_QML_SOURCE_VERSIONS "6.11"
 )
 
 add_subdirectory(impl)

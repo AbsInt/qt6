@@ -19,7 +19,7 @@ set_source_files_properties(
 
 qt_add_qml_module(tst_deltablue
     URI DeltaBlue
-    VERSION 1.0
+    RESOURCE_PREFIX "/"
     QML_FILES
         BaseConstraint.qml
         ChainTest.qml

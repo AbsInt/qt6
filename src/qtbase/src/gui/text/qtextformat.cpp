@@ -9,6 +9,7 @@
 #include <qdebug.h>
 #include <qmap.h>
 #include <qhashfunctions.h>
+#include <private/qfont_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -388,6 +389,20 @@ void QTextFormatPrivate::recalcFont() const
             case QTextFormat::FontKerning:
                 f.setKerning(props.at(i).value.toBool());
                 break;
+            case QTextFormat::FontFeatures:
+            {
+                const auto fontFeatures = props.at(i).value.value<QMap<QFont::Tag, quint32>>();
+                for (auto it = fontFeatures.constBegin(); it != fontFeatures.constEnd(); ++it)
+                    f.setFeature(it.key(), it.value());
+                break;
+            }
+            case QTextFormat::FontVariableAxes:
+            {
+                const auto fontVariableAxes = props.at(i).value.value<QMap<QFont::Tag, float>>();
+                for (auto it = fontVariableAxes.constBegin(); it != fontVariableAxes.constEnd(); ++it)
+                    f.setVariableAxis(it.key(), it.value());
+                break;
+            }
             default:
                 break;
             }
@@ -404,6 +419,16 @@ void QTextFormatPrivate::recalcFont() const
 Q_GUI_EXPORT QDataStream &operator<<(QDataStream &stream, const QTextFormat &fmt)
 {
     QMap<int, QVariant> properties = fmt.properties();
+    if (stream.version() < QDataStream::Qt_6_11) {
+        auto it = properties.constFind(QTextFormat::FontFeatures);
+        if (it != properties.cend())
+            properties.erase(it);
+
+        it = properties.constFind(QTextFormat::FontVariableAxes);
+        if (it != properties.cend())
+            properties.erase(it);
+    }
+
     if (stream.version() < QDataStream::Qt_6_0) {
         auto it = properties.constFind(QTextFormat::FontLetterSpacingType);
         if (it != properties.cend()) {
@@ -447,14 +472,17 @@ Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextFormat &fmt)
     for (QMap<qint32, QVariant>::ConstIterator it = properties.constBegin();
          it != properties.constEnd(); ++it) {
         qint32 key = it.key();
-        if (key == QTextFormat::OldFontLetterSpacingType)
-            key = QTextFormat::FontLetterSpacingType;
-        else if (key == QTextFormat::OldFontStretch)
-            key = QTextFormat::FontStretch;
-        else if (key == QTextFormat::OldTextUnderlineColor)
-            key = QTextFormat::TextUnderlineColor;
-        else if (key == QTextFormat::OldFontFamily)
-            key = QTextFormat::FontFamilies;
+
+        if (stream.version() < QDataStream::Qt_6_0) {
+            if (key == QTextFormat::OldFontLetterSpacingType)
+                key = QTextFormat::FontLetterSpacingType;
+            else if (key == QTextFormat::OldFontStretch)
+                key = QTextFormat::FontStretch;
+            else if (key == QTextFormat::OldTextUnderlineColor)
+                key = QTextFormat::TextUnderlineColor;
+            else if (key == QTextFormat::OldFontFamily)
+                key = QTextFormat::FontFamilies;
+        }
         fmt.d->insertProperty(key, it.value());
     }
 
@@ -653,6 +681,10 @@ Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextTableCellFormat &
     \value FontKerning          Specifies whether the font has kerning turned on.
     \value FontHintingPreference Controls the use of hinting according to values
                                  of the QFont::HintingPreference enum.
+    \value FontFeatures [since 6.11] Assigns integer numbers to typographical features. See
+           \l{QFont::setFeature()} for additional information.
+    \value FontVariableAxes [since 6.11] Assigns floating point numbers to variable axes in variable
+           fonts. See \l{QFont::setVariableAxis()} for additional information.
 
     \omitvalue FirstFontProperty
     \omitvalue LastFontProperty
@@ -1810,6 +1842,55 @@ void QTextCharFormat::setUnderlineStyle(UnderlineStyle style)
 */
 
 /*!
+    \since 6.11
+
+    Sets the typographical features of the text format's font to be \a fontFeatures.
+
+    \sa QFont::setFeature()
+*/
+void QTextCharFormat::setFontFeatures(const QMap<QFont::Tag, quint32> &fontFeatures)
+{
+    setProperty(FontFeatures, QVariant::fromValue(fontFeatures));
+}
+
+/*!
+    \since 6.11
+
+    Gets the typographical features of the text format's font.
+
+    \sa setFontFeatures()
+*/
+QMap<QFont::Tag, quint32> QTextCharFormat::fontFeatures() const
+{
+    return property(FontFeatures).value<QMap<QFont::Tag, quint32>>();
+}
+
+/*!
+    \since 6.11
+
+    Sets the variable axes of the text format's font to be \a fontVariableAxes.
+
+    \sa QFont::setVariableAxis()
+*/
+void QTextCharFormat::setFontVariableAxes(const QMap<QFont::Tag, float> &fontVariableAxes)
+{
+    setProperty(FontVariableAxes, QVariant::fromValue(fontVariableAxes));
+}
+
+/*!
+    \since 6.11
+
+    Gets the variable axes of the text format's font.
+
+    \sa setFontVariableAxes()
+*/
+QMap<QFont::Tag, float> QTextCharFormat::fontVariableAxes() const
+{
+    return property(FontVariableAxes).value<QMap<QFont::Tag, float>>();
+}
+
+
+/*!
     \fn QPen QTextCharFormat::textOutline() const
 
     Returns the pen used to draw the outlines of characters in this format.
@@ -2145,6 +2226,15 @@ void QTextCharFormat::setFont(const QFont &font, FontPropertiesInheritanceBehavi
         setFontHintingPreference(font.hintingPreference());
     if (mask & QFont::KerningResolved)
         setFontKerning(font.kerning());
+
+    if (mask & QFont::FeaturesResolved) {
+        QFontPrivate *fd = QFontPrivate::get(font);
+        setFontFeatures(fd->features);
+    }
+    if (mask & QFont::VariableAxesResolved) {
+        QFontPrivate *fd = QFontPrivate::get(font);
+        setFontVariableAxes(fd->request.variableAxisValues);
+    }
 }
 
 /*!

@@ -39,8 +39,6 @@ qt_internal_extend_target(QmlModels CONDITION QT_FEATURE_qml_itemmodel
 
 qt_internal_extend_target(QmlModels CONDITION QT_FEATURE_qml_object_model
     SOURCES
-        qqmlinstantiator.cpp qqmlinstantiator_p.h
-        qqmlinstantiator_p_p.h
         qqmlobjectmodel.cpp qqmlobjectmodel_p.h
 )
 
@@ -68,6 +66,7 @@ qt_internal_extend_target(QmlModels CONDITION QT_FEATURE_qml_delegate_model
         qqmldmabstractitemmodeldata.cpp qqmldmabstractitemmodeldata_p.h
         qqmldmlistaccessordata.cpp qqmldmlistaccessordata_p.h
         qqmldmobjectdata.cpp qqmldmobjectdata_p.h
+        qqmlinstantiator.cpp qqmlinstantiator_p.h qqmlinstantiator_p_p.h
         qqmllistaccessor.cpp qqmllistaccessor_p.h
         qqmllistcompositor.cpp qqmllistcompositor_p.h
         qquickpackage.cpp qquickpackage_p.h

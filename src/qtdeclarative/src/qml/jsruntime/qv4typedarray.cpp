@@ -716,7 +716,7 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_every(const FunctionObject *b
 
     ScopedValue that(scope, argc > 1 ? argv[1] : Value::undefinedValue());
     ScopedValue r(scope);
-    Value *arguments = scope.alloc(3);
+    Value *arguments = scope.constructUndefined(3);
 
     const char *data = v->constArrayData();
     uint bytesPerElement = v->bytesPerElement();
@@ -798,7 +798,7 @@ static TypedArray *typedArraySpeciesCreate(Scope &scope, const TypedArray *insta
         return nullptr;
     }
 
-    Value *arguments = scope.alloc(1);
+    Value *arguments = scope.constructUndefined(1);
     arguments[0] = Encode(len);
     Scoped<TypedArray> a(scope, constructor->callAsConstructor(arguments, 1));
     if (!a || a->hasDetachedArrayData() || a->length() < len) {
@@ -823,7 +823,7 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_filter(const FunctionObject *
 
     ScopedValue selected(scope);
     ScopedValue that(scope, argc > 1 ? argv[1] : Value::undefinedValue());
-    Value *arguments = scope.alloc(3);
+    Value *arguments = scope.constructUndefined(3);
     Value *list = arguments;
 
     uint to = 0;
@@ -841,7 +841,7 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_filter(const FunctionObject *
         CHECK_EXCEPTION();
         if (selected->toBoolean()) {
             ++arguments;
-            scope.alloc(1);
+            scope.constructUndefined(1);
             ++to;
         }
     }
@@ -870,7 +870,7 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_find(const FunctionObject *b,
     const FunctionObject *callback = static_cast<const FunctionObject *>(argv);
 
     ScopedValue result(scope);
-    Value *arguments = scope.alloc(3);
+    Value *arguments = scope.constructUndefined(3);
 
     ScopedValue that(scope, argc > 1 ? argv[1] : Value::undefinedValue());
 
@@ -906,7 +906,7 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_findIndex(const FunctionObjec
     const FunctionObject *callback = static_cast<const FunctionObject *>(argv);
 
     ScopedValue result(scope);
-    Value *arguments = scope.alloc(3);
+    Value *arguments = scope.constructUndefined(3);
 
     ScopedValue that(scope, argc > 1 ? argv[1] : Value::undefinedValue());
 
@@ -942,7 +942,7 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_forEach(const FunctionObject 
     const FunctionObject *callback = static_cast<const FunctionObject *>(argv);
 
     ScopedValue that(scope, argc > 1 ? argv[1] : Value::undefinedValue());
-    Value *arguments = scope.alloc(3);
+    Value *arguments = scope.constructUndefined(3);
 
     for (uint k = 0; k < len; ++k) {
         if (v->hasDetachedArrayData())
@@ -1161,7 +1161,7 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_map(const FunctionObject *b, 
     ScopedValue v(scope);
     ScopedValue mapped(scope);
     ScopedValue that(scope, argc > 1 ? argv[1] : Value::undefinedValue());
-    Value *arguments = scope.alloc(3);
+    Value *arguments = scope.constructUndefined(3);
 
     for (uint k = 0; k < len; ++k) {
         if (instance->hasDetachedArrayData())
@@ -1208,7 +1208,7 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_reduce(const FunctionObject *
             THROW_TYPE_ERROR();
     }
 
-    Value *arguments = scope.alloc(4);
+    Value *arguments = scope.constructUndefined(4);
 
     while (k < len) {
         if (instance->hasDetachedArrayData())
@@ -1264,7 +1264,7 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_reduceRight(const FunctionObj
             THROW_TYPE_ERROR();
     }
 
-    Value *arguments = scope.alloc(4);
+    Value *arguments = scope.constructUndefined(4);
 
     while (k > 0) {
         if (instance->hasDetachedArrayData())
@@ -1326,7 +1326,7 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_some(const FunctionObject *b,
 
     ScopedValue that(scope, argc > 1 ? argv[1] : Value::undefinedValue());
     ScopedValue result(scope);
-    Value *arguments = scope.alloc(3);
+    Value *arguments = scope.constructUndefined(3);
 
     for (uint k = 0; k < len; ++k) {
         if (instance->hasDetachedArrayData())
@@ -1538,7 +1538,7 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_subarray(const FunctionObject
     if (!constructor)
         return scope.engine->throwTypeError();
 
-    Value *arguments = scope.alloc(3);
+    Value *arguments = scope.constructUndefined(3);
     arguments[0] = buffer;
     arguments[1] = Encode(a->byteOffset() + begin * a->bytesPerElement());
     arguments[2] = Encode(newLen);
@@ -1652,7 +1652,7 @@ ReturnedValue IntrinsicTypedArrayCtor::method_from(const FunctionObject *f, cons
         mapfn = ScopedFunctionObject(scope, argv[1]);
         if (!mapfn)
             return scope.engine->throwTypeError(QString::fromLatin1("%1 is not a function").arg(argv[1].toQStringNoThrow()));
-        mapArguments = scope.alloc(2);
+        mapArguments = scope.constructUndefined(2);
     }
 
     // Iterator validity check goes after map function validity has been checked.
@@ -1679,7 +1679,7 @@ ReturnedValue IntrinsicTypedArrayCtor::method_from(const FunctionObject *f, cons
         CHECK_EXCEPTION();
 
         qint64 iterableLength = 0;
-        Value *nextValue = scope.alloc(1);
+        Value *nextValue = scope.constructUndefined(1);
         ScopedValue done(scope);
 
         ScopedObject lengthIterator(scope, Runtime::GetIterator::call(scope.engine, itemsObject, true));

@@ -10,12 +10,39 @@
 # - Or remove the <builddir>/CMakeCache.txt file and configure from scratch
 # - Or remove the QT_INTERNAL_PREVIOUSLY_FOUND_PACKAGES cache variable (by
 #   editing CMakeCache.txt) and reconfigure.
+#
+# It's possible to annotate the qt_find_package with information on how to
+# generate a vcpkg manifest to satisfy this qt_find_package call.
+#
+#   VCPKG_PORT <name>
+#     Name of the vcpkg port (package) to install.
+#
+#   VCPKG_PLATFORM <expression>
+#     vcpkg platform expression, e.g. "!windows".
+#     See https://learn.microsoft.com/en-us/vcpkg/reference/vcpkg-json#platform-expression
+#
+#   VCPKG_VERSION <version>
+#     The minimum version of the vcpkg port to install
+#     See https://learn.microsoft.com/en-us/vcpkg/reference/vcpkg-json#version
+#
+#   VCPKG_ADD_TO_FEATURE <name>
+#     Add this port to the vcpkg feature with the given name. Create the feature if non-existent.
+#
+#   VCPKG_DEFAULT_FEATURES <ON/OFF>
+#     ON by default. Set this to OFF to avoid that the vcpkg feature is added to
+#     vcpkg.json's default features. Only useful if VCPKG_ADD_TO_FEATURE is set.
 macro(qt_find_package)
     # Get the target names we expect to be provided by the package.
     set(find_package_options CONFIG NO_MODULE MODULE REQUIRED)
     set(options ${find_package_options} MARK_OPTIONAL)
-    set(oneValueArgs MODULE_NAME QMAKE_LIB)
-    set(multiValueArgs PROVIDED_TARGETS COMPONENTS OPTIONAL_COMPONENTS)
+    set(oneValueArgs MODULE_NAME QMAKE_LIB
+        VCPKG_ADD_TO_FEATURE
+        VCPKG_DEFAULT_FEATURES
+        VCPKG_PLATFORM
+        VCPKG_PORT
+        VCPKG_VERSION
+    )
+    set(multiValueArgs PROVIDED_TARGETS COMPONENTS OPTIONAL_COMPONENTS VCPKG_FEATURES)
     cmake_parse_arguments(arg "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     # If some Qt internal project calls qt_find_package(WrapFreeType), but WrapFreeType was already
@@ -406,13 +433,13 @@ function(qt_record_extra_main_tools_package_dependency
     endif()
     if (TARGET "${main_target_name}")
         get_target_property(extra_packages "${main_target_name}"
-                            QT_EXTRA_TOOLS_PACKAGE_DEPENDENCIES)
+                            _qt_extra_tools_package_dependencies)
         if(NOT extra_packages)
             set(extra_packages "")
         endif()
 
         list(APPEND extra_packages "${dep_package_name}\;${dep_package_version}")
-        set_target_properties("${main_target_name}" PROPERTIES QT_EXTRA_TOOLS_PACKAGE_DEPENDENCIES
+        set_target_properties("${main_target_name}" PROPERTIES _qt_extra_tools_package_dependencies
                                                                "${extra_packages}")
     endif()
 endfunction()
@@ -455,6 +482,52 @@ function(qt_record_extra_third_party_dependency main_target_name dep_target)
         set_target_properties("${main_target_name}" PROPERTIES _qt_extra_third_party_dep_targets
                                                                "${extra_deps}")
     endif()
+endfunction()
+
+# Record a third party dependency for a standalone tools package.
+#
+# This function records a dependency between the standalone pacakge PACKAGE_BASE_NAME and third
+# party dependency DEPENDENCY_PACKAGE_NAME and DEPENDENCY_PACKAGE_VERSION
+# at the CMake package level.
+#
+# E.g. A Qt6GarageTools package with the PACKAGE_BASE_NAME 'Garage',
+# needs to call find_package(ZLIB 1.2) (non-qt-package).
+function(qt_internal_record_tools_package_extra_third_party_dependency)
+    set(opt_args "")
+    set(single_args
+        PACKAGE_BASE_NAME
+    )
+    set(multi_args
+        DEPENDENCY_PACKAGE_NAME
+        DEPENDENCY_PACKAGE_VERSION
+    )
+    cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    if(NOT arg_PACKAGE_BASE_NAME)
+        message(FATAL_ERROR "PACKAGE_BASE_NAME is required.")
+    endif()
+    set(id "${arg_PACKAGE_BASE_NAME}")
+
+    if(NOT arg_DEPENDENCY_PACKAGE_NAME)
+        message(FATAL_ERROR "DEPENDENCY_PACKAGE_NAME is required.")
+    endif()
+    set(dep_package_name "${arg_DEPENDENCY_PACKAGE_NAME}")
+
+    if(arg_DEPENDENCY_PACKAGE_VERSION)
+        set(dep_package_version "${arg_DEPENDENCY_PACKAGE_VERSION}")
+    else()
+        set(dep_package_version "")
+    endif()
+
+    get_cmake_property(extra_deps _qt_standalone_tool_package_${id}_third_party_dependencies)
+    if(NOT extra_deps)
+        set(extra_deps "")
+    endif()
+
+    list(APPEND extra_deps "${dep_package_name}\;${dep_package_version}")
+    set_property(GLOBAL PROPERTY _qt_standalone_tool_package_${id}_third_party_dependencies
+        "${extra_deps}")
 endfunction()
 
 # Sets out_var to TRUE if the non-namespaced ${lib} target is exported as part of Qt6Targets.cmake.

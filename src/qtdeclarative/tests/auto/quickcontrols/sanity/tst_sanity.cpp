@@ -55,7 +55,7 @@ tst_Sanity::tst_Sanity()
     : QQmlDataTest(QT_QMLTEST_DATADIR, FailOnWarningsPolicy::DoNotFailOnWarnings),
       m_importPaths({ QLibraryInfo::path(QLibraryInfo::QmlImportsPath) }),
       m_linter(m_importPaths, m_importPaths),
-      m_categories(QQmlJSLogger::defaultCategories())
+      m_categories(QQmlJSLogger::builtinCategories())
 {
     // We do not care about any warnings that aren't explicitly created by controls-sanity.
     // Mainly because a lot of false positives are generated because we are linting files from
@@ -102,7 +102,7 @@ void tst_Sanity::initTestCase()
     }
 
     // Then, collect the files from each installed style directory.
-    const QVector<std::pair<QString, QString>> styleRelativePaths = {
+    const QList<std::pair<QString, QString>> styleRelativePaths = {
         { "basic", "QtQuick/Controls/Basic" },
         { "fusion", "QtQuick/Controls/Fusion" },
         { "material", "QtQuick/Controls/Material" },

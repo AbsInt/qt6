@@ -74,11 +74,6 @@ public:
 
     int defaultDPI() const;
 
-    static QString classNamePrefix();
-    QString registerWindowClass(const QWindow *w);
-    QString registerWindowClass(QString cname, WNDPROC proc,
-                                unsigned style = 0, HBRUSH brush = nullptr,
-                                bool icon = false);
     HWND createDummyWindow(const QString &classNameIn,
                            const wchar_t *windowName,
                            WNDPROC wndProc = nullptr, DWORD style = WS_OVERLAPPED);
@@ -163,7 +158,6 @@ private:
     bool handleContextMenuEvent(QWindow *window, const MSG &msg);
 #endif
     void handleExitSizeMove(QWindow *window);
-    void unregisterWindowClasses();
 
     QScopedPointer<QWindowsContextPrivate> d;
     static QWindowsContext *m_instance;

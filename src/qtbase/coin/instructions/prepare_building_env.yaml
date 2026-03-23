@@ -7,6 +7,38 @@ instructions:
   - type: EnvironmentVariable
     variableName: CMAKE_GENERATOR
     variableValue: Ninja
+  - type: Group
+    instructions:
+      - type: AppendToEnvironmentVariable
+        variableName: COMMON_CMAKE_ARGS
+        variableValue: " -DCMAKE_MAKE_PROGRAM={{.Env.NINJA_EXECUTABLE}}"
+      - type: AppendToEnvironmentVariable
+        variableName: COMMON_NON_QTBASE_CMAKE_ARGS
+        variableValue: " -DCMAKE_MAKE_PROGRAM={{.Env.NINJA_EXECUTABLE}}"
+      - type: AppendToEnvironmentVariable
+        variableName: COMMON_TEST_CMAKE_ARGS
+        variableValue: " -DCMAKE_MAKE_PROGRAM={{.Env.NINJA_EXECUTABLE}}"
+        disable_if:
+          condition: property
+          property: target.osVersion
+          in_values: [IOS_ANY]
+      - type: AppendToEnvironmentVariable
+        variableName: COMMON_TARGET_CMAKE_ARGS
+        variableValue: " -DCMAKE_MAKE_PROGRAM={{.Env.NINJA_EXECUTABLE}}"
+      - type: AppendToEnvironmentVariable
+        variableName: COMMON_NON_QTBASE_TARGET_CMAKE_ARGS
+        variableValue: " -DCMAKE_MAKE_PROGRAM={{.Env.NINJA_EXECUTABLE}}"
+      - type: AppendToEnvironmentVariable
+        variableName: COMMON_TARGET_TEST_CMAKE_ARGS
+        variableValue: " -DCMAKE_MAKE_PROGRAM={{.Env.NINJA_EXECUTABLE}}"
+        disable_if:
+          condition: property
+          property: target.osVersion
+          in_values: [IOS_ANY]
+    enable_if:
+      condition: runtime
+      env_var: NINJA_EXECUTABLE
+      not_equals_value: null
 
   # Set path separator based on host platform.
   # \ on Windows (double \\ for escaping the backslash)
@@ -50,6 +82,25 @@ instructions:
       property: host.compiler
       equals_value: ICC_18
 
+  # Test network integrity on Linux
+  - type: ExecuteCommand
+    command: [ "sh", "-c", "if [ -f /opt/CiNetworkTest/bin/CiNetworkTest ]; then LD_LIBRARY_PATH=/opt/icu/lib64 /opt/CiNetworkTest/bin/CiNetworkTest -d 2; fi " ]
+    resetOnFailure: true
+    userMessageOnFailure: "VM Network inconsistent"
+    enable_if:
+      condition: property
+      property: host.os
+      equals_value: Linux
+
+  # Test network integrity on Windows
+  - type: ExecuteCommand
+    command: [ "cmd", "/k", "if exist %ProgramFiles%\\CiNetworkTest.exe call %ProgramFiles%\\CiNetworkTest.exe -d 2" ]
+    resetOnFailure: true
+    userMessageOnFailure: "VM Network inconsistent"
+    enable_if:
+      condition: property
+      property: host.os
+      equals_value: Windows
 
   # Set CMAKE_C[XX]_COMPILER otherwise cmake may prioritize a wrong compiler
   - type: Group
@@ -442,15 +493,16 @@ instructions:
           property: host.os
           contains_value: Windows
 
-  # Enable warnings are errors
+  # Enable warnings are errors, including qml linting warnings for examples that should not regress
+  # in qmllint warnings
   - type: Group
     instructions:
       - type: AppendToEnvironmentVariable
         variableName: COMMON_CMAKE_ARGS
-        variableValue: " -DWARNINGS_ARE_ERRORS=ON"
+        variableValue: " -DWARNINGS_ARE_ERRORS=ON -DQT_LINT_EXAMPLES=ON"
       - type: AppendToEnvironmentVariable
         variableName: COMMON_TARGET_CMAKE_ARGS
-        variableValue: " -DWARNINGS_ARE_ERRORS=ON"
+        variableValue: " -DWARNINGS_ARE_ERRORS=ON -DQT_LINT_EXAMPLES=ON"
     enable_if:
       condition: property
       property: features
@@ -558,7 +610,7 @@ instructions:
   - type: EnvironmentVariable
     variableName: SBOM_PYTHON_ARGS
     variableValue: >-
-      -DQT_SBOM_PYTHON_INTERP={{.Env.PYTHON3_PATH}}
+      -DQT_SBOM_PYTHON_INTERP={{.Env.SBOM_PYTHON_INTERP_PATH}}
       -DQT_SBOM_PYTHON_APPS_PATH={{.Env.SBOM_PYTHON_APPS_PATH}}
   - type: AppendToEnvironmentVariable
     variableName: COMMON_CMAKE_ARGS
@@ -702,6 +754,29 @@ instructions:
           property: host.compiler
           contains_value: MSVC
 
+  # VCPKG
+  - type: Group
+    instructions:
+    - type: AppendToEnvironmentVariable
+      variableName: COMMON_NON_QTBASE_CMAKE_ARGS
+      variableValue: " -DQT_USE_VCPKG=ON -DVCPKG_INSTALLED_DIR={{.Env.VCPKG_INSTALLED_DIR}} -DVCPKG_HOST_TRIPLET={{.Env.VCPKG_HOST_TRIPLET}} -DVCPKG_TARGET_TRIPLET={{.Env.VCPKG_TARGET_TRIPLET}}"
+    - type: AppendToEnvironmentVariable
+      variableName: COMMON_TEST_CMAKE_ARGS
+      variableValue: " -DQT_USE_VCPKG=ON -DVCPKG_INSTALLED_DIR={{.Env.VCPKG_INSTALLED_DIR}} -DVCPKG_HOST_TRIPLET={{.Env.VCPKG_HOST_TRIPLET}} -DVCPKG_TARGET_TRIPLET={{.Env.VCPKG_TARGET_TRIPLET}}"
+    - type: AppendToEnvironmentVariable
+      variableName: COMMON_EXAMPLES_CMAKE_ARGS
+      variableValue: " -DQT_USE_VCPKG=ON -DVCPKG_INSTALLED_DIR={{.Env.VCPKG_INSTALLED_DIR}} -DVCPKG_HOST_TRIPLET={{.Env.VCPKG_HOST_TRIPLET}} -DVCPKG_TARGET_TRIPLET={{.Env.VCPKG_TARGET_TRIPLET}}"
+    - type: AppendToEnvironmentVariable
+      variableName: COMMON_NON_QTBASE_TARGET_CMAKE_ARGS
+      variableValue: " -DQT_USE_VCPKG=ON -DVCPKG_INSTALLED_DIR={{.Env.VCPKG_INSTALLED_DIR}} -DVCPKG_HOST_TRIPLET={{.Env.VCPKG_HOST_TRIPLET}} -DVCPKG_TARGET_TRIPLET={{.Env.VCPKG_TARGET_TRIPLET}}"
+    - type: AppendToEnvironmentVariable
+      variableName: COMMON_TARGET_TEST_CMAKE_ARGS
+      variableValue: " -DQT_USE_VCPKG=ON -DVCPKG_INSTALLED_DIR={{.Env.VCPKG_INSTALLED_DIR}} -DVCPKG_HOST_TRIPLET={{.Env.VCPKG_HOST_TRIPLET}} -DVCPKG_TARGET_TRIPLET={{.Env.VCPKG_TARGET_TRIPLET}}"
+    enable_if:
+      condition: runtime
+      env_var: USE_VCPKG
+      equals_value: "ON"
+
   # Specify a custom examples installation directory, so that the built example binaries are not
   # packaged into the artifact archive together with the Qt libraries.
   # Also specify that during examples deployment, only a subset of examples should be deployed, to
@@ -825,3 +900,31 @@ instructions:
       condition: property
       property: host.os
       equals_value: Windows
+  - # Default value when not cross-compiling
+    type: EnvironmentVariable
+    variableName: TARGET_INSTALL_DIR
+    variableValue: "{{.InstallDir}}"
+  - type: Group
+    instructions:
+      - # Default value when cross-compiling
+        type: EnvironmentVariable
+        variableName: TARGET_INSTALL_DIR
+        variableValue: "{{.InstallDir}}{{.Env.CI_PATH_SEP}}target"
+      - type: EnvironmentVariable
+        variableName: TARGET_INSTALL_DIR
+        variableValue: "{{$android_artifact_path:=index .Env \"QT_CI_ARTIFACT_ID_PATH_Android-x86\"}}{{index .Env $android_artifact_path}}/install/target"
+        enable_if:
+          condition: and
+          conditions:
+            - condition: property
+              property: target.osVersion
+              equals_value: Android_ANY
+            - condition: property
+              property: target.arch
+              equals_value: Multi
+    enable_if:
+      # Only enable if cross-compiling
+      condition: property
+      property: target.osVersion
+      in_values: [Android_ANY, QEMU, IOS_ANY, QNX_710, QNX_800, WebAssembly, INTEGRITY, VxWorks]
+

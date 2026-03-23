@@ -263,6 +263,7 @@ constexpr inline
 typename std::enable_if_t<std::is_unsigned_v<T>, bool>
 qAddOverflow(T v1, T v2, T *r)
 {
+    static_assert(!std::is_same_v<T, char>, "Template must be an integral other than plain 'char'");
 #if defined(Q_NUMERIC_USE_GCC_OVERFLOW_BUILTINS)
     return __builtin_add_overflow(v1, v2, r);
 #else
@@ -293,6 +294,7 @@ constexpr inline
 typename std::enable_if_t<std::is_signed_v<T>, bool>
 qAddOverflow(T v1, T v2, T *r)
 {
+    static_assert(!std::is_same_v<T, char>, "Template must be an integral other than plain 'char'");
 #if defined(Q_NUMERIC_USE_GCC_OVERFLOW_BUILTINS)
     return __builtin_add_overflow(v1, v2, r);
 #else
@@ -322,13 +324,14 @@ constexpr inline
 typename std::enable_if_t<std::is_unsigned_v<T>, bool>
 qSubOverflow(T v1, T v2, T *r)
 {
+    static_assert(!std::is_same_v<T, char>, "Template must be an integral other than plain 'char'");
 #if defined(Q_NUMERIC_USE_GCC_OVERFLOW_BUILTINS)
     return __builtin_sub_overflow(v1, v2, r);
 #else
     // unsigned subtractions are well-defined
     *r = v1 - v2;
     return v1 < v2;
-#endif // defined(Q_NUMERIC_USE_GCC_OVERFLOW_BUILTINS)
+#endif
 }
 
 template <typename T>
@@ -336,6 +339,7 @@ constexpr inline
 typename std::enable_if_t<std::is_signed_v<T>, bool>
 qSubOverflow(T v1, T v2, T *r)
 {
+    static_assert(!std::is_same_v<T, char>, "Template must be an integral other than plain 'char'");
 #if defined(Q_NUMERIC_USE_GCC_OVERFLOW_BUILTINS)
     return __builtin_sub_overflow(v1, v2, r);
 #else
@@ -355,6 +359,7 @@ constexpr inline
 typename std::enable_if_t<std::is_unsigned_v<T> || std::is_signed_v<T>, bool>
 qMulOverflow(T v1, T v2, T *r)
 {
+    static_assert(!std::is_same_v<T, char>, "Template must be an integral other than plain 'char'");
 #if defined(Q_NUMERIC_USE_GCC_OVERFLOW_BUILTINS)
 # if defined(Q_INTRINSIC_MUL_OVERFLOW64)
     return __builtin_mul_overflow(v1, v2, r);
@@ -421,6 +426,8 @@ template <auto V2, typename T> constexpr bool qSubOverflow(T v1, T *r)
 
 template <typename T, T V2> constexpr bool qMulOverflow(T v1, std::integral_constant<T, V2>, T *r)
 {
+    static_assert(!std::is_same_v<T, char>, "Template must be an integral other than plain 'char'");
+
     // Runtime detection for anything smaller than or equal to a register
     // width, as most architectures' multiplication instructions actually
     // produce a result twice as wide as the input registers, allowing us to

@@ -24,6 +24,8 @@
 #ifdef QT_NO_CURSOR
 #  include "qwindowscursor.h"
 #endif
+#include "qwindowswindowclassdescription.h"
+#include "qwindowswindowclassregistry.h"
 
 #include <QtGui/qguiapplication.h>
 #include <QtGui/qscreen.h>
@@ -59,6 +61,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 using QWindowCreationContextPtr = QSharedPointer<QWindowCreationContext>;
 
@@ -882,8 +886,13 @@ QWindowsWindowData
 
     const auto appinst = reinterpret_cast<HINSTANCE>(GetModuleHandle(nullptr));
 
-    const QString windowClassName = QWindowsContext::instance()->registerWindowClass(w);
-    const QString windowTitlebarName = QWindowsContext::instance()->registerWindowClass(QStringLiteral("_q_titlebar"), DefWindowProc, CS_VREDRAW|CS_HREDRAW, nullptr, false);
+    const QString windowClassName = QWindowsWindowClassRegistry::instance()->registerWindowClass(w);
+
+    QWindowsWindowClassDescription windowTitlebarDescription;
+    windowTitlebarDescription.name = "_q_titlebar"_L1;
+    windowTitlebarDescription.style = CS_VREDRAW | CS_HREDRAW;
+    windowTitlebarDescription.shouldAddPrefix = false;
+    const QString windowTitlebarName = QWindowsWindowClassRegistry::instance()->registerWindowClass(windowTitlebarDescription);
 
     const QScreen *screen{};
     const QRect rect = QPlatformWindow::initialGeometry(w, data.geometry,
@@ -1603,9 +1612,6 @@ QWindowsWindow::QWindowsWindow(QWindow *aWindow, const QWindowsWindowData &data)
         ShowWindow(m_data.hwndTitlebar, SW_SHOW);
     }
 
-    const Qt::WindowType type = aWindow->type();
-    if (type == Qt::Desktop)
-        return; // No further handling for Qt::Desktop
     if (aWindow->surfaceType() == QWindow::Direct3DSurface)
         setFlag(Direct3DSurface);
 #if QT_CONFIG(opengl)
@@ -1659,16 +1665,14 @@ void QWindowsWindow::initialize()
 
     // Trigger geometry change (unless it has a special state in which case setWindowState()
     // will send the message) and screen change signals of QWindow.
-    if (w->type() != Qt::Desktop) {
-        const Qt::WindowState state = w->windowState();
-        const QRect obtainedGeometry(creationContext->obtainedPos, creationContext->obtainedSize);
-        QPlatformScreen *obtainedScreen = screenForGeometry(obtainedGeometry);
-        if (obtainedScreen && screen() != obtainedScreen)
-            QWindowSystemInterface::handleWindowScreenChanged<QWindowSystemInterface::SynchronousDelivery>(w, obtainedScreen->screen());
-        if (state != Qt::WindowMaximized && state != Qt::WindowFullScreen
-            && creationContext->requestedGeometryIn != obtainedGeometry) {
-            QWindowSystemInterface::handleGeometryChange<QWindowSystemInterface::SynchronousDelivery>(w, obtainedGeometry);
-        }
+    const Qt::WindowState state = w->windowState();
+    const QRect obtainedGeometry(creationContext->obtainedPos, creationContext->obtainedSize);
+    QPlatformScreen *obtainedScreen = screenForGeometry(obtainedGeometry);
+    if (obtainedScreen && screen() != obtainedScreen)
+        QWindowSystemInterface::handleWindowScreenChanged<QWindowSystemInterface::SynchronousDelivery>(w, obtainedScreen->screen());
+    if (state != Qt::WindowMaximized && state != Qt::WindowFullScreen
+        && creationContext->requestedGeometryIn != obtainedGeometry) {
+        QWindowSystemInterface::handleGeometryChange<QWindowSystemInterface::SynchronousDelivery>(w, obtainedGeometry);
     }
     QWindowsWindow::setSavedDpi(GetDpiForWindow(handle()));
 }
@@ -2348,6 +2352,7 @@ void QWindowsWindow::handleResized(int wParam, LPARAM lParam)
         return;
     case SIZE_MAXIMIZED:
         handleGeometryChange();
+        updateRestoreGeometry();    // we might be in ResizeMoveActive mode but changed the screen
         if (!testFlag(WithinSetStyle) && !testFlag(WithinSetGeometry))
             handleWindowStateChange(Qt::WindowMaximized | (isFullScreen_sys() ? Qt::WindowFullScreen
                                                                               : Qt::WindowNoState));

@@ -240,19 +240,4 @@ void QTest::setBenchmarkResult(qreal result, QTest::QBenchmarkMetric metric)
     QBenchmarkTestMethodData::current->setResult({ result, metric }, false);
 }
 
-template <typename T>
-typename T::value_type qAverage(const T &container)
-{
-    typename T::const_iterator it = container.constBegin();
-    typename T::const_iterator end = container.constEnd();
-    typename T::value_type acc = typename T::value_type();
-    int count = 0;
-    while (it != end) {
-        acc += *it;
-        ++it;
-        ++count;
-    }
-    return acc / count;
-}
-
 QT_END_NAMESPACE

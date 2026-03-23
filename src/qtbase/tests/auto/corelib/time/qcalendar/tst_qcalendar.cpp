@@ -124,9 +124,7 @@ void tst_QCalendar::basic_data()
 {
     QTest::addColumn<QCalendar::System>("system");
 
-    QMetaEnum e = QCalendar::staticMetaObject.enumerator(0);
-    Q_ASSERT(qstrcmp(e.name(), "System") == 0);
-
+    const QMetaEnum e = QMetaEnum::fromType<QCalendar::System>();
     for (int i = 0; i <= int(QCalendar::System::Last); ++i) {
         // There may be gaps in the enum's numbering; and Last is a duplicate:
         if (e.value(i) != -1 && qstrcmp(e.key(i), "Last"))

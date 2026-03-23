@@ -873,7 +873,7 @@ auto QJniArrayBase::makeArray(List &&list, NewFn &&newArray, SetFn &&setRegion)
     const size_type length = size_type(std::size(list));
     JNIEnv *env = QJniEnvironment::getJniEnv();
     auto localArray = (env->*newArray)(length);
-    if (QJniEnvironment::checkAndClearExceptions(env)) {
+    if (env->ExceptionCheck()) {
         if (localArray)
             env->DeleteLocalRef(localArray);
         return QJniArray<ElementType>();
@@ -917,7 +917,7 @@ auto QJniArrayBase::makeObjectArray(List &&list)
         elementClass = env->GetObjectClass(*std::begin(list));
     }
     auto localArray = env->NewObjectArray(length, elementClass, nullptr);
-    if (QJniEnvironment::checkAndClearExceptions(env)) {
+    if (env->ExceptionCheck()) {
         if (localArray)
             env->DeleteLocalRef(localArray);
         return ResultType();

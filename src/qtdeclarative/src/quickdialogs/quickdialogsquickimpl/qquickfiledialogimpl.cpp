@@ -264,8 +264,6 @@ void QQuickFileDialogImplPrivate::handleClick(QQuickAbstractButton *button)
                 attached && fileInfo.exists() && isSaveMode && !dontConfirmOverride) {
                 QQuickDialog *confirmationDialog = attached->overwriteConfirmationDialog();
                 confirmationDialog->open();
-                static_cast<QQuickDialogButtonBox *>(confirmationDialog->footer())->standardButton(QPlatformDialogHelper::Yes)
-                    ->forceActiveFocus(Qt::PopupFocusReason);
             } else {
                 selectFile();
             }

@@ -115,24 +115,16 @@ void TranslatablePropertyManager<PropertySheetValue>::initialize(QtVariantProper
 template <class PropertySheetValue>
 bool TranslatablePropertyManager<PropertySheetValue>::uninitialize(QtProperty *property)
 {
-    if (QtProperty *comment = m_valueToComment.value(property)) {
+    if (QtProperty *comment = m_valueToComment.value(property))
         delete comment;
-        m_commentToValue.remove(comment);
-    } else {
+    else
         return false;
-    }
-    if (QtProperty *translatable = m_valueToTranslatable.value(property)) {
+    if (QtProperty *translatable = m_valueToTranslatable.value(property))
         delete translatable;
-        m_translatableToValue.remove(translatable);
-    }
-    if (QtProperty *disambiguation = m_valueToDisambiguation.value(property)) {
+    if (QtProperty *disambiguation = m_valueToDisambiguation.value(property))
         delete disambiguation;
-        m_disambiguationToValue.remove(disambiguation);
-    }
-    if (QtProperty *id = m_valueToId.value(property)) {
+    if (QtProperty *id = m_valueToId.value(property))
         delete id;
-        m_idToValue.remove(id);
-    }
 
     m_values.remove(property);
     m_valueToComment.remove(property);
@@ -1566,16 +1558,10 @@ void DesignerPropertyManager::uninitializeProperty(QtProperty *property)
     }
     m_flagValues.remove(property);
 
-    QtProperty *alignH = m_propertyToAlignH.value(property);
-    if (alignH) {
+    if (QtProperty *alignH = m_propertyToAlignH.value(property))
         delete alignH;
-        m_alignHToProperty.remove(alignH);
-    }
-    QtProperty *alignV = m_propertyToAlignV.value(property);
-    if (alignV) {
+    if (QtProperty *alignV = m_propertyToAlignV.value(property))
         delete alignV;
-        m_alignVToProperty.remove(alignV);
-    }
 
     m_stringManager.uninitialize(property);
     m_stringListManager.uninitialize(property);
@@ -1602,11 +1588,9 @@ void DesignerPropertyManager::uninitializeProperty(QtProperty *property)
     m_defaultPixmaps.remove(property);
 
     const auto &iconSubProperties = m_propertyToIconSubProperties.value(property);
-    for (auto itIcon = iconSubProperties.cbegin(), end = iconSubProperties.cend(); itIcon != end; ++itIcon) {
-        QtProperty *subIcon = itIcon.value();
-        delete subIcon;
-        m_iconSubPropertyToState.remove(subIcon);
-    }
+    for (auto itIcon = iconSubProperties.cbegin(), end = iconSubProperties.cend(); itIcon != end; ++itIcon)
+        delete itIcon.value();
+
     m_propertyToIconSubProperties.remove(property);
     m_iconSubPropertyToState.remove(property);
 
@@ -1667,11 +1651,8 @@ bool DesignerPropertyManager::resetIconSubProperty(QtProperty *property)
 // -------- DesignerEditorFactory
 DesignerEditorFactory::DesignerEditorFactory(QDesignerFormEditorInterface *core, QObject *parent) :
     QtVariantEditorFactory(parent),
-    m_resetDecorator(new ResetDecorator(core, this)),
     m_core(core)
 {
-    connect(m_resetDecorator, &ResetDecorator::resetProperty,
-            this, &DesignerEditorFactory::resetProperty);
 }
 
 DesignerEditorFactory::~DesignerEditorFactory() = default;
@@ -1679,7 +1660,6 @@ DesignerEditorFactory::~DesignerEditorFactory() = default;
 void DesignerEditorFactory::setSpacing(int spacing)
 {
     m_spacing = spacing;
-    m_resetDecorator->setSpacing(spacing);
 }
 
 void DesignerEditorFactory::setFormWindowBase(qdesigner_internal::FormWindowBase *fwb)
@@ -1688,15 +1668,18 @@ void DesignerEditorFactory::setFormWindowBase(qdesigner_internal::FormWindowBase
     DesignerPixmapCache *cache = nullptr;
     if (fwb)
         cache = fwb->pixmapCache();
-    for (auto it = m_editorToPixmapProperty.cbegin(), end = m_editorToPixmapProperty.cend(); it != end; ++it)
-        it.key()->setPixmapCache(cache);
-    for (auto it = m_editorToIconProperty.cbegin(), end = m_editorToIconProperty.cend(); it != end; ++it)
-        it.key()->setPixmapCache(cache);
+    for (auto it = m_pixmapPropertyToEditors.cbegin(), end = m_pixmapPropertyToEditors.cend(); it != end; ++it) {
+        for (auto *e : it.value())
+            e->setPixmapCache(cache);
+    }
+    for (auto it = m_iconPropertyToEditors.cbegin(), end = m_iconPropertyToEditors.cend(); it != end; ++it) {
+        for (auto *e : it.value())
+            e->setPixmapCache(cache);
+    }
 }
 
 void DesignerEditorFactory::connectPropertyManager(QtVariantPropertyManager *manager)
 {
-    m_resetDecorator->connectPropertyManager(manager);
     connect(manager, &QtVariantPropertyManager::attributeChanged,
                 this, &DesignerEditorFactory::slotAttributeChanged);
     connect(manager, &QtVariantPropertyManager::valueChanged,
@@ -1708,7 +1691,6 @@ void DesignerEditorFactory::connectPropertyManager(QtVariantPropertyManager *man
 
 void DesignerEditorFactory::disconnectPropertyManager(QtVariantPropertyManager *manager)
 {
-    m_resetDecorator->disconnectPropertyManager(manager);
     disconnect(manager, &QtVariantPropertyManager::attributeChanged,
                 this, &DesignerEditorFactory::slotAttributeChanged);
     disconnect(manager, &QtVariantPropertyManager::valueChanged,
@@ -1840,7 +1822,6 @@ TextEditor *DesignerEditorFactory::createTextEditor(QWidget *parent, TextPropert
     rc->setText(value);
     rc->setSpacing(m_spacing);
     rc->setTextPropertyValidationMode(vm);
-    connect(rc, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
     return rc;
 }
 
@@ -1867,9 +1848,11 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
         const bool themeEnabled = manager->attributeValue(property, themeAttributeC).toBool();
         ed->setIconThemeModeEnabled(themeEnabled);
         m_stringPropertyToEditors[property].append(ed);
-        m_editorToStringProperty[ed] = property;
-        connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-        connect(ed, &TextEditor::textChanged, this, &DesignerEditorFactory::slotStringTextChanged);
+        connect(ed, &QObject::destroyed, ed,
+                [this, property] (QObject *o) { this->slotEditorDestroyed(property, o); });
+        connect(ed, &TextEditor::textChanged, ed, [this, property](const QString &text) {
+            this->slotStringTextChanged(property, text);
+        });
         editor = ed;
     }
         break;
@@ -1877,9 +1860,12 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
         PaletteEditorButton *ed = new PaletteEditorButton(m_core, qvariant_cast<QPalette>(manager->value(property)), parent);
         ed->setSuperPalette(qvariant_cast<QPalette>(manager->attributeValue(property, superPaletteAttributeC)));
         m_palettePropertyToEditors[property].append(ed);
-        m_editorToPaletteProperty[ed] = property;
-        connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-        connect(ed, &PaletteEditorButton::paletteChanged, this, &DesignerEditorFactory::slotPaletteChanged);
+        connect(ed, &QObject::destroyed, ed,
+                [this, property](QObject *o) { this->slotEditorDestroyed(property, o); });
+        connect(ed, &PaletteEditorButton::paletteChanged, ed,
+                [this, property](const QPalette &value) {
+                    this->slotPaletteChanged(property, value);
+                });
         editor = ed;
     }
         break;
@@ -1887,11 +1873,12 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
         if (manager->attributeValue(property, themeEnumAttributeC).toBool()) {
             auto *ed = IconThemeEnumEditor::createComboBox(parent);
             ed->setCurrentIndex(manager->value(property).toInt());
-            connect(ed, &QComboBox::currentIndexChanged, this,
-                    &DesignerEditorFactory::slotIntChanged);
-            connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
+            connect(ed, &QObject::destroyed, ed,
+                    [this, property](QObject *o) { this->slotEditorDestroyed(property, o); });
+            connect(ed, &QComboBox::currentIndexChanged, ed, [this, property](int value) {
+                this->slotIntChanged(property, value);
+            });
             m_intPropertyToComboEditors[property].append(ed);
-            m_comboEditorToIntProperty.insert(ed, property);
             editor = ed;
         } else {
             editor = QtVariantEditorFactory::createEditor(manager, property, parent);
@@ -1902,9 +1889,11 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
         ed->setValidator(new QULongLongValidator(0, UINT_MAX, ed));
         ed->setText(QString::number(manager->value(property).toUInt()));
         m_uintPropertyToEditors[property].append(ed);
-        m_editorToUintProperty[ed] = property;
-        connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-        connect(ed, &QLineEdit::textChanged, this, &DesignerEditorFactory::slotUintChanged);
+        connect(ed, &QObject::destroyed, ed,
+                [this, property](QObject *o) { this->slotEditorDestroyed(property, o); });
+        connect(ed, &QLineEdit::textChanged, ed, [this, property](const QString &value) {
+                this->slotUintChanged(property, value);
+        });
         editor = ed;
     }
         break;
@@ -1913,9 +1902,11 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
         ed->setValidator(new QLongLongValidator(ed));
         ed->setText(QString::number(manager->value(property).toLongLong()));
         m_longLongPropertyToEditors[property].append(ed);
-        m_editorToLongLongProperty[ed] = property;
-        connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-        connect(ed, &QLineEdit::textChanged, this, &DesignerEditorFactory::slotLongLongChanged);
+        connect(ed, &QObject::destroyed, ed,
+                [this, property](QObject *o) { this->slotEditorDestroyed(property, o); });
+        connect(ed, &QLineEdit::textChanged, ed, [this, property](const QString &value) {
+                this->slotLongLongChanged(property, value);
+        });
         editor = ed;
     }
         break;
@@ -1924,9 +1915,11 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
         ed->setValidator(new QULongLongValidator(ed));
         ed->setText(QString::number(manager->value(property).toULongLong()));
         m_uLongLongPropertyToEditors[property].append(ed);
-        m_editorToULongLongProperty[ed] = property;
-        connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-        connect(ed, &QLineEdit::textChanged, this, &DesignerEditorFactory::slotULongLongChanged);
+        connect(ed, &QObject::destroyed, ed,
+                [this, property](QObject *o) { this->slotEditorDestroyed(property, o); });
+        connect(ed, &QLineEdit::textChanged, ed, [this, property](const QString &value) {
+                this->slotULongLongChanged(property, value);
+        });
         editor = ed;
     }
         break;
@@ -1934,18 +1927,22 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
         TextEditor *ed = createTextEditor(parent, ValidationURL, manager->value(property).toUrl().toString());
         ed->setUpdateMode(TextPropertyEditor::UpdateOnFinished);
         m_urlPropertyToEditors[property].append(ed);
-        m_editorToUrlProperty[ed] = property;
-        connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-        connect(ed, &TextEditor::textChanged, this, &DesignerEditorFactory::slotUrlChanged);
+        connect(ed, &QObject::destroyed, ed,
+                [this, property](QObject *o) { this->slotEditorDestroyed(property, o); });
+        connect(ed, &TextEditor::textChanged, ed, [this, property](const QString &value) {
+                this->slotUrlChanged(property, value);
+        });
         editor = ed;
     }
         break;
     case QMetaType::QByteArray: {
         TextEditor *ed = createTextEditor(parent, ValidationMultiLine, QString::fromUtf8(manager->value(property).toByteArray()));
         m_byteArrayPropertyToEditors[property].append(ed);
-        m_editorToByteArrayProperty[ed] = property;
-        connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-        connect(ed, &TextEditor::textChanged, this, &DesignerEditorFactory::slotByteArrayChanged);
+        connect(ed, &QObject::destroyed, ed,
+                [this, property](QObject *o) { this->slotEditorDestroyed(property, o); });
+        connect(ed, &TextEditor::textChanged, ed, [this, property](const QString &value) {
+                this->slotByteArrayChanged(property, value);
+        });
         editor = ed;
     }
         break;
@@ -1957,9 +1954,11 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
             ed->setDefaultPixmap(qvariant_cast<QPixmap>(manager->attributeValue(property, defaultResourceAttributeC)));
             ed->setSpacing(m_spacing);
             m_pixmapPropertyToEditors[property].append(ed);
-            m_editorToPixmapProperty[ed] = property;
-            connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-            connect(ed, &PixmapEditor::pathChanged, this, &DesignerEditorFactory::slotPixmapChanged);
+            connect(ed, &QObject::destroyed, ed,
+                    [this, property](QObject *o) { this->slotEditorDestroyed(property, o); });
+            connect(ed, &PixmapEditor::pathChanged, ed, [this, property](const QString &value) {
+                this->slotPixmapChanged(property, value);
+            });
             editor = ed;
         } else if (type == DesignerPropertyManager::designerIconTypeId()) {
             PixmapEditor *ed = new PixmapEditor(m_core, parent);
@@ -1977,11 +1976,17 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
             ed->setDefaultPixmapIcon(defaultPixmap);
             ed->setSpacing(m_spacing);
             m_iconPropertyToEditors[property].append(ed);
-            m_editorToIconProperty[ed] = property;
-            connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-            connect(ed, &PixmapEditor::pathChanged, this, &DesignerEditorFactory::slotIconChanged);
-            connect(ed, &PixmapEditor::themeChanged, this, &DesignerEditorFactory::slotIconThemeChanged);
-            connect(ed, &PixmapEditor::themeEnumChanged, this, &DesignerEditorFactory::slotIconThemeEnumChanged);
+            connect(ed, &QObject::destroyed, ed,
+                    [this, property](QObject *o) { this->slotEditorDestroyed(property, o); });
+            connect(ed, &PixmapEditor::pathChanged, ed, [this, property](const QString &value) {
+                this->slotIconChanged(property, value);
+            });
+            connect(ed, &PixmapEditor::themeChanged, ed, [this, property](const QString &value) {
+                this->slotIconThemeChanged(property, value);
+            });
+            connect(ed, &PixmapEditor::themeEnumChanged, ed, [this, property](int value) {
+                this->slotIconThemeEnumChanged(property, value);
+            });
             editor = ed;
         } else if (type == DesignerPropertyManager::designerStringTypeId()) {
             const TextPropertyValidationMode tvm = static_cast<TextPropertyValidationMode>(manager->attributeValue(property, validationModesAttributeC).toInt());
@@ -1990,9 +1995,11 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
             if (richTextDefaultFont.metaType().id() == QMetaType::QFont)
                 ed->setRichTextDefaultFont(qvariant_cast<QFont>(richTextDefaultFont));
             m_stringPropertyToEditors[property].append(ed);
-            m_editorToStringProperty[ed] = property;
-            connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-            connect(ed, &TextEditor::textChanged, this, &DesignerEditorFactory::slotStringTextChanged);
+            connect(ed, &QObject::destroyed, ed,
+                    [this, property] (QObject *o) { this->slotEditorDestroyed(property, o); });
+            connect(ed, &TextEditor::textChanged, ed, [this, property](const QString &text) {
+                this->slotStringTextChanged(property, text);
+            });
             editor = ed;
         } else if (type == DesignerPropertyManager::designerStringListTypeId() || type == QMetaType::QStringList) {
             const QVariant variantValue = manager->value(property);
@@ -2000,129 +2007,138 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
                 ? variantValue.toStringList() : qvariant_cast<PropertySheetStringListValue>(variantValue).value();
             StringListEditorButton *ed = new StringListEditorButton(value, parent);
             m_stringListPropertyToEditors[property].append(ed);
-            m_editorToStringListProperty.insert(ed, property);
-            connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-            connect(ed, &StringListEditorButton::stringListChanged, this, &DesignerEditorFactory::slotStringListChanged);
+            connect(ed, &QObject::destroyed, ed,
+                    [this, property](QObject *o) { this->slotEditorDestroyed(property, o); });
+            connect(ed, &StringListEditorButton::stringListChanged, ed, [this, property](const QStringList &value) {
+                this->slotStringListChanged(property, value);
+            });
             editor = ed;
         } else if (type == DesignerPropertyManager::designerKeySequenceTypeId()) {
             QKeySequenceEdit *ed = new QKeySequenceEdit(parent);
             ed->setKeySequence(qvariant_cast<PropertySheetKeySequenceValue>(manager->value(property)).value());
             m_keySequencePropertyToEditors[property].append(ed);
-            m_editorToKeySequenceProperty[ed] = property;
-            connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
-            connect(ed, &QKeySequenceEdit::keySequenceChanged, this, &DesignerEditorFactory::slotKeySequenceChanged);
+            connect(ed, &QObject::destroyed, ed,
+                    [this, property](QObject *o) { this->slotEditorDestroyed(property, o); });
+            connect(ed, &QKeySequenceEdit::keySequenceChanged, ed,
+                    [this, property](const QKeySequence &value) {
+                        this->slotKeySequenceChanged(property, value);
+                    });
             editor = ed;
         } else {
             editor = QtVariantEditorFactory::createEditor(manager, property, parent);
         }
         break;
     }
-    return m_resetDecorator->editor(editor,
-            manager->variantProperty(property)->attributeValue(resettableAttributeC).toBool(),
-            manager, property, parent);
+
+    // Note: editor may be null for parent properties of subproperties
+    const bool resettable =
+            manager->variantProperty(property)->attributeValue(resettableAttributeC).toBool();
+    if (!resettable)
+        return editor;
+
+    if (editor == nullptr) {
+        // Resettable parent property of sub properties, merely displaying the value
+        auto *dummyEditor = new DummyEditor(property);
+        dummyEditor->setSpacing(m_spacing);
+        dummyEditor->propertyChanged(property);
+        connect(manager, &QtAbstractPropertyManager::propertyChanged,
+                dummyEditor, &DummyEditor::propertyChanged);
+        editor = dummyEditor;
+    }
+
+    auto *resetWidget = new PropertyResetWidget(m_core, property, editor, parent);
+    resetWidget->setSpacing(m_spacing);
+    resetWidget->propertyChanged(property);
+    connect(manager, &QtAbstractPropertyManager::propertyChanged, resetWidget,
+            &PropertyResetWidget::propertyChanged);
+    connect(resetWidget, &PropertyResetWidget::resetProperty, this,
+            &DesignerEditorFactory::resetProperty);
+    return resetWidget;
 }
 
 template <class Editor>
-bool removeEditor(QObject *object,
-                  QHash<const QtProperty *, QList<Editor>> *propertyToEditors,
-                  QHash<Editor, QtProperty *> *editorToProperty)
+bool removeEditor(const QtProperty *property, QObject *object,
+                  QHash<const QtProperty *, QList<Editor *>> *propertyToEditors)
 {
-    if (!propertyToEditors)
-        return false;
-    if (!editorToProperty)
-        return false;
-    for (auto e2pIt = editorToProperty->begin(), end = editorToProperty->end(); e2pIt != end; ++e2pIt) {
-        Editor editor = e2pIt.key();
-        if (editor == object) {
-            const auto p2eIt = propertyToEditors->find(e2pIt.value());
-            if (p2eIt != propertyToEditors->end()) {
-                p2eIt.value().removeAll(editor);
-                if (p2eIt.value().isEmpty())
-                    propertyToEditors->erase(p2eIt);
-            }
-            editorToProperty->erase(e2pIt);
+    const auto p2eIt = propertyToEditors->find(property);
+    if (p2eIt != propertyToEditors->end()) {
+        auto &editorList = p2eIt.value();
+        auto lit = std::find(editorList.cbegin(), editorList.cend(), object);
+        if (lit != editorList.cend()) {
+            editorList.erase(lit);
+            if (editorList.isEmpty())
+                propertyToEditors->erase(p2eIt);
             return true;
         }
     }
     return false;
 }
 
-void DesignerEditorFactory::slotEditorDestroyed(QObject *object)
+void DesignerEditorFactory::slotEditorDestroyed(QtProperty *property, QObject *object)
 {
-    if (removeEditor(object, &m_stringPropertyToEditors, &m_editorToStringProperty))
+    if (removeEditor(property, object, &m_stringPropertyToEditors))
         return;
-    if (removeEditor(object, &m_keySequencePropertyToEditors, &m_editorToKeySequenceProperty))
+    if (removeEditor(property, object, &m_keySequencePropertyToEditors))
         return;
-    if (removeEditor(object, &m_palettePropertyToEditors, &m_editorToPaletteProperty))
+    if (removeEditor(property, object, &m_palettePropertyToEditors))
         return;
-    if (removeEditor(object, &m_pixmapPropertyToEditors, &m_editorToPixmapProperty))
+    if (removeEditor(property, object, &m_pixmapPropertyToEditors))
         return;
-    if (removeEditor(object, &m_iconPropertyToEditors, &m_editorToIconProperty))
+    if (removeEditor(property, object, &m_iconPropertyToEditors))
         return;
-    if (removeEditor(object, &m_uintPropertyToEditors, &m_editorToUintProperty))
+    if (removeEditor(property, object, &m_uintPropertyToEditors))
         return;
-    if (removeEditor(object, &m_longLongPropertyToEditors, &m_editorToLongLongProperty))
+    if (removeEditor(property, object, &m_longLongPropertyToEditors))
         return;
-    if (removeEditor(object, &m_intPropertyToComboEditors, &m_comboEditorToIntProperty))
+    if (removeEditor(property, object, &m_intPropertyToComboEditors))
         return;
-    if (removeEditor(object, &m_uLongLongPropertyToEditors, &m_editorToULongLongProperty))
+    if (removeEditor(property, object, &m_uLongLongPropertyToEditors))
         return;
-    if (removeEditor(object, &m_urlPropertyToEditors, &m_editorToUrlProperty))
+    if (removeEditor(property, object, &m_urlPropertyToEditors))
         return;
-    if (removeEditor(object, &m_byteArrayPropertyToEditors, &m_editorToByteArrayProperty))
+    if (removeEditor(property, object, &m_byteArrayPropertyToEditors))
         return;
-    if (removeEditor(object, &m_stringListPropertyToEditors, &m_editorToStringListProperty))
+    if (removeEditor(property, object, &m_stringListPropertyToEditors))
         return;
 }
 
-template<class Editor>
-bool updateManager(QtVariantEditorFactory *factory, bool *changingPropertyValue,
-        const QHash<Editor, QtProperty *> &editorToProperty, QWidget *editor, const QVariant &value)
+static void updateManager(QtVariantEditorFactory *factory, bool *changingPropertyValue,
+                          QtProperty *prop, const QVariant &value)
 {
-    if (!editor)
-        return false;
-    for (auto it = editorToProperty.cbegin(), end = editorToProperty.cend(); it != end; ++it) {
-        if (it.key() == editor) {
-            QtProperty *prop = it.value();
-            QtVariantPropertyManager *manager = factory->propertyManager(prop);
-            *changingPropertyValue = true;
-            manager->variantProperty(prop)->setValue(value);
-            *changingPropertyValue = false;
-            return true;
-        }
-    }
-    return false;
+    QtVariantPropertyManager *manager = factory->propertyManager(prop);
+    *changingPropertyValue = true;
+    manager->variantProperty(prop)->setValue(value);
+    *changingPropertyValue = false;
 }
 
-void DesignerEditorFactory::slotUintChanged(const QString &value)
+void DesignerEditorFactory::slotUintChanged(QtProperty *prop, const QString &value)
 {
-    updateManager(this, &m_changingPropertyValue, m_editorToUintProperty, qobject_cast<QWidget *>(sender()), value.toUInt());
+    updateManager(this, &m_changingPropertyValue, prop, value.toUInt());
 }
 
-void DesignerEditorFactory::slotLongLongChanged(const QString &value)
+void DesignerEditorFactory::slotLongLongChanged(QtProperty *prop, const QString &value)
 {
-    updateManager(this, &m_changingPropertyValue, m_editorToLongLongProperty, qobject_cast<QWidget *>(sender()), value.toLongLong());
+    updateManager(this, &m_changingPropertyValue, prop, value.toLongLong());
 }
 
-void DesignerEditorFactory::slotIntChanged(int v)
+void DesignerEditorFactory::slotIntChanged(QtProperty *prop, int v)
 {
-    updateManager(this, &m_changingPropertyValue, m_comboEditorToIntProperty,
-                  qobject_cast<QWidget *>(sender()), v);
+    updateManager(this, &m_changingPropertyValue, prop, v);
 }
 
-void DesignerEditorFactory::slotULongLongChanged(const QString &value)
+void DesignerEditorFactory::slotULongLongChanged(QtProperty *prop, const QString &value)
 {
-    updateManager(this, &m_changingPropertyValue, m_editorToULongLongProperty, qobject_cast<QWidget *>(sender()), value.toULongLong());
+    updateManager(this, &m_changingPropertyValue, prop, value.toULongLong());
 }
 
-void DesignerEditorFactory::slotUrlChanged(const QString &value)
+void DesignerEditorFactory::slotUrlChanged(QtProperty *prop, const QString &value)
 {
-    updateManager(this, &m_changingPropertyValue, m_editorToUrlProperty, qobject_cast<QWidget *>(sender()), QUrl(value));
+    updateManager(this, &m_changingPropertyValue, prop, QUrl(value));
 }
 
-void DesignerEditorFactory::slotByteArrayChanged(const QString &value)
+void DesignerEditorFactory::slotByteArrayChanged(QtProperty *prop, const QString &value)
 {
-    updateManager(this, &m_changingPropertyValue, m_editorToByteArrayProperty, qobject_cast<QWidget *>(sender()), value.toUtf8());
+    updateManager(this, &m_changingPropertyValue, prop, value.toUtf8());
 }
 
 template <class Editor>
@@ -2135,100 +2151,92 @@ QtProperty *findPropertyForEditor(const QHash<Editor *, QtProperty *> &editorMap
     return nullptr;
 }
 
-void DesignerEditorFactory::slotStringTextChanged(const QString &value)
+void DesignerEditorFactory::slotStringTextChanged(QtProperty *prop, const QString &value)
 {
-    if (QtProperty *prop = findPropertyForEditor(m_editorToStringProperty, sender())) {
-        QtVariantPropertyManager *manager = propertyManager(prop);
-        QtVariantProperty *varProp = manager->variantProperty(prop);
-        QVariant val = varProp->value();
-        if (val.userType() == DesignerPropertyManager::designerStringTypeId()) {
-            PropertySheetStringValue strVal = qvariant_cast<PropertySheetStringValue>(val);
-            strVal.setValue(value);
-            // Disable translation if no translation subproperties exist.
-            if (varProp->subProperties().isEmpty())
-                strVal.setTranslatable(false);
-            val = QVariant::fromValue(strVal);
-        } else {
-            val = QVariant(value);
-        }
-        m_changingPropertyValue = true;
-        manager->variantProperty(prop)->setValue(val);
-        m_changingPropertyValue = false;
+    QtVariantPropertyManager *manager = propertyManager(prop);
+    QtVariantProperty *varProp = manager->variantProperty(prop);
+    QVariant val = varProp->value();
+    if (val.userType() == DesignerPropertyManager::designerStringTypeId()) {
+        PropertySheetStringValue strVal = qvariant_cast<PropertySheetStringValue>(val);
+        strVal.setValue(value);
+        // Disable translation if no translation subproperties exist.
+        if (varProp->subProperties().isEmpty())
+            strVal.setTranslatable(false);
+        val = QVariant::fromValue(strVal);
+    } else {
+        val = QVariant(value);
     }
+    m_changingPropertyValue = true;
+    manager->variantProperty(prop)->setValue(val);
+    m_changingPropertyValue = false;
 }
 
-void DesignerEditorFactory::slotKeySequenceChanged(const QKeySequence &value)
+void DesignerEditorFactory::slotKeySequenceChanged(QtProperty *prop, const QKeySequence &value)
 {
-    if (QtProperty *prop = findPropertyForEditor(m_editorToKeySequenceProperty, sender())) {
-        QtVariantPropertyManager *manager = propertyManager(prop);
-        QtVariantProperty *varProp = manager->variantProperty(prop);
-        QVariant val = varProp->value();
-        if (val.userType() == DesignerPropertyManager::designerKeySequenceTypeId()) {
-            PropertySheetKeySequenceValue keyVal = qvariant_cast<PropertySheetKeySequenceValue>(val);
-            keyVal.setValue(value);
-            val = QVariant::fromValue(keyVal);
-        } else {
-            val = QVariant::fromValue(value);
-        }
-        m_changingPropertyValue = true;
-        manager->variantProperty(prop)->setValue(val);
-        m_changingPropertyValue = false;
+    QtVariantPropertyManager *manager = propertyManager(prop);
+    QtVariantProperty *varProp = manager->variantProperty(prop);
+    QVariant val = varProp->value();
+    if (val.userType() == DesignerPropertyManager::designerKeySequenceTypeId()) {
+        PropertySheetKeySequenceValue keyVal = qvariant_cast<PropertySheetKeySequenceValue>(val);
+        keyVal.setValue(value);
+        val = QVariant::fromValue(keyVal);
+    } else {
+        val = QVariant::fromValue(value);
     }
+    m_changingPropertyValue = true;
+    manager->variantProperty(prop)->setValue(val);
+    m_changingPropertyValue = false;
 }
 
-void DesignerEditorFactory::slotPaletteChanged(const QPalette &value)
+void DesignerEditorFactory::slotPaletteChanged(QtProperty *prop, const QPalette &value)
 {
-    updateManager(this, &m_changingPropertyValue, m_editorToPaletteProperty, qobject_cast<QWidget *>(sender()), QVariant::fromValue(value));
+    updateManager(this, &m_changingPropertyValue, prop, QVariant::fromValue(value));
 }
 
-void DesignerEditorFactory::slotPixmapChanged(const QString &value)
+void DesignerEditorFactory::slotPixmapChanged(QtProperty *prop, const QString &value)
 {
-    updateManager(this, &m_changingPropertyValue, m_editorToPixmapProperty, qobject_cast<QWidget *>(sender()),
-                    QVariant::fromValue(PropertySheetPixmapValue(value)));
+    updateManager(this, &m_changingPropertyValue, prop,
+                  QVariant::fromValue(PropertySheetPixmapValue(value)));
 }
 
-void DesignerEditorFactory::slotIconChanged(const QString &value)
+void DesignerEditorFactory::slotIconChanged(QtProperty *prop, const QString &value)
 {
-    updateManager(this, &m_changingPropertyValue, m_editorToIconProperty, qobject_cast<QWidget *>(sender()),
-                    QVariant::fromValue(PropertySheetIconValue(PropertySheetPixmapValue(value))));
+    updateManager(this, &m_changingPropertyValue, prop,
+                  QVariant::fromValue(PropertySheetIconValue(PropertySheetPixmapValue(value))));
 }
 
-void DesignerEditorFactory::slotIconThemeChanged(const QString &value)
+void DesignerEditorFactory::slotIconThemeChanged(QtProperty *prop, const QString &value)
 {
     PropertySheetIconValue icon;
     icon.setTheme(value);
-    updateManager(this, &m_changingPropertyValue, m_editorToIconProperty, qobject_cast<QWidget *>(sender()),
-                    QVariant::fromValue(icon));
+    updateManager(this, &m_changingPropertyValue, prop, QVariant::fromValue(icon));
 }
 
-void DesignerEditorFactory::slotIconThemeEnumChanged(int value)
+void DesignerEditorFactory::slotIconThemeEnumChanged(QtProperty *prop, int value)
 {
     PropertySheetIconValue icon;
     icon.setThemeEnum(value);
-    updateManager(this, &m_changingPropertyValue, m_editorToIconProperty,
-                  qobject_cast<QWidget *>(sender()), QVariant::fromValue(icon));
+    updateManager(this, &m_changingPropertyValue, prop, QVariant::fromValue(icon));
 }
 
-void DesignerEditorFactory::slotStringListChanged(const QStringList &value)
+void DesignerEditorFactory::slotStringListChanged(QtProperty *prop, const QStringList &value)
 {
-    if (QtProperty *prop = findPropertyForEditor(m_editorToStringListProperty, sender())) {
-        QtVariantPropertyManager *manager = propertyManager(prop);
-        QtVariantProperty *varProp = manager->variantProperty(prop);
-        QVariant val = varProp->value();
-        if (val.userType() == DesignerPropertyManager::designerStringListTypeId()) {
-            PropertySheetStringListValue listValue = qvariant_cast<PropertySheetStringListValue>(val);
-            listValue.setValue(value);
-            // Disable translation if no translation subproperties exist.
-            if (varProp->subProperties().isEmpty())
-                listValue.setTranslatable(false);
-            val = QVariant::fromValue(listValue);
-        } else {
-            val = QVariant(value);
-        }
-        m_changingPropertyValue = true;
-        manager->variantProperty(prop)->setValue(val);
-        m_changingPropertyValue = false;
-    }
+     QtVariantPropertyManager *manager = propertyManager(prop);
+     QtVariantProperty *varProp = manager->variantProperty(prop);
+     QVariant val = varProp->value();
+     if (val.userType() == DesignerPropertyManager::designerStringListTypeId()) {
+         PropertySheetStringListValue listValue = qvariant_cast<PropertySheetStringListValue>(val);
+         listValue.setValue(value);
+         // Disable translation if no translation subproperties exist.
+         if (varProp->subProperties().isEmpty())
+             listValue.setTranslatable(false);
+         val = QVariant::fromValue(listValue);
+     } else {
+         val = QVariant(value);
+     }
+     m_changingPropertyValue = true;
+     manager->variantProperty(prop)->setValue(val);
+     m_changingPropertyValue = false;
 }
 
 }

@@ -20,29 +20,26 @@
 #include "QtWidgets/qcombobox.h"
 
 #include "QtWidgets/qabstractslider.h"
-#include "QtWidgets/qapplication.h"
 #include "QtWidgets/qstyleditemdelegate.h"
-#include "QtGui/qstandarditemmodel.h"
-#include "QtWidgets/qlineedit.h"
 #include "QtWidgets/qlistview.h"
-#include "QtGui/qpainter.h"
 #include "QtWidgets/qstyle.h"
-#include "QtWidgets/qstyleoption.h"
 #include "QtCore/qtimer.h"
 #include "private/qwidget_p.h"
 #include "QtCore/qpointer.h"
-#if QT_CONFIG(completer)
-#include "QtWidgets/qcompleter.h"
-#endif
-#include "QtGui/qevent.h"
 
-#include <limits.h>
+#include <array>
+#include <limits>
 
 QT_REQUIRE_CONFIG(combobox);
 
 QT_BEGIN_NAMESPACE
 
+class QLineEdit;
+class QPainter;
 class QPlatformMenu;
+class QStyleOptionComboBox;
+class QStyleOptionMenuItem;
+class QStyleOptionViewItem;
 
 class QComboBoxListView : public QListView
 {

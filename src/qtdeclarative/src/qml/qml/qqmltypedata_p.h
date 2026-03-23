@@ -16,6 +16,7 @@
 // We mean it.
 //
 
+#include <private/qqmlnotifyingblob_p.h>
 #include <private/qqmlsourcecoordinate_p.h>
 #include <private/qqmltypeloader_p.h>
 #include <private/qv4executablecompilationunit_p.h>
@@ -24,37 +25,33 @@ QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(lcCycle)
 
-class Q_AUTOTEST_EXPORT QQmlTypeData : public QQmlTypeLoader::Blob
+class Q_AUTOTEST_EXPORT QQmlTypeData : public QQmlNotifyingBlob
 {
     Q_DECLARE_TR_FUNCTIONS(QQmlTypeData)
 public:
 
     struct TypeReference
     {
-        TypeReference() : version(QTypeRevision::zero()), needsCreation(true) {}
-
-        QV4::CompiledData::Location location;
-        QQmlType type;
-        QTypeRevision version;
-        QQmlRefPointer<QQmlTypeData> typeData;
-        bool selfReference = false;
         QString prefix; // used by CompositeSingleton types
+        QQmlType type;
+        QQmlRefPointer<QQmlTypeData> typeData;
+        QV4::CompiledData::Location location;
+        QTypeRevision version = QTypeRevision::zero();
+        bool selfReference = false;
+        bool needsCreation = true;
+
         QString qualifiedName() const;
-        bool needsCreation;
     };
 
     struct ScriptReference
     {
-        QV4::CompiledData::Location location;
         QString qualifier;
         QQmlRefPointer<QQmlScriptBlob> script;
+        QV4::CompiledData::Location location;
     };
 
 private:
     friend class QQmlTypeLoader;
-
-    template<typename Container>
-    void setCompileUnit(const Container &container);
 
 public:
     QQmlTypeData(const QUrl &, QQmlTypeLoader *);
@@ -62,26 +59,16 @@ public:
 
     QV4::CompiledData::CompilationUnit *compilationUnit() const;
 
-    // Used by QQmlComponent to get notifications
-    struct TypeDataCallback {
-        virtual ~TypeDataCallback();
-        virtual void typeDataProgress(QQmlTypeData *, qreal) {}
-        virtual void typeDataReady(QQmlTypeData *) {}
-    };
-    void registerCallback(TypeDataCallback *);
-    void unregisterCallback(TypeDataCallback *);
-
     QQmlType qmlType(const QString &inlineComponentName = QString()) const;
     QByteArray typeClassName() const { return m_typeClassName; }
     SourceCodeData backupSourceCode() const { return m_backupSourceCode; }
 
 protected:
     void done() override;
-    void completed() override;
+
     void dataReceived(const SourceCodeData &) override;
     void initializeFromCachedUnit(const QQmlPrivate::CachedQmlUnit *unit) override;
     void allDependenciesDone() override;
-    void downloadProgressChanged(qreal) override;
 
     QString stringAt(int index) const override;
 
@@ -138,8 +125,6 @@ private:
     QHash<QString, InlineComponentData> m_inlineComponentData;
 
     CompilationUnitPtr m_compiledData;
-
-    QList<TypeDataCallback *> m_callbacks;
 
     bool m_implicitImportLoaded;
     bool loadImplicitImport();

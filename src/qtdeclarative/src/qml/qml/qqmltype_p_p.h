@@ -356,13 +356,7 @@ public:
                     typeLoader ? typeLoader : unit->engine->typeLoader());
         }
 
-        if (const QQmlType type = (*it)->type(); type.isValid())
-            return type;
-
-        if (const auto cu = (*it)->compilationUnit())
-            return cu->qmlType;
-
-        return QQmlType();
+        return (*it)->type();
     }
 
 private:

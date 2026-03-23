@@ -729,8 +729,8 @@ QString Stringify::Str(const QString &key, const Value &v)
         return QStringLiteral("null");
     if (value->isBoolean())
         return value->booleanValue() ? QStringLiteral("true") : QStringLiteral("false");
-    if (value->isString())
-        return quote(value->stringValue()->toQString());
+    if (QV4::String *stringValue = value->stringValue())
+        return quote(stringValue->toQString());
 
     if (value->isNumber()) {
         double d = value->toNumber();
@@ -801,8 +801,6 @@ QString Stringify::JO(Object *o)
         for (int i = 0; i < propertyListSize; ++i) {
             bool exists;
             String *s = propertyList + i;
-            if (!s)
-                continue;
             v = o->get(s, &exists);
             if (!exists)
                 continue;
@@ -822,7 +820,7 @@ QString Stringify::JO(Object *o)
                  + stepback + u'}';
     }
 
-    indent = stepback;
+    indent = std::move(stepback);
     stack.pop();
     return result;
 }
@@ -866,7 +864,7 @@ QString Stringify::JA(Object *a)
         result = QLatin1String("[\n") + indent + partial.join(separator) + u'\n' + stepback + u']';
     }
 
-    indent = stepback;
+    indent = std::move(stepback);
     stack.pop();
     return result;
 }
@@ -916,7 +914,7 @@ ReturnedValue JsonObject::method_stringify(const FunctionObject *b, const Value 
         if (o->isArrayObject()) {
             int arrayLen = scope.engine->safeForAllocLength(o->getLength());
             CHECK_EXCEPTION();
-            stringify.propertyList = static_cast<QV4::String *>(scope.alloc(arrayLen));
+            stringify.propertyList = static_cast<QV4::String *>(scope.constructUndefined(arrayLen));
             for (int i = 0; i < arrayLen; ++i) {
                 Value *v = stringify.propertyList + i;
                 *v = o->get(i);

@@ -42,12 +42,18 @@ public:
           , processPending(false), asynchronous(false), useCustomPath(false)
     {}
 
-    void appendPathElement(QQuickPathElement *pathElement)
+    enum class ProcessPathPolicy {
+        DontProcess,
+        Process
+    };
+    void appendPathElement(QQuickPathElement *pathElement,
+                           ProcessPathPolicy processPathPolicy = ProcessPathPolicy::Process)
     {
         if (pathElement && componentComplete) {
             enablePathElement(pathElement);
             _pathElements.append(pathElement);
-            q_func()->processPath();
+            if (processPathPolicy == ProcessPathPolicy::Process)
+                q_func()->processPath();
         } else {
             _pathElements.append(pathElement);
         }
@@ -94,9 +100,28 @@ public:
             q_func()->processPath();
     }
 
+    enum class DeleteElementPolicy {
+        DontDelete,
+        Delete
+    };
+    void clearPathElements(DeleteElementPolicy deleteElementPolicy
+        = QQuickPathPrivate::DeleteElementPolicy::DontDelete)
+    {
+        Q_Q(QQuickPath);
+        q->disconnectPathElements();
+        if (deleteElementPolicy == DeleteElementPolicy::Delete)
+            qDeleteAll(_pathElements);
+        _pathElements.clear();
+        _pathCurves.clear();
+        _pointCache.clear();
+        _pathTexts.clear();
+        _path.clear();
+        emit q->changed();
+    }
+
     QPainterPath _path;
     QList<QQuickPathElement*> _pathElements;
-    mutable QVector<QPointF> _pointCache;
+    mutable QList<QPointF> _pointCache;
     QList<QQuickPath::AttributePoint> _attributePoints;
     QStringList _attributes;
     QList<QQuickCurve*> _pathCurves;

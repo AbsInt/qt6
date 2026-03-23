@@ -78,7 +78,8 @@ public:
         HaveCustomButton1               = 0x00002000,
         HaveCustomButton2               = 0x00004000,
         HaveCustomButton3               = 0x00008000,
-        NoCancelButtonOnLastPage        = 0x00010000
+        NoCancelButtonOnLastPage        = 0x00010000,
+        StretchBanner                   = 0x00020000,
     };
     Q_ENUM(WizardOption)
 

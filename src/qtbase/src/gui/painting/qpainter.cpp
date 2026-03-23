@@ -41,6 +41,8 @@
 #include <private/qrawfont_p.h>
 #include <private/qfont_p.h>
 
+#include <QtCore/private/qtclasshelper_p.h>
+
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
@@ -1525,14 +1527,14 @@ void QPainterPrivate::initFrom(const QPaintDevice *device)
 
     Q_Q(QPainter);
     device->initPainter(q);
+}
 
-    if (extended) {
-        extended->penChanged();
-    } else if (engine) {
-        engine->setDirty(QPaintEngine::DirtyPen);
-        engine->setDirty(QPaintEngine::DirtyBrush);
-        engine->setDirty(QPaintEngine::DirtyFont);
-    }
+void QPainterPrivate::setEngineDirtyFlags(QSpan<const QPaintEngine::DirtyFlags> flags)
+{
+    if (!engine)
+        return;
+    for (const QPaintEngine::DirtyFlags f : flags)
+        engine->setDirty(f);
 }
 
 /*!
@@ -1799,14 +1801,16 @@ bool QPainter::begin(QPaintDevice *pd)
         d->engine->setActive(begun);
     }
 
-    // Copy painter properties from original paint device,
-    // required for QPixmap::grabWidget()
-    if (d->original_device->devType() == QInternal::Widget) {
+    switch (d->original_device->devType()) {
+    case QInternal::Widget:
         d->initFrom(d->original_device);
-    } else {
+        break;
+
+    default:
         d->state->layoutDirection = Qt::LayoutDirectionAuto;
         // make sure we have a font compatible with the paintdevice
         d->state->deviceFont = d->state->font = QFont(d->state->deviceFont, device());
+        break;
     }
 
     QRect systemRect = d->engine->systemRect();
@@ -1831,6 +1835,15 @@ bool QPainter::begin(QPaintDevice *pd)
     ++d->device->painters;
 
     d->state->emulationSpecifier = 0;
+
+    switch (d->original_device->devType()) {
+    case QInternal::Widget:
+        // for widgets we've aleady initialized the painter above
+        break;
+    default:
+        d->initFrom(d->original_device);
+        break;
+    }
 
     return true;
 }
@@ -2058,7 +2071,8 @@ void QPainter::setOpacity(qreal opacity)
 
 
 /*!
-    Returns the currently set brush origin.
+    Returns the current brush origin.
+    Prefer using QPainter::brushOriginF() to get the precise origin.
 
     \sa setBrushOrigin(), {QPainter#Settings}{Settings}
 */
@@ -2071,6 +2085,23 @@ QPoint QPainter::brushOrigin() const
         return QPoint();
     }
     return QPointF(d->state->brushOrigin).toPoint();
+}
+
+/*!
+    Returns the current brush origin.
+
+    \sa setBrushOrigin(), {QPainter#Settings}{Settings}
+    \since 6.11
+*/
+
+QPointF QPainter::brushOriginF() const
+{
+    Q_D(const QPainter);
+    if (!d->engine) {
+        qWarning("QPainter::brushOrigin: Painter not active");
+        return QPointF();
+    }
+    return d->state->brushOrigin;
 }
 
 /*!
@@ -3639,6 +3670,8 @@ void QPainter::setPen(const QColor &color)
 }
 
 /*!
+    \fn void QPainter::setPen(const QPen &pen)
+
     Sets the painter's pen to be the given \a pen.
 
     The \a pen defines how to draw lines and outlines, and it also
@@ -3647,7 +3680,13 @@ void QPainter::setPen(const QColor &color)
     \sa pen(), {QPainter#Settings}{Settings}
 */
 
-void QPainter::setPen(const QPen &pen)
+/*!
+    \fn void QPainter::setPen(QPen &&pen)
+    \since 6.11
+    \overload
+*/
+
+void QPainter::doSetPen(const QPen &pen, QPen *rvalue)
 {
 
 #ifdef QT_DEBUG_DRAW
@@ -3664,7 +3703,7 @@ void QPainter::setPen(const QPen &pen)
     if (d->state->pen == pen)
         return;
 
-    d->state->pen = pen;
+    q_choose_assign(d->state->pen, pen, rvalue);
 
     if (d->extended) {
         d->checkEmulation();
@@ -3720,6 +3759,8 @@ const QPen &QPainter::pen() const
 
 
 /*!
+    \fn void QPainter::setBrush(const QBrush &brush)
+
     Sets the painter's brush to the given \a brush.
 
     The painter's brush defines how shapes are filled.
@@ -3727,7 +3768,13 @@ const QPen &QPainter::pen() const
     \sa brush(), {QPainter#Settings}{Settings}
 */
 
-void QPainter::setBrush(const QBrush &brush)
+/*!
+    \fn void QPainter::setBrush(QBrush &&brush)
+    \since 6.11
+    \overload
+*/
+
+void QPainter::doSetBrush(const QBrush &brush, QBrush *rvalue)
 {
 #ifdef QT_DEBUG_DRAW
     if constexpr (qt_show_painter_debug_output)
@@ -3743,13 +3790,13 @@ void QPainter::setBrush(const QBrush &brush)
         return;
 
     if (d->extended) {
-        d->state->brush = brush;
+        q_choose_assign(d->state->brush, brush, rvalue);
         d->checkEmulation();
         d->extended->brushChanged();
         return;
     }
 
-    d->state->brush = brush;
+    q_choose_assign(d->state->brush, brush, rvalue);
     d->state->dirtyFlags |= QPaintEngine::DirtyBrush;
 }
 
@@ -6427,8 +6474,9 @@ QRectF QPainter::boundingRect(const QRectF &r, const QString &text, const QTextO
     and height (on both 1x and 2x displays), and produces high-resolution
     output on 2x displays.
 
-    The \a position offset is always in the painter coordinate system,
-    indepentent of display devicePixelRatio.
+    The \a position offset is provided in the device independent pixels
+    relative to the top-left corner of the \a rectangle. The \a position
+    can be used to align the repeating pattern inside the \a rectangle.
 
     \sa drawPixmap()
 */
@@ -6532,8 +6580,12 @@ void QPainter::drawTiledPixmap(const QRectF &r, const QPixmap &pixmap, const QPo
 
     (\a{x}, \a{y}) specifies the top-left point in the paint device
     that is to be drawn onto; with the given \a width and \a
-    height. (\a{sx}, \a{sy}) specifies the top-left point in the \a
-    pixmap that is to be drawn; this defaults to (0, 0).
+    height.
+
+    (\a{sx}, \a{sy}) specifies the origin inside the specified rectangle
+    where the pixmap will be drawn. The origin position is specified in
+    the device independent pixels relative to (\a{x}, \a{y}). This defaults
+    to (0, 0).
 */
 
 #ifndef QT_NO_PICTURE
@@ -7128,22 +7180,18 @@ void QPainter::setViewTransformEnabled(bool enable)
     d->updateMatrix();
 }
 
-void qt_format_text(const QFont &fnt, const QRectF &_r,
-                    int tf, const QString& str, QRectF *brect,
-                    int tabstops, int *ta, int tabarraylen,
+void qt_format_text(const QFont &fnt,
+                    const QRectF &_r,
+                    int tf,
+                    int alignment,
+                    const QTextOption *option,
+                    const QString& str,
+                    QRectF *brect,
+                    int tabstops,
+                    int *ta,
+                    int tabarraylen,
                     QPainter *painter)
 {
-    qt_format_text(fnt, _r,
-                    tf, nullptr, str, brect,
-                    tabstops, ta, tabarraylen,
-                    painter);
-}
-void qt_format_text(const QFont &fnt, const QRectF &_r,
-                    int tf, const QTextOption *option, const QString& str, QRectF *brect,
-                    int tabstops, int *ta, int tabarraylen,
-                    QPainter *painter)
-{
-
     Q_ASSERT( !((tf & ~Qt::TextDontPrint)!=0 && option!=nullptr) ); // we either have an option or flags
 
     if (_r.isEmpty() && !(tf & Qt::TextDontClip)) {
@@ -7154,7 +7202,7 @@ void qt_format_text(const QFont &fnt, const QRectF &_r,
     }
 
     if (option) {
-        tf |= option->alignment();
+        alignment |= option->alignment();
         if (option->wrapMode() != QTextOption::NoWrap)
             tf |= Qt::TextWordWrap;
 
@@ -7186,12 +7234,12 @@ void qt_format_text(const QFont &fnt, const QRectF &_r,
     else
         layout_direction = Qt::LeftToRight;
 
-    tf = QGuiApplicationPrivate::visualAlignment(layout_direction, QFlag(tf));
+    alignment = QGuiApplicationPrivate::visualAlignment(layout_direction, QFlag(alignment));
 
     bool isRightToLeft = layout_direction == Qt::RightToLeft;
     bool expandtabs = ((tf & Qt::TextExpandTabs) &&
-                        (((tf & Qt::AlignLeft) && !isRightToLeft) ||
-                          ((tf & Qt::AlignRight) && isRightToLeft)));
+                        (((alignment & Qt::AlignLeft) && !isRightToLeft) ||
+                          ((alignment & Qt::AlignRight) && isRightToLeft)));
 
     if (!painter)
         tf |= Qt::TextDontPrint;
@@ -7290,7 +7338,7 @@ start_lengthVariant:
     }
 
     engine.option.setTextDirection(layout_direction);
-    if (tf & Qt::AlignJustify)
+    if (alignment & Qt::AlignJustify)
         engine.option.setAlignment(Qt::AlignJustify);
     else
         engine.option.setAlignment(Qt::AlignLeft); // do not do alignment twice
@@ -7329,6 +7377,10 @@ start_lengthVariant:
 
             // Make sure lines are positioned on whole pixels
             height = qCeil(height);
+
+            if (alignment & Qt::AlignBaseline && l.lineNumber() == 0)
+                height -= l.ascent();
+
             l.setPosition(QPointF(0., height));
             height += textLayout.engine()->lines[l.lineNumber()].height().toReal();
             width = qMax(width, l.naturalTextWidth());
@@ -7340,14 +7392,14 @@ start_lengthVariant:
 
     qreal yoff = 0;
     qreal xoff = 0;
-    if (tf & Qt::AlignBottom)
+    if (alignment & Qt::AlignBottom)
         yoff = r.height() - height;
-    else if (tf & Qt::AlignVCenter)
+    else if (alignment & Qt::AlignVCenter)
         yoff = (r.height() - height)/2;
 
-    if (tf & Qt::AlignRight)
+    if (alignment & Qt::AlignRight)
         xoff = r.width() - width;
-    else if (tf & Qt::AlignHCenter)
+    else if (alignment & Qt::AlignHCenter)
         xoff = (r.width() - width)/2;
 
     QRectF bounds = QRectF(r.x() + xoff, r.y() + yoff, width, height);
@@ -7374,12 +7426,12 @@ start_lengthVariant:
 
             qreal advance = line.horizontalAdvance();
             xoff = 0;
-            if (tf & Qt::AlignRight) {
+            if (alignment & Qt::AlignRight) {
                 xoff = r.width() - advance -
                     eng->leadingSpaceWidth(eng->lines[line.lineNumber()]).toReal();
-            }
-            else if (tf & Qt::AlignHCenter)
+            } else if (alignment & Qt::AlignHCenter) {
                 xoff = (r.width() - advance) / 2;
+            }
 
             line.draw(painter, QPointF(r.x() + xoff, r.y() + yoff));
             eng->drawDecorations(painter);
@@ -7389,6 +7441,48 @@ start_lengthVariant:
             painter->restore();
         }
     }
+}
+
+void qt_format_text(const QFont &fnt, const QRectF &_r,
+                    int tf, const QString& str, QRectF *brect,
+                    int tabstops, int *ta, int tabarraylen,
+                    QPainter *painter)
+{
+    qt_format_text(fnt,
+                   _r,
+                   tf,
+                   tf & ~Qt::AlignBaseline, // Qt::AlignBaseline conflicts with Qt::TextSingleLine
+                   nullptr,
+                   str,
+                   brect,
+                   tabstops,
+                   ta,
+                   tabarraylen,
+                   painter);
+}
+
+void qt_format_text(const QFont &fnt,
+                    const QRectF &_r,
+                    int tf,
+                    const QTextOption *option,
+                    const QString& str,
+                    QRectF *brect,
+                    int tabstops,
+                    int *ta,
+                    int tabarraylen,
+                    QPainter *painter)
+{
+    qt_format_text(fnt,
+                   _r,
+                   tf,
+                   tf & ~Qt::AlignBaseline, // Qt::AlignBaseline conflicts with Qt::TextSingleLine
+                   option,
+                   str,
+                   brect,
+                   tabstops,
+                   ta,
+                   tabarraylen,
+                   painter);
 }
 
 /*!

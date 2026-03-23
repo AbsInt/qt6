@@ -463,6 +463,18 @@ void QQuickColorDialogImpl::invokeEyeDropper()
     d->eyeDropperEnter();
 }
 
+void QQuickColorDialogImpl::itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &data)
+{
+    Q_D(QQuickColorDialogImpl);
+    QQuickDialog::itemChange(change, data);
+
+    if (change != QQuickItem::ItemVisibleHasChanged || !isComponentComplete() || !data.boolValue)
+        return;
+
+    if (QQuickColorDialogImplAttached *attached = d->attachedOrWarn(); attached && attached->buttonBox())
+        attached->buttonBox()->forceActiveFocus(Qt::OtherFocusReason);
+}
+
 QQuickColorDialogImplAttached::QQuickColorDialogImplAttached(QObject *parent)
     : QObject(*(new QQuickColorDialogImplAttachedPrivate), parent)
 {

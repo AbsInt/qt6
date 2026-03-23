@@ -61,6 +61,11 @@
 */
 
 /*!
+    \class QAbstractSocketEngine
+    \internal
+*/
+
+/*!
     \enum QAbstractSocketEngine::PacketHeaderOption
 
     Specifies which fields in the IP packet header are desired in the call to

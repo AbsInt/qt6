@@ -65,6 +65,10 @@ T.ComboBox {
         selectedTextColor: control.palette.highlightedText
         verticalAlignment: Text.AlignVCenter
 
+        ContextMenu.menu: TextEditingContextMenu {
+            editor: parent
+        }
+
         background: PaddedRectangle {
             clip: true
             radius: 2

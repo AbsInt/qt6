@@ -43,7 +43,7 @@
     practice to subclass widgets and add your own slots so that you
     can handle the signals that you are interested in.
 
-    \image abstract-connections.png
+    \image abstract-connections.svg "Connections between objects"
     \omit
     \caption An abstract view of some signals and slots connections
     \endomit
@@ -289,10 +289,11 @@
     QScrollBar to the \c display() slot, so the LCD number
     continuously shows the value of the scroll bar.
 
-    Note that \c display() is overloaded; Qt will select the
-    appropriate version when you connect a signal to the slot. With
-    callbacks, you'd have to find five different names and keep track
-    of the types yourself.
+    Note that display() is overloaded. Qt's signals and slots give you
+    strongly-typed connections. They're safer at compile time than traditional
+    callbacks. With callbacks, you'd need different function names and manual
+    type tracking. But with overloaded functions, you need to specify which
+    version to use. The next section shows you how.
 
     \sa QLCDNumber, QObject::connect()
 

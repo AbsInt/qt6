@@ -564,9 +564,9 @@ QQuickItem *QQuickStackView::find(const QJSValue &callback, LoadBehavior behavio
     operations:
 
     \value StackView.Immediate An immediate operation without transitions.
-    \value StackView.PushTransition An operation with push transitions (since QtQuick.Controls 2.1).
-    \value StackView.ReplaceTransition An operation with replace transitions (since QtQuick.Controls 2.1).
-    \value StackView.PopTransition An operation with pop transitions (since QtQuick.Controls 2.1).
+    \value StackView.PushTransition An operation with push transitions (since \l{QtQuick.Controls} 2.1).
+    \value StackView.ReplaceTransition An operation with replace transitions (since \l{QtQuick.Controls} 2.1).
+    \value StackView.PopTransition An operation with pop transitions (since \l{QtQuick.Controls} 2.1).
 
     If no operation is provided, \c Immediate will be used if the stack is
     empty, and \c PushTransition otherwise.
@@ -672,9 +672,9 @@ void QQuickStackView::push(QQmlV4FunctionPtr args)
     operations:
 
     \value StackView.Immediate An immediate operation without transitions.
-    \value StackView.PushTransition An operation with push transitions (since QtQuick.Controls 2.1).
-    \value StackView.ReplaceTransition An operation with replace transitions (since QtQuick.Controls 2.1).
-    \value StackView.PopTransition An operation with pop transitions (since QtQuick.Controls 2.1).
+    \value StackView.PushTransition An operation with push transitions (since \l{QtQuick.Controls} 2.1).
+    \value StackView.ReplaceTransition An operation with replace transitions (since \l{QtQuick.Controls} 2.1).
+    \value StackView.PopTransition An operation with pop transitions (since \l{QtQuick.Controls} 2.1).
 
     If no operation is provided, \c PopTransition will be used.
 
@@ -824,9 +824,9 @@ void QQuickStackView::pop(QQmlV4FunctionPtr args)
     operations:
 
     \value StackView.Immediate An immediate operation without transitions.
-    \value StackView.PushTransition An operation with push transitions (since QtQuick.Controls 2.1).
-    \value StackView.ReplaceTransition An operation with replace transitions (since QtQuick.Controls 2.1).
-    \value StackView.PopTransition An operation with pop transitions (since QtQuick.Controls 2.1).
+    \value StackView.PushTransition An operation with push transitions (since \l{QtQuick.Controls} 2.1).
+    \value StackView.ReplaceTransition An operation with replace transitions (since \l{QtQuick.Controls} 2.1).
+    \value StackView.PopTransition An operation with pop transitions (since \l{QtQuick.Controls} 2.1).
 
     If no operation is provided, \c Immediate will be used if the stack is
     empty, and \c ReplaceTransition otherwise.
@@ -1401,7 +1401,7 @@ bool QQuickStackView::isEmpty() const
 
     \include qquickstackview.qdocinc pop-ownership
 
-    Since QtQuick.Controls 2.3, a \a transition can be optionally specified. Supported transitions:
+    Since \l{QtQuick.Controls} 2.3, a \a transition can be optionally specified. Supported transitions:
 
     \value StackView.Immediate Clear the stack immediately without any transition (default).
     \value StackView.PushTransition Clear the stack with a push transition.

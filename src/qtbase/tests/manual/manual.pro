@@ -2,14 +2,12 @@ TEMPLATE=subdirs
 QT_FOR_CONFIG += network-private gui-private
 
 SUBDIRS = \
-assets \
 filetest \
 embeddedintoforeignwindow \
 foreignwindows \
 fontfeatures \
 gestures \
 highdpi \
-keypadnavigation \
 keyevents \
 lance \
 network_remote_stresstest \
@@ -17,14 +15,11 @@ network_stresstest \
 qcursor \
 qdesktopservices \
 qgraphicsitem \
-qgraphicsitemgroup \
 qgraphicslayout/flicker \
 qhttpnetworkconnection \
 qimagereader \
-qlayout \
 qlocale \
 qmimedatabase \
-qnetconmonitor \
 qnetworkaccessmanager/qget \
 qnetworkreply \
 qstorageinfo \

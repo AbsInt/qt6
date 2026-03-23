@@ -24,12 +24,16 @@ if(NOT DEFINED "@INSTALL_CMAKE_NAMESPACE@@target@_FOUND")
     set("@INSTALL_CMAKE_NAMESPACE@@target@_FOUND" TRUE)
 endif()
 
-if (NOT QT_NO_CREATE_TARGETS AND @INSTALL_CMAKE_NAMESPACE@@target@_FOUND)
+# Do the checks inside Targets.cmake even when the file is still being generated
+include("${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@@target@TargetsPrecheck.cmake")
+
+if(NOT __qt_@target@_skip_include_targets_file AND @INSTALL_CMAKE_NAMESPACE@@target@_FOUND)
     include("${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@@target@Targets.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@@target@AdditionalTargetInfo.cmake"
         OPTIONAL)
     include("${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@@target@ExtraProperties.cmake"
         OPTIONAL)
+    set(__qt_@target@_targets_file_included ON)
 endif()
 
 # Find the private module counterpart.
@@ -80,7 +84,7 @@ if (@INSTALL_CMAKE_NAMESPACE@@target@_FOUND
 endif()
 unset(__qt_@target@_always_load_private_module)
 
-if (NOT QT_NO_CREATE_TARGETS AND @INSTALL_CMAKE_NAMESPACE@@target@_FOUND)
+if(__qt_@target@_targets_file_included)
     # DEPRECATED
     # Provide old style variables for includes, compile definitions, etc.
     # These variables are deprecated and only provided on a best-effort basis to facilitate porting.
@@ -210,9 +214,9 @@ else()
         set(@INSTALL_CMAKE_NAMESPACE@@target@_NOT_FOUND_MESSAGE
             "Target \"@QT_CMAKE_EXPORT_NAMESPACE@::@target@\" was not found.")
 
-        if(QT_NO_CREATE_TARGETS)
+        if(__qt_@target@_skip_include_targets_file)
             string(APPEND @INSTALL_CMAKE_NAMESPACE@@target@_NOT_FOUND_MESSAGE
-                "Possibly due to QT_NO_CREATE_TARGETS being set to TRUE and thus "
+                "Possibly due to __qt_@target@_skip_include_targets_file being set to TRUE and thus "
                 "${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@@target@Targets.cmake was not "
                 "included to define the target.")
         endif()

@@ -56,13 +56,6 @@ void QEglFSWindow::create()
         return;
 
     m_winId = newWId();
-
-    if (window()->type() == Qt::Desktop) {
-        QRect fullscreenRect(QPoint(), screen()->availableGeometry().size());
-        QWindowSystemInterface::handleGeometryChange(window(), fullscreenRect);
-        return;
-    }
-
     m_flags = Created;
 
     // Stop if there is already a window backed by a native window and surface. Additional
@@ -219,15 +212,13 @@ void QEglFSWindow::setVisible(bool visible)
     QList<QOpenGLCompositorWindow *> windows = compositor->windows();
     QWindow *wnd = window();
 
-    if (wnd->type() != Qt::Desktop) {
-        if (visible) {
-            compositor->addWindow(this);
-        } else {
-            compositor->removeWindow(this);
-            windows = compositor->windows();
-            if (windows.size())
-                windows.last()->sourceWindow()->requestActivate();
-        }
+    if (visible) {
+        compositor->addWindow(this);
+    } else {
+        compositor->removeWindow(this);
+        windows = compositor->windows();
+        if (windows.size())
+            windows.last()->sourceWindow()->requestActivate();
     }
 #else
     QWindow *wnd = window();
@@ -267,8 +258,7 @@ QRect QEglFSWindow::geometry() const
 void QEglFSWindow::requestActivateWindow()
 {
 #ifndef QT_NO_OPENGL
-    if (window()->type() != Qt::Desktop)
-        QOpenGLCompositor::instance()->moveToTop(this);
+    QOpenGLCompositor::instance()->moveToTop(this);
 #endif
     QWindow *wnd = window();
     QWindowSystemInterface::handleFocusWindowChanged(wnd, Qt::ActiveWindowFocusReason);
@@ -278,12 +268,10 @@ void QEglFSWindow::requestActivateWindow()
 void QEglFSWindow::raise()
 {
     QWindow *wnd = window();
-    if (wnd->type() != Qt::Desktop) {
 #ifndef QT_NO_OPENGL
-        QOpenGLCompositor::instance()->moveToTop(this);
+    QOpenGLCompositor::instance()->moveToTop(this);
 #endif
-        QWindowSystemInterface::handleExposeEvent(wnd, QRect(QPoint(0, 0), wnd->geometry().size()));
-    }
+    QWindowSystemInterface::handleExposeEvent(wnd, QRect(QPoint(0, 0), wnd->geometry().size()));
 }
 
 void QEglFSWindow::lower()
@@ -291,7 +279,7 @@ void QEglFSWindow::lower()
 #ifndef QT_NO_OPENGL
     QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
     QList<QOpenGLCompositorWindow *> windows = compositor->windows();
-    if (window()->type() != Qt::Desktop && windows.size() > 1) {
+    if (windows.size() > 1) {
         int idx = windows.indexOf(this);
         if (idx > 0) {
             compositor->changeWindowIndex(this, idx - 1);
@@ -324,8 +312,7 @@ QEglFSScreen *QEglFSWindow::screen() const
 
 bool QEglFSWindow::isRaster() const
 {
-    const QWindow::SurfaceType type = window()->surfaceType();
-    return type == QSurface::RasterSurface || type == QSurface::RasterGLSurface;
+    return window()->surfaceType() == QSurface::RasterSurface;
 }
 
 #ifndef QT_NO_OPENGL

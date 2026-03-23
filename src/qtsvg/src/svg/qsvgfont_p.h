@@ -1,5 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QSVGFONT_P_H
 #define QSVGFONT_P_H
@@ -19,7 +21,6 @@
 #include "qlist.h"
 #include "qstring.h"
 #include "qsvgstyle_p.h"
-#include "qtsvgglobal_p.h"
 
 #include <memory>
 
@@ -51,11 +52,12 @@ public:
     void addGlyph(const QString &unicode, const QPainterPath &path, qreal horizAdvX = -1);
     bool addMissingGlyph(const QPainterPath &path, qreal horizAdvX);
 
-    void draw(QPainter *p, const QPointF &point, const QString &str,
+    void draw(QPainter *p, const QPointF &point, const QList<const QSvgGlyph *> &glyphs,
               qreal pixelSize, Qt::Alignment alignment) const;
-    QRectF boundingRect(QPainter *p, const QPointF &point, const QString &str,
+    QRectF boundingRect(QPainter *p, const QPointF &point, const QList<const QSvgGlyph *> &glyphs,
                         qreal pixelSize, Qt::Alignment alignment) const;
     const QSvgGlyph *findFirstGlyphFor(QStringView text) const;
+    QList<const QSvgGlyph *> toGlyphs(QStringView text) const;
 
 public:
     QString m_familyName;
@@ -74,7 +76,8 @@ private:
     mutable QHash<char32_t, QList<qsizetype>> m_possibleGlyphIndicesForChar;
     mutable qsizetype m_firstUnscannedGlyphIdx = 0;
 
-    void draw_helper(QPainter *p, const QPointF &point, const QString &str, qreal pixelSize,
+    void draw_helper(QPainter *p, const QPointF &point,
+                     const QList<const QSvgGlyph *> &glyphs, qreal pixelSize,
                      Qt::Alignment alignment, QRectF *boundingRect = nullptr) const;
 };
 

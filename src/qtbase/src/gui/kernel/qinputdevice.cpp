@@ -169,6 +169,11 @@ QRect QInputDevice::availableVirtualGeometry() const
 }
 
 /*!
+    \property QInputDevice::name
+    \brief the device name.
+*/
+
+/*!
     Returns the device name.
 
     This string may be empty. It is however useful on systems that have
@@ -182,6 +187,11 @@ QString QInputDevice::name() const
 }
 
 /*!
+    \property QInputDevice::type
+    \brief the device type
+*/
+
+/*!
     Returns the device type.
 */
 QInputDevice::DeviceType QInputDevice::type() const
@@ -189,6 +199,11 @@ QInputDevice::DeviceType QInputDevice::type() const
     Q_D(const QInputDevice);
     return d->deviceType;
 }
+
+/*!
+    \property QInputDevice::capabilities
+    \brief the device capabilities.
+*/
 
 /*!
     Returns the device capabilities.
@@ -208,6 +223,11 @@ bool QInputDevice::hasCapability(QInputDevice::Capability capability) const
 }
 
 /*!
+    \property QInputDevice::systemId
+    \brief the platform-specific system ID.
+*/
+
+/*!
     Returns the platform specific system ID (for example xinput ID on the X11 platform).
 
     All platforms are expected to provide a unique system ID for each device.
@@ -217,6 +237,11 @@ qint64 QInputDevice::systemId() const
     Q_D(const QInputDevice);
     return d->systemId;
 }
+
+/*!
+    \property QInputDevice::seatName
+    \brief the seat associated with the device.
+*/
 
 /*!
     Returns the seat with which the device is associated, if known; otherwise empty.
@@ -239,7 +264,7 @@ Q_CONSTINIT static QBasicMutex devicesMutex;
     Returns a list of all registered input devices (keyboards and pointing devices).
 
     \note The list of devices is not always complete on all platforms. So far,
-    the most-complete information is available on the \l {Qt for Linux/X11}{X11}
+    the most-complete information is available on the \l {Qt for Linux}{Linux}
     platform, at startup and in response to hot-plugging. Most other platforms
     are only able to provide generic devices of various types, only after receiving
     events from them; and most platforms do not tell Qt when a device is plugged in,

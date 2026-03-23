@@ -1,6 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2024 Jie Liu <liujie01@kylinos.cn>
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qwaylandclipboard_p.h"
 #include "qwaylanddisplay_p.h"
@@ -151,6 +152,8 @@ bool QWaylandClipboard::ownsMode(QClipboard::Mode mode) const
 
     switch (mode) {
     case QClipboard::Clipboard:
+        if (seat->dataControlDevice() && seat->dataControlDevice()->selectionSource() != nullptr)
+            return true;
         return seat->dataDevice() && seat->dataDevice()->selectionSource() != nullptr;
     case QClipboard::Selection:
         if (seat->dataControlDevice() && seat->dataControlDevice()->primarySelectionSource() != nullptr)

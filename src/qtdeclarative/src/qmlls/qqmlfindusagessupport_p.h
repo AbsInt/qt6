@@ -17,7 +17,6 @@
 //
 
 #include "qlanguageserver_p.h"
-#include "qqmlcodemodel_p.h"
 #include "qqmlbasemodule_p.h"
 
 QT_BEGIN_NAMESPACE
@@ -30,7 +29,7 @@ class QQmlFindUsagesSupport : public QQmlBaseModule<ReferencesRequest>
 {
     Q_OBJECT
 public:
-    QQmlFindUsagesSupport(QmlLsp::QQmlCodeModel *codeModel);
+    QQmlFindUsagesSupport(QmlLsp::QQmlCodeModelManager *codeModelManager);
 
     QString name() const override;
     void registerHandlers(QLanguageServer *server, QLanguageServerProtocol *protocol) override;

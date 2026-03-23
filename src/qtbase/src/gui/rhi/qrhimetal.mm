@@ -405,6 +405,7 @@ struct QMetalGraphicsPipelineData
     MTLWinding winding;
     MTLCullMode cullMode;
     MTLTriangleFillMode triangleFillMode;
+    MTLDepthClipMode depthClipMode;
     float depthBias;
     float slopeScaledDepthBias;
     QMetalShader vs;
@@ -654,6 +655,9 @@ bool QRhiMetal::create(QRhi::Flags flags)
     if (caps.shadingRateMap && caps.multiView)
         caps.shadingRateMap = [d->dev supportsRasterizationRateMapWithLayerCount: 2];
 
+    // QTBUG-144444: setDepthClipMode is not available on the Simulator
+    caps.depthClamp = [d->dev supportsFamily:MTLGPUFamilyApple3];
+
     if (rhiFlags.testFlag(QRhi::EnablePipelineCacheDataSave))
         d->setupBinaryArchive();
 
@@ -873,6 +877,10 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
     case QRhi::PerRenderTargetBlending:
     case QRhi::SampleVariables:
         return true;
+    case QRhi::InstanceIndexIncludesBaseInstance:
+        return true;
+    case QRhi::DepthClamp:
+        return caps.depthClamp;
     default:
         Q_UNREACHABLE();
         return false;
@@ -1471,13 +1479,14 @@ void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD
 
 void QMetalGraphicsPipeline::makeActiveForCurrentRenderPassEncoder(QMetalCommandBuffer *cbD)
 {
+    QRHI_RES_RHI(QRhiMetal);
+
     [cbD->d->currentRenderPassEncoder setRenderPipelineState: d->ps];
 
     if (cbD->d->currentDepthStencilState != d->ds) {
         [cbD->d->currentRenderPassEncoder setDepthStencilState: d->ds];
         cbD->d->currentDepthStencilState = d->ds;
     }
-
     if (cbD->currentCullMode == -1 || d->cullMode != uint(cbD->currentCullMode)) {
         [cbD->d->currentRenderPassEncoder setCullMode: d->cullMode];
         cbD->currentCullMode = int(d->cullMode);
@@ -1485,6 +1494,12 @@ void QMetalGraphicsPipeline::makeActiveForCurrentRenderPassEncoder(QMetalCommand
     if (cbD->currentTriangleFillMode == -1 || d->triangleFillMode != uint(cbD->currentTriangleFillMode)) {
         [cbD->d->currentRenderPassEncoder setTriangleFillMode: d->triangleFillMode];
         cbD->currentTriangleFillMode = int(d->triangleFillMode);
+    }
+    if (rhiD->caps.depthClamp) {
+        if (cbD->currentDepthClipMode == -1 || d->depthClipMode != uint(cbD->currentDepthClipMode)) {
+            [cbD->d->currentRenderPassEncoder setDepthClipMode: d->depthClipMode];
+            cbD->currentDepthClipMode = int(d->depthClipMode);
+        }
     }
     if (cbD->currentFrontFaceWinding == -1 || d->winding != uint(cbD->currentFrontFaceWinding)) {
         [cbD->d->currentRenderPassEncoder setFrontFacingWinding: d->winding];
@@ -5034,6 +5049,7 @@ void QMetalGraphicsPipeline::mapStates()
     d->winding = m_frontFace == CCW ? MTLWindingCounterClockwise : MTLWindingClockwise;
     d->cullMode = toMetalCullMode(m_cullMode);
     d->triangleFillMode = toMetalTriangleFillMode(m_polygonMode);
+    d->depthClipMode = m_depthClamp ? MTLDepthClipModeClamp : MTLDepthClipModeClip;
     d->depthBias = float(m_depthBias);
     d->slopeScaledDepthBias = m_slopeScaledDepthBias;
 }
@@ -6256,6 +6272,7 @@ void QMetalCommandBuffer::resetPerPassCachedState()
     currentIndexFormat = QRhiCommandBuffer::IndexUInt16;
     currentCullMode = -1;
     currentTriangleFillMode = -1;
+    currentDepthClipMode = -1;
     currentFrontFaceWinding = -1;
     currentDepthBiasValues = { 0.0f, 0.0f };
 

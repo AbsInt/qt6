@@ -65,7 +65,6 @@ static inline int size_of_type(int type)
 
 bool qsg_sort_element_increasing_order(Element *a, Element *b) { return a->order < b->order; }
 bool qsg_sort_element_decreasing_order(Element *a, Element *b) { return a->order > b->order; }
-bool qsg_sort_batch_is_valid(Batch *a, Batch *b) { return a->first && !b->first; }
 bool qsg_sort_batch_increasing_order(Batch *a, Batch *b) { return a->first->order < b->first->order; }
 bool qsg_sort_batch_decreasing_order(Batch *a, Batch *b) { return a->first->order > b->first->order; }
 
@@ -873,6 +872,7 @@ Renderer::Renderer(QSGDefaultRenderContext *ctx, QSGRendererInterface::RenderMod
     , m_renderOrderRebuildLower(-1)
     , m_renderOrderRebuildUpper(-1)
 #endif
+    , m_minimumOrderPadding(4)
     , m_currentMaterial(nullptr)
     , m_currentShader(nullptr)
     , m_vertexUploadPool(256)
@@ -886,6 +886,11 @@ Renderer::Renderer(QSGDefaultRenderContext *ctx, QSGRendererInterface::RenderMod
     m_uint32IndexForRhi = !m_rhi->isFeatureSupported(QRhi::NonFourAlignedEffectiveIndexBufferOffset);
     if (qEnvironmentVariableIntValue("QSG_RHI_UINT32_INDEX"))
         m_uint32IndexForRhi = true;
+
+    bool ok = false;
+    int padding = qEnvironmentVariableIntValue("QSG_BATCHRENDERER_MINIMUM_ORDER_PADDING", &ok);
+    if (ok)
+        m_minimumOrderPadding = padding;
 
     m_visualizer = new RhiVisualizer(this);
 
@@ -1550,7 +1555,7 @@ void Renderer::buildRenderLists(QSGNode *node)
             int currentOrder = m_nextRenderOrder;
             QSGNODE_TRAVERSE(node)
                 buildRenderLists(child);
-            int padding = (m_nextRenderOrder - currentOrder) >> 2;
+            int padding = qMax((m_nextRenderOrder - currentOrder) >> 2, m_minimumOrderPadding);
             info->firstOrder = currentOrder;
             info->availableOrders = padding;
             info->lastOrder = m_nextRenderOrder + padding;
@@ -1732,15 +1737,19 @@ void Renderer::invalidateBatchAndOverlappingRenderOrders(Batch *batch)
  * batches and moving all invalidated batches to the batches pool.
  */
 void Renderer::cleanupBatches(QDataBuffer<Batch *> *batches) {
-    if (batches->size()) {
-        std::stable_sort(&batches->first(), &batches->last() + 1, qsg_sort_batch_is_valid);
-        int count = 0;
-        while (count < batches->size() && batches->at(count)->first)
-            ++count;
-        for (int i=count; i<batches->size(); ++i)
-            invalidateAndRecycleBatch(batches->at(i));
-        batches->resize(count);
+    qsizetype n = batches->size();
+    if (n == 0)
+        return;
+
+    qsizetype writeIndex = 0;
+    for (qsizetype i = 0; i < n; ++i) {
+        Batch *b = batches->at(i);
+        if (b->first)
+            (*batches).data()[writeIndex++] = b;
+        else
+            invalidateAndRecycleBatch(b);
     }
+    batches->resize(writeIndex);
 }
 
 void Renderer::prepareOpaqueBatches()
@@ -3084,7 +3093,7 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
     // currently unused srb that is layout-compatible with our binding list.
     if (!e->srb) {
         // reuse a QVector as our work area, thus possibly reusing the underlying allocation too
-        QVector<quint32> &layoutDesc(m_shaderManager->srbLayoutDescSerializeWorkspace);
+        QList<quint32> &layoutDesc(m_shaderManager->srbLayoutDescSerializeWorkspace);
         layoutDesc.clear();
         QRhiShaderResourceBinding::serializeLayoutDescription(bindings.cbegin(), bindings.cend(), std::back_inserter(layoutDesc));
         e->srb = m_shaderManager->srbPool.take(layoutDesc);

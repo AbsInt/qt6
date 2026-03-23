@@ -27,42 +27,16 @@ void WorkspaceHandlers::registerHandlers(QLanguageServer *server, QLanguageServe
                          QList<QByteArray> toRemove;
                          for (const WorkspaceFolder &folder : removed) {
                              toRemove.append(QQmlLSUtils::lspUriToQmlUrl(folder.uri));
-                             m_codeModel->removeDirectory(m_codeModel->url2Path(
-                                     QQmlLSUtils::lspUriToQmlUrl(folder.uri)));
+                             m_codeModelManager->removeDirectory(
+                                     QQmlLSUtils::lspUriToQmlUrl(folder.uri));
                          }
-                         m_codeModel->removeRootUrls(toRemove);
+                         m_codeModelManager->removeRootUrls(toRemove);
                          const QList<WorkspaceFolder> &added = event.added;
                          QList<QByteArray> toAdd;
                          for (const WorkspaceFolder &folder : added) {
                              toAdd.append(QQmlLSUtils::lspUriToQmlUrl(folder.uri));
                          }
-                         m_codeModel->addRootUrls(toAdd);
-                     });
-
-    QObject::connect(server->notifySignals(),
-                     &QLspNotifySignals::receivedDidChangeWatchedFilesNotification, this,
-                     [this](const DidChangeWatchedFilesParams &params) {
-                         const QList<FileEvent> &changes = params.changes;
-                         for (const FileEvent &change : changes) {
-                             const QString filename =
-                                     m_codeModel->url2Path(QQmlLSUtils::lspUriToQmlUrl(change.uri));
-                             switch (FileChangeType(change.type)) {
-                             case FileChangeType::Created:
-                                 // m_codeModel->addFile(filename);
-                                 break;
-                             case FileChangeType::Changed: {
-                                 QFile file(filename);
-                                 if (file.open(QIODevice::ReadOnly))
-                                     // m_modelManager->setFileContents(filename, file.readAll());
-                                     break;
-                                 break;
-                             }
-                             case FileChangeType::Deleted:
-                                 // m_modelManager->removeFile(filename);
-                                 break;
-                             }
-                         }
-                         // update due to dep changes...
+                         m_codeModelManager->addRootUrls(toAdd);
                      });
 
     QObject::connect(server, &QLanguageServer::clientInitialized, this,
@@ -87,6 +61,43 @@ void WorkspaceHandlers::setupCapabilities(const QLspSpecification::InitializePar
         serverInfo.capabilities.workspace = QJsonObject();
     serverInfo.capabilities.workspace->insert(u"workspaceFolders"_s,
                                               QTypedJson::toJsonValue(folders));
+
+    openInitialWorkspace(clientInfo);
+}
+
+void WorkspaceHandlers::openInitialWorkspace(const InitializeParams &clientInfo)
+{
+    if (clientInfo.workspaceFolders) {
+        const auto *folders = std::get_if<QList<WorkspaceFolder>>(&*clientInfo.workspaceFolders);
+
+        // note: if *clientInfo.workspaceFolders contains a nullptr_t than it means that no WS was
+        // opened yet.
+        if (!folders)
+            return;
+
+        QList<QByteArray> rootPaths;
+        for (const auto &folder : std::as_const(*folders)) {
+            rootPaths.append(QQmlLSUtils::lspUriToQmlUrl(folder.uri));
+        }
+        m_codeModelManager->addRootUrls(rootPaths);
+        return;
+    }
+
+    // note: rootUri is deprecated in the LSP protocol
+    if (const auto *rootUri = std::get_if<QByteArray>(&clientInfo.rootUri)) {
+        m_codeModelManager->addRootUrls({ QQmlLSUtils::lspUriToQmlUrl(*rootUri) });
+        return;
+    }
+    // note: rootPath is also deprecated in the LSP protocol. It was deprecated even before rootUri
+    // was deprecated.
+    if (clientInfo.rootPath) {
+        if (const auto *rootPath = std::get_if<QByteArray>(&*clientInfo.rootPath)) {
+            m_codeModelManager->addRootUrls({
+                    QUrl::fromLocalFile(QString::fromUtf8(*rootPath)).toEncoded(),
+            });
+            return;
+        }
+    }
 }
 
 void WorkspaceHandlers::clientInitialized(QLanguageServer *server)
@@ -142,25 +153,6 @@ void WorkspaceHandlers::clientInitialized(QLanguageServer *server)
                     qCWarning(lspServerLog) << QString::fromUtf8(msg.message);
                     protocol->notifyLogMessage(msg);
                 });
-    }
-
-    QSet<QString> rootPaths;
-    if (std::holds_alternative<QByteArray>(clientInfo.rootUri)) {
-        QString path = m_codeModel->url2Path(
-                QQmlLSUtils::lspUriToQmlUrl(std::get<QByteArray>(clientInfo.rootUri)));
-        rootPaths.insert(path);
-    } else if (clientInfo.rootPath && std::holds_alternative<QByteArray>(*clientInfo.rootPath)) {
-        QString path = QString::fromUtf8(std::get<QByteArray>(*clientInfo.rootPath));
-        rootPaths.insert(path);
-    }
-
-    if (clientInfo.workspaceFolders
-        && std::holds_alternative<QList<WorkspaceFolder>>(*clientInfo.workspaceFolders)) {
-        for (const WorkspaceFolder &workspace :
-             std::as_const(std::get<QList<WorkspaceFolder>>(*clientInfo.workspaceFolders))) {
-            const QUrl workspaceUrl(QString::fromUtf8(QQmlLSUtils::lspUriToQmlUrl(workspace.uri)));
-            rootPaths.insert(workspaceUrl.toLocalFile());
-        }
     }
 }
 

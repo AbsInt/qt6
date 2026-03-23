@@ -34,6 +34,7 @@ public:
     static void notifyStateChange(QAccessibleStateChangeEvent *event);
     static void notifyValueChange(QAccessibleValueChangeEvent *event);
     static void notifyNameChange(QAccessibleEvent *event);
+    static void notifyRoleChange(QAccessibleEvent *event);
     static void notifySelectionChange(QAccessibleEvent *event);
     static void notifyTextChange(QAccessibleEvent *event);
     static void raiseNotification(QAccessibleAnnouncementEvent *event);

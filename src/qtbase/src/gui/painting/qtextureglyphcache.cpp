@@ -302,6 +302,8 @@ void QImageTextureGlyphCache::fillTexture(const Coord &c,
                                           const QFixedPoint &subPixelPosition)
 {
     QImage mask = textureMapForGlyph(g, subPixelPosition);
+    if (mask.isNull())
+        return;
 
 #ifdef CACHE_DEBUG
     printf("fillTexture of %dx%d at %d,%d in the cache of %dx%d\n", c.w, c.h, c.x, c.y, m_image.width(), m_image.height());

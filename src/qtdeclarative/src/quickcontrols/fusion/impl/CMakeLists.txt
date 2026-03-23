@@ -8,11 +8,36 @@
 set(qml_files
     "ButtonPanel.qml"
     "CheckIndicator.qml"
+    "CopyAction.qml"
+    "CutAction.qml"
+    "DeleteAction.qml"
+    "PasteAction.qml"
     "RadioIndicator.qml"
+    "RedoAction.qml"
+    "SelectAllAction.qml"
     "SliderGroove.qml"
     "SliderHandle.qml"
     "SwitchIndicator.qml"
+    "TextEditingContextMenu.qml"
     "TextFieldBackground.qml"
+    "UndoAction.qml"
+)
+
+set_source_files_properties(
+    CopyAction.qml
+    CutAction.qml
+    DeleteAction.qml
+    PasteAction.qml
+    RedoAction.qml
+    SelectAllAction.qml
+    TextEditingContextMenu.qml
+    UndoAction.qml
+    PROPERTIES
+        QT_QML_SOURCE_VERSIONS "6.11"
+)
+
+set_source_files_properties(TextFieldBackground.qml PROPERTIES
+    QT_QML_SOURCE_VERSIONS "6.9"
 )
 
 qt_internal_add_qml_module(QuickControls2FusionStyleImpl

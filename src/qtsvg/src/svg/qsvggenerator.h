@@ -1,5 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QSVGGENERATOR_H
 #define QSVGGENERATOR_H
@@ -68,6 +70,7 @@ public:
 protected:
     QPaintEngine *paintEngine() const override;
     int metric(QPaintDevice::PaintDeviceMetric metric) const override;
+    void initPainter(QPainter *) const override;
 
 private:
     QScopedPointer<QSvgGeneratorPrivate> d_ptr;

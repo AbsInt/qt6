@@ -39,6 +39,10 @@ T.TextField {
 
     Material.containerStyle: Material.Outlined
 
+    ContextMenu.menu: TextEditingContextMenu {
+        editor: control
+    }
+
     cursorDelegate: CursorDelegate { }
 
     FloatingPlaceholderText {

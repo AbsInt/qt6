@@ -355,7 +355,8 @@ Q_STATIC_LOGGING_CATEGORY(lcQuickPopup, "qt.quick.controls.popup")
     \section1 Property Propagation
 
     Popup inherits fonts, palettes and attached properties through its parent
-    window, not its \l {Visual Parent}{object or visual parent}:
+    window, not its
+    \l {Concepts - Visual Parent in Qt Quick#Visual Parent}{object or visual parent}:
 
     \snippet qtquickcontrols-popup-property-propagation.qml file
 
@@ -579,7 +580,7 @@ bool QQuickPopupPrivate::blockInput(QQuickItem *item, const QPointF &point) cons
 {
     // don't propagate events within the popup beyond the overlay
     if (popupItem->contains(popupItem->mapFromScene(point))
-        && item == QQuickOverlay::overlay(window)) {
+        && item == QQuickOverlay::overlay(window, parentItem)) {
         return true;
     }
 
@@ -631,7 +632,7 @@ bool QQuickPopupPrivate::handleRelease(QQuickItem *item, const QPointF &point, u
 void QQuickPopupPrivate::handleUngrab()
 {
     Q_Q(QQuickPopup);
-    QQuickOverlay *overlay = QQuickOverlay::overlay(window);
+    QQuickOverlay *overlay = QQuickOverlay::overlay(window, parentItem);
     if (overlay) {
         QQuickOverlayPrivate *p = QQuickOverlayPrivate::get(overlay);
         if (p->mouseGrabberPopup == q)
@@ -788,7 +789,7 @@ bool QQuickPopupPrivate::prepareEnterTransition()
 
         if (lastActiveFocusItem) {
             this->lastActiveFocusItem = lastActiveFocusItem;
-            if (auto *overlay = QQuickOverlay::overlay(window)) {
+            if (auto *overlay = QQuickOverlay::overlay(window, parentItem)) {
                 auto *overlayPrivate = QQuickOverlayPrivate::get(overlay);
                 if (overlayPrivate->lastActiveFocusItem.isNull() && !popupItem->isAncestorOf(lastActiveFocusItem)) {
                     overlayPrivate->lastActiveFocusItem = lastActiveFocusItem;
@@ -852,7 +853,7 @@ void QQuickPopupPrivate::finalizeExitTransition()
     }
     destroyDimmer();
 
-    if (auto *overlay = QQuickOverlay::overlay(window)) {
+    if (auto *overlay = QQuickOverlay::overlay(window, parentItem)) {
         auto *overlayPrivate = QQuickOverlayPrivate::get(overlay);
         const auto stackingOrderPopups = overlayPrivate->stackingOrderPopups();
         // Reset the last active focus item in the overlay when this popup exit
@@ -1072,7 +1073,7 @@ void QQuickPopupPrivate::setWindow(QQuickWindow *newWindow)
         return;
 
     if (window) {
-        QQuickOverlay *overlay = QQuickOverlay::overlay(window);
+        QQuickOverlay *overlay = QQuickOverlay::overlay(window, parentItem);
         if (overlay)
             QQuickOverlayPrivate::get(overlay)->removePopup(q);
 
@@ -1086,7 +1087,7 @@ void QQuickPopupPrivate::setWindow(QQuickWindow *newWindow)
     window = newWindow;
 
     if (newWindow) {
-        QQuickOverlay *overlay = QQuickOverlay::overlay(newWindow);
+        QQuickOverlay *overlay = QQuickOverlay::overlay(newWindow, parentItem);
         if (overlay)
             QQuickOverlayPrivate::get(overlay)->addPopup(q);
 
@@ -1146,7 +1147,7 @@ bool QQuickPopupPrivate::usePopupWindow() const
 void QQuickPopupPrivate::adjustPopupItemParentAndWindow()
 {
     Q_Q(QQuickPopup);
-    QQuickOverlay *overlay = QQuickOverlay::overlay(window);
+    QQuickOverlay *overlay = QQuickOverlay::overlay(window, parentItem);
 
     if (visible && popupWindowDirty) {
         popupItem->setParentItem(overlay);
@@ -1258,7 +1259,7 @@ QQuickItem *QQuickPopupPrivate::createDimmer(QQmlComponent *component, QQuickPop
 void QQuickPopupPrivate::createOverlay()
 {
     Q_Q(QQuickPopup);
-    QQuickOverlay *overlay = QQuickOverlay::overlay(window);
+    QQuickOverlay *overlay = QQuickOverlay::overlay(window, parentItem);
     if (!overlay)
         return;
 
@@ -1341,7 +1342,7 @@ void QQuickPopupPrivate::resizeDimmer()
     if (!dimmer)
         return;
 
-    const QQuickOverlay *overlay = QQuickOverlay::overlay(window);
+    const QQuickOverlay *overlay = QQuickOverlay::overlay(window, parentItem);
 
     qreal w = overlay ? overlay->width() : 0;
     qreal h = overlay ? overlay->height() : 0;
@@ -2307,7 +2308,8 @@ void QQuickPopup::setContentItem(QQuickItem *item)
     d->popupItem->setContentItem(item);
     if (d->complete) {
         QQuickItem *newContentItem = d->popupItem->d_func()->contentItem.data();
-        connect(newContentItem, &QQuickItem::childrenChanged, this, &QQuickPopup::contentChildrenChanged);
+        if (newContentItem)
+            connect(newContentItem, &QQuickItem::childrenChanged, this, &QQuickPopup::contentChildrenChanged);
         if (oldContentItem != newContentItem)
             emit contentChildrenChanged();
     }
@@ -3101,7 +3103,7 @@ void QQuickPopup::setFiltersChildMouseEvents(bool filter)
 }
 
 /*!
-    \qmlmethod QtQuick.Controls::Popup::forceActiveFocus(enumeration reason = Qt.OtherFocusReason)
+    \qmlmethod void QtQuick.Controls::Popup::forceActiveFocus(enumeration reason = Qt.OtherFocusReason)
 
     Forces active focus on the popup with the given \a reason.
 
@@ -3262,7 +3264,7 @@ bool QQuickPopup::overlayEvent(QQuickItem *item, QEvent *event)
     // The overlay will normally call this function for each active popup, assuming there is no active mouse grabber.
     // If \a item doesn't belong to any of these popups, but exists in an overlay subtree, we shouldn't filter the event,
     // since the item is supposed to be independent of any active popups.
-    auto *overlay = QQuickOverlay::overlay(d->window);
+    auto *overlay = QQuickOverlay::overlay(d->window, d->parentItem);
     Q_ASSERT(overlay);
     const QList<QQuickItem *> paintOrderChildItems = QQuickOverlayPrivate::get(overlay)->paintOrderChildItems();
     const qsizetype targetItemPaintOrderIndex = paintOrderChildItems.indexOf(findRootOfOverlaySubtree(item, overlay));

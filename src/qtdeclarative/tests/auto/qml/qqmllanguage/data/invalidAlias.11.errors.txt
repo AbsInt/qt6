@@ -1,1 +1,1 @@
-5:5:Circular alias reference detected
+5:5:Cyclic alias

@@ -18,6 +18,12 @@ qt_feature("macdeployqt" PRIVATE
     AUTODETECT CMAKE_HOST_APPLE
     CONDITION MACOS AND QT_FEATURE_thread)
 
+qt_feature("wasmdeployqt" PRIVATE
+    SECTION "Deployment"
+    LABEL "WebAssembly deployment tool"
+    PURPOSE "The WebAssembly deployment tool is designed to automate the process of creating a deployable folder especially for dynamic linking case variant."
+    CONDITION QT_FEATURE_process)
+
 qt_feature("windeployqt" PRIVATE
     SECTION "Deployment"
     LABEL "Windows deployment tool"

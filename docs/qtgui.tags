@@ -10,6 +10,7 @@
         <class>QNativeInterface::QAndroidOffscreenSurface</class>
         <class>QNativeInterface::QAndroidScreen</class>
         <class>QNativeInterface::QCocoaGLContext</class>
+        <class>QNativeInterface::QCocoaScreen</class>
         <class>QNativeInterface::QEGLContext</class>
         <class>QNativeInterface::QGLXContext</class>
         <class>QNativeInterface::QWGLContext</class>
@@ -49,6 +50,17 @@
             <anchorfile>qnativeinterface-qcocoaglcontext.html</anchorfile>
             <anchor>nativeContext</anchor>
             <arglist>() const const = 0</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QNativeInterface::QCocoaScreen</name>
+        <filename>qnativeinterface-qcocoascreen.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>int *</type>
+            <name>nativeScreen</name>
+            <anchorfile>qnativeinterface-qcocoascreen.html</anchorfile>
+            <anchor>nativeScreen</anchor>
+            <arglist>() const const</arglist>
         </member>
     </compound>
     <compound kind="class">
@@ -197,6 +209,13 @@
             <name>touch</name>
             <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
             <anchor>touch</anchor>
+            <arglist>() const const = 0</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="pure" static="no">
+            <type>virtual xkb_context *</type>
+            <name>xkbContext</name>
+            <anchorfile>qnativeinterface-qwaylandapplication.html</anchorfile>
+            <anchor>xkbContext</anchor>
             <arglist>() const const = 0</arglist>
         </member>
     </compound>
@@ -648,6 +667,12 @@
             <anchor>Attribute-enum</anchor>
             <arglist></arglist>
         </member>
+        <member kind="enumvalue">
+            <name>Orientation</name>
+            <anchorfile>qaccessible.html</anchorfile>
+            <anchor>Attribute-enum</anchor>
+            <arglist></arglist>
+        </member>
         <member kind="enumeration">
             <name>Event</name>
             <anchorfile>qaccessible.html</anchorfile>
@@ -1069,6 +1094,12 @@
         </member>
         <member kind="enumvalue">
             <name>IdentifierChanged</name>
+            <anchorfile>qaccessible.html</anchorfile>
+            <anchor>Event-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>RoleChanged</name>
             <anchorfile>qaccessible.html</anchorfile>
             <anchor>Event-enum</anchor>
             <arglist></arglist>
@@ -1618,6 +1649,12 @@
         </member>
         <member kind="enumvalue">
             <name>Notification</name>
+            <anchorfile>qaccessible.html</anchorfile>
+            <anchor>Role-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>Switch</name>
             <anchorfile>qaccessible.html</anchorfile>
             <anchor>Role-enum</anchor>
             <arglist></arglist>
@@ -4325,7 +4362,7 @@
             <arglist>(const QTransform &amp;matrix) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
+            <type></type>
             <name>operator QVariant</name>
             <anchorfile>qbitmap.html</anchorfile>
             <anchor>operator-QVariant</anchor>
@@ -4532,13 +4569,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qbrush.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>Qt::BrushStyle</type>
             <name>style</name>
             <anchorfile>qbrush.html</anchorfile>
@@ -4578,6 +4608,13 @@
             <name>gradient</name>
             <anchorfile>qbrush.html</anchorfile>
             <anchor>gradient</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qbrush.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
     </compound>
@@ -5415,13 +5452,6 @@
             <arglist>(QColor::NameFormat format) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qcolor.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>isValid</name>
             <anchorfile>qcolor.html</anchorfile>
@@ -5664,6 +5694,13 @@
             <name>yellow</name>
             <anchorfile>qcolor.html</anchorfile>
             <anchor>yellow</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qcolor.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -6186,13 +6223,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qcolorspace.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>isValid</name>
             <anchorfile>qcolorspace.html</anchorfile>
@@ -6211,6 +6241,13 @@
             <name>gamma</name>
             <anchorfile>qcolorspace.html</anchorfile>
             <anchor>gamma</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qcolorspace.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
     </compound>
@@ -6637,17 +6674,17 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qcursor.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>Qt::CursorShape</type>
             <name>shape</name>
             <anchorfile>qcursor.html</anchorfile>
             <anchor>shape</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qcursor.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
     </compound>
@@ -9154,13 +9191,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qfont.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>bold</name>
             <anchorfile>qfont.html</anchorfile>
@@ -9291,6 +9321,13 @@
             <name>stretch</name>
             <anchorfile>qfont.html</anchorfile>
             <anchor>stretch</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qfont.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -10728,6 +10765,36 @@
             <anchorfile>qfontvariableaxis.html</anchorfile>
             <anchor>minimumValue</anchor>
             <arglist>() const const</arglist>
+        </member>
+        <member kind="property" type="qreal">
+            <name>defaultValue</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>defaultValue-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="qreal">
+            <name>maximumValue</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>maximumValue-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="qreal">
+            <name>minimumValue</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>minimumValue-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="QString">
+            <name>name</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>name-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="QByteArray">
+            <name>tag</name>
+            <anchorfile>qfontvariableaxis.html</anchorfile>
+            <anchor>tag-prop</anchor>
+            <arglist></arglist>
         </member>
     </compound>
     <compound kind="class">
@@ -14354,13 +14421,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qicon.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>isMask</name>
             <anchorfile>qicon.html</anchorfile>
@@ -14372,6 +14432,13 @@
             <name>isNull</name>
             <anchorfile>qicon.html</anchorfile>
             <anchor>isNull</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qicon.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -15556,13 +15623,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qimage.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>allGray</name>
             <anchorfile>qimage.html</anchorfile>
@@ -15721,6 +15781,13 @@
             <name>width</name>
             <anchorfile>qimage.html</anchorfile>
             <anchor>width</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qimage.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -17103,6 +17170,36 @@
             <anchor>availableVirtualGeometry-prop</anchor>
             <arglist></arglist>
         </member>
+        <member kind="property" type="Capabilities">
+            <name>capabilities</name>
+            <anchorfile>qinputdevice.html</anchorfile>
+            <anchor>capabilities-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="QString">
+            <name>name</name>
+            <anchorfile>qinputdevice.html</anchorfile>
+            <anchor>name-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="QString">
+            <name>seatName</name>
+            <anchorfile>qinputdevice.html</anchorfile>
+            <anchor>seatName-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="qint64">
+            <name>systemId</name>
+            <anchorfile>qinputdevice.html</anchorfile>
+            <anchor>systemId-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="DeviceType">
+            <name>type</name>
+            <anchorfile>qinputdevice.html</anchorfile>
+            <anchor>type-prop</anchor>
+            <arglist></arglist>
+        </member>
     </compound>
     <compound kind="class">
         <name>QInputEvent</name>
@@ -18376,13 +18473,6 @@
             <arglist>(QKeySequence::SequenceFormat format) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qkeysequence.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>isEmpty</name>
             <anchorfile>qkeysequence.html</anchorfile>
@@ -18436,6 +18526,13 @@
             <name>count</name>
             <anchorfile>qkeysequence.html</anchorfile>
             <anchor>count</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qkeysequence.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
     </compound>
@@ -18959,13 +19056,6 @@
             <arglist>(float distanceToPlane) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qmatrix4x4.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>QVector3D</type>
             <name>map</name>
             <anchorfile>qmatrix4x4.html</anchorfile>
@@ -19057,17 +19147,18 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qmatrix4x4.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
             <name>copyDataTo</name>
             <anchorfile>qmatrix4x4.html</anchorfile>
             <anchor>copyDataTo</anchor>
             <arglist>(float *values) const const</arglist>
-        </member>
-        <member kind="typedef" type="QMatrix4x4::Flag">
-            <name>Flags</name>
-            <anchorfile>qmatrix4x4.html</anchorfile>
-            <anchor>Flag-enum</anchor>
-            <arglist></arglist>
         </member>
     </compound>
     <compound kind="class">
@@ -26567,20 +26658,27 @@
             <name>setBrush</name>
             <anchorfile>qpainter.html</anchorfile>
             <anchor>setBrush-1</anchor>
-            <arglist>(QColor color)</arglist>
+            <arglist>(QBrush &amp;&amp;brush)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
             <name>setBrush</name>
             <anchorfile>qpainter.html</anchorfile>
             <anchor>setBrush-2</anchor>
-            <arglist>(Qt::BrushStyle style)</arglist>
+            <arglist>(QColor color)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
             <name>setBrush</name>
             <anchorfile>qpainter.html</anchorfile>
             <anchor>setBrush-3</anchor>
+            <arglist>(Qt::BrushStyle style)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setBrush</name>
+            <anchorfile>qpainter.html</anchorfile>
+            <anchor>setBrush-4</anchor>
             <arglist>(Qt::GlobalColor color)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -26686,13 +26784,20 @@
             <name>setPen</name>
             <anchorfile>qpainter.html</anchorfile>
             <anchor>setPen-1</anchor>
-            <arglist>(Qt::PenStyle style)</arglist>
+            <arglist>(QPen &amp;&amp;pen)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
             <name>setPen</name>
             <anchorfile>qpainter.html</anchorfile>
             <anchor>setPen-2</anchor>
+            <arglist>(Qt::PenStyle style)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setPen</name>
+            <anchorfile>qpainter.html</anchorfile>
+            <anchor>setPen-3</anchor>
             <arglist>(const QColor &amp;color)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -26868,6 +26973,13 @@
             <name>brushOrigin</name>
             <anchorfile>qpainter.html</anchorfile>
             <anchor>brushOrigin</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QPointF</type>
+            <name>brushOriginF</name>
+            <anchorfile>qpainter.html</anchorfile>
+            <anchor>brushOriginF</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -27653,13 +27765,6 @@
         <name>QPainterPath::Element</name>
         <filename>qpainterpath-element.html</filename>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QPointF</type>
-            <name>operator QPointF</name>
-            <anchorfile>qpainterpath-element.html</anchorfile>
-            <anchor>operator-QPointF</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>isCurveTo</name>
             <anchorfile>qpainterpath-element.html</anchorfile>
@@ -27693,6 +27798,13 @@
             <anchorfile>qpainterpath-element.html</anchorfile>
             <anchor>operator-eq-eq</anchor>
             <arglist>(const QPainterPath::Element &amp;other) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QPointF</name>
+            <anchorfile>qpainterpath-element.html</anchorfile>
+            <anchor>operator-QPointF</anchor>
+            <arglist>() const const</arglist>
         </member>
     </compound>
     <compound kind="class">
@@ -28233,13 +28345,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qpalette.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>isBrushSet</name>
             <anchorfile>qpalette.html</anchorfile>
@@ -28448,6 +28553,13 @@
             <anchorfile>qpalette.html</anchorfile>
             <anchor>color-1</anchor>
             <arglist>(QPalette::ColorRole role) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qpalette.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
+            <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>qint64</type>
@@ -28969,13 +29081,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qpen.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>Qt::PenCapStyle</type>
             <name>capStyle</name>
             <anchorfile>qpen.html</anchorfile>
@@ -29029,6 +29134,13 @@
             <name>width</name>
             <anchorfile>qpen.html</anchorfile>
             <anchor>width</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qpen.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -29967,13 +30079,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qpixmap.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>hasAlpha</name>
             <anchorfile>qpixmap.html</anchorfile>
@@ -30041,6 +30146,13 @@
             <name>width</name>
             <anchorfile>qpixmap.html</anchorfile>
             <anchor>width</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qpixmap.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -30478,6 +30590,30 @@
             <anchor>PointerType-enum</anchor>
             <arglist></arglist>
         </member>
+        <member kind="property" type="int">
+            <name>buttonCount</name>
+            <anchorfile>qpointingdevice.html</anchorfile>
+            <anchor>buttonCount-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="int">
+            <name>maximumPoints</name>
+            <anchorfile>qpointingdevice.html</anchorfile>
+            <anchor>maximumPoints-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="PointerType">
+            <name>pointerType</name>
+            <anchorfile>qpointingdevice.html</anchorfile>
+            <anchor>pointerType-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="QPointingDeviceUniqueId">
+            <name>uniqueId</name>
+            <anchorfile>qpointingdevice.html</anchorfile>
+            <anchor>uniqueId-prop</anchor>
+            <arglist></arglist>
+        </member>
     </compound>
     <compound kind="class">
         <name>QPointingDeviceUniqueId</name>
@@ -30697,13 +30833,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qpolygon.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>containsPoint</name>
             <anchorfile>qpolygon.html</anchorfile>
@@ -30716,6 +30845,13 @@
             <anchorfile>qpolygon.html</anchorfile>
             <anchor>intersects</anchor>
             <arglist>(const QPolygon &amp;p) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qpolygon.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
+            <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
@@ -30842,13 +30978,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qpolygonf.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>containsPoint</name>
             <anchorfile>qpolygonf.html</anchorfile>
@@ -30869,10 +30998,20 @@
             <anchor>isClosed</anchor>
             <arglist>() const const</arglist>
         </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qpolygonf.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
+            <arglist>() const const</arglist>
+        </member>
     </compound>
     <compound kind="class">
         <name>QQuaternion</name>
         <filename>qquaternion.html</filename>
+        <class>QQuaternion::Axes</class>
+        <class>QQuaternion::Axis</class>
+        <class>QQuaternion::EulerAngles</class>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QDataStream &amp;</type>
             <name>operator&lt;&lt;</name>
@@ -30927,6 +31066,13 @@
             <name>fromAxes</name>
             <anchorfile>qquaternion.html</anchorfile>
             <anchor>fromAxes</anchor>
+            <arglist>(QQuaternion::Axes axes)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QQuaternion</type>
+            <name>fromAxes</name>
+            <anchorfile>qquaternion.html</anchorfile>
+            <anchor>fromAxes-1</anchor>
             <arglist>(const QVector3D &amp;xAxis, const QVector3D &amp;yAxis, const QVector3D &amp;zAxis)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -30955,6 +31101,13 @@
             <name>fromEulerAngles</name>
             <anchorfile>qquaternion.html</anchorfile>
             <anchor>fromEulerAngles-1</anchor>
+            <arglist>(QQuaternion::EulerAngles&lt;float&gt; angles)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QQuaternion</type>
+            <name>fromEulerAngles</name>
+            <anchorfile>qquaternion.html</anchorfile>
+            <anchor>fromEulerAngles-2</anchor>
             <arglist>(const QVector3D &amp;angles)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="yes">
@@ -31182,10 +31335,17 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
+            <type>QQuaternion::Axes</type>
+            <name>toAxes</name>
             <anchorfile>qquaternion.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
+            <anchor>toAxes</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QQuaternion::EulerAngles&lt;float&gt;</type>
+            <name>eulerAngles</name>
+            <anchorfile>qquaternion.html</anchorfile>
+            <anchor>eulerAngles</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -31273,9 +31433,16 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qquaternion.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
             <name>getAxes</name>
-            <anchorfile>qquaternion.html</anchorfile>
+            <anchorfile>qquaternion-obsolete.html</anchorfile>
             <anchor>getAxes</anchor>
             <arglist>(QVector3D *xAxis, QVector3D *yAxis, QVector3D *zAxis) const const</arglist>
         </member>
@@ -31296,10 +31463,43 @@
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
             <name>getEulerAngles</name>
-            <anchorfile>qquaternion.html</anchorfile>
+            <anchorfile>qquaternion-obsolete.html</anchorfile>
             <anchor>getEulerAngles</anchor>
             <arglist>(float *pitch, float *yaw, float *roll) const const</arglist>
         </member>
+    </compound>
+    <compound kind="class">
+        <name>QQuaternion::Axes</name>
+        <filename>qquaternion-axes.html</filename>
+    </compound>
+    <compound kind="class">
+        <name>QQuaternion::Axis</name>
+        <filename>qquaternion-axis.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="yes">
+            <type>QQuaternion::Axis</type>
+            <name>fromVector3D</name>
+            <anchorfile>qquaternion-axis.html</anchorfile>
+            <anchor>fromVector3D</anchor>
+            <arglist>(QVector3D v)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>qFuzzyIsNull</name>
+            <anchorfile>qquaternion-axis.html</anchorfile>
+            <anchor>qFuzzyIsNull</anchor>
+            <arglist>(QQuaternion::Axis axis)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QVector3D</type>
+            <name>toVector3D</name>
+            <anchorfile>qquaternion-axis.html</anchorfile>
+            <anchor>toVector3D</anchor>
+            <arglist>() const const</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QQuaternion::EulerAngles</name>
+        <filename>qquaternion-eulerangles.html</filename>
     </compound>
     <compound kind="class">
         <name>QRadialGradient</name>
@@ -31664,6 +31864,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QString</type>
+            <name>glyphName</name>
+            <anchorfile>qrawfont.html</anchorfile>
+            <anchor>glyphName</anchor>
+            <arglist>(quint32 glyphIndex) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QString</type>
             <name>styleName</name>
             <anchorfile>qrawfont.html</anchorfile>
             <anchor>styleName</anchor>
@@ -31807,6 +32014,13 @@
             <name>xHeight</name>
             <anchorfile>qrawfont.html</anchorfile>
             <anchor>xHeight</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>quint32</type>
+            <name>glyphCount</name>
+            <anchorfile>qrawfont.html</anchorfile>
+            <anchor>glyphCount</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="typedef" type="QRawFont::LayoutFlag">
@@ -32187,13 +32401,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qregion.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>contains</name>
             <anchorfile>qregion.html</anchorfile>
@@ -32254,6 +32461,13 @@
             <name>rectCount</name>
             <anchorfile>qregion.html</anchorfile>
             <anchor>rectCount</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qregion.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="typedef" type="">
@@ -32450,6 +32664,13 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator quint64</name>
+            <anchorfile>qrgba64.html</anchorfile>
+            <anchor>operator-quint64</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type>quint16</type>
             <name>alpha</name>
             <anchorfile>qrgba64.html</anchorfile>
@@ -32475,13 +32696,6 @@
             <name>red</name>
             <anchorfile>qrgba64.html</anchorfile>
             <anchor>red</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>quint64</type>
-            <name>operator quint64</name>
-            <anchorfile>qrgba64.html</anchorfile>
-            <anchor>operator-quint64</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -33053,6 +33267,18 @@
         </member>
         <member kind="enumvalue">
             <name>SampleVariables</name>
+            <anchorfile>qrhi.html</anchorfile>
+            <anchor>Feature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>InstanceIndexIncludesBaseInstance</name>
+            <anchorfile>qrhi.html</anchorfile>
+            <anchor>Feature-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>DepthClamp</name>
             <anchorfile>qrhi.html</anchorfile>
             <anchor>Feature-enum</anchor>
             <arglist></arglist>
@@ -34793,6 +35019,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setDepthClamp</name>
+            <anchorfile>qrhigraphicspipeline.html</anchorfile>
+            <anchor>setDepthClamp</anchor>
+            <arglist>(bool enable)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setDepthOp</name>
             <anchorfile>qrhigraphicspipeline.html</anchorfile>
             <anchor>setDepthOp</anchor>
@@ -35041,6 +35274,13 @@
             <name>vertexInputLayout</name>
             <anchorfile>qrhigraphicspipeline.html</anchorfile>
             <anchor>vertexInputLayout</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>hasDepthClamp</name>
+            <anchorfile>qrhigraphicspipeline.html</anchorfile>
+            <anchor>hasDepthClamp</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -36322,12 +36562,6 @@
             <anchorfile>qrhishaderresourcebindings.html</anchorfile>
             <anchor>bindingCount</anchor>
             <arglist>() const const</arglist>
-        </member>
-        <member kind="typedef" type="QRhiShaderResourceBindings::UpdateFlag">
-            <name>UpdateFlags</name>
-            <anchorfile>qrhishaderresourcebindings.html</anchorfile>
-            <anchor>UpdateFlag-enum</anchor>
-            <arglist></arglist>
         </member>
     </compound>
     <compound kind="class">
@@ -39872,6 +40106,12 @@
         </member>
         <member kind="enumvalue">
             <name>InstanceIndexBuiltin</name>
+            <anchorfile>qshaderdescription.html</anchorfile>
+            <anchor>BuiltinType-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>ViewIndexBuiltin</name>
             <anchorfile>qshaderdescription.html</anchorfile>
             <anchor>BuiltinType-enum</anchor>
             <arglist></arglist>
@@ -44999,6 +45239,13 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
+            <name>setFontFeatures</name>
+            <anchorfile>qtextcharformat.html</anchorfile>
+            <anchor>setFontFeatures</anchor>
+            <arglist>(const QMap&lt;QFont::Tag, quint32&gt; &amp;fontFeatures)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
             <name>setFontFixedPitch</name>
             <anchorfile>qtextcharformat.html</anchorfile>
             <anchor>setFontFixedPitch</anchor>
@@ -45094,6 +45341,13 @@
             <anchorfile>qtextcharformat.html</anchorfile>
             <anchor>setFontUnderline</anchor>
             <arglist>(bool underline)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>void</type>
+            <name>setFontVariableAxes</name>
+            <anchorfile>qtextcharformat.html</anchorfile>
+            <anchor>setFontVariableAxes</anchor>
+            <arglist>(const QMap&lt;QFont::Tag, float&gt; &amp;fontVariableAxes)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
@@ -45205,6 +45459,20 @@
             <name>fontStyleStrategy</name>
             <anchorfile>qtextcharformat.html</anchorfile>
             <anchor>fontStyleStrategy</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QMap&lt;QFont::Tag, float&gt;</type>
+            <name>fontVariableAxes</name>
+            <anchorfile>qtextcharformat.html</anchorfile>
+            <anchor>fontVariableAxes</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QMap&lt;QFont::Tag, quint32&gt;</type>
+            <name>fontFeatures</name>
+            <anchorfile>qtextcharformat.html</anchorfile>
+            <anchor>fontFeatures</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -47729,6 +47997,18 @@
             <arglist></arglist>
         </member>
         <member kind="enumvalue">
+            <name>FontFeatures</name>
+            <anchorfile>qtextformat.html</anchorfile>
+            <anchor>Property-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
+            <name>FontVariableAxes</name>
+            <anchorfile>qtextformat.html</anchorfile>
+            <anchor>Property-enum</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="enumvalue">
             <name>LastFontProperty</name>
             <anchorfile>qtextformat.html</anchorfile>
             <anchor>Property-enum</anchor>
@@ -48363,13 +48643,6 @@
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qtextformat.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
             <name>property</name>
             <anchorfile>qtextformat.html</anchorfile>
             <anchor>property</anchor>
@@ -48506,6 +48779,13 @@
             <name>type</name>
             <anchorfile>qtextformat.html</anchorfile>
             <anchor>type</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qtextformat.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
@@ -49810,13 +50090,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qtextlength.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>operator!=</name>
             <anchorfile>qtextlength.html</anchorfile>
@@ -49829,6 +50102,13 @@
             <anchorfile>qtextlength.html</anchorfile>
             <anchor>operator-eq-eq</anchor>
             <arglist>(const QTextLength &amp;other) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qtextlength.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
+            <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>qreal</type>
@@ -51807,13 +52087,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qtransform.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>isAffine</name>
             <anchorfile>qtransform.html</anchorfile>
@@ -51868,6 +52141,13 @@
             <anchorfile>qtransform.html</anchorfile>
             <anchor>operator-eq-eq</anchor>
             <arglist>(const QTransform &amp;matrix) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qtransform.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
+            <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>qreal</type>
@@ -52573,12 +52853,6 @@
             <anchor>count</anchor>
             <arglist>(const QMimeData *mimeData) const const</arglist>
         </member>
-        <member kind="typedef" type="QUtiMimeConverter::HandlerScopeFlag">
-            <name>HandlerScope</name>
-            <anchorfile>qutimimeconverter.html</anchorfile>
-            <anchor>HandlerScopeFlag-enum</anchor>
-            <arglist></arglist>
-        </member>
     </compound>
     <compound kind="class">
         <name>QValidator</name>
@@ -52885,13 +53159,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qvector2d.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>QVector2D</type>
             <name>normalized</name>
             <anchorfile>qvector2d.html</anchorfile>
@@ -52966,6 +53233,13 @@
             <name>y</name>
             <anchorfile>qvector2d.html</anchorfile>
             <anchor>y</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qvector2d.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
     </compound>
@@ -53232,13 +53506,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qvector3d.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>QVector2D</type>
             <name>toVector2D</name>
             <anchorfile>qvector3d.html</anchorfile>
@@ -53348,6 +53615,13 @@
             <name>z</name>
             <anchorfile>qvector3d.html</anchorfile>
             <anchor>z</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qvector3d.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
     </compound>
@@ -53607,13 +53881,6 @@
             <arglist>() const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>operator QVariant</name>
-            <anchorfile>qvector4d.html</anchorfile>
-            <anchor>operator-QVariant</anchor>
-            <arglist>() const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
             <type>QVector2D</type>
             <name>toVector2D</name>
             <anchorfile>qvector4d.html</anchorfile>
@@ -53702,6 +53969,13 @@
             <name>z</name>
             <anchorfile>qvector4d.html</anchorfile>
             <anchor>z</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QVariant</name>
+            <anchorfile>qvector4d.html</anchorfile>
+            <anchor>operator-QVariant</anchor>
             <arglist>() const const</arglist>
         </member>
     </compound>
@@ -54566,6 +54840,36 @@
             <anchorfile>qwheelevent.html</anchorfile>
             <anchor>isUpdateEvent</anchor>
             <arglist>() const const override</arglist>
+        </member>
+        <member kind="property" type="QPoint">
+            <name>angleDelta</name>
+            <anchorfile>qwheelevent.html</anchorfile>
+            <anchor>angleDelta-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="const QPointingDevice*">
+            <name>device</name>
+            <anchorfile>qwheelevent.html</anchorfile>
+            <anchor>device-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="bool">
+            <name>inverted</name>
+            <anchorfile>qwheelevent.html</anchorfile>
+            <anchor>inverted-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="Qt::ScrollPhase">
+            <name>phase</name>
+            <anchorfile>qwheelevent.html</anchorfile>
+            <anchor>phase-prop</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="property" type="QPoint">
+            <name>pixelDelta</name>
+            <anchorfile>qwheelevent.html</anchorfile>
+            <anchor>pixelDelta-prop</anchor>
+            <arglist></arglist>
         </member>
     </compound>
     <compound kind="class">

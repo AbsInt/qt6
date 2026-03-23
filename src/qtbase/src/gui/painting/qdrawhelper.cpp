@@ -28,7 +28,7 @@
 #include <qmath.h>
 
 #if QT_CONFIG(qtgui_threadpool)
-#include <qsemaphore.h>
+#include <private/qlatch_p.h>
 #include <qthreadpool.h>
 #include <private/qthreadpool_p.h>
 #endif
@@ -3973,17 +3973,17 @@ static void spanfill_from_first(QRasterBuffer *rasterBuffer, QPixelLayout::BPP b
     QThreadPool *threadPool = QGuiApplicationPrivate::qtGuiThreadPool(); \
     if (segments > 1 && qPixelLayouts[data->rasterBuffer->format].bpp >= QPixelLayout::BPP8 \
              && threadPool && !threadPool->contains(QThread::currentThread())) { \
-        QSemaphore semaphore; \
+        QLatch latch(segments); \
         int c = 0; \
         for (int i = 0; i < segments; ++i) { \
             int cn = (count - c) / (segments - i); \
             threadPool->start([&, c, cn]() { \
                 function(c, c + cn); \
-                semaphore.release(1); \
+                latch.countDown(); \
             }, 1); \
             c += cn; \
         } \
-        semaphore.acquire(segments); \
+        latch.wait(); \
     } else \
         function(0, count)
 #else

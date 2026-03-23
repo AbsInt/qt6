@@ -17,13 +17,14 @@ class tst_QQmlSslConfiguration : public QObject
 private Q_SLOTS:
     void sslOptionsInSync_data();
     void sslOptionsInSync();
-};
 
-static QList<QSsl::SslOption> getSslOptionsFromConfig(const QSslConfiguration &c)
-{
+    void sslOptionFlags_data();
+    void sslOptionFlags();
+
+public:
     // Keep in sync with QSsl::SslOptions!
     static constexpr
-    std::array<QSsl::SslOption, 8> allOptions { QSsl::SslOptionDisableEmptyFragments,
+    std::array<QSsl::SslOption, 8> AllOptions { QSsl::SslOptionDisableEmptyFragments,
                                                 QSsl::SslOptionDisableSessionTickets,
                                                 QSsl::SslOptionDisableCompression,
                                                 QSsl::SslOptionDisableServerNameIndication,
@@ -31,9 +32,12 @@ static QList<QSsl::SslOption> getSslOptionsFromConfig(const QSslConfiguration &c
                                                 QSsl::SslOptionDisableSessionSharing,
                                                 QSsl::SslOptionDisableSessionPersistence,
                                                 QSsl::SslOptionDisableServerCipherPreference };
+};
 
+static QList<QSsl::SslOption> getSslOptionsFromConfig(const QSslConfiguration &c)
+{
     QList<QSsl::SslOption> result;
-    for (auto opt : allOptions) {
+    for (auto opt : tst_QQmlSslConfiguration::AllOptions) {
         if (c.testSslOption(opt))
             result.append(opt);
     }
@@ -41,6 +45,16 @@ static QList<QSsl::SslOption> getSslOptionsFromConfig(const QSslConfiguration &c
     // return a sorted list
     std::sort(result.begin(), result.end());
     return result;
+}
+
+static QSsl::SslOptions getSslOptionsAsFlags(const QSslConfiguration &c)
+{
+    QSsl::SslOptions options{};
+    for (auto opt : tst_QQmlSslConfiguration::AllOptions) {
+        if (c.testSslOption(opt))
+            options |= opt;
+    }
+    return options;
 }
 
 void tst_QQmlSslConfiguration::sslOptionsInSync_data()
@@ -53,6 +67,9 @@ void tst_QQmlSslConfiguration::sslOptionsInSync_data()
 
 void tst_QQmlSslConfiguration::sslOptionsInSync()
 {
+#if QT_REMOVAL_QT7_DEPRECATED_SINCE(6, 11)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
     QFETCH(ConfType, type);
     std::unique_ptr<QQmlSslConfiguration> conf;
 
@@ -81,6 +98,52 @@ void tst_QQmlSslConfiguration::sslOptionsInSync()
     // reading the values from the underlying configuration
     QEXPECT_FAIL("", "QTBUG-137900", Continue);
     QCOMPARE_EQ(getSslOptionsFromConfig(conf->configuration()), newOptions);
+QT_WARNING_POP
+#else
+    QSKIP("This test should be removed in Qt 7!")
+#endif // QT_REMOVAL_QT7_DEPRECATED_SINCE(6, 11)
+}
+
+void tst_QQmlSslConfiguration::sslOptionFlags_data()
+{
+    QTest::addColumn<ConfType>("type");
+
+    QTest::newRow("DefaultSslConfiguration") << ConfType::DefaultSsl;
+    QTest::newRow("DefaultDtlsConfiguration") << ConfType::DefaultDtls;
+}
+
+void tst_QQmlSslConfiguration::sslOptionFlags()
+{
+    QFETCH(const ConfType, type);
+
+    std::unique_ptr<QQmlSslConfiguration> conf;
+    QSsl::SslOptions defaultOptions;
+
+    if (type == ConfType::DefaultSsl) {
+        conf.reset(new QQmlSslDefaultConfiguration);
+        defaultOptions = getSslOptionsAsFlags(QSslConfiguration::defaultConfiguration());
+    } else {
+        conf.reset(new QQmlSslDefaultDtlsConfiguration);
+#if QT_CONFIG(dtls)
+        defaultOptions = getSslOptionsAsFlags(QSslConfiguration::defaultDtlsConfiguration());
+#else
+        defaultOptions = getSslOptionsAsFlags(QSslConfiguration::defaultConfiguration());
+#endif // QT_CONFIG(dtls)
+    }
+
+    // check default options
+    QCOMPARE_EQ(conf->sslOptionFlags(), defaultOptions);
+    // check the underlying configuration
+    QCOMPARE_EQ(getSslOptionsAsFlags(conf->configuration()), defaultOptions);
+
+    // update to some new value
+    QSsl::SslOptions options = QSsl::SslOptionDisableCompression
+                                | QSsl::SslOptionDisableServerCipherPreference;
+
+    conf->setSslOptionFlags(options);
+    QCOMPARE_EQ(conf->sslOptionFlags(), options);
+    // check the underlying configuration
+    QCOMPARE_EQ(getSslOptionsAsFlags(conf->configuration()), options);
 }
 
 QTEST_MAIN(tst_QQmlSslConfiguration)

@@ -7,6 +7,7 @@
 
 #include <QtQml/qtqmlglobal.h>
 #include <QtQml/qqmlregistration.h>
+#include <QtQml/qqmlprivate.h>
 
 #include <QtCore/QObject>
 #include <QtCore/QHash>
@@ -22,7 +23,13 @@ class Q_QML_EXPORT QQmlPropertyMap : public QObject
     Q_OBJECT
     QML_ANONYMOUS
 public:
+#if QT_DEPRECATED_SINCE(6, 11)
+    QT_DEPRECATED_VERSION_X_6_11("Use create() or the protected two-argument constructor instead.")
     explicit QQmlPropertyMap(QObject *parent = nullptr);
+#endif
+
+    static QQmlPropertyMap *create(QObject *parent = nullptr);
+
     ~QQmlPropertyMap() override;
 
     QVariant value(const QString &key) const;
@@ -55,11 +62,33 @@ protected:
     }
 
 private:
+    friend class QtPrivate::QMetaTypeForType<QQmlPropertyMap>;
+
     QQmlPropertyMap(const QMetaObject *staticMetaObject, QObject *parent);
 
     Q_DECLARE_PRIVATE(QQmlPropertyMap)
     Q_DISABLE_COPY(QQmlPropertyMap)
 };
+
+namespace QtPrivate {
+template<>
+constexpr QMetaTypeInterface::DefaultCtrFn QMetaTypeForType<QQmlPropertyMap>::getDefaultCtr()
+{
+    return [](const QMetaTypeInterface *, void *addr) {
+        new (addr) QQmlPropertyMap(&QQmlPropertyMap::staticMetaObject, nullptr);
+    };
+}
+}
+
+namespace QQmlPrivate {
+
+// Specialization of QQmlElement for QQmlPropertyMap, for the rare case
+// when you'd want to register QQmlPropertyMap directly, rather than some
+// derived class of it.
+template<>
+inline QQmlElement<QQmlPropertyMap>::QQmlElement() : QQmlPropertyMap(this, nullptr) {}
+
+}
 
 QT_END_NAMESPACE
 

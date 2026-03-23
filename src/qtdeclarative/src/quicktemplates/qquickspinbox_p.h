@@ -16,6 +16,7 @@
 // We mean it.
 //
 
+#include <QtQuickTemplates2/private/qquickabstractspinbox_p.h>
 #include <QtQuickTemplates2/private/qquickcontrol_p.h>
 #include <QtQml/qjsvalue.h>
 
@@ -25,7 +26,8 @@ class QValidator;
 class QQuickSpinBoxPrivate;
 class QQuickIndicatorButton;
 
-class Q_QUICKTEMPLATES2_EXPORT QQuickSpinBox : public QQuickControl
+class Q_QUICKTEMPLATES2_EXPORT QQuickSpinBox : public QQuickControl,
+                                               public QQuickAbstractSpinBox<QQuickSpinBox, int>
 {
     Q_OBJECT
     Q_PROPERTY(int from READ from WRITE setFrom NOTIFY fromChanged FINAL)
@@ -56,54 +58,22 @@ public:
     explicit QQuickSpinBox(QQuickItem *parent = nullptr);
     ~QQuickSpinBox();
 
-    int from() const;
     void setFrom(int from);
 
-    int to() const;
     void setTo(int to);
 
-    int value() const;
     void setValue(int value);
 
-    int stepSize() const;
     void setStepSize(int step);
-
-    bool isEditable() const;
-    void setEditable(bool editable);
 
     bool isLive() const;
     void setLive(bool live);
 
-#if QT_CONFIG(validator)
-    QValidator *validator() const;
-    void setValidator(QValidator *validator);
-#endif
-
     QJSValue textFromValue() const;
-    void setTextFromValue(const QJSValue &callback);
 
     QJSValue valueFromText() const;
-    void setValueFromText(const QJSValue &callback);
 
-    QQuickIndicatorButton *up() const;
-    QQuickIndicatorButton *down() const;
-
-    // 2.2 (Qt 5.9)
-    Qt::InputMethodHints inputMethodHints() const;
-    void setInputMethodHints(Qt::InputMethodHints hints);
-
-    bool isInputMethodComposing() const;
-
-    // 2.3 (Qt 5.10)
-    bool wrap() const;
     void setWrap(bool wrap);
-
-    // 2.4 (Qt 5.11)
-    QString displayText() const;
-
-public Q_SLOTS:
-    void increase();
-    void decrease();
 
 Q_SIGNALS:
     void fromChanged();
@@ -127,33 +97,91 @@ Q_SIGNALS:
     Q_REVISION(2, 4) void displayTextChanged();
 
 protected:
-    void focusInEvent(QFocusEvent *event) override;
-    void hoverEnterEvent(QHoverEvent *event) override;
-    void hoverMoveEvent(QHoverEvent *event) override;
-    void hoverLeaveEvent(QHoverEvent *event) override;
-    void keyPressEvent(QKeyEvent *event) override;
-    void keyReleaseEvent(QKeyEvent *event) override;
-    void timerEvent(QTimerEvent *event) override;
+    void focusInEvent(QFocusEvent *event) override
+    {
+        QQuickControl::focusInEvent(event);
+        handleFocusInEvent(event);
+    }
+    void hoverEnterEvent(QHoverEvent *event) override
+    {
+        QQuickControl::hoverEnterEvent(event);
+        handleHoverEnterEvent(event);
+    }
+    void hoverMoveEvent(QHoverEvent *event) override
+    {
+        QQuickControl::hoverMoveEvent(event);
+        handleHoverMoveEvent(event);
+    }
+    void hoverLeaveEvent(QHoverEvent *event) override
+    {
+        QQuickControl::hoverLeaveEvent(event);
+        handleHoverLeaveEvent(event);
+    }
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        QQuickControl::keyPressEvent(event);
+        handleKeyPressEvent(event);
+    }
+    void keyReleaseEvent(QKeyEvent *event) override
+    {
+        QQuickControl::keyReleaseEvent(event);
+        handleKeyReleaseEvent(event);
+    }
+    void timerEvent(QTimerEvent *event) override
+    {
+        QQuickControl::timerEvent(event);
+        handleTimerEvent(event);
+    }
 #if QT_CONFIG(wheelevent)
-    void wheelEvent(QWheelEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override
+    {
+        QQuickControl::wheelEvent(event);
+        handleWheelEvent(event);
+    }
 #endif
-
-    void classBegin() override;
-    void componentComplete() override;
-    void itemChange(ItemChange change, const ItemChangeData &value) override;
+    void classBegin() override
+    {
+        QQuickControl::classBegin();
+        handleClassBegin();
+    }
+    void componentComplete() override
+    {
+        QQuickControl::componentComplete();
+        handleComponentComplete();
+    }
+    void itemChange(ItemChange change, const ItemChangeData &value) override
+    {
+        QQuickControl::itemChange(change, value);
+        handleItemChange(change, value);
+    }
     void contentItemChange(QQuickItem *newItem, QQuickItem *oldItem) override;
-    void localeChange(const QLocale &newLocale, const QLocale &oldLocale) override;
-
-    QFont defaultFont() const override;
-
+    void localeChange(const QLocale &newLocale, const QLocale &oldLocale) override
+    {
+        QQuickControl::localeChange(newLocale, oldLocale);
+        handleLocaleChange();
+    }
+    QFont defaultFont() const override
+    {
+        return QQuickAbstractSpinBox<QQuickSpinBox, int>::defaultFont();
+    }
 #if QT_CONFIG(accessibility)
-    QAccessible::Role accessibleRole() const override;
-    void accessibilityActiveChanged(bool active) override;
+    QAccessible::Role accessibleRole() const override
+    {
+        return QQuickAbstractSpinBox<QQuickSpinBox, int>::accessibleRole();
+    }
+    void accessibilityActiveChanged(bool active) override
+    {
+        QQuickControl::accessibilityActiveChanged(active);
+        handleAccessibilityActiveChanged(active);
+    }
 #endif
 
 private:
     Q_DISABLE_COPY(QQuickSpinBox)
     Q_DECLARE_PRIVATE(QQuickSpinBox)
+    friend class QQuickAbstractSpinBox<QQuickSpinBox, int>;
+    QQuickControlPrivate *d_base_func();
+    const QQuickControlPrivate *d_base_func() const;
 };
 
 QT_END_NAMESPACE

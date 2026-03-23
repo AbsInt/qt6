@@ -23,7 +23,6 @@
 #include <private/qgraphicseffect_p.h>
 #endif
 #include <QtGui/private/qwindow_p.h>
-#include <QtGui/private/qhighdpiscaling_p.h>
 
 #include <qpa/qplatformbackingstore.h>
 
@@ -595,6 +594,12 @@ static QPlatformTextureList *widgetTexturesFor(QWidget *tlw, QWidget *widget)
 }
 
 // ---------------------------------------------------------------------------
+
+/*!
+    \class QWidgetRepaintManager
+    \inmodule QtWidgets
+    \internal
+*/
 
 /*!
     Synchronizes the \a exposedRegion of the \a exposedWidget with the backing store.
@@ -1200,6 +1205,12 @@ bool QWidgetRepaintManager::isDirty() const
 {
     return !(dirtyWidgets.isEmpty() && dirty.isEmpty() && dirtyRenderToTextureWidgets.isEmpty());
 }
+
+/*!
+    \class QWidgetPrivate
+    \inmodule QtWidgets
+    \internal
+*/
 
 /*!
     Invalidates the backing store when the widget is resized.

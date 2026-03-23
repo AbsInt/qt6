@@ -37,6 +37,7 @@ public:
     void resizeContent() override;
 
     void updateLayout();
+    void updateFocus();
 
     qreal getContentWidth() const override;
     qreal getContentHeight() const override;
@@ -55,7 +56,9 @@ public:
     Qt::Alignment alignment;
     QQuickDialogButtonBox::Position position = QQuickDialogButtonBox::Footer;
     QPlatformDialogHelper::StandardButtons standardButtons = QPlatformDialogHelper::NoButton;
+    QPlatformDialogHelper::StandardButton defaultStandardButton = QPlatformDialogHelper::NoButton;
     QPlatformDialogHelper::ButtonLayout buttonLayout = QPlatformDialogHelper::UnknownLayout;
+    QQuickAbstractButton *defaultButton = nullptr;
     QQmlComponent *delegate = nullptr;
 };
 

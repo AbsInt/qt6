@@ -16,12 +16,18 @@ qt_internal_add_test(tst_androidassets
         Qt::Quick
 )
 
-# add qml/*.qml files as assets instead of resources
+if(ANDROID)
+    # TODO: avoid using private API, introduce the public variant instead. See QTBUG-135973.
+    _qt_internal_android_get_target_deployment_dir(android_build_dir tst_androidassets)
+else()
+    set(android_build_dir "${CMAKE_CURRENT_BINARY_DIR}/android-build")
+endif()
 
+# add qml/*.qml files as assets instead of resources
 file(
     COPY qml/main.qml
-    DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/android-build/assets/qml/")
+    DESTINATION "${android_build_dir}/assets/qml/")
 
 file(
     COPY qml/pages/MainPage.qml
-    DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/android-build/assets/qml/pages/")
+    DESTINATION "${android_build_dir}/assets/qml/pages/")

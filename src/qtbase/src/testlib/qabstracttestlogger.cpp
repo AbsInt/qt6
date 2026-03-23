@@ -19,6 +19,10 @@
 #include <unistd.h>
 #endif
 
+#if defined(Q_OS_WINDOWS)
+#include <io.h>
+#endif
+
 #ifdef Q_OS_ANDROID
 #include <sys/stat.h>
 #endif
@@ -190,22 +194,37 @@ void QAbstractTestLogger::filterUnprintable(char *str) const
     Convenience method to write \a msg to the output stream.
 
     The output \a msg must be a \c{'\0'}-terminated string (and not \nullptr).
-    A copy of it is passed to \l filterUnprintable() and the result written to
-    the output \c stream, which is then flushed.
+
+    If the output \c stream is TTY the message is printed as is. If not, the
+    message is filtered via filterUnprintable() first. In both cases the output
+    \c stream is flushed after printing.
 */
 void QAbstractTestLogger::outputString(const char *msg)
 {
     QTEST_ASSERT(stream);
     QTEST_ASSERT(msg);
 
-    char *filtered = new char[strlen(msg) + 1];
-    strcpy(filtered, msg);
-    filterUnprintable(filtered);
+#if defined(Q_OS_WINDOWS)
+#define isatty _isatty
+#define fileno _fileno
+#endif
 
-    ::fputs(filtered, stream);
-    ::fflush(stream);
+    if (isatty(fileno(stream))) {
+        ::fputs(msg, stream);
+        ::fflush(stream);
+    } else {
+        char *filtered = new char[strlen(msg) + 1];
+        strcpy(filtered, msg);
+        filterUnprintable(filtered);
+        ::fputs(filtered, stream);
+        ::fflush(stream);
+        delete [] filtered;
+    }
 
-    delete [] filtered;
+#if defined(Q_OS_WINDOWS)
+#undef isatty
+#undef fileno
+#endif
 }
 
 /*!

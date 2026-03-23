@@ -137,7 +137,7 @@ QQmlJSTypeResolver::QQmlJSTypeResolver(QQmlJSImporter *importer)
     m_listPropertyType = m_qObjectType->listType();
     Q_ASSERT(m_listPropertyType->internalName() == u"QQmlListProperty<QObject>"_s);
     Q_ASSERT(m_listPropertyType->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence);
-    Q_ASSERT(m_listPropertyType->valueTypeName() == u"QObject"_s);
+    Q_ASSERT(m_listPropertyType->elementTypeName() == u"QObject"_s);
     assertExtension(m_listPropertyType, "Array"_L1);
 
     QQmlJSScope::Ptr emptyType = QQmlJSScope::create();
@@ -789,8 +789,8 @@ bool QQmlJSTypeResolver::canHold(
     if (container == m_qObjectListType || container == m_listPropertyType) {
         if (contained->accessSemantics() != QQmlJSScope::AccessSemantics::Sequence)
             return false;
-        if (QQmlJSScope::ConstPtr value = contained->valueType())
-            return value->isReferenceType();
+        if (QQmlJSScope::ConstPtr element = contained->elementType())
+            return element->isReferenceType();
         return false;
     }
 
@@ -1421,10 +1421,12 @@ bool QQmlJSTypeResolver::canPrimitivelyConvertFromTo(
         return true;
     if (isNumeric(from) && isNumeric(to))
         return true;
-    if (isNumeric(from) && to == m_boolType)
+    // We can convert everything to bool.
+    if (to == m_boolType)
         return true;
+
     if (from->accessSemantics() == QQmlJSScope::AccessSemantics::Reference
-            && (to == m_boolType || to == m_stringType)) {
+            && to == m_stringType) {
         return true;
     }
 
@@ -1506,31 +1508,30 @@ bool QQmlJSTypeResolver::canPrimitivelyConvertFromTo(
     if (from == m_variantListType)
         return to->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence;
 
-    // We can convert anything that fits into QJSPrimitiveValue
-    if (canConvertFromTo(from, m_jsPrimitiveType) && canConvertFromTo(m_jsPrimitiveType, to))
+    // We can convert anything that fits natively into QJSPrimitiveValue
+    if (canPrimitivelyConvertFromTo(from, m_jsPrimitiveType)
+            && canPrimitivelyConvertFromTo(m_jsPrimitiveType, to)) {
         return true;
-
-    // We can convert everything to bool.
-    if (to == m_boolType)
-        return true;
+    }
 
     if (areEquivalentLists(from, to))
         return true;
 
     if (from->isListProperty()
             && to->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence
-            && canConvertFromTo(from->valueType(), to->valueType())) {
+            && canConvertFromTo(from->elementType(), to->elementType())) {
         return true;
     }
 
     // it is possible to assing a singlar object to a list property if it could be stored in the list
     if (to->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence
-        && from->accessSemantics()  == QQmlJSScope::AccessSemantics::Reference
-        &&  from->inherits(to->valueType()))
+            && from->accessSemantics()  == QQmlJSScope::AccessSemantics::Reference
+            && from->inherits(to->elementType())) {
         return true;
+    }
 
     if (to == m_stringType && from->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence)
-        return canConvertFromTo(from->valueType(), m_stringType);
+        return canConvertFromTo(from->elementType(), m_stringType);
 
     return false;
 }
@@ -1618,7 +1619,7 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberType(
         return result;
 
     for (auto scope = contained;
-         scope && (scope->scopeType() == QQmlSA::ScopeType::JSFunctionScope
+         scope && (QQmlSA::isFunctionScope(scope->scopeType())
                    || scope->scopeType() == QQmlSA::ScopeType::JSLexicalScope);
          scope = scope->parentScope()) {
         if (auto ownIdentifier = scope->ownJSIdentifier(name)) {
@@ -1740,19 +1741,19 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberType(
     Q_UNREACHABLE_RETURN({});
 }
 
-QQmlJSRegisterContent QQmlJSTypeResolver::valueType(QQmlJSRegisterContent list) const
+QQmlJSRegisterContent QQmlJSTypeResolver::elementType(QQmlJSRegisterContent list) const
 {
     QQmlJSScope::ConstPtr value;
 
     auto valueType = [&](const QQmlJSScope::ConstPtr &scope) -> QQmlJSScope::ConstPtr {
         if (scope->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence)
-            return scope->valueType();
+            return scope->elementType();
 
         if (scope == m_forInIteratorPtr)
             return m_sizeType;
 
         if (scope == m_forOfIteratorPtr)
-            return list.scopeType()->valueType();
+            return list.scopeType()->elementType();
 
         if (scope == m_jsValueType || scope == m_varType)
             return m_jsValueType;
@@ -1827,7 +1828,7 @@ QQmlJSRegisterContent QQmlJSTypeResolver::iteratorPointer(
 {
     const QQmlJSScope::ConstPtr value = (type == QQmlJS::AST::ForEachType::In)
             ? m_int32Type
-            : valueType(listType).containedType();
+            : elementType(listType).containedType();
 
     QQmlJSScope::ConstPtr iteratorPointer = type == QQmlJS::AST::ForEachType::In
             ? m_forInIteratorPtr

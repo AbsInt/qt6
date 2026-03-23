@@ -1502,4 +1502,29 @@ TestCase {
         touch.release(0, tumblerView, control.width / 2, scrollOffset).commit()
         tryCompare(tumblerView, "currentIndex", 2)
     }
+
+    Component {
+        id: delegateComponent1
+
+        Text {}
+    }
+
+    Component {
+        id: delegateComponent2
+
+        Text {}
+    }
+
+    function test_dontDeleteDelegates() {
+        let control = createTemporaryObject(tumblerComponent, testCase, { delegate: delegateComponent1 })
+        verify(control)
+
+        // When setting a new delegate, the old one shouldn't be destroyed.
+        control.delegate = delegateComponent2
+        verify(delegateComponent1)
+
+        // The same goes for the new delegate: it shouldn't be destroyed when setting the old one.
+        control.delegate = delegateComponent1
+        verify(delegateComponent2)
+    }
 }

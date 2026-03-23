@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:critical reason:data-parser
 
-#define QT_NO_URL_CAST_FROM_STRING
-
 #include <qvariant.h>
 #include <private/qwidgetitemdata_p.h>
 #include "qfiledialog.h"
@@ -3021,7 +3019,6 @@ void QFileDialogPrivate::createWidgets()
     qFileDialogUi->lookInCombo->setDuplicatesEnabled(false);
 
     // filename
-    qFileDialogUi->fileNameEdit->setFileDialogPrivate(this);
 #ifndef QT_NO_SHORTCUT
     qFileDialogUi->fileNameLabel->setBuddy(qFileDialogUi->fileNameEdit);
 #endif
@@ -3778,6 +3775,9 @@ void QFileDialogPrivate::enterDirectory(const QModelIndex &index)
     QModelIndex sourceIndex = index.model() == proxyModel ? mapToSource(index) : index;
     QString path = sourceIndex.data(QFileSystemModel::FilePathRole).toString();
     if (path.isEmpty() || model->isDir(sourceIndex)) {
+        if (q->directory().path() == path)
+            return;
+
         const QFileDialog::FileMode fileMode = q->fileMode();
         q->setDirectory(path);
         emit q->directoryEntered(path);
@@ -4170,6 +4170,12 @@ QSize QFileDialogTreeView::sizeHint() const
     QSize sizeHint = header()->sizeHint();
     return QSize(sizeHint.width() * 4, height * 30);
 }
+
+/*!
+    \class QFileDialogLineEdit
+    \inmodule QtWidgets
+    \internal
+*/
 
 /*!
     // FIXME: this is a hack to avoid propagating key press events

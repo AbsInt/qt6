@@ -184,6 +184,12 @@ static RoleMapping map[] = {
     //: Role of an accessible object
     { QAccessible::CheckBox, ATSPI_ROLE_CHECK_BOX, QT_TRANSLATE_NOOP("QSpiAccessibleBridge", "check box") },
     //: Role of an accessible object
+#if ATSPI_ROLE_COUNT >= 132
+    { QAccessible::Switch, ATSPI_ROLE_SWITCH, QT_TRANSLATE_NOOP("QSpiAccessibleBridge", "switch") },
+#else
+    { QAccessible::Switch, ATSPI_ROLE_CHECK_BOX, QT_TRANSLATE_NOOP("QSpiAccessibleBridge", "check box") },
+#endif
+    //: Role of an accessible object
     { QAccessible::RadioButton, ATSPI_ROLE_RADIO_BUTTON, QT_TRANSLATE_NOOP("QSpiAccessibleBridge", "radio button") },
     //: Role of an accessible object
     { QAccessible::ComboBox, ATSPI_ROLE_COMBO_BOX, QT_TRANSLATE_NOOP("QSpiAccessibleBridge", "combo box") },

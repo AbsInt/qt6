@@ -17,6 +17,8 @@
 
 QT_BEGIN_NAMESPACE
 
+QSet<QEglFSKmsScreen *> QEglFSKmsScreen::s_screens;
+
 class QEglFSKmsInterruptHandler : public QObject
 {
 public:
@@ -60,10 +62,14 @@ QEglFSKmsScreen::QEglFSKmsScreen(QEglFSKmsDevice *device, const QKmsOutput &outp
     } else {
         qCDebug(qLcEglfsKmsDebug) << "No EDID data for output" << name();
     }
+
+    s_screens.insert(this);
 }
 
 QEglFSKmsScreen::~QEglFSKmsScreen()
 {
+    s_screens.remove(this);
+
     m_output.cleanup(m_device);
     delete m_interruptHandler;
 }
@@ -167,6 +173,11 @@ void QEglFSKmsScreen::waitForFlip()
 {
 }
 
+void QEglFSKmsScreen::updateOutput(QKmsOutput output)
+{
+    m_output = output;
+}
+
 void QEglFSKmsScreen::restoreMode()
 {
     m_output.restoreMode(m_device);
@@ -179,6 +190,11 @@ qreal QEglFSKmsScreen::refreshRate() const
 
     quint32 refresh = m_output.modes[m_output.mode].vrefresh;
     return refresh > 0 ? refresh : 60;
+}
+
+void QEglFSKmsScreen::removeSibling(QPlatformScreen *screen)
+{
+    m_siblings.removeAll(screen);
 }
 
 QList<QPlatformScreen::Mode> QEglFSKmsScreen::modes() const
@@ -226,6 +242,11 @@ void QEglFSKmsScreen::pageFlipped(unsigned int sequence, unsigned int tv_sec, un
     Q_UNUSED(sequence);
     Q_UNUSED(tv_sec);
     Q_UNUSED(tv_usec);
+}
+
+bool QEglFSKmsScreen::isScreenKnown(QEglFSKmsScreen *s)
+{
+    return s_screens.contains(s);
 }
 
 QT_END_NAMESPACE

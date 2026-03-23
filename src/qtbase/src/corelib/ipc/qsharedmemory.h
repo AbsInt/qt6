@@ -83,7 +83,7 @@ public:
     SharedMemoryError error() const;
     QString errorString() const;
 
-    static bool isKeyTypeSupported(QNativeIpcKey::Type type) Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION static bool isKeyTypeSupported(QNativeIpcKey::Type type);
     static QNativeIpcKey platformSafeKey(const QString &key,
             QNativeIpcKey::Type type = QNativeIpcKey::DefaultTypeForOs);
     static QNativeIpcKey legacyNativeKey(const QString &key,

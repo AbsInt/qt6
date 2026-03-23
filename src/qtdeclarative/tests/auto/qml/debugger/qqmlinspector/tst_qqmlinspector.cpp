@@ -25,7 +25,6 @@ public:
 
 private:
     ConnectResult startQmlProcess(const QString &qmlFile, bool restrictMode = true);
-    void checkAnimationSpeed(int targetMillisPerDegree);
     QList<QQmlDebugClient *> createClients() override;
     QQmlDebugProcess *createProcess(const QString &executable) override;
 
@@ -50,49 +49,6 @@ QQmlDebugTest::ConnectResult tst_QQmlInspector::startQmlProcess(const QString &q
     return QQmlDebugTest::connectTo(QLibraryInfo::path(QLibraryInfo::BinariesPath) + "/qml",
                                   restrictServices ? QStringLiteral("QmlInspector") : QString(),
                                   testFile(qmlFile), true);
-}
-
-void tst_QQmlInspector::checkAnimationSpeed(int targetMillisPerDegree)
-{
-    const QString markerString = QStringLiteral("ms/degrees");
-
-    // Funny things can happen with time and VMs. Also the change might take a while to propagate.
-    // Thus, we wait until we either have 3 passes or 3 failures in a row, or 10 loops have passed.
-
-    int numFailures = 0;
-    int numPasses = 0;
-
-    for (int i = 0; i < 10; ++i) {
-        QString output = m_process->output();
-        int position = output.size();
-        do {
-            QVERIFY(QQmlDebugTest::waitForSignal(m_process, SIGNAL(readyReadStandardOutput())));
-            output = m_process->output();
-        } while (!output.mid(position).contains(markerString));
-
-
-        QStringList words = output.split(QLatin1Char(' '));
-        const int marker = words.lastIndexOf(markerString);
-        QVERIFY(marker > 1);
-        const double degrees = words[marker - 1].toDouble();
-        const int milliseconds = words[marker - 2].toInt();
-        const double millisecondsPerDegree = milliseconds / degrees;
-
-        if (millisecondsPerDegree > targetMillisPerDegree - 3
-                || millisecondsPerDegree < targetMillisPerDegree + 3) {
-            if (++numPasses == 3)
-                return; // pass
-            numFailures = 0;
-        } else {
-            QVERIFY2(++numFailures < 3,
-                     QString("3 consecutive failures when checking for %1 milliseconds per degree")
-                     .arg(targetMillisPerDegree).toLocal8Bit().constData());
-            numPasses = 0;
-        }
-    }
-
-    QFAIL(QString("Animation speed won't settle to %1 milliseconds per degree")
-          .arg(targetMillisPerDegree).toLocal8Bit().constData());
 }
 
 QList<QQmlDebugClient *> tst_QQmlInspector::createClients()
@@ -159,22 +115,22 @@ void tst_QQmlInspector::setAnimationSpeed()
     QCOMPARE(startQmlProcess("qtquick2.qml"), ConnectSuccess);
     QVERIFY(m_client);
     QTRY_COMPARE(m_client->state(), QQmlDebugClient::Enabled);
-    checkAnimationSpeed(10);
+    checkAnimationSpeed(m_process, 10);
 
     int requestId = m_client->setAnimationSpeed(0.5);
     QTRY_COMPARE(m_recipient->lastResponseId, requestId);
     QVERIFY(m_recipient->lastResult);
-    checkAnimationSpeed(5);
+    checkAnimationSpeed(m_process, 5);
 
     requestId = m_client->setAnimationSpeed(2.0);
     QTRY_COMPARE(m_recipient->lastResponseId, requestId);
     QVERIFY(m_recipient->lastResult);
-    checkAnimationSpeed(20);
+    checkAnimationSpeed(m_process, 20);
 
     requestId = m_client->setAnimationSpeed(1.0);
     QTRY_COMPARE(m_recipient->lastResponseId, requestId);
     QVERIFY(m_recipient->lastResult);
-    checkAnimationSpeed(10);
+    checkAnimationSpeed(m_process, 10);
 }
 
 QTEST_MAIN(tst_QQmlInspector)

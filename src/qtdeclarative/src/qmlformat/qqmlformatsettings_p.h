@@ -24,6 +24,11 @@ class QQmlFormatSettings : public QQmlToolingSettings
 {
 public:
     QQmlFormatSettings(const QString &toolName = QLatin1String("qmlformat"));
+
+    void addOption(const QString &name, const QVariant &defaultValue, const QStringList &allowedValues = {});
+
+    bool outputOptions() const;
+
     static const inline QLatin1StringView s_useTabsSetting = QLatin1String("UseTabs");
     static const inline QLatin1StringView s_indentWidthSetting = QLatin1String("IndentWidth");
     static const inline QLatin1StringView s_maxColumnWidthSetting = QLatin1String("MaxColumnWidth");
@@ -31,8 +36,14 @@ public:
     static const inline QLatin1StringView s_newlineSetting = QLatin1String("NewlineType");
     static const inline QLatin1StringView s_objectsSpacingSetting = QLatin1String("ObjectsSpacing");
     static const inline QLatin1StringView s_functionsSpacingSetting = QLatin1String("FunctionsSpacing");
+    static const inline QLatin1StringView s_groupAttributesTogetherSetting =
+            QLatin1String("GroupAttributesTogether");
     static const inline QLatin1StringView s_sortImportsSetting = QLatin1String("SortImports");
+    static const inline QLatin1StringView s_singleLineEmptyObjectsSetting = QLatin1String("SingleLineEmptyObjects");
     static const inline QLatin1StringView s_semiColonRuleSetting = QLatin1String("SemicolonRule");
+
+protected:
+    QHash<QString, QStringList> m_allowedValues;
 };
 
 QT_END_NAMESPACE

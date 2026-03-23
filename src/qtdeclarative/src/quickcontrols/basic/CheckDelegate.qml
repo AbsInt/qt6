@@ -20,7 +20,6 @@ T.CheckDelegate {
 
     icon.width: 24
     icon.height: 24
-    icon.color: control.palette.text
 
     contentItem: IconLabel {
         leftPadding: control.mirrored ? control.indicator.width + control.spacing : 0
@@ -32,9 +31,10 @@ T.CheckDelegate {
         alignment: control.display === IconLabel.IconOnly || control.display === IconLabel.TextUnderIcon ? Qt.AlignCenter : Qt.AlignLeft
 
         icon: control.icon
+        defaultIconColor: control.palette.text
         text: control.text
         font: control.font
-        color: control.palette.text
+        color: defaultIconColor
     }
 
     // keep in sync with CheckBox.qml (shared CheckIndicator.qml was removed for performance reasons)

@@ -44,7 +44,7 @@ struct Q_QML_EXPORT Value : public StaticValue
         return {staticValue._val};
     }
 
-    static constexpr Value undefinded()
+    static constexpr Value undefined()
     {
         return fromStaticValue(Encode::undefined());
     }

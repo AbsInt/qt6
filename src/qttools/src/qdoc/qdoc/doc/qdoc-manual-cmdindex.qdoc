@@ -96,6 +96,7 @@
     \li \l {qmlenum-command} {\\qmlenum}
     \li \qdoccmd qmlenumeratorsfrom
     \li \l {qmltype-command} {\\qmltype}
+    \li \l {qmlsingletontype-command} {\\qmlsingletontype}
     \li \l {qmlmethod-command} {\\qmlmethod}
     \li \l {qmlproperty-command} {\\qmlproperty}
     \li \l {qmlsignal-command} {\\qmlsignal}
@@ -129,11 +130,12 @@
     \li \l {subtitle-command} {\\subtitle}
     \li \l {sup-command} {\\sup}
     \li \l {table-command} {\\table}
-    \li \l {tableofcontents-command} {\\tableofcontents}
     \li \l {target-command} {\\target}
     \li \l {threadsafe-command} {\\threadsafe}
     \li \l {title-command} {\\title}
     \li \qdoccmd tm
+    \li \l {toc-command} {\\toc}
+    \li \l {tocentry-command} {\\tocentry}
     \li \l {tt-command} {\\tt}
     \li \l {typealias-command} {\\typealias}
     \li \l {typedef-command} {\\typedef}

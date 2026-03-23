@@ -3,6 +3,7 @@
 // Qt-Security score:significant
 
 #include "qqmljslintervisitor_p.h"
+#include "qqmljsutils_p.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -19,10 +20,10 @@ namespace QQmlJS {
  */
 
 LinterVisitor::LinterVisitor(
-        const QQmlJSScope::Ptr &target, QQmlJSImporter *importer, QQmlJSLogger *logger,
+        QQmlJSImporter *importer, QQmlJSLogger *logger,
         const QString &implicitImportDirectory, const QStringList &qmldirFiles,
         QQmlJS::Engine *engine)
-    : QQmlJSImportVisitor(target, importer, logger, implicitImportDirectory, qmldirFiles)
+    : QQmlJSImportVisitor(importer, logger, implicitImportDirectory, qmldirFiles)
     , m_engine(engine)
 {
 }
@@ -543,6 +544,145 @@ void LinterVisitor::handleLiteralBinding(const QQmlJSMetaPropertyBinding &bindin
         break;
     }
     }
+}
+
+static constexpr QLatin1String s_method = "method"_L1;
+static constexpr QLatin1String s_signal = "signal"_L1;
+static constexpr QLatin1String s_property = "property"_L1;
+
+enum OverrideInformation { WithoutOverride = 0, WithFinal = 1, WithOverride = 2 };
+Q_DECLARE_FLAGS(OverrideInformations, OverrideInformation);
+
+static void warnForMethodShadowingInBase(const QQmlJSScope::ConstPtr &base, const QString &name,
+                                         const QQmlJS::SourceLocation &location,
+                                         QQmlJSLogger *logger)
+{
+    Q_ASSERT(base);
+    if (!base->hasMethod(name))
+        return;
+
+    static constexpr QLatin1String warningMessage =
+            "%1 \"%2\" already exists in base type \"%3\", use a different name."_L1;
+    const auto owner = QQmlJSScope::ownerOfMethod(base, name).scope;
+    const bool isSignal = owner->methods(name).front().methodType() == QQmlJSMetaMethodType::Signal;
+    logger->log(warningMessage.arg(isSignal ? "Signal"_L1 : "Method"_L1, name,
+                                   QQmlJSUtils::getScopeName(owner, QQmlSA::ScopeType::QMLScope)),
+                qmlShadow, location);
+}
+
+static void warnForPropertyShadowingInBase(const QQmlJSScope::ConstPtr &base, const QString &name,
+                                           const QQmlJS::SourceLocation &location,
+                                           OverrideInformations overrideFlags, QQmlJSLogger *logger)
+{
+    Q_ASSERT(base);
+    const bool hasOverride = overrideFlags.testFlag(WithOverride);
+    if (!base->hasProperty(name)) {
+        if (!hasOverride)
+            return;
+        logger->log(
+                "Member \"%1\" does not override anything. Consider removing \"override\"."_L1.arg(
+                        name),
+                qmlPropertyOverride, location);
+        return;
+    }
+
+    const auto owner = QQmlJSScope::ownerOfProperty(base, name).scope;
+    const auto shadowedProperty = owner->ownProperty(name);
+    if (shadowedProperty.isFinal()) {
+        logger->log(
+                (!hasOverride
+                         ? "Member \"%1\" shadows final member \"%1\" from base type \"%2\", use a different name."_L1
+                         : "Member \"%1\" overrides final member \"%1\" from base type \"%2\", use a different name and remove the \"override\"."_L1)
+                        .arg(name, QQmlJSUtils::getScopeName(owner, QQmlSA::ScopeType::QMLScope)),
+                qmlPropertyOverride, location);
+        return;
+    }
+
+    if (shadowedProperty.isVirtual() || shadowedProperty.isOverride()) {
+        if (hasOverride || overrideFlags.testFlag(WithFinal))
+            return;
+
+        logger->log(
+                "Member \"%1\" shadows member \"%1\" from base type \"%2\", use a different name or add a final or override specifier."_L1
+                        .arg(name, QQmlJSUtils::getScopeName(owner, QQmlSA::ScopeType::QMLScope)),
+                qmlPropertyOverride, location);
+        return;
+    }
+
+    if (hasOverride) {
+        logger->log(
+                "Member \"%1\" overrides a non-virtual member from base type \"%2\", use a different name or mark the property as virtual in the base type."_L1
+                        .arg(name, QQmlJSUtils::getScopeName(owner, QQmlSA::ScopeType::QMLScope)),
+                qmlPropertyOverride, location);
+        return;
+    }
+    logger->log("Property \"%2\" already exists in base type \"%3\", use a different name."_L1.arg(
+                        name, QQmlJSUtils::getScopeName(owner, QQmlSA::ScopeType::QMLScope)),
+                qmlPropertyOverride, location);
+}
+
+static void warnForDuplicates(const QQmlJSScope::ConstPtr &scope, const QString &name,
+                              QLatin1String type, const QQmlJS::SourceLocation &location,
+                              OverrideInformations overrideFlags, QQmlJSLogger *logger)
+{
+    static constexpr QLatin1String duplicateMessage =
+            "Duplicated %1 name \"%2\", \"%2\" is already a %3."_L1;
+    if (const auto methods = scope->ownMethods(name); !methods.isEmpty()) {
+        logger->log(duplicateMessage.arg(type, name,
+                                         methods.front().methodType() == QQmlSA::MethodType::Signal
+                                                 ? s_signal
+                                                 : s_method),
+                    qmlDuplicatedName, location);
+    }
+    if (scope->hasOwnProperty(name))
+        logger->log(duplicateMessage.arg(type, name, s_property), qmlDuplicatedName, location);
+
+    const QQmlJSScope::ConstPtr base = scope->baseType();
+    if (!base)
+        return;
+
+    warnForMethodShadowingInBase(base, name, location, logger);
+    warnForPropertyShadowingInBase(base, name, location, overrideFlags, logger);
+}
+
+bool LinterVisitor::visit(UiPublicMember *publicMember)
+{
+    switch (publicMember->type) {
+    case UiPublicMember::Signal: {
+        const QString signalName = publicMember->name.toString();
+        warnForDuplicates(m_currentScope, signalName, s_signal, publicMember->identifierToken,
+                          WithoutOverride, m_logger);
+        break;
+    }
+    case QQmlJS::AST::UiPublicMember::Property: {
+        const QString propertyName = publicMember->name.toString();
+        OverrideInformations flags;
+        flags.setFlag(WithOverride, publicMember->isOverride());
+        flags.setFlag(WithFinal, publicMember->isFinal());
+        warnForDuplicates(m_currentScope, propertyName, s_property, publicMember->identifierToken,
+                          flags, m_logger);
+        break;
+    }
+    }
+    return QQmlJSImportVisitor::visit(publicMember);
+}
+
+bool LinterVisitor::visit(FunctionExpression *fexpr)
+{
+    if (m_currentScope->scopeType() == QQmlSA::ScopeType::QMLScope) {
+        warnForDuplicates(m_currentScope, fexpr->name.toString(), s_method, fexpr->identifierToken,
+                          WithoutOverride, m_logger);
+    }
+    return QQmlJSImportVisitor::visit(fexpr);
+}
+
+bool LinterVisitor::visit(FunctionDeclaration *fdecl)
+{
+    if (m_currentScope->scopeType() == QQmlSA::ScopeType::QMLScope) {
+        warnForDuplicates(m_currentScope, fdecl->name.toString(), s_method, fdecl->identifierToken,
+                          WithoutOverride, m_logger);
+    }
+    return QQmlJSImportVisitor::visit(fdecl);
 }
 
 } // namespace QQmlJS

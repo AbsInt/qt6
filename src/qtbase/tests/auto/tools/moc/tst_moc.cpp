@@ -860,6 +860,7 @@ private slots:
     void privateClass();
     void cxx11Enums_data();
     void cxx11Enums();
+    void cxx11TrailingReturn_data();
     void cxx11TrailingReturn();
     void returnRefs();
     void memberProperties_data();
@@ -1416,7 +1417,7 @@ void tst_Moc::warnOnMultipleInheritance()
     QProcess proc;
     QStringList args;
     const QString header = m_sourceDirectory + QStringLiteral("/warn-on-multiple-qobject-subclasses.h");
-    args << "-I" << qtIncludePath + "/QtGui" << header;
+    args << "-I" << qtIncludePath << header;
     proc.start(m_moc, args);
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
@@ -1424,7 +1425,7 @@ void tst_Moc::warnOnMultipleInheritance()
     QVERIFY(!mocOut.isEmpty());
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
     QCOMPARE(mocWarning, header +
-                QString(":18:1: warning: Class Bar inherits from two QObject subclasses QWindow and Foo. This is not supported!\n"));
+                QString(":24:1: warning: Class Baz inherits from two QObject subclasses Foo and Bar. This is not supported!\n"));
 #else
     QSKIP("Only tested on linux/gcc");
 #endif
@@ -1476,7 +1477,7 @@ void tst_Moc::forgottenQInterface()
     QProcess proc;
     QStringList args;
     const QString header = m_sourceDirectory + QStringLiteral("/forgotten-qinterface.h");
-    args << "-I" << qtIncludePath + "/QtCore" << header;
+    args << "-I" << qtIncludePath << "-I" << qtIncludePath + "/QtCore" << header;
     proc.start(m_moc, args);
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
@@ -2576,6 +2577,26 @@ void tst_Moc::warnings_data()
         << QString()
         << u"standard input:2:1: error: Parse error at \"NONSENSE\""_s;
 
+    QTest::newRow("VIRTUAL FINAL property")
+            << "class X { \n Q_PROPERTY(int p READ p VIRTUAL FINAL) \n };"_ba << QStringList() << 1
+            << QString()
+            << u"standard input:2:1: error: Issue with property declaration p: "
+               u"The VIRTUAL cannot be combined with FINAL, as these attributes are mutually exclusive"_s;
+
+    QTest::newRow("FINAL OVERRIDE property")
+            << "class X { \n Q_PROPERTY(int p READ p FINAL OVERRIDE) \n };"_ba << QStringList() << 1
+            << QString()
+            << u"standard input:2:1: error: Issue with property declaration p: "
+               u"OVERRIDE is redundant when property is marked FINAL"_s;
+
+    QTest::newRow("VIRTUAL OVERRIDE property")
+            << "class X { \n Q_PROPERTY(int p READ p VIRTUAL OVERRIDE) \n };"_ba << QStringList()
+            << 1 << QString()
+            << u"standard input:2:1: error: Issue with property declaration p: VIRTUAL is "
+               u"redundant when overriding a property."
+               u" The OVERRIDE must only be used when actually overriding an existing property;"
+               u" using it on a new property is an error."_s;
+
 #ifdef Q_OS_UNIX  // Limit to Unix because the error message is platform-dependent
     QTest::newRow("Q_PLUGIN_METADATA: unreadable file")
         << QByteArray("class X { \n Q_PLUGIN_METADATA(FILE \".\") \n };")
@@ -2767,16 +2788,54 @@ void tst_Moc::cxx11Enums()
     QCOMPARE(metaEnum.isScoped(), isScoped);
 }
 
+void tst_Moc::cxx11TrailingReturn_data()
+{
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<bool>("isSlot");
+    QTest::addColumn<int>("returnTypeId");
+
+    QTest::newRow("f()") << "f()" << true << qMetaTypeId<void>();
+    QTest::newRow("args(int,char)") << "args(int,char)" << true << qMetaTypeId<int>();
+    QTest::newRow("inlineFunc(int)") << "inlineFunc(int)" << true << qMetaTypeId<int>();
+    QTest::newRow("inlineFuncVoid()") << "inlineFuncVoid()" << true << qMetaTypeId<void>();
+    QTest::newRow("constFunc()") << "constFunc()" << true << qMetaTypeId<double>();
+    QTest::newRow("fMacro()") << "fMacro()" << true << qMetaTypeId<void>();
+    QTest::newRow("argsMacro(int,char)") << "argsMacro(int,char)" << true << qMetaTypeId<int>();
+    QTest::newRow("inlineFuncMacro(int)") << "inlineFuncMacro(int)" << true << qMetaTypeId<int>();
+    QTest::newRow("inlineFuncVoidMacro()")
+            << "inlineFuncVoidMacro()" << true << qMetaTypeId<void>();
+    QTest::newRow("constFuncMacro()") << "constFuncMacro()" << true << qMetaTypeId<double>();
+
+    // we don't support references as return types, it's too dangerous
+    QTest::newRow("constRefReturn()") << "constRefReturn()" << true << qMetaTypeId<void>();
+    QTest::newRow("constConstRefReturn()")
+            << "constConstRefReturn()" << true << qMetaTypeId<void>();
+    QTest::newRow("constRefReturnMacro()")
+            << "constRefReturnMacro()" << true << qMetaTypeId<void>();
+    QTest::newRow("constConstRefReturnMacro()")
+            << "constConstRefReturnMacro()" << true << qMetaTypeId<void>();
+
+    QTest::newRow("signal(int)") << "signal(int)" << false << qMetaTypeId<void>();
+    QTest::newRow("signalMacro(int)") << "signalMacro(int)" << false << qMetaTypeId<void>();
+}
+
 void tst_Moc::cxx11TrailingReturn()
 {
     CXX11TrailingReturn retClass;
     const QMetaObject *mobj = retClass.metaObject();
-    QVERIFY(mobj->indexOfSlot("fun()") != -1);
-    QVERIFY(mobj->indexOfSlot("arguments(int,char)") != -1);
-    QVERIFY(mobj->indexOfSlot("inlineFunc(int)") != -1);
-    QVERIFY(mobj->indexOfSlot("constRefReturn()") != -1);
-    QVERIFY(mobj->indexOfSlot("constConstRefReturn()") != -1);
-    QVERIFY(mobj->indexOfSignal("trailingSignalReturn(int)") != -1);
+
+    QFETCH(QString, name);
+    QFETCH(bool, isSlot);
+    QFETCH(int, returnTypeId);
+
+    auto const index = [&] {
+        if (isSlot) {
+            return mobj->indexOfSlot(name.toUtf8());
+        }
+        return mobj->indexOfSignal(name.toUtf8());
+    }();
+    QVERIFY(index != -1);
+    QCOMPARE(mobj->method(index).returnType(), returnTypeId);
 }
 
 void tst_Moc::returnRefs()
@@ -3452,13 +3511,14 @@ void tst_Moc::overloadedAddressOperator()
 class CustomQObject : public QObject
 {
     Q_OBJECT
-    Q_ENUMS(Number)
 public:
     enum Number {
       Zero,
       One,
       Two
     };
+    Q_ENUM(Number)
+
     explicit CustomQObject(QObject *parent = nullptr)
       : QObject(parent)
     {
@@ -3492,13 +3552,14 @@ Q_DECLARE_METATYPE(SomeNamespace::NamespacedNonQObject)
 class CustomQObject2 : public QObject
 {
     Q_OBJECT
-    Q_ENUMS(Number)
 public:
     enum Number {
       Zero,
       One,
       Two
     };
+    Q_ENUM(Number)
+
     explicit CustomQObject2(QObject *parent = nullptr)
       : QObject(parent)
     {
@@ -3985,9 +4046,9 @@ namespace QTBUG32933_relatedObjectsDontIncludeItself {
             Q_PROPERTY(Obj::MyEnum p2 MEMBER member)
             Q_PROPERTY(NS::Obj::MyEnum p3 MEMBER member)
             Q_PROPERTY(QTBUG32933_relatedObjectsDontIncludeItself::NS::Obj::MyEnum p4 MEMBER member)
-            Q_ENUMS(MyEnum)
         public:
             enum MyEnum { Something, SomethingElse };
+            Q_ENUM(MyEnum)
             MyEnum member;
         };
     }
@@ -3997,19 +4058,19 @@ void tst_Moc::QTBUG32933_relatedObjectsDontIncludeItself()
 {
     const QMetaObject *mo = &QTBUG32933_relatedObjectsDontIncludeItself::NS::Obj::staticMetaObject;
     const auto *objects = mo->d.relatedMetaObjects;
-    // the related objects should be empty because the enums is in the same object.
+    // the related objects should be empty because the enum is in the same object.
     QVERIFY(!objects);
 }
 
 class UnrelatedClass : public QObject
 {
     Q_OBJECT
-    Q_ENUMS(UnrelatedEnum)
 public:
     enum UnrelatedEnum {
         UnrelatedInvalidValue = -1,
         UnrelatedValue = 42
     };
+    Q_ENUM(UnrelatedEnum)
 };
 
 // The presence of this macro used to confuse moc and prevent

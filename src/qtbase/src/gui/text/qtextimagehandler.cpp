@@ -4,15 +4,19 @@
 
 #include "qtextimagehandler_p.h"
 
+#include <qbuffer.h>
 #include <qguiapplication.h>
 #include <qtextformat.h>
 #include <qpainter.h>
 #include <qdebug.h>
-#include <qfile.h>
 #include <qicon.h>
-#include <private/qtextengine_p.h>
-#include <qpalette.h>
+#include <qimagereader.h>
+#include <qpixmapcache.h>
 #include <qthread.h>
+#include <qpa/qplatformintegration.h>
+#include <private/qguiapplication_p.h>
+#include <private/qhexstring_p.h>
+#include <private/qtextengine_p.h>
 #include <limits>
 
 QT_BEGIN_NAMESPACE
@@ -50,32 +54,71 @@ static inline QUrl findAtNxFileOrResource(const QString &baseFileName,
     return QUrl(*name);
 }
 
-template<typename T>
-static T getAs(QTextDocument *doc, const QTextImageFormat &format, const qreal devicePixelRatio = 1.0)
+static QImage getImage(QTextDocument *doc, const QTextImageFormat &format,
+                       const qreal devicePixelRatio = 1.0, const QSizeF &size = {})
 {
     qreal sourcePixelRatio = 1.0;
     QString name;
     const QUrl url = findAtNxFileOrResource(format.name(), devicePixelRatio, &sourcePixelRatio, &name);
     const QVariant data = doc->resource(QTextDocument::ImageResource, url);
 
-    T result;
+    // directly provided as QPixmap/QImage or already cached
     if (data.userType() == QMetaType::QPixmap || data.userType() == QMetaType::QImage)
-        result = data.value<T>();
-    else if (data.metaType() == QMetaType::fromType<QByteArray>())
-        result.loadFromData(data.toByteArray());
+        return data.value<QImage>();
 
-    if (result.isNull()) {
-        if (name.isEmpty() || !result.load(name))
-            return T(":/qt-project.org/styles/commonstyle/images/file-16.png"_L1);
-        doc->addResource(QTextDocument::ImageResource, url, result);
+    // some image formats are scalable (e.g. svg) so we should not store a single
+    // QImage as QTextDocument::ImageResource to avoid scaling artefacts later on.
+    // But otoh we don't want to load them on every usage. Therefore cache the result
+    // in QPixmapCache
+    const bool canUsePixmapCache = (QThread::isMainThread()
+                                    || QGuiApplicationPrivate::platformIntegration()->hasCapability(
+                                            QPlatformIntegration::ThreadedPixmaps));
+    const auto buildCacheKey = [](const QSizeF &size, qreal dpr) {
+        return QLatin1String("qt_textimagehandler_") % HexString<int>(size.width())
+                % HexString<int>(size.height())
+                % HexString<qint16>(qRound(dpr * 1000));
+    };
+    const QString cacheKey = canUsePixmapCache
+            ? buildCacheKey(size * devicePixelRatio, sourcePixelRatio)
+            : QString();
+
+    if (canUsePixmapCache) {
+        QPixmap pm;
+        if (QPixmapCache::find(cacheKey, &pm))
+            return pm.toImage();
     }
 
-    if (sourcePixelRatio != 1.0)
-        result.setDevicePixelRatio(sourcePixelRatio);
+    const auto readImage = [&](auto &&content) {
+        QImageReader imgReader(content);
+        if (imgReader.canRead()) {
+            const bool supportsScaledSize = imgReader.supportsOption(QImageIOHandler::ScaledSize);
+            if (size.isValid() && supportsScaledSize)
+                imgReader.setScaledSize((size * devicePixelRatio).toSize());
+            QImage result = imgReader.read();
+            result.setDevicePixelRatio(sourcePixelRatio);
+            if (!supportsScaledSize)
+                doc->addResource(QTextDocument::ImageResource, url, result);
+            else if (canUsePixmapCache)
+                QPixmapCache::insert(cacheKey, QPixmap::fromImage(result));
+            return result;
+        }
+        return QImage();
+    };
+
+    QImage result;
+    if (data.metaType() == QMetaType::fromType<QByteArray>()) {
+        QByteArray ba(data.toByteArray());
+        QBuffer buf(&ba);
+        result = readImage(&buf);
+    }
+    if (result.isNull())
+        result = readImage(name);
+
+    if (result.isNull())
+        result = QImage(":/qt-project.org/styles/commonstyle/images/file-16.png"_L1);
     return result;
 }
 
-template<typename T>
 static QSize getSize(QTextDocument *doc, const QTextImageFormat &format)
 {
     const bool hasWidth = format.hasProperty(QTextFormat::ImageWidth);
@@ -96,10 +139,10 @@ static QSize getSize(QTextDocument *doc, const QTextImageFormat &format)
         width = qMin(effectiveMaxWidth, width);
     }
 
-    T source;
+    QImage source;
     QSize size(width, height);
     if (!hasWidth || !hasHeight) {
-        source = getAs<T>(doc, format);
+        source = getImage(doc, format);
         QSizeF sourceSize = source.deviceIndependentSize();
 
         if (sourceSize.width() > effectiveMaxWidth) {
@@ -122,15 +165,10 @@ static QSize getSize(QTextDocument *doc, const QTextImageFormat &format)
         }
     }
 
-    qreal scale = 1.0;
-    QPaintDevice *pdev = doc->documentLayout()->paintDevice();
-    if (pdev) {
-        if (source.isNull())
-            source = getAs<T>(doc, format);
-        if (!source.isNull())
-            scale = qreal(pdev->logicalDpiY()) / qreal(qt_defaultDpi());
-    }
-    size *= scale;
+    const QPaintDevice *pdev = doc->documentLayout()->paintDevice();
+    if (pdev)
+        size *= qreal(pdev->logicalDpiY()) / qreal(qt_defaultDpi());
+
     return size;
 }
 
@@ -144,16 +182,14 @@ QSizeF QTextImageHandler::intrinsicSize(QTextDocument *doc, int posInDocument, c
     Q_UNUSED(posInDocument);
     const QTextImageFormat imageFormat = format.toImageFormat();
 
-    if (QCoreApplication::instance()->thread() != QThread::currentThread())
-        return getSize<QImage>(doc, imageFormat);
-    return getSize<QPixmap>(doc, imageFormat);
+    return getSize(doc, imageFormat);
 }
 
 QImage QTextImageHandler::image(QTextDocument *doc, const QTextImageFormat &imageFormat)
 {
     Q_ASSERT(doc != nullptr);
 
-    return getAs<QImage>(doc, imageFormat);
+    return getImage(doc, imageFormat);
 }
 
 void QTextImageHandler::drawObject(QPainter *p, const QRectF &rect, QTextDocument *doc, int posInDocument, const QTextFormat &format)
@@ -161,13 +197,8 @@ void QTextImageHandler::drawObject(QPainter *p, const QRectF &rect, QTextDocumen
     Q_UNUSED(posInDocument);
         const QTextImageFormat imageFormat = format.toImageFormat();
 
-    if (QCoreApplication::instance()->thread() != QThread::currentThread()) {
-        const QImage image = getAs<QImage>(doc, imageFormat, p->device()->devicePixelRatio());
-        p->drawImage(rect, image, image.rect());
-    } else {
-        const QPixmap pixmap = getAs<QPixmap>(doc, imageFormat, p->device()->devicePixelRatio());
-        p->drawPixmap(rect, pixmap, pixmap.rect());
-    }
+    const QImage image = getImage(doc, imageFormat, p->device()->devicePixelRatio(), rect.size());
+    p->drawImage(rect, image, image.rect());
 }
 
 QT_END_NAMESPACE

@@ -405,6 +405,37 @@ set_target_properties(${target} PROPERTIES
 */
 
 /*!
+\page cmake-target-property-qt-android-legacy-packaging.html
+\ingroup cmake-properties-qtcore
+\ingroup cmake-target-properties-qtcore
+
+\title QT_ANDROID_LEGACY_PACKAGING
+\target cmake-target-property-QT_ANDROID_LEGACY_PACKAGING
+
+\summary {The Android app legacy packaging.}
+
+\cmakepropertysince 6.11
+\cmakepropertyandroidonly
+
+Specifies whether the app uses legacy packaging. When legacy packaging is set to
+\c TRUE, the app APK will store compressed libraries that are extracted on the
+device during installation, and the app would load those libraries. Otherwise,
+when set to \c FALSE, the libraries will remain uncompressed and the app can load
+them directly from the APK package and the libraries are mapped to memory when
+used.
+
+\badcode
+set_target_properties(${target} PROPERTIES
+    QT_ANDROID_LEGACY_PACKAGING TRUE
+)
+\endcode
+
+\note Using the Address Sanitizer require this to be set to \c TRUE.
+
+\sa{qt6_android_generate_deployment_settings}{qt_android_generate_deployment_settings()}
+*/
+
+/*!
 \page cmake-target-property-qt-android-version-code.html
 \ingroup cmake-properties-qtcore
 \ingroup cmake-target-properties-qtcore

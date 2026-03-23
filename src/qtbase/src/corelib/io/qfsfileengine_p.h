@@ -82,7 +82,7 @@ public:
     bool setFileTime(const QDateTime &newDate, QFile::FileTime time) override;
     QDateTime fileTime(QFile::FileTime time) const override;
     void setFileName(const QString &file) override;
-    void setFileEntry(QFileSystemEntry &&entry);
+    virtual void setFileEntry(QFileSystemEntry &&entry);
     int handle() const override;
 
 #ifndef QT_NO_FILESYSTEMITERATOR

@@ -953,9 +953,42 @@ QTimeZonePrivate::findLongNamePrefix(QStringView text, const QLocale &locale,
     // at least produce one with the same offsets as the most natural choice.
     return best;
 }
+
+QTimeZonePrivate::NamePrefixMatch
+QTimeZonePrivate::findNarrowOffsetPrefix(QStringView, const QLocale &)
+{
+    // Seemingly only needed in the timezonelocale case.
+    return {};
+}
 #else
 // Implemented in qtimezonelocale.cpp
 #endif // icu || !timezone_locale
+
+QTimeZonePrivate::NamePrefixMatch
+QTimeZonePrivate::findLongUtcPrefix(QStringView text)
+{
+    if (text.startsWith(u"UTC")) {
+        if (text.size() > 4 && (text[3] == u'+' || text[3] == u'-')) {
+            // Compare QUtcTimeZonePrivate::offsetFromUtcString()
+            using QtMiscUtils::isAsciiDigit;
+            qsizetype length = 3;
+            int groups = 0; // Number of groups of digits seen (allow up to three).
+            do {
+                // text[length] is sign or the colon after last digit-group.
+                Q_ASSERT(length < text.size());
+                if (length + 1 >= text.size() || !isAsciiDigit(text[length + 1].unicode()))
+                    break;
+                length +=
+                    (length + 2 < text.size() && isAsciiDigit(text[length + 2].unicode())) ? 3 : 2;
+            } while (++groups < 3 && length < text.size() && text[length] == u':');
+            if (length > 4)
+                return { text.first(length).toLatin1(), length, QTimeZone::GenericTime };
+        }
+        return { utcQByteArray(), 3, QTimeZone::GenericTime };
+    }
+
+    return {};
+}
 
 QByteArray QTimeZonePrivate::aliasToIana(QByteArrayView alias)
 {
@@ -1144,7 +1177,7 @@ QUtcTimeZonePrivate::QUtcTimeZonePrivate(qint32 offsetSeconds)
         }
         Q_ASSERT(!name.isEmpty());
     } else { // Fall back to a UTC-offset name:
-        name = isoOffsetFormat(offsetSeconds, QTimeZone::ShortName);
+        name = isoOffsetFormat(offsetSeconds, QTimeZone::OffsetName);
         id = name.toUtf8();
     }
     init(id, offsetSeconds, name, name, QLocale::AnyTerritory, name);
@@ -1259,11 +1292,15 @@ QString QUtcTimeZonePrivate::displayName(QTimeZone::TimeType timeType,
         if (!(name.startsWith("GMT"_L1) || name.startsWith("UTC"_L1)) || name.size() < 5)
             return false;
         // Fallback drops trailing ":00" minute:
-        QStringView tail{avoid};
+        QStringView tail{avoid}; // TODO: deal with sign earlier !  Also: invisible Unicode !
         tail = tail.sliced(3);
-        if (tail.endsWith(":00"_L1))
-            tail = tail.chopped(3);
         if (name.sliced(3) == tail)
+            return true;
+        while (tail.endsWith(":00"_L1))
+            tail = tail.chopped(3);
+        while (name.endsWith(":00"_L1))
+            name = name.chopped(3);
+        if (name == tail)
             return true;
         // Accept U+2212 as minus sign:
         const QChar sign = name[3] == u'\u2212' ? u'-' : name[3];

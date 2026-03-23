@@ -26,7 +26,7 @@
 #include <QtCore/qdatetime.h>
 #include <QtCore/qdebug.h>
 #include <QtCore/qglobal.h>
-#include <QtCore/qmetacontainer.h>
+#include <QtCore/qmetasequence.h>
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qpointer.h>
 #include <QtCore/qurl.h>
@@ -101,6 +101,9 @@ namespace QQmlPrivate
     class QQmlElement final : public T
     {
     public:
+        // Not defaulted so that it can be specialized
+        QQmlElement() {}
+
         ~QQmlElement() override {
             QQmlPrivate::qdeclarativeelement_destructor(this);
         }
@@ -515,7 +518,7 @@ namespace QQmlPrivate
         const QMetaObject *extensionMetaObject;
 
         QQmlCustomParser *(*customParserFactory)();
-        QVector<int> *qmlTypeIds;
+        QList<int> *qmlTypeIds;
         int finalizerCast;
 
         bool forceAnonymous;
@@ -574,7 +577,7 @@ namespace QQmlPrivate
         QObject *(*extensionObjectCreate)(QObject *);
         const QMetaObject *extensionMetaObject;
 
-        QVector<int> *qmlTypeIds;
+        QList<int> *qmlTypeIds;
     };
 
     struct RegisterCompositeType {
@@ -616,7 +619,7 @@ namespace QQmlPrivate
         QMetaType typeId;
         QMetaSequence metaSequence;
 
-        QVector<int> *qmlTypeIds;
+        QList<int> *qmlTypeIds;
     };
 
     struct AOTTrackedLocalsStorage
@@ -1102,7 +1105,7 @@ namespace QQmlPrivate
     template<typename T, typename E, typename WrapperT = T>
     void qmlRegisterSingletonAndRevisions(const char *uri, int versionMajor,
                                           const QMetaObject *classInfoMetaObject,
-                                          QVector<int> *qmlTypeIds, const QMetaObject *extension)
+                                          QList<int> *qmlTypeIds, const QMetaObject *extension)
     {
         static_assert(std::is_base_of_v<QObject, T>);
         RegisterSingletonTypeAndRevisions api = {
@@ -1130,7 +1133,7 @@ namespace QQmlPrivate
     template<typename T, typename E>
     void qmlRegisterTypeAndRevisions(const char *uri, int versionMajor,
                                      const QMetaObject *classInfoMetaObject,
-                                     QVector<int> *qmlTypeIds, const QMetaObject *extension,
+                                     QList<int> *qmlTypeIds, const QMetaObject *extension,
                                      bool forceAnonymous = false)
     {
         RegisterTypeAndRevisions type = {
@@ -1175,7 +1178,7 @@ namespace QQmlPrivate
     template<typename T>
     void qmlRegisterSequenceAndRevisions(const char *uri, int versionMajor,
                                          const QMetaObject *classInfoMetaObject,
-                                         QVector<int> *qmlTypeIds)
+                                         QList<int> *qmlTypeIds)
     {
         RegisterSequentialContainerAndRevisions type = {
             0,
@@ -1193,7 +1196,7 @@ namespace QQmlPrivate
     template<>
     void Q_QML_EXPORT qmlRegisterTypeAndRevisions<QQmlTypeNotAvailable, void>(
             const char *uri, int versionMajor, const QMetaObject *classInfoMetaObject,
-            QVector<int> *qmlTypeIds, const QMetaObject *, bool);
+            QList<int> *qmlTypeIds, const QMetaObject *, bool);
 
     constexpr QtPrivate::QMetaTypeInterface metaTypeForNamespace(
             const QtPrivate::QMetaTypeInterface::MetaObjectFn &metaObjectFunction, const char *name)

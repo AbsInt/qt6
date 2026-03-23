@@ -101,8 +101,6 @@ static inline int SHA384_512AddLength(SHA512Context *context, unsigned int lengt
 }
 #endif // !QT_CONFIG(opensslv30)
 
-#include "qtcore-config_p.h"
-
 #if QT_CONFIG(system_libb2)
 #include <blake2.h>
 #else

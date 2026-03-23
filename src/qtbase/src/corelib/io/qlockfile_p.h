@@ -25,6 +25,15 @@ QT_BEGIN_NAMESPACE
 class QLockFilePrivate
 {
 public:
+    struct LockFileInfo
+    {
+        qint64 pid;
+        QString appname;
+        QString hostname;
+        QByteArray hostid;
+        QByteArray bootid;
+    };
+
     explicit QLockFilePrivate(const QString &fn);
     ~QLockFilePrivate();
 
@@ -40,6 +49,9 @@ public:
     static bool isProcessRunning(qint64 pid, const QString &appname);
 
     QString fileName;
+
+    static bool getLockInfo_helper(const QString &fileName, LockFileInfo *info);
+    static int openNewFileDescriptor(const QString &fileName);
 
 #ifdef Q_OS_WIN
     Qt::HANDLE fileHandle;

@@ -142,7 +142,7 @@ DEFINE_OBJECT_VTABLE(QV4::ReferenceObject);
   have the latest data available already, see \l{Limiting reads on a
   QObject property}.
 
-  Certain implementation of ReferenceObject, might want to lazily load
+  Certain implementations of ReferenceObject, might want to lazily load
   the data on the first read, rather than on the initialization of the
   reference. One such example would be `QQmlValueTypeWrapper`.
 
@@ -299,7 +299,7 @@ DEFINE_OBJECT_VTABLE(QV4::ReferenceObject);
   Currently, the \tt{BINDABLE} subscription will take predecedence.
 
   ReferenceObjects that are part of a \l{Reference object chains}{chain}, will
-  traverse the chain up until a QOjbect holding root is found, and connect based
+  traverse the chain up until a QObject holding root is found, and connect based
   on that object.
   As read/write backs in a chain are always propagated up the chain, this allow
   ReferenceObjects that are not directly parented to relevant element to still
@@ -311,7 +311,7 @@ DEFINE_OBJECT_VTABLE(QV4::ReferenceObject);
   property itself, that change would be propagated up the chain, possibly
   triggering a \tt{NOTIFY} signal that is part of the chain.
   Thus, by connecting to that upper \tt{NOTIFY} signal, we can still reliably know
-  if a change was performed on the property itself and thus avoid reduce the
+  if a change was performed on the property itself and thus reduce the
   number of reads.
 
   As changes in the chain that do not really invalidate the data of that
@@ -352,7 +352,7 @@ DEFINE_OBJECT_VTABLE(QV4::ReferenceObject);
   read, as it cannot know if the data was modified since its last read.
   This case will initially be managed by the base constructor for
   ReferenceObject, nonetheless derived objects with a custom readReference
-  implementation need to take it into accoutn when setting the "dirty" flag
+  implementation need to take it into account when setting the "dirty" flag
   after a read.
 
   isConnected can be used to discern between the two cases, as it will only
@@ -475,7 +475,7 @@ DEFINE_OBJECT_VTABLE(QV4::ReferenceObject);
   QObjectWrapper in a chain to obtain the latest data.
 
   Returning to the example above, if \c{b} is a Q_OBJECT instead of a value
-  type, then it will be the root of the reference chain that has \c{c} has its
+  type, then it will be the root of the reference chain that has \c{c} as its
   child, without the need to be related to the QObjectWrapper that has been
   built by accessing \c{a}.
 

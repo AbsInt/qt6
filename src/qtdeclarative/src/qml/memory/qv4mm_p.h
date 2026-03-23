@@ -21,7 +21,7 @@
 #include <private/qv4scopedvalue_p.h>
 #include <private/qv4object_p.h>
 #include <private/qv4mmdefs_p.h>
-#include <QVector>
+#include <QList>
 
 #define MM_DEBUG 0
 
@@ -100,6 +100,11 @@ public:
         MarkDrain,
         MarkReady,
         InitCallDestroyObjects,
+        // The following needs to be after InitCallDestroyObjects,
+        // even if it normally would run before it, to ensure that in
+        // a normal incremental run the stack is redrained before this
+        // is run as we make use of that knowledge in a test.
+        CrossValidateIncrementalMarkPhase,
         CallDestroyObjects,
         FreeWeakMaps,
         FreeWeakSets,
@@ -130,6 +135,11 @@ public:
     MemoryManager *mm = nullptr;
     ExtraData stateData; // extra date for specific states
     bool collectTimings = false;
+    #ifdef QT_BUILD_INTERNAL
+    // This is used only to simplify testing.
+    using BitmapError = std::tuple<std::size_t, std::size_t, quintptr>;
+    std::vector<BitmapError> bitmapErrors;
+    #endif
 
     GCStateMachine();
 
@@ -382,7 +392,7 @@ public:
 
     void dumpStats() const;
 
-    size_t getUsedMem() const;
+    size_t getRegularItemsMem() const;
     size_t getAllocatedMem() const;
     size_t getLargeItemsMem() const;
 
@@ -471,7 +481,7 @@ public:
     HugeItemAllocator hugeItemAllocator;
     PersistentValueStorage *m_persistentValues;
     PersistentValueStorage *m_weakValues;
-    QVector<Value *> m_pendingFreedObjectWrapperValue;
+    QList<Value *> m_pendingFreedObjectWrapperValue;
     Heap::MapObject *weakMaps = nullptr;
     Heap::SetObject *weakSets = nullptr;
 
@@ -485,18 +495,34 @@ public:
     enum Blockness : quint8 {Unblocked, NormalBlocked, InCriticalSection };
     Blockness gcBlocked = Unblocked;
     bool aggressiveGC = false;
-    bool gcStats = false;
-    bool gcCollectorStats = false;
+    bool crossValidateIncrementalGC = false;
 
     int allocationCount = 0;
     size_t lastAllocRequestedSlots = 0;
 
-    struct {
-        size_t maxReservedMem = 0;
+    struct Statistics {
         size_t maxAllocatedMem = 0;
-        size_t maxUsedMem = 0;
+        size_t maxUsedBeforeGC = 0;
+        size_t maxUsedAfterGC = 0;
         uint allocations[BlockAllocator::NumBins];
-    } statistics;
+    };
+
+    struct CollectorStatistics
+    {
+        qint64 gcTime = 0;
+        size_t oldUnmanagedSize = 0;
+        size_t regularItemsBefore = 0;
+        size_t largeItemsBefore = 0;
+        size_t oldChunks = 0;
+        bool triggeredByUnmanagedHeap = false;
+
+        void start(MemoryManager *mm);
+        void step(MemoryManager *mm);
+        void end(MemoryManager *mm);
+    };
+
+    std::unique_ptr<Statistics> statistics;
+    std::unique_ptr<CollectorStatistics> collectorStatistics;
 };
 
 /*!

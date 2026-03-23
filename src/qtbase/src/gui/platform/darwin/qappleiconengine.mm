@@ -461,9 +461,20 @@ void QAppleIconEngine::paint(QPainter *painter, const QRect &rect, QIcon::Mode m
     const NSRect sourceRect = NSMakeRect(0, 0, pixmapSize.width, pixmapSize.height);
     const NSRect iconRect = NSMakeRect(rect.x(), rect.y(), pixmapSize.width, pixmapSize.height);
 
-    [image drawInRect:iconRect fromRect:sourceRect operation:NSCompositingOperationSourceOver fraction:1.0 respectFlipped:YES hints:nil];
+    [image drawInRect:iconRect fromRect:sourceRect operation:NSCompositingOperationSourceOver
+        fraction:1.0 respectFlipped:YES hints:@{
+        NSImageHintUserInterfaceLayoutDirection: painter->layoutDirection() == Qt::RightToLeft ?
+            @(NSUserInterfaceLayoutDirectionRightToLeft) : @(NSUserInterfaceLayoutDirectionLeftToRight)
+    }];
     [NSGraphicsContext restoreGraphicsState];
 #elif defined(QT_PLATFORM_UIKIT)
+    auto *layoutDirectionTrait = [UITraitCollection traitCollectionWithLayoutDirection:
+        painter->layoutDirection() == Qt::RightToLeft ?
+            UITraitEnvironmentLayoutDirectionRightToLeft :
+            UITraitEnvironmentLayoutDirectionLeftToRight];
+
+    image = [image imageWithConfiguration:layoutDirectionTrait.imageConfiguration];
+
     UIGraphicsPushContext(ctx);
     const CGRect cgrect = CGRectMake(rect.x(), rect.y(), rect.width(), rect.height());
     [image drawInRect:cgrect];

@@ -53,6 +53,7 @@ qt_internal_add_module(Widgets
         QT_NO_CONTEXTLESS_CONNECT
         QT_NO_USING_NAMESPACE
         QT_NO_FOREACH
+        QT_NO_URL_CAST_FROM_STRING
         QT_USE_NODISCARD_FILE_OPEN
     INCLUDE_DIRECTORIES
         dialogs
@@ -681,6 +682,7 @@ qt_internal_extend_target(Widgets CONDITION MACOS AND (QT_FEATURE_menu OR QT_FEA
 qt_internal_extend_target(Widgets CONDITION QT_FEATURE_colordialog
     SOURCES
         dialogs/qcolordialog.cpp dialogs/qcolordialog.h
+        dialogs/qcolorwell_p.h
 )
 
 qt_internal_extend_target(Widgets CONDITION QT_FEATURE_dialog
@@ -772,6 +774,7 @@ endif()
 qt_internal_extend_target(Widgets CONDITION QT_FEATURE_accessibility
     SOURCES
         accessible/complexwidgets.cpp accessible/complexwidgets_p.h
+        accessible/qaccessiblecolorwell.cpp accessible/qaccessiblecolorwell_p.h
         accessible/qaccessiblemenu.cpp accessible/qaccessiblemenu_p.h
         accessible/qaccessiblewidget.cpp accessible/qaccessiblewidget.h
         accessible/qaccessiblewidgetfactory.cpp accessible/qaccessiblewidgetfactory_p.h
@@ -928,20 +931,5 @@ if(IOS)
 endif()
 
 if(QT_FEATURE_doc_snippets)
-    add_subdirectory(doc/snippets/customviewstyle)
-    if (QT_FEATURE_filedialog)
-        add_subdirectory(doc/snippets/filedialogurls)
-    endif()
-    if (QT_FEATURE_graphicsview)
-        add_subdirectory(doc/snippets/graphicssceneadditem)
-    endif()
-    if(QT_FEATURE_opengl AND QT_FEATURE_printdialog)
-        add_subdirectory(doc/snippets/graphicsview)
-    endif()
-    if (QT_FEATURE_mdiarea)
-        add_subdirectory(doc/snippets/mdiarea)
-    endif()
-    if (QT_FEATURE_scrollarea)
-        add_subdirectory(doc/snippets/myscrollarea)
-    endif()
+    add_subdirectory(doc/snippets)
 endif()

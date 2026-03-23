@@ -30,47 +30,46 @@ static ErrorGroups myExportErrors()
 bool ModuleScope::iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const
 {
     bool cont = true;
-    cont = cont && self.dvValueField(visitor, Fields::uri, uri);
-    cont = cont && self.dvWrapField(visitor, Fields::version, version);
-    cont = cont && self.dvItemField(visitor, Fields::exports, [this, &self]() {
-        int minorVersion = version.minorVersion;
-        return self.subMapItem(Map(
-                self.pathFromOwner().withField(Fields::exports),
-                [minorVersion](const DomItem &mapExp, const QString &name) -> DomItem {
-                    DomItem mapExpOw = mapExp.owner();
-                    QList<DomItem> exports =
-                            mapExp.ownerAs<ModuleIndex>()->exportsWithNameAndMinorVersion(
-                                    mapExpOw, name, minorVersion);
-                    return mapExp.subListItem(List::fromQList<DomItem>(
-                            mapExp.pathFromOwner().withKey(name), exports,
-                            [](const DomItem &, const PathEls::PathComponent &, const DomItem &el) {
-                                return el;
-                            },
-                            ListOptions::Normal));
-                },
-                [](const DomItem &mapExp) {
-                    DomItem mapExpOw = mapExp.owner();
-                    return mapExp.ownerAs<ModuleIndex>()->exportNames(mapExpOw);
-                },
-                QLatin1String("List<Exports>")));
-    });
-    cont = cont && self.dvItemField(visitor, Fields::symbols, [&self]() {
-        Path basePath = Path::fromCurrent(PathCurrent::Obj).withField(Fields::exports);
-        return self.subMapItem(Map(
-                self.pathFromOwner().withField(Fields::symbols),
-                [basePath](const DomItem &mapExp, const QString &name) -> DomItem {
-                    QList<Path> symb({ basePath.withKey(name) });
-                    return mapExp.subReferencesItem(PathEls::Key(name), symb);
-                },
-                [](const DomItem &mapExp) {
-                    DomItem mapExpOw = mapExp.owner();
-                    return mapExp.ownerAs<ModuleIndex>()->exportNames(mapExpOw);
-                },
-                QLatin1String("List<References>")));
-    });
-    cont = cont && self.dvItemField(visitor, Fields::autoExports, [this, &self]() {
-        return containingObject(self).field(Fields::autoExports);
-    });
+    cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::uri), uri);
+    cont = cont && self.invokeVisitorOnField(visitor, Fields::version, version);
+    cont = cont && visitor(PathEls::Field(Fields::exports), [this, &self]() {
+               int minorVersion = version.minorVersion;
+               return self.subMapItem(Map(
+                       self.pathFromOwner().withField(Fields::exports),
+                       [minorVersion](const DomItem &mapExp, const QString &name) -> DomItem {
+                           DomItem mapExpOw = mapExp.owner();
+                           QList<DomItem> exports =
+                                   mapExp.ownerAs<ModuleIndex>()->exportsWithNameAndMinorVersion(
+                                           mapExpOw, name, minorVersion);
+                           return mapExp.subListItem(List::fromQList<DomItem>(
+                                   mapExp.pathFromOwner().withKey(name), exports,
+                                   [](const DomItem &, const PathEls::PathComponent &,
+                                      const DomItem &el) { return el; },
+                                   ListOptions::Normal));
+                       },
+                       [](const DomItem &mapExp) {
+                           DomItem mapExpOw = mapExp.owner();
+                           return mapExp.ownerAs<ModuleIndex>()->exportNames(mapExpOw);
+                       },
+                       QLatin1String("List<Exports>")));
+           });
+    cont = cont && visitor(PathEls::Field(Fields::symbols), [&self]() {
+               Path basePath = Path::fromCurrent(PathCurrent::Obj).withField(Fields::exports);
+               return self.subMapItem(Map(
+                       self.pathFromOwner().withField(Fields::symbols),
+                       [basePath](const DomItem &mapExp, const QString &name) -> DomItem {
+                           QList<Path> symb({ basePath.withKey(name) });
+                           return mapExp.subReferencesItem(PathEls::Key(name), symb);
+                       },
+                       [](const DomItem &mapExp) {
+                           DomItem mapExpOw = mapExp.owner();
+                           return mapExp.ownerAs<ModuleIndex>()->exportNames(mapExpOw);
+                       },
+                       QLatin1String("List<References>")));
+           });
+    cont = cont && visitor(PathEls::Field(Fields::autoExports), [this, &self]() {
+               return containingObject(self).field(Fields::autoExports);
+           });
     return cont;
 }
 
@@ -116,36 +115,38 @@ ModuleIndex::~ModuleIndex()
 
 bool ModuleIndex::iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const
 {
-    bool cont = self.dvValueField(visitor, Fields::uri, uri());
-    cont = cont && self.dvValueField(visitor, Fields::majorVersion, majorVersion());
-    cont = cont && self.dvItemField(visitor, Fields::moduleScope, [this, &self]() {
-        return self.subMapItem(Map(
-                pathFromOwner(self).withField(Fields::moduleScope),
-                [](const DomItem &map, const QString &minorVersionStr) {
-                    bool ok;
-                    int minorVersion = minorVersionStr.toInt(&ok);
-                    if (minorVersionStr.isEmpty()
-                        || minorVersionStr.compare(u"Latest", Qt::CaseInsensitive) == 0)
-                        minorVersion = Version::Latest;
-                    else if (!ok)
-                        return DomItem();
-                    return map.copy(map.ownerAs<ModuleIndex>()->ensureMinorVersion(minorVersion));
-                },
-                [this](const DomItem &) {
-                    QSet<QString> res;
-                    for (int el : minorVersions())
-                        if (el >= 0)
-                            res.insert(QString::number(el));
-                    if (!minorVersions().isEmpty())
-                        res.insert(QString());
-                    return res;
-                },
-                QLatin1String("Map<List<Exports>>")));
-    });
-    cont = cont && self.dvItemField(visitor, Fields::sources, [this, &self]() {
-        return self.subReferencesItem(PathEls::Field(Fields::sources), sources());
-    });
-    cont = cont && self.dvValueLazyField(visitor, Fields::autoExports, [this, &self]() {
+    bool cont = self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::uri), uri());
+    cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::majorVersion),
+                                         majorVersion());
+    cont = cont && visitor(PathEls::Field(Fields::moduleScope), [this, &self]() {
+               return self.subMapItem(Map(
+                       pathFromOwner().withField(Fields::moduleScope),
+                       [](const DomItem &map, const QString &minorVersionStr) {
+                           bool ok;
+                           int minorVersion = minorVersionStr.toInt(&ok);
+                           if (minorVersionStr.isEmpty()
+                               || minorVersionStr.compare(u"Latest", Qt::CaseInsensitive) == 0)
+                               minorVersion = Version::Latest;
+                           else if (!ok)
+                               return DomItem();
+                           return map.copy(
+                                   map.ownerAs<ModuleIndex>()->ensureMinorVersion(minorVersion));
+                       },
+                       [this](const DomItem &) {
+                           QSet<QString> res;
+                           for (int el : minorVersions())
+                               if (el >= 0)
+                                   res.insert(QString::number(el));
+                           if (!minorVersions().isEmpty())
+                               res.insert(QString());
+                           return res;
+                       },
+                       QLatin1String("Map<List<Exports>>")));
+           });
+    cont = cont && visitor(PathEls::Field(Fields::sources), [this, &self]() {
+               return self.subReferencesItem(PathEls::Field(Fields::sources), sources());
+           });
+    cont = cont && self.invokeVisitorOnLazyField(visitor, Fields::autoExports, [this, &self]() {
         return autoExports(self);
     });
     return cont;

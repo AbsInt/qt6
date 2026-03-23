@@ -36,6 +36,7 @@ public:
         : QQmlDebugClientPrivate(QLatin1String("CanvasFrameRate"), connection)
         , eventReceiver(eventReceiver)
         , engineControl(new QQmlEngineControlClient(connection))
+        , messageClient(new QQmlDebugMessageClient(connection))
         , maximumTime(0)
         , recording(false)
         , requestedFeatures(0)

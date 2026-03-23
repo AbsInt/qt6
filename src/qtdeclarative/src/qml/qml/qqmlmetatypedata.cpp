@@ -16,13 +16,7 @@ QQmlMetaTypeData::QQmlMetaTypeData()
 
 QQmlMetaTypeData::~QQmlMetaTypeData()
 {
-    {
-        // Unregister all remaining composite types.
-        // Avoid deletion recursion (via QQmlTypePrivate dtor) by moving them out of the way first.
-        CompositeTypes emptyComposites;
-        emptyComposites.swap(compositeTypes);
-    }
-
+    clearCompositeTypes();
     propertyCaches.clear();
     // Do this before the attached properties disappear.
     types.clear();
@@ -138,7 +132,7 @@ QQmlPropertyCache::ConstPtr QQmlMetaTypeData::propertyCache(
     if (auto pc = propertyCacheForVersion(type.index(), version))
         return pc;
 
-    QVector<QQmlType> types;
+    QList<QQmlType> types;
 
     quint8 maxMinorVersion = 0;
 
@@ -260,6 +254,18 @@ QQmlPropertyCache::ConstPtr QQmlMetaTypeData::findPropertyCacheInCompositeTypes(
     return (iter == compositeTypes.constEnd())
             ? QQmlPropertyCache::ConstPtr()
             : propertyCacheForPotentialInlineComponentType(t, iter);
+}
+
+void QQmlMetaTypeData::clearCompositeTypes()
+{
+    // Unregister all remaining composite types.
+    // Avoid deletion recursion (via QQmlTypePrivate dtor) by moving them out of the way first.
+    CompositeTypes emptyComposites;
+    emptyComposites.swap(compositeTypes);
+
+    // ECMAScript modules can form cycles. Clear the edges first, so that we don't leak memory.
+    for (const auto &cu : std::as_const(emptyComposites))
+        clearCompositeType(cu);
 }
 
 void QQmlMetaTypeData::clearCompositeMetaTypes()

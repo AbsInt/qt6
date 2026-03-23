@@ -34,6 +34,7 @@ Q_LOGGING_CATEGORY(lcSsl, "qt.network.ssl");
 
     Describes the different key algorithms supported by QSslKey.
 
+    \value MlDsa The ML-DSA algorithm.
     \value Rsa The RSA algorithm.
     \value Dsa The DSA algorithm.
     \value Ec  The Elliptic Curve algorithm.

@@ -218,7 +218,7 @@ std::unique_ptr<QAbstractFileEngine> QAbstractFileEngine::create(const QString &
     A QAbstractFileEngine refers to one file or one directory. If the referent
     is a file, the setFileName(), rename(), and remove() functions are
     applicable. If the referent is a directory the mkdir(), rmdir(), and
-    entryList() functions are applicable. In all cases the caseSensitive(),
+    beginEntryList() functions are applicable. In all cases the caseSensitive(),
     isRelativePath(), fileFlags(), ownerId(), owner(), and fileTime()
     functions are applicable.
 
@@ -579,46 +579,6 @@ bool QAbstractFileEngine::caseSensitive() const
 bool QAbstractFileEngine::isRelativePath() const
 {
     return false;
-}
-
-/*!
-    Requests that a list of all the files matching the \a filters
-    list based on the \a filterNames in the file engine's directory
-    are returned.
-
-    Should return an empty list if the file engine refers to a file
-    rather than a directory, or if the directory is unreadable or does
-    not exist or if nothing matches the specifications.
-
-    \sa setFileName()
- */
-QStringList QAbstractFileEngine::entryList(QDir::Filters filters, const QStringList &filterNames) const
-{
-    QStringList ret;
-#ifdef QT_BOOTSTRAPPED
-    Q_UNUSED(filters);
-    Q_UNUSED(filterNames);
-    Q_UNREACHABLE_RETURN(ret);
-#else
-    for (const auto &dirEntry : QDirListing(fileName(), filterNames, filters.toInt()))
-        ret.emplace_back(dirEntry.fileName());
-    return ret;
-#endif
-}
-
-QStringList QAbstractFileEngine::entryList(QDirListing::IteratorFlags filters,
-                                           const QStringList &filterNames) const
-{
-    QStringList ret;
-#ifdef QT_BOOTSTRAPPED
-    Q_UNUSED(filters);
-    Q_UNUSED(filterNames);
-    Q_UNREACHABLE_RETURN(ret);
-#else
-    for (const auto &dirEntry : QDirListing(fileName(), filterNames, filters))
-        ret.emplace_back(dirEntry.fileName());
-    return ret;
-#endif
 }
 
 /*!

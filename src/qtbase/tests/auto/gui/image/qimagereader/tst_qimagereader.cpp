@@ -610,6 +610,7 @@ void tst_QImageReader::imageFormat_data()
 
     QTest::newRow("pbm") << QString("image.pbm") << QByteArray("pbm") << QImage::Format_Mono;
     QTest::newRow("pgm") << QString("image.pgm") << QByteArray("pgm") << QImage::Format_Grayscale8;
+    QTest::newRow("pgm") << QString("image16.pgm") << QByteArray("pgm") << QImage::Format_Grayscale16;
     QTest::newRow("ppm-1") << QString("image.ppm") << QByteArray("ppm") << QImage::Format_RGB32;
     QTest::newRow("ppm-2") << QString("teapot.ppm") << QByteArray("ppm") << QImage::Format_RGB32;
     QTest::newRow("ppm-3") << QString("runners.ppm") << QByteArray("ppm") << QImage::Format_RGB32;

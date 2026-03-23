@@ -45,6 +45,7 @@ private slots:
     void color();
     void locale();
     void qmlproperty();
+    void easingCurve();
 
     void bindingAssignment();
     void bindingRead();
@@ -297,6 +298,76 @@ void tst_qqmlvaluetypes::qmlproperty()
     QCOMPARE(object->property("colorPropertyName").toString(), "color");
     QCOMPARE(object->property("invalidPropertyObject").value<QObject *>(), nullptr);
     QCOMPARE(object->property("invalidPropertyName").toString(), "");
+}
+
+void tst_qqmlvaluetypes::easingCurve()
+{
+    {
+        QQmlComponent component(&engine, testFileUrl("easingCurve_read.qml"));
+        std::unique_ptr<MyTypeObject> object { qobject_cast<MyTypeObject *>(component.create()) };
+        QVERIFY2(object, qPrintable(component.errorString()));
+
+        QCOMPARE(static_cast<QEasingCurve::Type>(object->property("r_type").toInt()), QEasingCurve::InOutElastic);
+        QCOMPARE(object->property("r_amplitude").toReal(), 0.25);
+        QCOMPARE(object->property("r_overshoot").toReal(), 0.5); // As set by MyTypeObject
+        QCOMPARE(object->property("r_period").toReal(), 0.75);
+        const QList<qreal> expectedBezierCurve = { 0.4, 0.4, 0.8, 0.8, 1, 1 };
+        QCOMPARE(object->property("r_bezierCurve").value<QList<qreal>>(), expectedBezierCurve);
+        QEasingCurve expectedCopy;
+        expectedCopy.setType(QEasingCurve::InOutElastic);
+        expectedCopy.setAmplitude(0.25);
+        expectedCopy.setOvershoot(0.5);
+        expectedCopy.setPeriod(0.75);
+        expectedCopy.addCubicBezierSegment(QPointF(0.4, 0.4), QPointF(0.8, 0.8), QPointF(1, 1));
+        QCOMPARE(object->property("copy"), expectedCopy);
+
+        // Test creation in QML.
+        const auto inOutQuadCurve = object->property("inOutQuadCurve").value<QEasingCurve>();
+        QCOMPARE(inOutQuadCurve.type(), QEasingCurve::InOutQuad);
+
+        const auto outQuintCurve = object->property("outQuintCurve").value<QEasingCurve>();
+        QCOMPARE(outQuintCurve.type(), QEasingCurve::OutQuint);
+
+        const auto inElasticCurve = object->property("inElasticCurve").value<QEasingCurve>();
+        QCOMPARE(inElasticCurve.type(), QEasingCurve::InElastic);
+        QCOMPARE(inElasticCurve.amplitude(), 4);
+        QCOMPARE(inElasticCurve.period(), 3);
+    }
+
+    {
+        QQmlComponent component(&engine, testFileUrl("easingCurve_write.qml"));
+        std::unique_ptr<MyTypeObject> object { qobject_cast<MyTypeObject *>(component.create()) };
+        QVERIFY2(object, qPrintable(component.errorString()));
+
+        const QEasingCurve easeCurve = object->easeCurve();
+        QCOMPARE(easeCurve.type(), QEasingCurve::BezierSpline);
+        QCOMPARE(easeCurve.amplitude(), 1);
+        QCOMPARE(easeCurve.overshoot(), 1.70158);
+        QCOMPARE(easeCurve.period(), 0.3);
+        const QList<QPointF> expectedBezierCurve = { {0.3, 0.3}, {0.7, 0.7}, {1.1, 1.1} };
+        QCOMPARE(easeCurve.toCubicSpline(), expectedBezierCurve);
+    }
+
+    {
+        QQmlComponent component(&engine, testFileUrl("easingCurve_compare.qml"));
+        std::unique_ptr<MyTypeObject> object { qobject_cast<MyTypeObject *>(component.create()) };
+        QVERIFY2(object, qPrintable(component.errorString()));
+
+        QString tostring = QLatin1String("QEasingCurve(InOutElastic, 0.25, 0.5, 0.75, )");
+        QCOMPARE(object->property("tostring").toString(), tostring);
+        QCOMPARE(object->property("equalsString").toBool(), true);
+        QCOMPARE(object->property("equalsSelf").toBool(), true);
+        QCOMPARE(object->property("equalsOther").toBool(), false);
+    }
+
+    {
+        QQmlComponent component(&engine, testFileUrl("easingSingleton.qml"));
+        std::unique_ptr<QObject> object { component.create() };
+        QVERIFY2(object, qPrintable(component.errorString()));
+
+        QCOMPARE(object->property("linearValue").toReal(), 0.5);
+        QCOMPARE(object->property("inQuadValue").toReal(), 0.25);
+    }
 }
 
 void tst_qqmlvaluetypes::sizereadonly()
@@ -1547,7 +1618,7 @@ void tst_qqmlvaluetypes::sequences()
             QCOMPARE(value.property(quint32(i)).property("baseProperty").toInt(), container.at(i).baseProperty());
     }
     {
-        QVector<QChar> qcharVector{QChar(1), QChar(4), QChar(42), QChar(8), QChar(15)};
+        QList<QChar> qcharVector{QChar(1), QChar(4), QChar(42), QChar(8), QChar(15)};
         QJSValue value = engine.toScriptValue(qcharVector);
         QCOMPARE(value.property("length").toInt(), qcharVector.size());
         for (int i = 0; i < qcharVector.size(); ++i)
@@ -1854,7 +1925,7 @@ void tst_qqmlvaluetypes::constructors()
     QCOMPARE(o->property("quaternion"), QVariant(QQuaternion()));
     QCOMPARE(o->property("matrix4x4"), QVariant(QMatrix4x4()));
     QCOMPARE(o->property("font"), QVariant(QFont()));
-
+    QCOMPARE(o->property("easeCurve"), QVariant(QEasingCurve()));
 }
 
 #undef CHECK_TYPE_IS_NOT_VALUETYPE

@@ -10,8 +10,15 @@
 #include <QtCore/qstringlistmodel.h>
 #include <QtTest/qsignalspy.h>
 
+#include <QtGui/qcolor.h>
+#include <QtGui/qpolygon.h>
+
 #if QT_CONFIG(itemmodeltester)
 #include <QtTest/qabstractitemmodeltester.h>
+#endif
+
+#if defined(__cpp_lib_ranges)
+#include <ranges>
 #endif
 
 class tst_QRangeModel : public QRangeModelTest
@@ -30,6 +37,8 @@ private slots:
     void overrideRoleNames();
     void setRoleNames();
     void defaultRoleNames();
+    void autoConnectPolicy_data();
+    void autoConnectPolicy();
 
     void dimensions_data() { createTestData(); }
     void dimensions();
@@ -41,6 +50,8 @@ private slots:
     void headerData();
     void data_data() { createTestData(); }
     void data();
+    void multiData_data() { createTestData(); }
+    void multiData();
     void setData_data() { createTestData(); }
     void setData();
     void itemData_data() { createTestData(); }
@@ -69,6 +80,10 @@ private slots:
     void inconsistentColumnCount();
     void largeArrays();
     void mapsAsRange();
+    void spanAsRange();
+    void filterAsRange();
+    void multiRoleContainer();
+    void multiRoleTuple();
 
     void tree_data();
     void tree();
@@ -85,6 +100,7 @@ private slots:
     void treeMoveRowBranches();
 
     void adlTest();
+    void itemAccess();
 
 private:
     void createTestData();
@@ -238,6 +254,9 @@ void tst_QRangeModel::createTestData()
             u"MultiRoleGadget"_s);
     ADD_POINTER(arrayOfUniqueMultiRoleGadgets, 1, ChangeAction::SetData | ChangeAction::SetItemData,
             u"MultiRoleGadget"_s);
+
+    ADD_ALL(vectorOfItemAccess, 1, ChangeAction::ChangeRows | ChangeAction::SetData | ChangeAction::SetItemData,
+            1);
 
     ADD_MOVE(listOfObjects, 2, ChangeAction::ChangeRows | ChangeAction::SetData | ChangeAction::SetItemData,
              u"string"_s);
@@ -723,6 +742,288 @@ void tst_QRangeModel::defaultRoleNames()
     }();
 }
 
+class MultiRoleObject : public Object
+{
+public:
+    template <typename Signal>
+    bool isConnected(Signal &&signal) const
+    {
+        return isSignalConnected(QMetaMethod::fromSignal(signal));
+    }
+};
+
+template <>
+struct QRangeModel::RowOptions<MultiRoleObject>
+{
+    static constexpr auto rowCategory = QRangeModel::RowCategory::MultiRoleItem;
+};
+
+void tst_QRangeModel::autoConnectPolicy_data()
+{
+    QTest::addColumn<QRangeModel::AutoConnectPolicy>("policy");
+
+    QTest::addRow("Full") << QRangeModel::AutoConnectPolicy::Full;
+    QTest::addRow("OnRead") << QRangeModel::AutoConnectPolicy::OnRead;
+}
+
+void tst_QRangeModel::autoConnectPolicy()
+{
+    QFETCH(const QRangeModel::AutoConnectPolicy, policy);
+
+    [policy]{
+        QList<MultiRoleObject *> objectList = {
+            new MultiRoleObject,
+            new MultiRoleObject,
+            new MultiRoleObject,
+        };
+        QRangeModel model(&objectList);
+        model.setAutoConnectPolicy(policy);
+        QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        int emissions = 0;
+        objectList[0]->setString("String 0");
+        if (policy == QRangeModel::AutoConnectPolicy::OnRead) {
+            QCOMPARE(dataChangedSpy.size(), emissions);
+        } else {
+            QCOMPARE(dataChangedSpy.size(), ++emissions);
+            QCOMPARE(dataChangedSpy.at(0).at(0), model.index(0, 0));
+            QCOMPARE(dataChangedSpy.at(0).at(1), model.index(0, 0));
+            QCOMPARE(dataChangedSpy.at(0).at(2), QVariant::fromValue(QList<int>{Qt::UserRole}));
+        }
+
+        if (policy == QRangeModel::AutoConnectPolicy::OnRead) {
+            QVERIFY(!objectList.at(1)->isConnected(&Object::stringChanged));
+            QVERIFY(!objectList.at(1)->isConnected(&Object::numberChanged));
+            model.data(model.index(1, 0), Qt::UserRole + 1);
+            QVERIFY(!objectList.at(1)->isConnected(&Object::stringChanged));
+            QVERIFY(objectList.at(1)->isConnected(&Object::numberChanged));
+            model.itemData(model.index(1, 0));
+            QVERIFY(objectList.at(1)->isConnected(&Object::stringChanged));
+        }
+
+        objectList[1]->setNumber(42);
+        QCOMPARE(dataChangedSpy.size(), ++emissions);
+        QCOMPARE(dataChangedSpy.at(emissions - 1).at(0), model.index(1, 0));
+        QCOMPARE(dataChangedSpy.at(emissions - 1).at(1), model.index(1, 0));
+        QCOMPARE(dataChangedSpy.at(emissions - 1).at(2), QVariant::fromValue(QList<int>{Qt::UserRole + 1}));
+
+        QVERIFY(model.insertRow(0));
+        QCOMPARE(objectList.at(1)->isConnected(&Object::numberChanged),
+                 policy == QRangeModel::AutoConnectPolicy::Full);
+        QCOMPARE(objectList.at(1)->isConnected(&Object::stringChanged),
+                 policy == QRangeModel::AutoConnectPolicy::Full);
+    }();
+
+    [policy]{
+        QList<QList<MultiRoleObject *>> objectTable = {
+            {new MultiRoleObject, new MultiRoleObject},
+            {new MultiRoleObject, new MultiRoleObject},
+        };
+        QRangeModel model(&objectTable);
+        connect(&model, &QRangeModel::rowsInserted,
+                &model, [&objectTable](const QModelIndex &, int first, int last){
+            while (first <= last) {
+                objectTable[first][0] = new MultiRoleObject;
+                objectTable[first][1] = new MultiRoleObject;
+                ++first;
+            }
+        });
+        connect(&model, &QRangeModel::columnsInserted,
+                &model, [&objectTable](const QModelIndex &, int first, int last){
+            for (auto &row : objectTable) {
+                for (int column = first; column <= last; ++column)
+                    row[column] = new MultiRoleObject;
+            }
+        });
+        model.setAutoConnectPolicy(policy);
+        QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        objectTable[0][1]->setString("String 0/1");
+        QCOMPARE(dataChangedSpy.size(), policy == QRangeModel::AutoConnectPolicy::Full ? 1 : 0);
+
+        model.insertRows(1, 2);
+        for (const auto &row : std::as_const(objectTable)) {
+            for (const auto &object : row) {
+                QCOMPARE(object->isConnected(&Object::numberChanged),
+                         policy == QRangeModel::AutoConnectPolicy::Full);
+                QCOMPARE(object->isConnected(&Object::stringChanged),
+                         policy == QRangeModel::AutoConnectPolicy::Full);
+            }
+        }
+
+        model.insertColumn(0);
+        for (const auto &row : std::as_const(objectTable)) {
+            for (const auto &object : row) {
+                QCOMPARE(object->isConnected(&Object::numberChanged),
+                         policy == QRangeModel::AutoConnectPolicy::Full);
+                QCOMPARE(object->isConnected(&Object::stringChanged),
+                         policy == QRangeModel::AutoConnectPolicy::Full);
+            }
+        }
+    }();
+
+    [policy]{
+        QList<std::tuple<MultiRoleObject *, MultiRoleObject *>> objectTable = {
+            {new MultiRoleObject, new MultiRoleObject},
+            {new MultiRoleObject, new MultiRoleObject},
+        };
+        QRangeModel model(&objectTable);
+        model.setAutoConnectPolicy(policy);
+        QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        if (policy == QRangeModel::AutoConnectPolicy::OnRead) {
+            for (int row = 0; row < model.rowCount(); ++row) {
+                for (int column = 0; column < model.columnCount(); ++column)
+                    model.itemData(model.index(row, column));
+            }
+        }
+
+        auto *topRight = get<1>(objectTable[0]);
+        auto *bottomLeft = get<0>(objectTable[1]);
+        topRight->setNumber(52);
+        QCOMPARE(dataChangedSpy.size(), 1);
+
+        QVERIFY(bottomLeft->isConnected(&Object::numberChanged));
+        QVERIFY(bottomLeft->isConnected(&Object::stringChanged));
+        QVERIFY(model.removeRows(1, 1));
+        bottomLeft->setNumber(52); // this will lazily break the connection
+        QVERIFY(!bottomLeft->isConnected(&Object::numberChanged));
+        QVERIFY(bottomLeft->isConnected(&Object::stringChanged));
+        QCOMPARE(dataChangedSpy.size(), 1);
+        bottomLeft->setNumber(53); // this should not crash
+        bottomLeft->setString("No update");
+        QVERIFY(!bottomLeft->isConnected(&Object::stringChanged));
+
+        const QModelIndex index = model.index(0, 0);
+        dataChangedSpy.clear();
+        QVERIFY(model.setData(index, "string", Qt::UserRole));
+        QCOMPARE(dataChangedSpy.count(), 1);
+        QCOMPARE(dataChangedSpy.back().at(2),
+                 QVariant::fromValue(QList<int>{Qt::UserRole}));
+        // this will right now emit dataChanged three times:
+        QVERIFY(model.setItemData(index, QMap<int, QVariant>{
+            {Qt::UserRole, QVariant("string")},
+            {Qt::UserRole + 1, QVariant(42)},
+        }));
+        QCOMPARE(dataChangedSpy.count(), 2);
+        QCOMPARE(dataChangedSpy.back().at(2),
+                 QVariant::fromValue(QList<int>{Qt::UserRole, Qt::UserRole + 1}));
+        QVERIFY(model.setData(index, 42, Qt::UserRole + 1));
+        QCOMPARE(dataChangedSpy.count(), 3);
+        QCOMPARE(dataChangedSpy.back().at(2),
+                 QVariant::fromValue(QList<int>{Qt::UserRole + 1}));
+    }();
+
+    [policy]{
+        QList<Object *> objectList = {
+            new Object, new Object, new Object
+        };
+        Object *top = objectList.front();
+        Object *bottom = objectList.back();
+
+        QRangeModel model(std::move(objectList));
+        model.setAutoConnectPolicy(policy);
+        QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        if (policy == QRangeModel::AutoConnectPolicy::OnRead) {
+            // read top-left and bottom-right
+            model.data(model.index(0, 0));
+            model.data(model.index(model.rowCount() - 1, model.columnCount() - 1));
+        }
+        top->setString("abc");
+        QCOMPARE(dataChangedSpy.count(), 1);
+        QCOMPARE(dataChangedSpy.back().at(0), model.index(0, 0));
+        QCOMPARE(dataChangedSpy.back().at(1), model.index(0, 0));
+        QCOMPARE(dataChangedSpy.back().at(2), QVariant::fromValue(QList<int>{Qt::DisplayRole}));
+        bottom->setNumber(42);
+        QCOMPARE(dataChangedSpy.count(), 2);
+        QCOMPARE(dataChangedSpy.back().at(0), model.index(model.rowCount() - 1,
+                                                          model.columnCount() - 1));
+        QCOMPARE(dataChangedSpy.back().at(2), QVariant::fromValue(QList<int>{Qt::DisplayRole}));
+        dataChangedSpy.clear();
+
+        top->setNumber(1234);
+        bottom->setString("def");
+        QCOMPARE(dataChangedSpy.count(), policy == QRangeModel::AutoConnectPolicy::Full ? 2 : 0);
+    }();
+
+    [policy]{
+        using Tree = QList<MultiRoleObject *>;
+        struct ObjectTreeProtocol
+        {
+            const MultiRoleObject *parentRow(const MultiRoleObject &row) const
+            {
+                return static_cast<MultiRoleObject *>(row.parent());
+            }
+            void setParentRow(MultiRoleObject &row, MultiRoleObject *parent)
+            {
+                row.setParent(parent);
+            }
+            const Tree &childRows(const MultiRoleObject &row) const {
+                // don't do that at home...
+                return *reinterpret_cast<const Tree *>(&row.children());
+            }
+            Tree &childRows(const MultiRoleObject &) {
+                empty = {};
+                return empty;
+            }
+            Tree empty;
+        };
+        Tree tree {
+            new MultiRoleObject,
+            new MultiRoleObject,
+            new MultiRoleObject,
+        };
+        tree[0]->setObjectName("root 0");
+        tree[1]->setObjectName("root 1");
+        tree[2]->setObjectName("root 2");
+        auto *child01 = new MultiRoleObject;
+        child01->setObjectName("child 0/1");
+        child01->setParent(tree[0]);
+        (new MultiRoleObject)->setParent(tree[1]);
+        (new MultiRoleObject)->setParent(tree[2]);
+
+        QRangeModel model(std::ref(tree), ObjectTreeProtocol{});
+        QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+        model.setAutoConnectPolicy(policy);
+
+        const QModelIndex root0 = model.index(0, 0);
+        const QModelIndex child01Index = model.index(0, 0, root0);
+        if (policy == QRangeModel::AutoConnectPolicy::OnRead)
+            QVERIFY(model.data(child01Index, Qt::UserRole + 1).isValid());
+
+        child01->setNumber(42);
+        QCOMPARE(dataChangedSpy.size(), 1);
+
+        QCOMPARE(dataChangedSpy.at(0).at(0).value<QModelIndex>(), child01Index);
+        QCOMPARE(dataChangedSpy.at(0).at(1).value<QModelIndex>(), child01Index);
+        QCOMPARE(dataChangedSpy.at(0).at(2), QVariant::fromValue(QList{Qt::UserRole + 1}));
+    }();
+
+    // build tests
+    { // make sure we don't kill the compiler with recursive templates
+        QList<std::array<Object *, 1000000>> wideList;
+        QRangeModel model(wideList);
+    }
+
+    { // work with custom tuple types
+        QList<ObjectRow> objectRows;
+        QRangeModel model(objectRows);
+    }
+
+    { // correctly resolve optional children
+        struct Protocol {
+            ObjectRow *parentRow(const ObjectRow &) const { return nullptr; }
+            const auto &childRows(const ObjectRow &) const { return emptyRow; }
+
+            std::optional<std::vector<ObjectRow>> emptyRow = std::nullopt;
+        };
+        std::vector<ObjectRow> objectTree;
+        QRangeModel model(objectTree, Protocol{});
+        model.setAutoConnectPolicy(QRangeModel::AutoConnectPolicy::Full);
+    }
+}
+
 void tst_QRangeModel::dimensions()
 {
     QFETCH(Factory, factory);
@@ -801,6 +1102,19 @@ void tst_QRangeModel::data()
     QVERIFY(last.data().isValid());
 }
 
+void tst_QRangeModel::multiData()
+{
+    QFETCH(Factory, factory);
+    auto model = factory();
+
+    const QModelIndex index = model->index(0, 0);
+    QVERIFY(index.isValid());
+    QModelRoleData displayData(Qt::DisplayRole);
+    model->multiData(index, displayData);
+
+    QCOMPARE(displayData.data(), model->data(index, Qt::DisplayRole));
+}
+
 void tst_QRangeModel::setData()
 {
     QFETCH(Factory, factory);
@@ -827,6 +1141,13 @@ void tst_QRangeModel::setData()
     model->setData(first, oldValue, Qt::UserRole + 255);
 }
 
+static constexpr bool fakedRole(int role)
+{
+    return role == Qt::EditRole
+        || role == Qt::RangeModelDataRole
+        || role == Qt::RangeModelDataRole + 1;
+}
+
 void tst_QRangeModel::itemData()
 {
     QFETCH(Factory, factory);
@@ -837,7 +1158,8 @@ void tst_QRangeModel::itemData()
     const QModelIndex index = model->index(0, 0);
     const QMap<int, QVariant> itemData = model->itemData(index);
     for (int role = 0; role < Qt::UserRole; ++role) {
-        if (role == Qt::EditRole || role == Qt::RangeModelDataRole) // we fake that in data()
+        // we fake those in data()
+        if (fakedRole(role))
             continue;
         QCOMPARE(itemData.value(role), index.data(role));
     }
@@ -862,7 +1184,7 @@ void tst_QRangeModel::setItemData()
 
     itemData = {};
     for (int role : roles) {
-        if (role == Qt::EditRole || role == Qt::RangeModelDataRole) // faked
+        if (fakedRole(role)) // faked
             continue;
         QVariant data = role != Qt::DecorationRole ? QVariant(QStringLiteral("%1").arg(role))
                                                    : QVariant(QColor(Qt::magenta));
@@ -888,7 +1210,7 @@ void tst_QRangeModel::setItemData()
     }
 
     for (int role = 0; role < Qt::UserRole; ++role) {
-        if (role == Qt::EditRole || role == Qt::RangeModelDataRole) // faked role
+        if (fakedRole(role))
             continue;
 
         QVariant data = index.data(role);
@@ -1290,6 +1612,123 @@ void tst_QRangeModel::mapsAsRange()
         });
         QCOMPARE(model.columnCount(), 2);
     }
+}
+
+void tst_QRangeModel::spanAsRange()
+{
+    QList<int> list = {1, 2, 3};
+    QSpan span(list);
+    QRangeModel model(span);
+}
+
+void tst_QRangeModel::filterAsRange()
+{
+#if defined(__cpp_lib_ranges)
+    auto view = std::views::iota(0, 100)
+              | std::views::filter([](int i){ return 0 == i % 2; })
+              | std::views::transform([](int i){ return i * i; });
+
+    QRangeModel model(view);
+    QCOMPARE(model.rowCount(), 50);
+#else
+    QSKIP("Test of std::ranges requires C++ 20");
+#endif
+}
+
+template <>
+struct QRangeModel::RowOptions<QPolygon>
+{
+    static constexpr auto rowCategory = QRangeModel::RowCategory::MultiRoleItem;
+};
+
+template <>
+struct QRangeModel::ItemAccess<QPolygon>
+{
+    static QVariant readRole(const QPolygon &polygon, int role)
+    {
+        if (role == Qt::DisplayRole) {
+            QString string;
+            bool first = true;
+            for (const auto &point : polygon) {
+                if (!first)
+                    string += ";";
+                else
+                    first = false;
+                string += u"%1/%2"_s.arg(point.x()).arg(point.y());
+            }
+            return string;
+        }
+        return QVariant();
+    }
+
+    static bool writeRole(QPolygon &target, const QVariant &value, int role)
+    {
+        target.clear();
+        if (role == Qt::DisplayRole || role == Qt::EditRole) {
+            bool ok = false;
+            for (auto entry : QStringTokenizer(value.toString(), u';')) {
+                const auto tokens = entry.tokenize(u'/');
+                auto coord = tokens.cbegin();
+                QPoint point;
+                point.rx() = coord->toInt(&ok);
+                if (!ok)
+                    break;
+                ++coord;
+                point.ry() = coord->toInt(&ok);
+                if (!ok)
+                    break;
+                target += point;
+            }
+            return ok;
+        }
+        return false;
+    }
+};
+
+void tst_QRangeModel::multiRoleContainer()
+{
+    static_assert(QRangeModelDetails::item_access<QPolygon>::value);
+
+    QList<QPolygon> listOfPolygons = {
+        QPolygon{{0, 0}, {1, 0}, {1, 1}, {0, 1}},
+        QPolygon{{0, 0}, {2, 0}, {2, 2}, {0, 2}},
+        QPolygon{{0, 0}, {3, 0}, {3, 3}, {0, 3}},
+    };
+
+    QRangeModel model(std::ref(listOfPolygons));
+
+    QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(model.columnCount(), 1);
+
+    const QModelIndex first = model.index(0, 0);
+    QCOMPARE(first.data(), "0/0;1/0;1/1;0/1");
+    QVERIFY(model.setData(first, "1/0;1/1;0/1;0/0"));
+    QCOMPARE(first.data(), "1/0;1/1;0/1;0/0");
+}
+
+template <>
+struct QRangeModel::RowOptions<QPoint>
+{
+    static constexpr auto rowCategory = QRangeModel::RowCategory::MultiRoleItem;
+};
+
+void tst_QRangeModel::multiRoleTuple()
+{
+    QList<QPoint> listOfPoints = {
+        {0, 0},
+        {1, 0},
+        {1, 1},
+        {0, 1},
+    };
+
+    QRangeModel model(listOfPoints);
+    QCOMPARE(model.rowCount(), listOfPoints.size());
+    QCOMPARE(model.columnCount(), 1);
+
+    const QModelIndex item = model.index(1, 0);
+    QCOMPARE(item.data().value<QPoint>(), listOfPoints.at(1));
+    QVERIFY(model.setData(item, listOfPoints.back()));
+    QCOMPARE(item.data().value<QPoint>(), listOfPoints.back());
 }
 
 enum class TreeProtocol {
@@ -1717,12 +2156,126 @@ struct Value
                       "pointerTo should never be found through ADL.");
     }
 };
+
+struct Range
+{
+    static inline bool beginCalled = false;
+    static inline bool sizeCalled = false;
+
+    friend Value *begin(Range &r)
+    {
+        Range::beginCalled = true;
+        return r.values;
+    }
+
+    friend Value *end(Range &r)
+    {
+        // never called by QRM, only used in tree models
+        return r.values + std::size(r.values);
+    }
+
+    friend size_t size(const Range &r)
+    {
+        Range::sizeCalled = true;
+        return std::size(r.values);
+    }
+
+    Value values[3] = {{0}, {1}, {2}};
+};
 } // namespace ADLTest
 
 void tst_QRangeModel::adlTest()
 {
     QRangeModel adlModel(std::vector<ADLTest::Value>{});
+
+    ADLTest::Range r;
+
+    // compile tests
+    {
+        QRangeModel model(&r);
+    }
+    {
+        QRangeModel model(std::make_unique<ADLTest::Range>());
+    }
+    {
+        QRangeModel model(std::ref(r));
+    }
+
+    QRangeModel model(std::move(r));
+    QCOMPARE(model.rowCount(), 3);
+    const QModelIndex top = model.index(0, 0);
+    const QModelIndex bottom = model.index(model.rowCount() - 1, 0);
+
+    QVERIFY(top.isValid());
+    QVERIFY(bottom.isValid());
+
+    QVariant topData = model.data(top);
+    QVariant bottomData = model.data(bottom);
+    QCOMPARE(topData.value<ADLTest::Value>().x, top.row());
+    QCOMPARE(bottomData.value<ADLTest::Value>().x, bottom.row());
+
+    QVERIFY(ADLTest::Range::beginCalled);
+    QVERIFY(ADLTest::Range::sizeCalled);
 }
+
+class ItemAccessItem : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QString display MEMBER m_display)
+    Q_PROPERTY(QColor decoration MEMBER m_decoration)
+public:
+    ItemAccessItem(const QString &display, QColor decoration)
+        : m_display(display), m_decoration(decoration)
+    {}
+
+    QString m_display;
+    QColor m_decoration;
+};
+
+template <>
+struct QRangeModel::ItemAccess<ItemAccessItem>
+{
+    static QVariant readRole(const ItemAccessItem &item, int role)
+    {
+        switch (role) {
+        case Qt::DisplayRole:
+            return item.m_display.toUpper();
+        case Qt::DecorationRole:
+            return QColor(item.m_decoration.red(), item.m_decoration.green(),
+                          item.m_decoration.blue(), 128);
+        default:
+            break;
+        }
+        return {};
+    }
+
+    static bool writeRole(ItemAccessItem &item, const QVariant &data, int role)
+    {
+        switch (role) {
+        case Qt::DisplayRole:
+        case Qt::EditRole:
+            item.m_display = data.toString();
+            return true;
+        default:
+            break;
+        }
+        return false;
+    }
+};
+
+void tst_QRangeModel::itemAccess()
+{
+    QRangeModel model(QList<ItemAccessItem *>{
+        new ItemAccessItem{"one", Qt::red}
+    });
+    const QModelIndex index = model.index(0, 0);
+    QCOMPARE(model.columnCount(), 1);
+    QCOMPARE(model.data(index), "ONE");
+    QCOMPARE(model.data(index, Qt::DecorationRole).value<QColor>().alpha(), 128);
+    QVERIFY(model.setData(index, "Two"));
+    QCOMPARE(model.data(index), "TWO");
+    QVERIFY(!model.setData(index, QVariant::fromValue(Qt::blue), Qt::DecorationRole));
+};
 
 QTEST_MAIN(tst_QRangeModel)
 #include "tst_qrangemodel.moc"

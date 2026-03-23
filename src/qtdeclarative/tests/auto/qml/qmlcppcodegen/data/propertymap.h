@@ -16,7 +16,7 @@ class WithPropertyMap : public QObject
 public:
     WithPropertyMap(QObject *parent = nullptr)
         : QObject(parent)
-        , m_map(new QQmlPropertyMap(this))
+        , m_map(QQmlPropertyMap::create(this))
     {
     }
 
@@ -25,7 +25,7 @@ public:
     void setProperties(const QVariantHash &properties)
     {
         delete m_map;
-        m_map = new QQmlPropertyMap(this);
+        m_map = QQmlPropertyMap::create(this);
         m_map->insert(properties);
         emit mapChanged();
     }

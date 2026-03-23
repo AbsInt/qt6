@@ -23,6 +23,11 @@ constexpr const QMetaTypeInterface *qMetaTypeInterfaceForType();
 
 namespace QtMetaContainerPrivate {
 
+class Sequence;
+class SequentialIterator;
+class Association;
+class AssociativeIterator;
+
 enum IteratorCapability : quint8 {
     InputCapability         = 1 << 0,
     ForwardCapability       = 1 << 1,
@@ -923,9 +928,60 @@ protected:
     const QtMetaContainerPrivate::QMetaContainerInterface *d_ptr = nullptr;
 };
 
+// ### Qt7: Move this to qmetasequence.h, including QtMetaContainerPrivate parts above.
 class Q_CORE_EXPORT QMetaSequence : public QMetaContainer
 {
 public:
+#ifdef Q_QDOC
+    class Iterable : public QIterable<QMetaSequence>
+    {
+    public:
+        class Iterator : public QIterator<QMetaSequence>
+        {
+        public:
+            QVariant::Reference<Iterator> operator*() const;
+            QVariant::Pointer<Iterator> operator->() const;
+            QVariant::Reference<Iterator> operator[](qsizetype n) const;
+        };
+
+        class ConstIterator : public QConstIterator<QMetaSequence>
+        {
+        public:
+            QVariant operator*() const;
+            QVariant::ConstPointer<ConstIterator> operator->() const;
+            QVariant operator[](qsizetype n) const;
+        };
+
+        using RandomAccessIterator = Iterator;
+        using BidirectionalIterator = Iterator;
+        using ForwardIterator = Iterator;
+        using InputIterator = Iterator;
+
+        using RandomAccessConstIterator = ConstIterator;
+        using BidirectionalConstIterator = ConstIterator;
+        using ForwardConstIterator = ConstIterator;
+        using InputConstIterator = ConstIterator;
+
+        ConstIterator begin() const;
+        ConstIterator end() const;
+
+        ConstIterator constBegin() const;
+        ConstIterator constEnd() const;
+
+        Iterator mutableBegin();
+        Iterator mutableEnd();
+
+        QVariant at(qsizetype idx) const;
+        void setAt(qsizetype idx, const QVariant &value);
+        void append(const QVariant &value);
+        void prepend(const QVariant &value);
+        void removeLast();
+        void removeFirst();
+    };
+#else
+    using Iterable = QtMetaContainerPrivate::Sequence;
+#endif
+
     QMetaSequence() = default;
     explicit QMetaSequence(const QtMetaContainerPrivate::QMetaSequenceInterface *d) : QMetaContainer(d) {}
 
@@ -1000,9 +1056,67 @@ private:
     }
 };
 
+// ### Qt7: Move this to qmetaassociation.h, including QtMetaContainerPrivate parts above.
 class Q_CORE_EXPORT QMetaAssociation : public QMetaContainer
 {
 public:
+#ifdef Q_QDOC
+    class Iterable : public QIterable<QMetaAssociation>
+    {
+    public:
+        class Iterator : public QIterator<QMetaAssociation>
+        {
+        public:
+            QVariant key() const;
+            QVariant value() const;
+
+            QVariant::Reference<Iterator> operator*() const;
+            QVariant::Pointer<Iterator> operator->() const;
+        };
+
+        class ConstIterator : public QConstIterator<QMetaAssociation>
+        {
+        public:
+            QVariant key() const;
+            QVariant value() const;
+
+            QVariant operator*() const;
+            QVariant::ConstPointer<ConstIterator> operator->() const;
+        };
+
+        using RandomAccessIterator = Iterator;
+        using BidirectionalIterator = Iterator;
+        using ForwardIterator = Iterator;
+        using InputIterator = Iterator;
+
+        using RandomAccessConstIterator = ConstIterator;
+        using BidirectionalConstIterator = ConstIterator;
+        using ForwardConstIterator = ConstIterator;
+        using InputConstIterator = ConstIterator;
+
+        ConstIterator begin() const;
+        ConstIterator end() const;
+
+        ConstIterator constBegin() const;
+        ConstIterator constEnd() const;
+
+        Iterator mutableBegin();
+        Iterator mutableEnd();
+
+        ConstIterator find(const QVariant &key) const;
+        ConstIterator constFind(const QVariant &key) const;
+        Iterator mutableFind(const QVariant &key);
+
+        bool containsKey(const QVariant &key) const;
+        void insertKey(const QVariant &key);
+        void removeKey(const QVariant &key);
+        QVariant value(const QVariant &key) const;
+        void setValue(const QVariant &key, const QVariant &mapped);
+    };
+#else
+    using Iterable = QtMetaContainerPrivate::Association;
+#endif
+
     QMetaAssociation() = default;
     explicit QMetaAssociation(const QtMetaContainerPrivate::QMetaAssociationInterface *d) : QMetaContainer(d) {}
 

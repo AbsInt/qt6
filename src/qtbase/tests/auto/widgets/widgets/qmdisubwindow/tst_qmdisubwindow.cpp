@@ -846,8 +846,6 @@ void tst_QMdiSubWindow::setWindowFlags_data()
                                  << Qt::WindowFlags{} << StandardWindowFlags;
     QTest::newRow("Qt::SplashScreen") << Qt::SplashScreen << Qt::SubWindow
                                       << Qt::WindowFlags{} << StandardWindowFlags;
-    QTest::newRow("Qt::Desktop") << Qt::Desktop << Qt::SubWindow
-                                 << Qt::WindowFlags{} << StandardWindowFlags;
     QTest::newRow("Qt::SubWindow") << Qt::SubWindow << Qt::SubWindow
                                    << Qt::WindowFlags{} << StandardWindowFlags;
 

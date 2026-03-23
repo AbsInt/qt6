@@ -412,7 +412,18 @@ void QSGRhiLayer::grab()
     // layer contents do not change.
     m_dirtyTexture = false;
 
-    m_renderer->setDevicePixelRatio(m_dpr);
+    // The texture is essentially a virtual screen with a dpr == m_pixelSize / m_logicalRect
+    // For automatic texture sizes this factor will be equal to m_dpr.
+    // If the texture size is manually set, we need to know the actual ratio. This only
+    // works correctly for uniform rects, but this is already the prerequisite everywhere this
+    // factor is used.
+    if (m_logicalRect.isValid() && !m_pixelSize.isNull()) {
+        qreal actualDpr = std::max(m_pixelSize.width() / m_logicalRect.width(),
+                                   m_pixelSize.height() / m_logicalRect.height());
+        m_renderer->setDevicePixelRatio(actualDpr);
+    } else {
+        m_renderer->setDevicePixelRatio(m_dpr);
+    }
     m_renderer->setDeviceRect(m_pixelSize);
     m_renderer->setViewportRect(m_pixelSize);
 

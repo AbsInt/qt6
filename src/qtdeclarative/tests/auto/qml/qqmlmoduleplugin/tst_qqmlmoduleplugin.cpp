@@ -283,30 +283,9 @@ void tst_qqmlmoduleplugin::incorrectPluginCase()
     QList<QQmlError> errors = component.errors();
     QCOMPARE(errors.size(), 1);
 
-    QString expectedError = QLatin1String("module \"org.qtproject.WrongCase\" plugin \"PluGin\" not found");
-
-#ifndef QT_STATIC
-#if defined(Q_OS_DARWIN) || defined(Q_OS_WIN32)
-#if defined(Q_OS_DARWIN)
-    bool caseSensitive =
-            pathconf(QDir::currentPath().toLatin1().constData(), _PC_CASE_SENSITIVE) == 1;
-#if QT_CONFIG(debug) && !QT_CONFIG(framework)
-    QString libname = "libPluGin_debug.dylib";
-#else
-    QString libname = "libPluGin.dylib";
-#endif
-#elif defined(Q_OS_WIN32)
-    bool caseSensitive = false;
-    QString libname = "PluGin.dll";
-#endif
-    if (!caseSensitive) {
-        expectedError = QLatin1String("File name case mismatch for \"")
-            + QDir(m_importsDirectory).filePath("org/qtproject/WrongCase/" + libname)
-            + QLatin1Char('"');
-    }
-#endif
-#endif
-    QCOMPARE(errors.at(0).description(), expectedError);
+    QCOMPARE(
+            errors.at(0).description(),
+            QLatin1String("module \"org.qtproject.WrongCase\" plugin \"PluGin\" not found"));
 }
 
 void tst_qqmlmoduleplugin::importPluginWithQmlFile()
@@ -733,7 +712,10 @@ void tst_qqmlmoduleplugin::importVersionedModule()
     QTest::ignoreMessage(QtWarningMsg, "QQmlComponent: Component is not ready");
     QScopedPointer<QObject> object12(component.create());
     QVERIFY(object12.isNull());
-    QCOMPARE(component.errorString(), QString("%1:1 module \"org.qtproject.VersionedModule\" version 1.2 is not installed\n").arg(url.toString()));
+    QCOMPARE(component.errorString(),
+             QString("%1:1:1: module \"org.qtproject.VersionedModule\" version 1.2 is not "
+                     "installed\n")
+                     .arg(url.toString()));
 }
 
 void tst_qqmlmoduleplugin::parallelPluginImport()

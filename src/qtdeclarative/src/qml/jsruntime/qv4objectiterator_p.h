@@ -38,7 +38,7 @@ struct Q_QML_EXPORT ObjectIterator
     ObjectIterator(Scope &scope, const Object *o, uint flags)
     {
         engine = scope.engine;
-        object = static_cast<Object *>(scope.alloc());
+        object = static_cast<Object *>(scope.constructUndefined(1));
         this->flags = flags;
         object->setM(o ? o->m() : nullptr);
         if (o)

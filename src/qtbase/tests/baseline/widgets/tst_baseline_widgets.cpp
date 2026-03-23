@@ -1351,7 +1351,7 @@ void tst_Widgets::tst_QLCDNumber()
     layout.addWidget(lcdNumber.get());
     testWindow()->setLayout(&layout);
 
-    QBASELINE_CHECK_DEFERRED(takeSnapshot(), "lcdnumber");
+    takeStandardSnapshots();
 }
 
 QBASELINETEST_MAIN(tst_Widgets)

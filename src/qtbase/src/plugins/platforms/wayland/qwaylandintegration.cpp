@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qwaylandintegration_p.h"
 
@@ -56,6 +57,7 @@
 #include "qwaylandinputdeviceintegration_p.h"
 #include "qwaylandinputdeviceintegrationfactory_p.h"
 #include "qwaylandwindow_p.h"
+#include "qwaylandsessionmanager_p.h"
 
 #include <QtWaylandClient/private/qwayland-xdg-system-bell-v1.h>
 
@@ -87,6 +89,8 @@ QWaylandIntegration::QWaylandIntegration(const QString &platformName)
     : mPlatformName(platformName), mFontDb(new QGenericUnixFontDatabase())
 #endif
 {
+    QCoreApplication::setAttribute(Qt::AA_CompressHighFrequencyEvents);
+
     mDisplay.reset(new QWaylandDisplay(this));
     mPlatformServices.reset(new QWaylandPlatformServices(mDisplay.data()));
 
@@ -126,19 +130,20 @@ bool QWaylandIntegration::hasCapability(QPlatformIntegration::Capability cap) co
     case MultipleWindows:
     case NonFullScreenWindows:
         return true;
-    case RasterGLSurface:
-        return true;
     case WindowActivation:
         return true;
     case ScreenWindowGrabbing: // whether QScreen::grabWindow() is supported
         return false;
+    case OffscreenSurface:
+        return mDisplay->clientBufferIntegration()
+                && mDisplay->clientBufferIntegration()->canCreatePlatformOffscreenSurface();
     default: return QPlatformIntegration::hasCapability(cap);
     }
 }
 
 QPlatformWindow *QWaylandIntegration::createPlatformWindow(QWindow *window) const
 {
-    if ((window->surfaceType() == QWindow::OpenGLSurface || window->surfaceType() == QWindow::RasterGLSurface)
+    if (window->surfaceType() == QWindow::OpenGLSurface
         && mDisplay->clientBufferIntegration())
         return mDisplay->clientBufferIntegration()->createEglWindow(window);
 
@@ -155,6 +160,13 @@ QPlatformOpenGLContext *QWaylandIntegration::createPlatformOpenGLContext(QOpenGL
 {
     if (mDisplay->clientBufferIntegration())
         return mDisplay->clientBufferIntegration()->createPlatformOpenGLContext(context->format(), context->shareHandle());
+    return nullptr;
+}
+
+QPlatformOffscreenSurface *QWaylandIntegration::createPlatformOffscreenSurface(QOffscreenSurface *surface) const
+{
+    if (mDisplay->clientBufferIntegration())
+        return mDisplay->clientBufferIntegration()->createPlatformOffscreenSurface(surface);
     return nullptr;
 }
 
@@ -528,6 +540,14 @@ QWaylandShellIntegration *QWaylandIntegration::createShellIntegration(const QStr
         return nullptr;
     }
 }
+
+#ifndef QT_NO_SESSIONMANAGER
+QPlatformSessionManager *QWaylandIntegration::createPlatformSessionManager(const QString &id, const QString &key) const
+{
+    Q_UNUSED(key);
+    return new QWaylandSessionManager(mDisplay.data(), id);
+}
+#endif
 
 void QWaylandIntegration::reset()
 {

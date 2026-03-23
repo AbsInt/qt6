@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #undef QT_NO_FOREACH // this file contains unported legacy Q_FOREACH uses
 
@@ -136,6 +137,19 @@ static QString deviceModelIdentifier()
 #endif
 }
 #endif // !defined(Q_OS_VISIONOS)
+
+
+void QIOSScreen::initializeScreens()
+{
+#if defined(Q_OS_VISIONOS)
+    // Qt requires a screen, so let's give it a dummy one
+    QWindowSystemInterface::handleScreenAdded(new QIOSScreen);
+#else
+    Q_ASSERT([UIScreen.screens containsObject:UIScreen.mainScreen]);
+    for (UIScreen *screen in UIScreen.screens)
+        QWindowSystemInterface::handleScreenAdded(new QIOSScreen(screen));
+#endif
+}
 
 #if defined(Q_OS_VISIONOS)
 QIOSScreen::QIOSScreen()

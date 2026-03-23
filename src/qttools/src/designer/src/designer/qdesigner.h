@@ -4,8 +4,15 @@
 #ifndef QDESIGNER_H
 #define QDESIGNER_H
 
-#include <QtCore/qpointer.h>
+#include "helpclient.h"
+
 #include <QtWidgets/qapplication.h>
+
+#include <QtCore/qlibraryinfo.h>
+#include <QtCore/qpointer.h>
+#include <QtCore/qversionnumber.h>
+
+#include <optional>
 
 QT_BEGIN_NAMESPACE
 
@@ -20,6 +27,18 @@ class QDesignerClient;
 class QErrorMessage;
 class QCommandLineParser;
 struct Options;
+
+struct Options
+{
+    QStringList files;
+    QString resourceDir{QLibraryInfo::path(QLibraryInfo::TranslationsPath)};
+    QStringList pluginPaths;
+    std::optional<QVersionNumber> qtVersion;
+    bool server{false};
+    quint16 clientPort{0};
+    bool enableInternalDynamicProperties{false};
+    HelpClientType helpMode{HelpClientType::Assistant};
+};
 
 class QDesigner: public QApplication
 {

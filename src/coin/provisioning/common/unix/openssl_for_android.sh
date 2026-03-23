@@ -5,16 +5,23 @@
 # This script install prebuilt OpenSSL which was built against Android NDK 25.
 # OpenSSL build will fail with Android NDK 22, because it's missing platforms and sysroot directories
 
-set -ex
+set -eux
 # shellcheck source=../unix/DownloadURL.sh
 source "${BASH_SOURCE%/*}/../unix/DownloadURL.sh"
 # shellcheck source=../unix/SetEnvVar.sh
 source "${BASH_SOURCE%/*}/../unix/SetEnvVar.sh"
 
+outputPathBase="${HOME}"
+
 sslVersionForLatest="3.0.7"
 ndkVersionLatest="r27c"
 featureSuffixLatest="_16kb"
 prebuiltOpensslShaLatest="2cc15dd990460c2c7157ab257a47071fbd9e0ac8"
+
+sslVersionForPreview="3.0.7"
+ndkVersionPreview="r29-beta2"
+featureSuffixPreview="_16kb"
+prebuiltOpensslShaPreview="76c9788216440111be97ea1a63c4d8cd807baacd"
 
 ndkVersionNightly1=$ndkVersionLatest
 sslVersionForNightly1=$sslVersionForLatest
@@ -26,7 +33,7 @@ sslVersionForNightly2=$sslVersionForLatest
 featureSuffixNightly2=""
 prebuiltOpensslShaNightly2=$prebuiltOpensslShaLatest
 
-: <<'EOB' SOURCE BUILD INSTRUCTIONS - Openssl prebuilt was made using Android NDK r27c
+: <<'EOB' SOURCE BUILD INSTRUCTIONS - Openssl prebuilt was made using Android NDK r29-beta2
 # Source built requires GCC and Perl to be in PATH. Rhel "requires yum install perl-IPC-Cmd"
 exports_file="/tmp/export.sh"
 # source previously made environmental variables.
@@ -58,49 +65,110 @@ PATH=$TOOLCHAIN:$PATH CC=clang ./Configure android-arm
 PATH=$TOOLCHAIN:$PATH CC=clang make build_generated
 EOB
 
+function BuildOutputPath() {
+    local ndkVersion="$1"
+    local suffix="$2"
+    local sslVersion="$3"
+
+    echo "${outputPathBase}/prebuilt-openssl-${sslVersion}-for-android-ndk-${ndkVersion}${suffix}"
+}
+
 function InstallPrebuiltOpenssl() {
+    local ndkVersion="$1"
+    local suffix="$2"
+    local sha="$3"
+    local sslVersion="$4"
+    local output_dir="$5"
 
-    ndkVersion=$1
-    suffix=$2
-    sha=$3
-    sslVersion=$4
-
-    renamed_root="${HOME}/prebuilt-openssl-${sslVersion}-for-android-ndk-${ndkVersion}${suffix}"
-
-    prebuiltUrl="http://ci-files01-hki.ci.qt.io/input/openssl/prebuilt-openssl-${sslVersion}-for-android-ndk-${ndkVersion}${suffix}.zip"
-    targetFile="/tmp/prebuilt-openssl-${sslVersion}-for-android-ndk-${ndkVersion}${suffix}.zip"
+    local prebuiltUrl="http://ci-files01-hki.ci.qt.io/input/openssl/prebuilt-openssl-${sslVersion}-for-android-ndk-${ndkVersion}${suffix}.zip"
+    local targetFile="/tmp/prebuilt-openssl-${sslVersion}-for-android-ndk-${ndkVersion}${suffix}.zip"
 
     DownloadURL "$prebuiltUrl" "$prebuiltUrl" "$sha" "$targetFile"
 
+    local tmp_extract
     tmp_extract="$(mktemp -d "${TMPDIR:-/tmp}/openssl-extract.XXXXXX")"
     unzip -q -o "$targetFile" -d "$tmp_extract"
-    sudo rm -f "$targetFile"
+    rm -f "$targetFile"
 
     # We assume there is only one top-level directory in the openssl zip
+    local temp_openssl_root
     temp_openssl_root="$(find "$tmp_extract" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
     if [[ -z "$temp_openssl_root" ]]; then
         echo "ERROR: Expected a single top-level directory in the archive, but none was found." >&2
-        return 1
+        exit 1
     fi
 
-    mv "$temp_openssl_root" "$renamed_root"
+    mv "$temp_openssl_root" "$output_dir"
     rm -rf "$tmp_extract"
 
-    opensslHome="${renamed_root}"
+    # There have been cases where necessary symlinks are lost when unarchiving.
+    # Force-create them now.
+    local abi_list="arm64-v8a armeabi-v7a x86 x86_64"
+    for abi in $abi_list; do
+        ln -fs "${output_dir}/include" "${output_dir}/${abi}/include"
+        ln -fs "${output_dir}/${abi}/libcrypto_3.so" "${output_dir}/${abi}/libcrypto.so"
+        ln -fs "${output_dir}/${abi}/libssl_3.so" "${output_dir}/${abi}/libssl.so"
+    done
 }
 
 if [ "$ndkVersionNightly1" != "$ndkVersionLatest" ]; then
-    InstallPrebuiltOpenssl "$ndkVersionNightly1" "$featureSuffixNightly1" "$prebuiltOpensslShaNightly1" "$sslVersionForNightly1"
-    SetEnvVar "OPENSSL_ANDROID_HOME_NIGHTLY1" "$opensslHome"
-    echo "OpenSSL for Android $ndkVersionNightly1 = $sslVersionForNightly1" >> ~/versions.txt
+    outputDirNightly1=$(BuildOutputPath \
+        "$ndkVersionNightly1" \
+        "$featureSuffixNightly1" \
+        "$sslVersionForNightly1")
+
+    InstallPrebuiltOpenssl \
+        "$ndkVersionNightly1" \
+        "$featureSuffixNightly1" \
+        "$prebuiltOpensslShaNightly1" \
+        "$sslVersionForNightly1" \
+        "$outputDirNightly1"
+    SetEnvVar "OPENSSL_ANDROID_HOME_NIGHTLY1" "$outputDirNightly1"
+    echo "OpenSSL for Android ${ndkVersionNightly1} = ${sslVersionForNightly1}" >> ~/versions.txt
 fi
 
 if [ "$ndkVersionNightly2" != "$ndkVersionLatest" ]; then
-    InstallPrebuiltOpenssl "$ndkVersionNightly2" "$featureSuffixNightly2" "$prebuiltOpensslShaNightly2" "$sslVersionForNightly2"
-    SetEnvVar "OPENSSL_ANDROID_HOME_NIGHTLY2" "$opensslHome"
-    echo "OpenSSL for Android $ndkVersionNightly2 = $sslVersionForNightly2" >> ~/versions.txt
+    outputDirNightly2=$(BuildOutputPath \
+        "$ndkVersionNightly2" \
+        "$featureSuffixNightly2" \
+        "$sslVersionForNightly2")
+
+    InstallPrebuiltOpenssl \
+        "$ndkVersionNightly2" \
+        "$featureSuffixNightly2" \
+        "$prebuiltOpensslShaNightly2" \
+        "$sslVersionForNightly2" \
+        "$outputDirNightly2"
+    SetEnvVar "OPENSSL_ANDROID_HOME_NIGHTLY1" "$outputDirNightly2"
+    echo "OpenSSL for Android ${ndkVersionNightly2} = ${sslVersionForNightly2}" >> ~/versions.txt
 fi
 
-InstallPrebuiltOpenssl "$ndkVersionLatest" "$featureSuffixLatest" "$prebuiltOpensslShaLatest" "$sslVersionForLatest"
-SetEnvVar "OPENSSL_ANDROID_HOME_LATEST" "$opensslHome"
-echo "OpenSSL for Android $ndkVersionLatest = $sslVersionForLatest" >> ~/versions.txt
+if [ "$ndkVersionPreview" != "$ndkVersionLatest" ]; then
+    outputDirPreview="$(BuildOutputPath \
+        "$ndkVersionPreview" \
+        "$featureSuffixPreview" \
+        "$sslVersionForPreview")"
+
+    InstallPrebuiltOpenssl \
+        "$ndkVersionPreview" \
+        "$featureSuffixPreview" \
+        "$prebuiltOpensslShaPreview" \
+        "$sslVersionForPreview" \
+        "$outputDirPreview"
+    SetEnvVar "OPENSSL_ANDROID_HOME_PREVIEW" "$outputDirPreview"
+    echo "OpenSSL for Android ${ndkVersionPreview} = ${sslVersionForPreview}" >> ~/versions.txt
+fi
+
+outputDirLatest="$(BuildOutputPath \
+    "$ndkVersionLatest" \
+    "$featureSuffixLatest" \
+    "$sslVersionForLatest")"
+
+InstallPrebuiltOpenssl \
+    "$ndkVersionLatest" \
+    "$featureSuffixLatest" \
+    "$prebuiltOpensslShaLatest" \
+    "$sslVersionForLatest" \
+    "$outputDirLatest"
+SetEnvVar "OPENSSL_ANDROID_HOME_LATEST" "$outputDirLatest"
+echo "OpenSSL for Android ${ndkVersionLatest} = ${sslVersionForLatest}" >> ~/versions.txt

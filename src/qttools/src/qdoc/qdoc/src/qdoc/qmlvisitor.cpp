@@ -119,8 +119,11 @@ Node *QmlDocVisitor::applyDocumentation(QQmlJS::SourceLocation location, Node *n
     // No preceding comment; construct a new QML type if
     // needed.
     if (!loc.isValid()) {
-        if (!node)
+        if (!node) {
             node = new QmlTypeNode(m_current, m_name, NodeType::QmlType);
+            if (m_singletonPragmaFound)
+                static_cast<QmlTypeNode*>(node)->setSingleton(true);
+        }
         comment_loc.setLineNo(location.startLine);
         node->setLocation(comment_loc);
         return node;
@@ -142,6 +145,8 @@ Node *QmlDocVisitor::applyDocumentation(QQmlJS::SourceLocation location, Node *n
             node = new QmlTypeNode(m_current, m_name, NodeType::QmlType);
             node->setLocation(comment_loc);
         }
+        if (m_singletonPragmaFound && node->isQmlNode())
+            static_cast<QmlTypeNode*>(node)->setSingleton(true);
     }
 
     auto *parent{node->parent()};
@@ -182,8 +187,8 @@ Node *QmlDocVisitor::applyDocumentation(QQmlJS::SourceLocation location, Node *n
                     }
                     break;
                 }
-            } else if (topic == COMMAND_QMLTYPE || topic == COMMAND_QMLVALUETYPE ||
-                       topic == COMMAND_QMLBASICTYPE) {
+            } else if (topic == COMMAND_QMLTYPE || topic == COMMAND_QMLSINGLETONTYPE ||
+                       topic == COMMAND_QMLVALUETYPE || topic == COMMAND_QMLBASICTYPE) {
                 if (node->isQmlType()) {
                     if (nodes.size() > 1) {
                         doc.location().warning("\\%1 cannot be mixed with other topic commands"_L1.arg(topic));
@@ -269,36 +274,34 @@ bool QmlSignatureParser::match(int target)
  */
 bool QmlSignatureParser::matchTypeAndName(CodeChunk *type, QString *var)
 {
-    /*
-      This code is really hard to follow... sorry. The loop is there to match
-      Alpha::Beta::Gamma::...::Omega.
-     */
+    // Match code with scope operators, such as Alpha::Beta::Gamma::...::Omega.
     for (;;) {
-        bool virgin = true;
-
-        // If not an identifier, try to match a sequence of qualifiers.
-        if (tok_ != Tok_Ident) {
+        if (match(Tok_Ident)) {
+            type->append(previousLexeme());
+        } else {
+            // If not an identifier, try to match a sequence of modifiers.
+            bool hasModifiers = false;
             while (match(Tok_signed) || match(Tok_unsigned) || match(Tok_short) || match(Tok_long)
                    || match(Tok_int64)) {
                 // Append the matched qualifier token.
                 type->append(previousLexeme());
-                virgin = false;
+                hasModifiers = true;
+            }
+
+            // Match and append a type, or return false.
+            if (hasModifiers && (match(Tok_int) || match(Tok_char) || match(Tok_double))) {
+                type->append(previousLexeme());
+            } else if (!hasModifiers) {
+                if (match(Tok_void) || match(Tok_int) ||
+                    match(Tok_char) || match(Tok_double)) {
+                    type->append(previousLexeme());
+                } else {
+                    return false;
+                }
             }
         }
 
-        if (virgin) {
-            if (match(Tok_Ident)) {
-                type->append(previousLexeme());
-            } else if (match(Tok_void) || match(Tok_int) || match(Tok_char) || match(Tok_double)
-                       || match(Tok_Ellipsis))
-                type->append(previousLexeme());
-            else
-                return false;
-        } else if (match(Tok_int) || match(Tok_char) || match(Tok_double)) {
-            type->append(previousLexeme());
-        }
-
-        // Match and append a namespace separator or break.
+        // Match and append a scope operator, or break to go to the next stage.
         if (match(Tok_Gulbrandsen))
             type->append(previousLexeme());
         else
@@ -514,7 +517,6 @@ bool QmlDocVisitor::visit(QQmlJS::AST::UiObjectDefinition *definition)
         // Set base type name unless one was already provided with \inherits
         if (!component->doc().isEmpty() && qmlTypeNode->qmlBaseName().isEmpty())
             qmlTypeNode->setQmlBaseName(type);
-        qmlTypeNode->setTitle(m_name);
         qmlTypeNode->setImportList(m_importList);
         m_importList.clear();
         m_current = qmlTypeNode;

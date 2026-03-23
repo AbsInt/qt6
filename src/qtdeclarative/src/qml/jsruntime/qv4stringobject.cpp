@@ -814,7 +814,7 @@ ReturnedValue StringPrototype::method_replace(const FunctionObject *b, const Val
     if (!!searchCallback) {
         result.reserve(string.size() + 10*numStringMatches);
         ScopedValue entry(scope);
-        Value *arguments = scope.alloc(numCaptures + 2);
+        Value *arguments = scope.constructUndefined(numCaptures + 2);
         int lastEnd = 0;
         for (int i = 0; i < numStringMatches; ++i) {
             for (int k = 0; k < numCaptures; ++k) {

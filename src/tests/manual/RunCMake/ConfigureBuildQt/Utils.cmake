@@ -20,10 +20,21 @@ endfunction()
 
 # Query the var name from the CMake cache or the environment or use a default value.
 function(get_cmake_or_env_or_default out_var var_name_to_check default_value)
+    # Load the cache variables from the build dir containing the ConfigueBuildQt test
+    # RunCMake_BINARY_DIR is not actually created at this point so we have to normalize the path
+    cmake_path(SET actual_BINARY_DIR NORMALIZE "${RunCMake_BINARY_DIR}/..")
+    load_cache("${actual_BINARY_DIR}"
+        READ_WITH_PREFIX CACHE_VAL_ "${var_name_to_check}"
+    )
     if(${var_name_to_check})
+        # This is set within the script, highest priority
         set(value "${var_name_to_check}")
     elseif(DEFINED ENV{${var_name_to_check}})
+        # This may be used to change parameters at ctest runtime
         set(value "$ENV{${var_name_to_check}}")
+    elseif(DEFINED CACHE_VAL_${var_name_to_check})
+        # These parameters are set at configure time
+        set(value "${CACHE_VAL_${var_name_to_check}}")
     else()
         set(value "${default_value}")
     endif()
@@ -235,16 +246,22 @@ function(setup_qt_sources)
 
     set(RunCMake_TEST_COMMAND_WORKING_DIRECTORY "${working_dir}")
 
-    set(code_qt_io_mirror "https://code.qt.io/qt/qt5.git")
     set(gerrit_mirror "https://codereview.qt-project.org/qt/qt5")
+    get_repo_base_url(ci_repo_base_url)
+    set(remote_clone_url "${ci_repo_base_url}/qt/qt5.git")
 
     # Make a copy of the qt6 repo on which the test will operate on.
-    # On the CI we clone it from the official mirror, because we don't have a git repo, but only
-    # a source archive.
-    # On a local build we use the current qt6 checkout.
+    # On the CI we clone qt6 from one of the following sources, in order:
+    # - the Coin CI git mirror
+    # - or the remote specified by QT_CI_BUILD_QT_GIT_REMOTE
+    # - or from code.qt.io
+    # We do a clone, because 'local_clone_url' is usually not a git repo in the CI,
+    # but only a source archive.
+    # On a local build where a ci_ref is not specified, we use the current qt6 checkout
+    # from 'local_clone_url'.
     set(ci_ref "$ENV{TESTED_MODULE_REVISION_COIN}")
     if(ci_ref)
-        set(final_clone_url "${code_qt_io_mirror}")
+        set(final_clone_url "${remote_clone_url}")
     else()
         set(final_clone_url "${local_clone_url}")
     endif()
@@ -271,23 +288,35 @@ function(setup_qt_sources)
     # Merge stdout with stderr, to avoid having stderr output from git trigger errors.
     set(RunCMake_TEST_OUTPUT_MERGE TRUE)
 
-    # Adjust its remote url not to be the local url.
-    get_repo_base_url(repo_base_url)
-    set(remote_clone_url "${repo_base_url}/qt/qt5.git")
-    run_command("${prefix}" set_remote_url git remote set-url origin "${remote_clone_url}")
+    get_cmake_or_env_or_default(use_local USE_LOCAL_SUBMODULE_SYMLINKS OFF)
+    if(use_local)
+        file(GLOB qt_submodules RELATIVE "${top_level_src_dir}" "${top_level_src_dir}/qt*")
+        foreach(submodule IN LISTS qt_submodules)
+            message(STATUS
+                "Making a symlink of submodule ${submodule} "
+                "pointing to ${top_level_src_dir}/${submodule}"
+            )
+            file(REMOVE_RECURSE "${top_level_src_dir}/${submodule}")
+            file(CREATE_LINK "${top_repo_dir_path}/${submodule}" "${top_level_src_dir}/${submodule}"
+            SYMBOLIC)
+        endforeach()
+    else()
+        # Adjust its remote url to be the chosen mirror rather the local url.
+        run_command("${prefix}" set_remote_url git remote set-url origin "${remote_clone_url}")
 
-    # Sync to given module.
-    run_command("${prefix}" git_sync_to_${SYNC_MODULE}
-        ${CMAKE_COMMAND}
-            "-DSYNC_TO_MODULE=${SYNC_MODULE}"
-            "-DSYNC_TO_BRANCH=${SYNC_TO_REF}"
-            -DSHOW_PROGRESS=1
-            -DVERBOSE=1
-            -DGIT_DEPTH=1
-            -P cmake/QtSynchronizeRepo.cmake
-    )
+        # Sync to given module.
+        run_command("${prefix}" git_sync_to_${SYNC_MODULE}
+                ${CMAKE_COMMAND}
+                "-DSYNC_TO_MODULE=${SYNC_MODULE}"
+                "-DSYNC_TO_BRANCH=${SYNC_TO_REF}"
+                -DSHOW_PROGRESS=1
+                -DVERBOSE=1
+                -DGIT_DEPTH=1
+                -P cmake/QtSynchronizeRepo.cmake
+        )
 
-    apply_extra_gerrit_changes()
+        apply_extra_gerrit_changes()
+    endif()
 
     file(TOUCH "${working_dir}/sources_synced.txt")
 endfunction()
@@ -297,7 +326,23 @@ function(setup_list_of_repos_to_build)
     # Fake set the CMAKE_CURRENT_SOURCE_DIR so that we can parse the dependencies.
     set(CMAKE_CURRENT_SOURCE_DIR "${TOP_LEVEL_SRC_DIR}")
 
-    qt_internal_sort_module_dependencies("${SYNC_MODULE}" initial_submodules)
+    set(sort_module_args "")
+    set(optional_submodules_skipped "")
+    get_cmake_or_env_or_default(exclude_optional_deps EXCLUDE_OPTIONAL_DEPS "ON")
+    if(exclude_optional_deps)
+        list(APPEND sort_module_args
+            EXCLUDE_OPTIONAL_DEPS
+            EXCLUDE_OPTIONAL_DEPS_VAR optional_submodules_skipped
+        )
+    endif()
+
+    # TODO: hard-coding how to deal with qtdeclarative here for now
+    # We need qtshadertools to build standalone tests in qtdeclarative because of qtquick
+    if("qtdeclarative" IN_LIST SYNC_MODULE)
+        list(PREPEND SYNC_MODULE qtshadertools)
+    endif()
+
+    qt_internal_sort_module_dependencies("${SYNC_MODULE}" initial_submodules ${sort_module_args})
     set(final_submodules ${initial_submodules})
 
     get_default_repo_to_sync(default_module)
@@ -308,11 +353,8 @@ function(setup_list_of_repos_to_build)
         # Support semicolons and commas.
         string(REPLACE "," ";" skip_submodules "${skip_submodules}")
     endif()
-
-    # By default we skip some of qtdeclarative's optional dependencies.
-    if(NOT skip_submodules AND SYNC_MODULE STREQUAL "${default_module}")
-        set(skip_submodules qtsvg qtimageformats qtlanguageserver)
-    endif()
+    list(APPEND skip_submodules ${optional_submodules_skipped})
+    list(REMOVE_DUPLICATES skip_submodules)
 
     if(skip_submodules)
         list(REMOVE_ITEM final_submodules ${skip_submodules})
@@ -477,6 +519,7 @@ function(configure_qt)
     )
     set(single_args
         TEST_NAME
+        CMAKE_GENERATOR
         BUILD_DIR_ROOT_PATH
         REPO_NAME
         REPO_PATH
@@ -590,26 +633,14 @@ function(configure_qt)
     run_command("${prefix}" configure ${final_configure_args})
 endfunction()
 
-# Configures standalone tests or examples for a repo.
-function(configure_standalone_part)
-    set(opt_args
-        TOP_LEVEL
-        NO_PREFIX
-    )
+function(get_standalone_part_name out_var)
+    set(opt_args "")
     set(single_args
-        TEST_NAME
-        BUILD_DIR_ROOT_PATH
-        REPO_NAME
-        REPO_PATH
-        INSTALL_PREFIX
         PART_NAME
         PART_VARIANT
-        OUT_VAR_BUILD_DIR
     )
-    set(multi_args
-        CMAKE_ARGS
-    )
-    cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
+    set(multi_args "")
+    cmake_parse_arguments(PARSE_ARGV 1 arg "${opt_args}" "${single_args}" "${multi_args}")
 
     if(NOT arg_PART_NAME)
         message(FATAL_ERROR "PART_NAME is required.")
@@ -619,6 +650,8 @@ function(configure_standalone_part)
     if(NOT arg_PART_NAME IN_LIST supported_parts)
         message(FATAL_ERROR "PART_NAME must be one of: ${supported_parts}")
     endif()
+    string(TOLOWER "${arg_PART_NAME}" part_name)
+
     string(TOLOWER "${arg_PART_NAME}" part_name)
 
     if(arg_PART_NAME STREQUAL "EXAMPLES")
@@ -635,16 +668,50 @@ function(configure_standalone_part)
             set(part_variant_suffix "_ep")
         endif()
     endif()
+    set(${out_var} "standalone_${part_name}${part_variant_suffix}" PARENT_SCOPE)
+endfunction()
+
+# Configures standalone tests or examples for a repo.
+function(configure_standalone_part)
+    set(opt_args
+        TOP_LEVEL
+        NO_PREFIX
+    )
+    set(single_args
+        TEST_NAME
+        CMAKE_GENERATOR
+        BUILD_DIR_ROOT_PATH
+        REPO_NAME
+        REPO_PATH
+        INSTALL_PREFIX
+        PART_NAME
+        PART_VARIANT
+        OUT_VAR_BUILD_DIR
+    )
+    set(multi_args
+        CMAKE_ARGS
+    )
+    cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
+
+    if(NOT arg_PART_NAME)
+        message(FATAL_ERROR "PART_NAME is required.")
+    endif()
+    set(standalone_part_name_args PART_NAME ${arg_PART_NAME})
+    if(arg_PART_VARIANT)
+        list(APPEND standalone_part_name_args PART_VARIANT ${arg_PART_VARIANT})
+    endif()
+    get_standalone_part_name(standalone_part_name ${standalone_part_name_args})
+    string(TOLOWER "${arg_PART_NAME}" part_name)
 
     check_and_set_common_qt_configure_options()
 
     message(STATUS "Configuring standalone parts: ${arg_TEST_NAME}:${repo_name}:${part_name}")
 
     if(arg_TOP_LEVEL)
-        set(build_dir_path "${build_dir_root}/standalone_${part_name}${part_variant_suffix}")
+        set(build_dir_path "${build_dir_root}/${standalone_part_name}")
     else()
         set(build_dir_path
-            "${build_dir_root}/standalone_${part_name}${part_variant_suffix}_${repo_name}")
+            "${build_dir_root}/${standalone_part_name}_${repo_name}")
     endif()
     file(MAKE_DIRECTORY "${build_dir_path}")
     set(${arg_OUT_VAR_BUILD_DIR} "${build_dir_path}" PARENT_SCOPE)
@@ -678,6 +745,11 @@ function(configure_standalone_part)
         -B .
     )
     get_common_cmake_args(common_cmake_args)
+    if(arg_CMAKE_GENERATOR)
+        list(APPEND common_cmake_args -G "${arg_CMAKE_GENERATOR}")
+    else()
+        list(APPEND common_cmake_args -G "${RunCMake_GENERATOR}")
+    endif()
     list(APPEND common_cmake_args
         ${arg_CMAKE_ARGS}
     )
@@ -772,6 +844,7 @@ function(call_cmake_in_qt_build_dir)
         REPO_NAME
         REPO_PATH
         LOG_LEVEL
+        STANDALONE_PART_PREFIX
     )
     set(multi_args
         CMAKE_ARGS
@@ -780,10 +853,15 @@ function(call_cmake_in_qt_build_dir)
 
     check_and_set_common_qt_configure_options()
 
+    set(repo_prefix "")
+    if(arg_STANDALONE_PART)
+        set(repo_prefix "${arg_STANDALONE_PART_PREFIX}_")
+    endif()
+
     if(arg_TOP_LEVEL)
         set(build_dir_path "${build_dir_root}")
     else()
-        set(build_dir_path "${build_dir_root}/${repo_name}")
+        set(build_dir_path "${build_dir_root}/${repo_prefix}${repo_name}")
     endif()
 
     set(op_name "cmake_in_qt")
@@ -991,6 +1069,7 @@ function(qt_build_helper)
         RECONFIGURE_WITHOUT_ARGS_AFTER_BUILD
         RECONFIGURE_WITHOUT_ARGS_IMMEDIATELY
         BUILD_AFTER_RECONFIGURE
+        RECONFIGURE_STANDALONE_PARTS
     )
     set(single_args
         TEST_NAME
@@ -1139,6 +1218,16 @@ function(qt_build_helper)
                 BUILD_DIR_PATH "${tests_build_dir}"
                 OP_NAME "build_tests"
             )
+            if(arg_RECONFIGURE_STANDALONE_PARTS)
+                get_standalone_part_name(standalone_part_name
+                    PART_NAME "TESTS"
+                )
+                call_cmake_in_qt_build_dir(
+                    ${common_args}
+                    LOG_LEVEL STATUS
+                    STANDALONE_PART_PREFIX "${standalone_part_name}"
+                )
+            endif()
         endif()
 
         if(arg_BUILD_STANDALONE_EXAMPLES_IN_TREE AND NOT arg_SKIP_STANDALONE_PARTS)
@@ -1153,6 +1242,17 @@ function(qt_build_helper)
                 BUILD_DIR_PATH "${examples_build_dir}"
                 OP_NAME "build_examples"
             )
+            if(arg_RECONFIGURE_STANDALONE_PARTS)
+                get_standalone_part_name(standalone_part_name
+                    PART_NAME "EXAMPLES"
+                    PART_VARIANT "EXAMPLES_IN_TREE"
+                )
+                call_cmake_in_qt_build_dir(
+                    ${common_args}
+                    LOG_LEVEL STATUS
+                    STANDALONE_PART_PREFIX "${standalone_part_name}"
+                )
+            endif()
         endif()
 
         if(arg_BUILD_STANDALONE_EXAMPLES_AS_EXTERNAL_PROJECTS AND NOT arg_SKIP_STANDALONE_PARTS)
@@ -1167,8 +1267,88 @@ function(qt_build_helper)
                 BUILD_DIR_PATH "${examples_build_dir}"
                 OP_NAME "build_examples"
             )
+            if(arg_RECONFIGURE_STANDALONE_PARTS)
+                get_standalone_part_name(standalone_part_name
+                    PART_NAME "EXAMPLES"
+                    PART_VARIANT "EXAMPLES_AS_EXTERNAL_PROJECTS"
+                )
+                call_cmake_in_qt_build_dir(
+                    ${common_args}
+                    LOG_LEVEL STATUS
+                    STANDALONE_PART_PREFIX "${standalone_part_name}"
+                )
+            endif()
         endif()
     endforeach()
+
+    # Do another round of reconfigure (and in certain cases rebuild) after all submodules were built
+    # This will include any plugin navigations in the find_package calls
+    if(arg_RECONFIGURE_WITHOUT_ARGS_IMMEDIATELY
+        OR arg_RECONFIGURE_WITHOUT_ARGS_AFTER_BUILD)
+        foreach(repo_name IN LISTS repos_to_process)
+            set(repo_path "${source_dir}/${repo_name}")
+            set(test_name "${arg_TEST_NAME}_${repo_name}")
+
+            set(common_args
+                TEST_NAME "${test_name}"
+                REPO_NAME "${repo_name}"
+                REPO_PATH "${repo_path}"
+                TOP_LEVEL_SOURCE_DIR_PATH "${source_dir}"
+                BUILD_DIR_ROOT_PATH "${build_dir_root}"
+                ${extra_args}
+            )
+
+            call_cmake_in_qt_build_dir(
+                ${common_args}
+                LOG_LEVEL STATUS
+            )
+
+            if(arg_BUILD_AFTER_RECONFIGURE)
+                build_qt(
+                    IS_REBUILD
+                    BUILD_VERBOSE
+                    BUILD_NINJA_EXPLAIN
+                    ${common_args}
+                )
+            endif()
+            if(arg_RECONFIGURE_STANDALONE_PARTS AND NOT arg_SKIP_STANDALONE_PARTS)
+                if(arg_BUILD_STANDALONE_TESTS)
+                    get_standalone_part_name(standalone_part_name
+                        PART_NAME "TESTS"
+                    )
+                    call_cmake_in_qt_build_dir(
+                        ${common_args}
+                        LOG_LEVEL STATUS
+                        STANDALONE_PART_PREFIX "${standalone_part_name}"
+                    )
+                endif()
+
+                if(arg_BUILD_STANDALONE_EXAMPLES_IN_TREE)
+                    get_standalone_part_name(standalone_part_name
+                        PART_NAME "EXAMPLES"
+                        PART_VARIANT "EXAMPLES_IN_TREE"
+                    )
+                    call_cmake_in_qt_build_dir(
+                        ${common_args}
+                        LOG_LEVEL STATUS
+                        STANDALONE_PART_PREFIX "${standalone_part_name}"
+                    )
+                endif()
+
+                if(arg_BUILD_STANDALONE_EXAMPLES_AS_EXTERNAL_PROJECTS)
+                    get_standalone_part_name(standalone_part_name
+                        PART_NAME "EXAMPLES"
+                        PART_VARIANT "EXAMPLES_AS_EXTERNAL_PROJECTS"
+                    )
+                    call_cmake_in_qt_build_dir(
+                        ${common_args}
+                        LOG_LEVEL STATUS
+                        STANDALONE_PART_PREFIX "${standalone_part_name}"
+                    )
+                endif()
+            endif()
+        endforeach()
+    endif()
 endfunction()
 
 function(add_test_case)

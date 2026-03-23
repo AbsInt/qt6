@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QIOSSCREEN_H
 #define QIOSSCREEN_H
@@ -51,6 +52,7 @@ public:
     void updateProperties();
 
 private:
+    static void initializeScreens();
     void deliverUpdateRequests() const;
 
 #if !defined(Q_OS_VISIONOS)
@@ -65,6 +67,8 @@ private:
 #endif
     QSizeF m_physicalSize;
     CADisplayLink *m_displayLink = nullptr;
+
+    friend class QIOSIntegration;
 };
 
 QT_END_NAMESPACE

@@ -364,7 +364,8 @@ QDebug operator<<(QDebug debug, const QSslKey &key)
           << ", " << (key.algorithm() == QSsl::Opaque ? "OPAQUE" :
                      (key.algorithm() == QSsl::Rsa ? "RSA" :
                      (key.algorithm() == QSsl::Dsa ? "DSA" :
-                     (key.algorithm() == QSsl::Dh ? "DH" : "EC"))))
+                     (key.algorithm() == QSsl::Dh ? "DH" :
+                     (key.algorithm() == QSsl::Ec ? "EC" : "ML-DSA")))))
           << ", " << key.length()
           << ')';
     return debug;

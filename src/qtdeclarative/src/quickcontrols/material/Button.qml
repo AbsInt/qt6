@@ -26,9 +26,6 @@ T.Button {
 
     icon.width: 24
     icon.height: 24
-    icon.color: !enabled ? Material.hintTextColor :
-        (control.flat && control.highlighted) || (control.checked && !control.highlighted) ? Material.accentColor :
-        highlighted ? Material.primaryHighlightedTextColor : Material.foreground
 
     readonly property bool hasIcon: icon.name.length > 0 || icon.source.toString().length > 0
 
@@ -41,11 +38,13 @@ T.Button {
         display: control.display
 
         icon: control.icon
+        defaultIconColor: !control.enabled ? control.Material.hintTextColor
+            : (control.flat && control.highlighted) || (control.checked && !control.highlighted)
+            ? control.Material.accentColor : control.highlighted
+            ? control.Material.primaryHighlightedTextColor : control.Material.foreground
         text: control.text
         font: control.font
-        color: !control.enabled ? control.Material.hintTextColor :
-            (control.flat && control.highlighted) || (control.checked && !control.highlighted) ? control.Material.accentColor :
-            control.highlighted ? control.Material.primaryHighlightedTextColor : control.Material.foreground
+        color: defaultIconColor
     }
 
     background: Rectangle {

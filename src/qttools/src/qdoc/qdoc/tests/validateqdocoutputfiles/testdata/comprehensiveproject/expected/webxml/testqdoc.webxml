@@ -47,12 +47,12 @@
                 </function>
                 <function name="inlineFunction" fullname="TestQDoc::Test::inlineFunction" href="testqdoc-test.html#inlineFunction" status="active" access="public" location="testcpp.h" documented="true" meta="plain" type="void" brief="An inline function, documented using the \fn QDoc command" signature="void inlineFunction()">
                     <description>
-                        <brief>An inline function, documented using the \fn QDoc command.</brief>
+                        <brief>An inline function, documented using the <teletype>\fn</teletype> QDoc command.</brief>
                     </description>
                 </function>
                 <function name="methodWithEmDashInItsDocs" fullname="TestQDoc::Test::methodWithEmDashInItsDocs" href="testqdoc-test.html#methodWithEmDashInItsDocs" status="active" access="public" location="testcpp.h" documented="true" meta="plain" type="void" signature="void methodWithEmDashInItsDocs()">
                     <description>
-                        <para>This method has em dashes in its documentation—as you'll find represented by <teletype type="highlighted">---</teletype> in the sources—here and there. The important bit to note is that when passed e.g. to the \c command, the three hyphens are processed as input to the command and not replaced by an em dash.</para>
+                        <para>This method has em dashes in its documentation—as you'll find represented by <teletype type="highlighted">---</teletype> in the sources—here and there. The important bit to note is that when passed e.g. to the <teletype>\c</teletype> command, the three hyphens are processed as input to the command and not replaced by an em dash.</para>
                         <para>-----------------------------------------------------------------------</para>
                         <para>People can still add a bunch of dashes, though, without QDoc replacing them all with a series of em dashes.</para>
                         <para>—You can also start a new paragraph with an em dash, if you want to.</para>
@@ -63,12 +63,12 @@
                 </function>
                 <function name="methodWithEnDashInItsDocs" fullname="TestQDoc::Test::methodWithEnDashInItsDocs" href="testqdoc-test.html#methodWithEnDashInItsDocs" status="active" access="public" location="testcpp.h" documented="true" meta="plain" type="void" signature="void methodWithEnDashInItsDocs()">
                     <description>
-                        <para>This method has en dashes in its documentation – as you'll find represented by <teletype type="highlighted">--</teletype> in the sources – here and there. The important bit to note is that when passed e.g. to the \c command, the two hyphens are processed as input to the command and not replaced by an en dash. This also applies to code blocks, where otherwise, the decrement operator would get completely borked:</para>
+                        <para>This method has en dashes in its documentation – as you'll find represented by <teletype type="highlighted">--</teletype> in the sources – here and there. The important bit to note is that when passed e.g. to the <teletype>\c</teletype> command, the two hyphens are processed as input to the command and not replaced by an en dash. This also applies to code blocks, where otherwise, the decrement operator would get completely borked:</para>
                         <code>for (int i = 42; i &gt; 0; --i)
     // Do something cool during countdown.</code>
                         <para>...as it would be silly if this would output –i instead of <teletype type="highlighted">--i</teletype>.</para>
                         <para>-----------------------------------------------------------------------</para>
-                        <para>It still allows people to add a bunch of dashes, though, without replacing them all with a series of en dashes. Of course, they might want to use the \hr command instead, like this:</para>
+                        <para>It still allows people to add a bunch of dashes, though, without replacing them all with a series of en dashes. Of course, they might want to use the <teletype>\hr</teletype> command instead, like this:</para>
                         <para>– You can also start a new paragraph with an en dash, if you want to.</para>
                         <see-also>methodWithEnDashInItsDocs</see-also>
                     </description>
@@ -149,6 +149,9 @@
                 <function name="boolPropChanged" fullname="TestQDoc::TestDerived::boolPropChanged" href="testqdoc-testderived.html#boolProp-prop" status="active" access="public" location="testcpp.h" meta="signal" associated-property="boolProp,secondBoolProp" type="void" signature="void boolPropChanged()">
                     <description/>
                 </function>
+                <function name="duplicate" fullname="TestQDoc::TestDerived::duplicate" href="testqdoc-testderived.html#duplicate-prop" status="active" access="public" location="testcpp.h" meta="plain" associated-property="duplicate" type="int" signature="int duplicate()">
+                    <description/>
+                </function>
                 <function name="emitSomething" fullname="TestQDoc::TestDerived::emitSomething" href="testqdoc-testderived.html#emitSomething" status="active" access="public" location="testcpp.h" documented="true" meta="signal" type="void" signature="void emitSomething()">
                     <description>
                         <para>Emitted when things happen.</para>
@@ -202,7 +205,7 @@
                 <function name="virtualFun" fullname="TestQDoc::TestDerived::virtualFun" href="testqdoc-testderived.html#virtualFun" status="active" access="public" location="testcpp.h" documented="true" meta="plain" virtual="virtual" override="true" type="void" signature="void virtualFun() override">
                     <description/>
                 </function>
-                <enum name="anonymous" fullname="TestQDoc::TestDerived::anonymous" href="testqdoc-testderived.html#anonymous-enum" status="active" access="public" location="testcpp.h" documented="true">
+                <enum name="anonymous" fullname="TestQDoc::TestDerived::anonymous" href="testqdoc-testderived.html#anonymous-enum" status="active" access="public" location="testcpp.h" documented="true" anonymous="true">
                     <value name="Val1" value="0"/>
                     <value name="Val2" value="1"/>
                     <value name="Val3" value="0"/>
@@ -234,7 +237,7 @@
                         <para>I'm an alias, not a typedef.</para>
                     </description>
                 </typedef>
-                <property name="bindableProp" fullname="TestQDoc::TestDerived::bindableProp" href="testqdoc-testderived.html#bindableProp-prop" status="active" access="public" location="testcpp.h" documented="true" bindable="true">
+                <property name="bindableProp" fullname="TestQDoc::TestDerived::bindableProp" href="testqdoc-testderived.html#bindableProp-prop" status="active" access="public" location="testcpp.h" documented="true" bindable="true" dataType="QString">
                     <getter name="bindableProp"/>
                     <setter name="setBindableProp"/>
                     <notifier name="bindablePropChanged"/>
@@ -245,7 +248,7 @@
                         </see-also>
                     </description>
                 </property>
-                <property name="boolProp" fullname="TestQDoc::TestDerived::boolProp" href="testqdoc-testderived.html#boolProp-prop" status="active" access="public" location="testcpp.h" documented="true">
+                <property name="boolProp" fullname="TestQDoc::TestDerived::boolProp" href="testqdoc-testderived.html#boolProp-prop" status="active" access="public" location="testcpp.h" documented="true" dataType="bool">
                     <getter name="boolProp"/>
                     <setter name="setBoolProp"/>
                     <resetter name="resetBoolProp"/>
@@ -254,26 +257,30 @@
                         <para>A boolean property.</para>
                     </description>
                 </property>
-                <property name="intProp" fullname="TestQDoc::TestDerived::intProp" href="testqdoc-testderived.html#intProp-prop" status="active" access="public" location="testcpp.h" documented="true" writable="false">
+                <property name="duplicate" fullname="TestQDoc::TestDerived::duplicate" href="testqdoc-testderived.html#duplicate-prop" status="active" access="public" location="testcpp.h" documented="true" writable="false" dataType="int">
+                    <getter name="duplicate"/>
+                    <description/>
+                </property>
+                <property name="intProp" fullname="TestQDoc::TestDerived::intProp" href="testqdoc-testderived.html#intProp-prop" status="active" access="public" location="testcpp.h" documented="true" writable="false" constant="true" dataType="int*">
                     <getter name="getInt"/>
                     <description>
                         <para>An integer property.</para>
                     </description>
                 </property>
-                <property name="name" fullname="TestQDoc::TestDerived::name" href="testqdoc-testderived.html#name-prop" status="active" access="public" location="testcpp.h" documented="true" writable="false" brief="Name">
+                <property name="name" fullname="TestQDoc::TestDerived::name" href="testqdoc-testderived.html#name-prop" status="active" access="public" location="testcpp.h" documented="true" writable="false" dataType="const QString*" brief="Name">
                     <getter name="name"/>
                     <description>
                         <brief>This property holds a name..</brief>
                     </description>
                 </property>
-                <property name="secondBoolProp" fullname="TestQDoc::TestDerived::secondBoolProp" href="testqdoc-testderived.html#secondBoolProp-prop" status="active" access="public" location="testcpp.h" documented="true" writable="false">
+                <property name="secondBoolProp" fullname="TestQDoc::TestDerived::secondBoolProp" href="testqdoc-testderived.html#secondBoolProp-prop" status="active" access="public" location="testcpp.h" documented="true" writable="false" dataType="bool">
                     <getter name="secondBoolProp"/>
                     <notifier name="boolPropChanged"/>
                     <description>
                         <para>A property sharing a notifier signal with <link raw="boolProp" href="testqdoc-testderived.html#boolProp-prop" type="function">boolProp</link>.</para>
                     </description>
                 </property>
-                <property name="someProp" fullname="TestQDoc::TestDerived::someProp" href="testqdoc-testderived.html#someProp-prop" status="active" access="public" location="testcpp.h" documented="true" bindable="true" writable="false">
+                <property name="someProp" fullname="TestQDoc::TestDerived::someProp" href="testqdoc-testderived.html#someProp-prop" status="active" access="public" location="testcpp.h" documented="true" bindable="true" writable="false" dataType="QString">
                     <getter name="someProp"/>
                     <description>
                         <para>Another property.</para>

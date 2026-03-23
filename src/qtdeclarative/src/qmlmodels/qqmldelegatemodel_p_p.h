@@ -69,10 +69,11 @@ public:
                 : nullptr;
     }
 
+    qsizetype groupCount() const { return groupNames.size(); }
+
     void emitModelChanged() const;
 
     QPointer<QQmlInstanceModel> model;
-    const int groupCount;
     QV4::ExecutionEngine * const v4Engine;
     QQmlRefPointer<QQmlDelegateModelAttachedMetaObject> attachedMetaObject;
     const QStringList groupNames;
@@ -91,24 +92,93 @@ class QQmlDelegateModelItem : public QObject
     Q_PROPERTY(int column READ modelColumn NOTIFY columnChanged REVISION(2, 12))
     Q_PROPERTY(QObject *model READ modelObject CONSTANT)
 public:
+    struct ObjectReference
+    {
+        Q_DISABLE_COPY_MOVE(ObjectReference)
+
+        ObjectReference(QQmlDelegateModelItem *item) : item(item)
+        {
+            ++item->m_objectStrongRef;
+        }
+
+        ~ObjectReference()
+        {
+            Q_ASSERT(item->m_objectStrongRef > 0);
+            --item->m_objectStrongRef;
+        }
+    private:
+        QQmlDelegateModelItem *item = nullptr;
+    };
+
+    struct ObjectSpanReference
+    {
+        Q_DISABLE_COPY_MOVE(ObjectSpanReference)
+
+        ObjectSpanReference(QSpan<QQmlDelegateModelItem *const> span) : items(std::move(span))
+        {
+            for (QQmlDelegateModelItem *item : items)
+                ++item->m_objectStrongRef;
+        }
+
+        ~ObjectSpanReference()
+        {
+            for (QQmlDelegateModelItem *item : items) {
+                Q_ASSERT(item->m_objectStrongRef > 0);
+                --item->m_objectStrongRef;
+            }
+        }
+
+    private:
+        const QSpan<QQmlDelegateModelItem *const> items;
+    };
+
+    struct ScriptReference
+    {
+        Q_DISABLE_COPY_MOVE(ScriptReference)
+
+        ScriptReference(QQmlDelegateModelItem *item) : item(item) { item->referenceSript(); }
+        ~ScriptReference() { item->releaseScript(); }
+
+        QQmlDelegateModelItem *data() const { return item; }
+    private:
+        QQmlDelegateModelItem *item = nullptr;
+    };
+
     QQmlDelegateModelItem(const QQmlRefPointer<QQmlDelegateModelItemMetaType> &metaType,
                           QQmlAdaptorModel::Accessors *accessor, int modelIndex,
                           int row, int column);
     ~QQmlDelegateModelItem();
 
-    void referenceObject() { ++objectRef; }
-    bool releaseObject()
+    [[nodiscard]] QObject *referenceObjectWeak()
     {
-        Q_ASSERT(objectRef > 0);
-        return --objectRef == 0 && !(groups & Compositor::PersistedFlag);
+        Q_ASSERT(m_object);
+        ++m_objectWeakRef;
+        return m_object;
     }
-    bool isObjectReferenced() const { return objectRef != 0 || (groups & Compositor::PersistedFlag); }
+
+    bool releaseObjectWeak()
+    {
+        if (m_objectWeakRef > 0)
+            --m_objectWeakRef;
+        return !isObjectReferenced();
+    }
+    void clearObjectWeakReferences()
+    {
+        m_objectWeakRef = 0;
+    }
+
+    bool isObjectReferenced() const
+    {
+        return m_objectWeakRef != 0
+                || m_objectStrongRef != 0
+                || (m_groups & Compositor::PersistedFlag);
+    }
     void childContextObjectDestroyed(QObject *childContextObject);
 
-    bool isReferenced() const {
-        return scriptRef
-                || incubationTask
-                || ((groups & Compositor::UnresolvedFlag) && (groups & Compositor::GroupMask));
+    bool isScriptReferenced() const {
+        return m_scriptRef
+                || m_incubationTask
+                || ((m_groups & Compositor::UnresolvedFlag) && (m_groups & Compositor::GroupMask));
     }
 
     void dispose();
@@ -116,21 +186,25 @@ public:
     QObject *modelObject() { return this; }
 
     void destroyObject();
+    void destroyObjectLater();
 
     static QQmlDelegateModelItem *dataForObject(QObject *object);
 
     int groupIndex(Compositor::Group group);
 
-    int modelRow() const { return row; }
-    int modelColumn() const { return column; }
-    int modelIndex() const { return index; }
+    int modelRow() const { return m_row; }
+    int modelColumn() const { return m_column; }
+    int modelIndex() const { return m_index; }
+    bool hasValidModelIndex() const { return m_index >= 0; }
     virtual void setModelIndex(int idx, int newRow, int newColumn, bool alwaysEmit = false);
 
-    virtual QV4::ReturnedValue get() { return QV4::QObjectWrapper::wrap(metaType->v4Engine, this); }
+    bool usesStructuredModelData() const { return m_useStructuredModelData; }
+
+    virtual QV4::ReturnedValue get() { return QV4::QObjectWrapper::wrap(m_metaType->v4Engine, this); }
 
     virtual void setValue(const QString &role, const QVariant &value) { Q_UNUSED(role); Q_UNUSED(value); }
     virtual bool resolveIndex(const QQmlAdaptorModel &, int) { return false; }
-    virtual QQmlRefPointer<QQmlContextData> initProxy() { return contextData; }
+    virtual QQmlRefPointer<QQmlContextData> initProxy() { return m_contextData; }
 
     static QV4::ReturnedValue get_model(const QV4::FunctionObject *, const QV4::Value *thisObject, const QV4::Value *argv, int argc);
     static QV4::ReturnedValue get_groups(const QV4::FunctionObject *, const QV4::Value *thisObject, const QV4::Value *argv, int argc);
@@ -139,21 +213,13 @@ public:
     static QV4::ReturnedValue set_member(QQmlDelegateModelItem *thisItem, uint flag, const QV4::Value &arg);
     static QV4::ReturnedValue get_index(QQmlDelegateModelItem *thisItem, uint flag, const QV4::Value &arg);
 
-    QQmlRefPointer<QQmlDelegateModelItemMetaType> metaType;
-    QQmlRefPointer<QQmlContextData> contextData;
-    QPointer<QObject> object;
-    QQDMIncubationTask *incubationTask = nullptr;
-    QQmlComponent *delegate = nullptr;
-    int objectRef = 0;
-    int scriptRef = 0;
-    int groups = 0;
 
     QQmlDelegateModelAttached *attached() const
     {
-        if (!object)
+        if (!m_object)
             return nullptr;
 
-        QQmlData *ddata = QQmlData::get(object);
+        QQmlData *ddata = QQmlData::get(m_object);
         if (!ddata || !ddata->hasExtendedData())
             return nullptr;
 
@@ -162,25 +228,100 @@ public:
                         QQmlPrivate::attachedPropertiesFunc<QQmlDelegateModel>()));
     }
 
-    void disableStructuredModelData() { useStructuredModelData = false; }
+    void disableStructuredModelData() { m_useStructuredModelData = false; }
 
     QDynamicMetaObjectData *exchangeMetaObject(QDynamicMetaObjectData *metaObject)
     {
         return std::exchange(d_ptr->metaObject, metaObject);
     }
 
+    QQDMIncubationTask *incubationTask() const { return m_incubationTask; }
+    void clearIncubationTask() { m_incubationTask = nullptr; }
+    void setIncubationTask(QQDMIncubationTask *incubationTask)
+    {
+        Q_ASSERT(!m_incubationTask);
+        Q_ASSERT(incubationTask);
+        m_incubationTask = incubationTask;
+    }
+
+    quint16 objectStrongRef() const { return m_objectStrongRef; }
+    quint16 objectWeakRef() const { return m_objectWeakRef; }
+    quint16 scriptRef() const { return m_scriptRef; }
+
+    QObject *object() const { return m_object; }
+    void setObject(QObject *object) {
+        Q_ASSERT(!m_object);
+        Q_ASSERT(object);
+        m_object = object;
+    }
+
+    QQmlComponent *delegate() const { return m_delegate; }
+    void setDelegate(QQmlComponent *delegate) { m_delegate = delegate; }
+
+    const QQmlRefPointer<QQmlContextData> &contextData() const { return m_contextData; }
+    void setContextData(const QQmlRefPointer<QQmlContextData> &contextData)
+    {
+        m_contextData = contextData;
+    }
+
+    int groups() const { return m_groups; }
+    void setGroups(int groups) { m_groups = groups; }
+    void addGroups(int groups) { m_groups |= groups; }
+    void removeGroups(int groups) { m_groups &= ~groups; }
+    void clearGroups() { m_groups = 0; }
+
+    const QQmlRefPointer<QQmlDelegateModelItemMetaType> &metaType() const { return m_metaType; }
+
 Q_SIGNALS:
     void modelIndexChanged();
     Q_REVISION(2, 12) void rowChanged();
     Q_REVISION(2, 12) void columnChanged();
 
-protected:
+private:
     void objectDestroyed(QObject *);
 
-    int index = -1;
-    int row = -1;
-    int column = -1;
-    bool useStructuredModelData = true;
+    void referenceSript() { ++m_scriptRef; }
+    bool releaseScript()
+    {
+        Q_ASSERT(m_scriptRef > 0);
+        return --m_scriptRef == 0;
+    }
+
+    QQmlRefPointer<QQmlDelegateModelItemMetaType> m_metaType;
+    QQmlRefPointer<QQmlContextData> m_contextData;
+    QPointer<QObject> m_object;
+    QQDMIncubationTask *m_incubationTask = nullptr;
+    QQmlComponent *m_delegate = nullptr;
+    int m_groups = 0;
+    int m_index = -1;
+    int m_row = -1;
+    int m_column = -1;
+
+    // A strong reference to the object prevents the deletion of the object. We use them as
+    // temporary guards with ObjectReference or ObjectSpanReference to make sure the objects we're
+    // currently manipulating don't disappear.
+    quint16 m_objectStrongRef = 0;
+
+    // A weak reference to the object is added when handing the object out to the view via object().
+    // It is dropped when the view calls release(). Weak references are advisory. We try not to
+    // delete an object while weak references are still in place. However, during destruction, the
+    // weak refernces may be ignored. Views are expected to use QPointer or similar guards in
+    // addition.
+    quint16 m_objectWeakRef = 0;
+
+    // A script reference is a strong reference to the QQmlDelegateModelItem itself. We don't delete
+    // the QQmlDelegateModelItem while script references are still in place. We can use them as
+    // temporary guards to hold on to an item while working on it, or we can attach them to
+    // Heap::QQmlDelegateModelItemObject in order to extend the life time of a QQmlDelegateModelItem
+    // to the life time of its heap object.
+    // The latter case is particular in that it contradicts our usual mechanism of only holding weak
+    // references to QObjects in e.g. QV4::QObjectWrapper. The trick here is that the actual
+    // QQmlDelegateModelItem is never exposed to the user, so that the user has no chance of
+    // manually deleting it.
+    // TODO: This is brittle.
+    quint16 m_scriptRef = 0;
+
+    bool m_useStructuredModelData = true;
 };
 
 namespace QV4 {
@@ -188,7 +329,13 @@ namespace Heap {
 struct QQmlDelegateModelItemObject : Object {
     inline void init(QQmlDelegateModelItem *item);
     void destroy();
-    QQmlDelegateModelItem *item;
+
+    alignas(alignof(QQmlDelegateModelItem::ScriptReference))
+    std::byte ref[sizeof(QQmlDelegateModelItem::ScriptReference)];
+
+    QQmlDelegateModelItem *item() const {
+        return reinterpret_cast<const QQmlDelegateModelItem::ScriptReference *>(&ref)->data();
+    }
 };
 
 }
@@ -200,10 +347,10 @@ struct QQmlDelegateModelItemObject : QV4::Object
     V4_NEEDS_DESTROY
 };
 
-void QV4::Heap::QQmlDelegateModelItemObject::init(QQmlDelegateModelItem *item)
+void QV4::Heap::QQmlDelegateModelItemObject::init(QQmlDelegateModelItem *modelItem)
 {
     Object::init();
-    this->item = item;
+    new (ref) QQmlDelegateModelItem::ScriptReference(modelItem);
 }
 
 class QQmlReusableDelegateModelItemsPool
@@ -391,18 +538,18 @@ public:
     void setGroups(Compositor::iterator from, int count, Compositor::Group group, int groupFlags);
 
     void itemsInserted(
-            const QVector<Compositor::Insert> &inserts,
-            QVarLengthArray<QVector<QQmlChangeSet::Change>, Compositor::MaximumGroupCount> *translatedInserts,
+            const QList<Compositor::Insert> &inserts,
+            QVarLengthArray<QList<QQmlChangeSet::Change>, Compositor::MaximumGroupCount> *translatedInserts,
             QHash<int, QList<QQmlDelegateModelItem *> > *movedItems = nullptr);
-    void itemsInserted(const QVector<Compositor::Insert> &inserts);
+    void itemsInserted(const QList<Compositor::Insert> &inserts);
     void itemsRemoved(
-            const QVector<Compositor::Remove> &removes,
-            QVarLengthArray<QVector<QQmlChangeSet::Change>, Compositor::MaximumGroupCount> *translatedRemoves,
+            const QList<Compositor::Remove> &removes,
+            QVarLengthArray<QList<QQmlChangeSet::Change>, Compositor::MaximumGroupCount> *translatedRemoves,
             QHash<int, QList<QQmlDelegateModelItem *> > *movedItems = nullptr);
-    void itemsRemoved(const QVector<Compositor::Remove> &removes);
+    void itemsRemoved(const QList<Compositor::Remove> &removes);
     void itemsMoved(
-            const QVector<Compositor::Remove> &removes, const QVector<Compositor::Insert> &inserts);
-    void itemsChanged(const QVector<Compositor::Change> &changes);
+            const QList<Compositor::Remove> &removes, const QList<Compositor::Insert> &inserts);
+    void itemsChanged(const QList<Compositor::Change> &changes);
     void emitChanges();
     void emitModelUpdated(const QQmlChangeSet &changeSet, bool reset) override;
     void delegateChanged(bool add = true, bool remove = true);
@@ -502,7 +649,7 @@ private:
     QString m_part;
     QString m_filterGroup;
     QList<QByteArray> m_watchedRoles;
-    QVector<int> m_pendingPackageInitializations; // vector holds model indices
+    QList<int> m_pendingPackageInitializations; // vector holds model indices
     Compositor::Group m_compositorGroup;
     bool m_inheritGroup;
     bool m_modelUpdatePending = true;

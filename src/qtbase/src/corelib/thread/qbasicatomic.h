@@ -46,6 +46,7 @@ public:
     static constexpr bool isReferenceCountingWaitFree() noexcept { return Ops::isReferenceCountingWaitFree(); }
 
     bool ref() noexcept { return Ops::ref(_q_value); }
+    void refRelaxed() noexcept { Ops::fetchAndAddRelaxed(_q_value, 1); }
     bool deref() noexcept { return Ops::deref(_q_value); }
 
     static constexpr bool isTestAndSetNative() noexcept { return Ops::isTestAndSetNative(); }

@@ -503,6 +503,143 @@ void blockUnixSignals()
     pthread_sigmask(SIG_BLOCK, &set, nullptr);
 }
 
+static std::string_view unixSignalCodeToName(int signo, int code) noexcept
+{
+    switch (signo) {
+    case SIGFPE:
+        switch (code) {
+#ifdef FPE_INTDIV
+        case FPE_INTDIV: return "FPE_INTDIV";        // Integer divide by zero.
+#endif
+#ifdef FPE_INTOVF
+        case FPE_INTOVF: return "FPE_INTOVF";        // Integer overflow.
+#endif
+#ifdef FPE_FLTDIV
+        case FPE_FLTDIV: return "FPE_FLTDIV";        // Floating point divide by zero.
+#endif
+#ifdef FPE_FLTOVF
+        case FPE_FLTOVF: return "FPE_FLTOVF";        // Floating point overflow.
+#endif
+#ifdef FPE_FLTUND
+        case FPE_FLTUND: return "FPE_FLTUND";        // Floating point underflow.
+#endif
+#ifdef FPE_FLTRES
+        case FPE_FLTRES: return "FPE_FLTRES";        // Floating point inexact result.
+#endif
+#ifdef FPE_FLTINV
+        case FPE_FLTINV: return "FPE_FLTINV";        // Floating point invalid operation.
+#endif
+#ifdef FPE_FLTSUB
+        case FPE_FLTSUB: return "FPE_FLTSUB";        // Subscript out of range.
+#endif
+#ifdef FPE_FLTUNK
+        case FPE_FLTUNK: return "FPE_FLTUNK";        // Undiagnosed floating-point exception.
+#endif
+#ifdef FPE_CONDTRAP
+        case FPE_CONDTRAP: return "FPE_CONDTRAP";    // Trap on condition.
+#endif
+        }
+        break;
+
+    case SIGILL:
+        switch (code) {
+#ifdef ILL_ILLOPC
+        case ILL_ILLOPC: return "ILL_ILLOPC";        // Illegal opcode.
+#endif
+#ifdef ILL_ILLOPN
+        case ILL_ILLOPN: return "ILL_ILLOPN";        // Illegal operand.
+#endif
+#ifdef ILL_ILLADR
+        case ILL_ILLADR: return "ILL_ILLADR";        // Illegal addressing mode.
+#endif
+#ifdef ILL_ILLTRP
+        case ILL_ILLTRP: return "ILL_ILLTRP";        // Illegal trap.
+#endif
+#ifdef ILL_PRVOPC
+        case ILL_PRVOPC: return "ILL_PRVOPC";        // Privileged opcode.
+#endif
+#ifdef ILL_PRVREG
+        case ILL_PRVREG: return "ILL_PRVREG";        // Privileged register.
+#endif
+#ifdef ILL_COPROC
+        case ILL_COPROC: return "ILL_COPROC";        // Coprocessor error.
+#endif
+#ifdef ILL_BADSTK
+        case ILL_BADSTK: return "ILL_BADSTK";        // Internal stack error.
+#endif
+#ifdef ILL_BADIADDR
+        case ILL_BADIADDR: return "ILL_BADIADDR";    // Unimplemented instruction address.
+#endif
+        }
+        break;
+
+    case SIGSEGV:
+        switch (code) {
+#ifdef SEGV_MAPERR
+        case SEGV_MAPERR: return "SEGV_MAPERR";        // Address not mapped to object.
+#endif
+#ifdef SEGV_ACCERR
+        case SEGV_ACCERR: return "SEGV_ACCERR";        // Invalid permissions for mapped object.
+#endif
+#ifdef SEGV_BNDERR
+        // Intel MPX - deprecated
+        case SEGV_BNDERR: return "SEGV_BNDERR";        // Bounds checking failure.
+#endif
+#ifdef SEGV_PKUERR
+        // Intel PKRU
+        case SEGV_PKUERR: return "SEGV_PKUERR";        // Protection key checking failure.
+#endif
+#ifdef Q_PROCESSOR_SPARC
+        // these seem to be Sparc-specific on Linux
+#  ifdef SEGV_ACCADI
+        case SEGV_ACCADI: return "SEGV_ACCADI";        // ADI not enabled for mapped object.
+#  endif
+#  ifdef SEGV_ADIDERR
+        case SEGV_ADIDERR: return "SEGV_ADIDERR";      // Disrupting MCD error.
+#  endif
+#  ifdef SEGV_ADIPERR
+        case SEGV_ADIPERR: return "SEGV_ADIPERR";      // Precise MCD exception.
+#  endif
+#endif
+#ifdef Q_PROCESSOR_ARM
+#  ifdef SEGV_MTEAERR
+        case SEGV_MTEAERR: return "SEGV_MTEAERR";      // Asynchronous ARM MTE error.
+#  endif
+#  ifdef SEGV_MTESERR
+        case SEGV_MTESERR: return "SEGV_MTESERR";      // Synchronous ARM MTE exception.
+#  endif
+#endif
+#ifdef SEGV_CPERR
+        // seen on both AArch64 and x86 Linux
+        case SEGV_CPERR:  return "SEGV_CPERR";         // Control protection fault
+#endif
+        }
+        break;
+
+    case SIGBUS:
+        switch (code) {
+#ifdef BUS_ADRALN
+        case BUS_ADRALN: return "BUS_ADRALN";        // Invalid address alignment.
+#endif
+#ifdef BUS_ADRERR
+        case BUS_ADRERR: return "BUS_ADRERR";        // Non-existant physical address.
+#endif
+#ifdef BUS_OBJERR
+        case BUS_OBJERR: return "BUS_OBJERR";        // Object specific hardware error.
+#endif
+#ifdef BUS_MCEERR_AR
+        case BUS_MCEERR_AR: return "BUS_MCEERR_AR";  // Hardware memory error: action required.
+#endif
+#ifdef BUS_MCEERR_AO
+        case BUS_MCEERR_AO: return "BUS_MCEERR_AO";  // Hardware memory error: action optional.
+#endif
+        }
+        break;
+    }
+
+    return {};
+}
+
 template <typename T> static
         std::enable_if_t<sizeof(std::declval<T>().si_pid) + sizeof(std::declval<T>().si_uid) >= 1>
 printSentSignalInfo(T *info)
@@ -519,7 +656,9 @@ printCrashingSignalInfo(T *info, quintptr pc)
     auto toHexString = [](quintptr u, HexString &&r = {}) {
         return asyncSafeToHexString(u, r.data());
     };
-    writeToStderr(", code ", asyncSafeToString(info->si_code));
+
+    std::string_view name = unixSignalCodeToName(info->si_signo, info->si_code);
+    writeToStderr(", code ", name.size() ? name : asyncSafeToString(info->si_code));
     if (pc)
         writeToStderr(", at instruction address ", toHexString(pc));
     writeToStderr(", accessing address ", toHexString(quintptr(info->si_addr)));

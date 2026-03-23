@@ -32,7 +32,6 @@ class EventCallback;
 
 struct KeyEvent;
 struct PointerEvent;
-class QWasmDeadKeySupport;
 struct WheelEvent;
 
 Q_DECLARE_LOGGING_CATEGORY(qLcQpaWasmInputContext)
@@ -42,7 +41,7 @@ class QWasmWindow final : public QPlatformWindow,
                           public QNativeInterface::Private::QWasmWindow
 {
 public:
-    QWasmWindow(QWindow *w, QWasmDeadKeySupport *deadKeySupport, QWasmCompositor *compositor,
+    QWasmWindow(QWindow *w, QWasmCompositor *compositor,
                 QWasmBackingStore *backingStore, WId nativeHandle);
     ~QWasmWindow() final;
 
@@ -150,6 +149,7 @@ private:
 
     void handlePointerEnterLeaveEvent(const PointerEvent &event);
     bool processPointerEnterLeave(const PointerEvent &event);
+    void releasePointerGrab(const MouseEvent &event);
     void processPointer(const PointerEvent &event);
     bool deliverPointerEvent(const PointerEvent &event);
     void handleWheelEvent(const emscripten::val &event);
@@ -160,7 +160,6 @@ private:
 
     QWasmCompositor *m_compositor = nullptr;
     QWasmBackingStore *m_backingStore = nullptr;
-    QWasmDeadKeySupport *m_deadKeySupport;
     QRect m_normalGeometry {0, 0, 0 ,0};
 
     emscripten::val m_document;
@@ -198,6 +197,7 @@ private:
     QWasmEventHandler m_dragStartCallback;
     QWasmEventHandler m_dragEndCallback;
     QWasmEventHandler m_dropCallback;
+    QWasmEventHandler m_dragEnterCallback;
     QWasmEventHandler m_dragLeaveCallback;
 
     QWasmEventHandler m_wheelEventCallback;
@@ -215,6 +215,7 @@ private:
 
     QPoint m_lastPointerMovePoint;
 
+    std::optional<int> m_capturedPointerId = std::nullopt;
     WId m_winId = 0;
     bool m_wantCapture = false;
     bool m_hasTitle = false;

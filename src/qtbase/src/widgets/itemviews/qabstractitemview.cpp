@@ -172,6 +172,43 @@ void QAbstractItemViewPrivate::checkMouseMove(const QPersistentModelIndex &index
     }
 }
 
+#if QT_CONFIG(accessibility)
+void QAbstractItemViewPrivate::updateItemAccessibility(const QModelIndex &index,
+                                                       const QList<int> &roles)
+{
+    Q_Q(QAbstractItemView);
+
+    if (!QAccessible::isActive())
+        return;
+
+    const int childIndex = accessibleChildIndex(index);
+    if (childIndex < 0)
+        return;
+
+    // see QAccessibleTableCell for how role data are mapped to the a11y layer
+
+    for (int role : roles) {
+        if (role == Qt::AccessibleTextRole
+            || (role == Qt::DisplayRole
+                && index.data(Qt::AccessibleTextRole).toString().isEmpty())) {
+            QAccessibleEvent event(q, QAccessible::NameChanged);
+            event.setChild(childIndex);
+            QAccessible::updateAccessibility(&event);
+        } else if (role == Qt::AccessibleDescriptionRole) {
+            QAccessibleEvent event(q, QAccessible::DescriptionChanged);
+            event.setChild(childIndex);
+            QAccessible::updateAccessibility(&event);
+        } else if (role == Qt::CheckStateRole) {
+            QAccessible::State state;
+            state.checked = true;
+            QAccessibleStateChangeEvent event(q, state);
+            event.setChild(childIndex);
+            QAccessible::updateAccessibility(&event);
+        }
+    }
+}
+#endif
+
 #if QT_CONFIG(gestures) && QT_CONFIG(scroller)
 
 // stores and restores the selection and current item when flicking
@@ -250,9 +287,9 @@ void QAbstractItemViewPrivate::disconnectDelegate(QAbstractItemDelegate *delegat
 void QAbstractItemViewPrivate::disconnectAll()
 {
     Q_Q(QAbstractItemView);
-    for (const QMetaObject::Connection &connection : modelConnections)
+    for (QMetaObject::Connection &connection : modelConnections)
         QObject::disconnect(connection);
-    for (const QMetaObject::Connection &connection : scrollbarConnections)
+    for (QMetaObject::Connection &connection : scrollbarConnections)
       QObject::disconnect(connection);
     disconnectDelegate(itemDelegate);
     for (QAbstractItemDelegate *delegate : std::as_const(rowDelegates))
@@ -719,7 +756,7 @@ void QAbstractItemView::setModel(QAbstractItemModel *model)
     if (model == d->model)
         return;
     if (d->model && d->model != QAbstractItemModelPrivate::staticEmptyModel()) {
-        for (const QMetaObject::Connection &connection : d->modelConnections)
+        for (QMetaObject::Connection &connection : d->modelConnections)
             disconnect(connection);
     }
     d->model = (model ? model : QAbstractItemModelPrivate::staticEmptyModel());
@@ -3108,7 +3145,8 @@ void QAbstractItemView::keyboardSearch(const QString &search)
     QModelIndex startMatch;
     QModelIndexList previous;
     do {
-        match = d->model->match(current, Qt::DisplayRole, d->keyboardInput);
+        match = d->model->match(current, Qt::DisplayRole, d->keyboardInput, 1,
+                                d->keyboardSearchFlags);
         if (match == previous)
             break;
         firstMatch = match.value(0);
@@ -3248,6 +3286,30 @@ void QAbstractItemView::setUpdateThreshold(int threshold)
     if (d->updateThreshold == threshold)
         return;
     d->updateThreshold = threshold;
+}
+
+/*!
+    \property QAbstractItemView::keyboardSearchFlags
+    \since 6.11
+    This property determines how the default implementation of
+    keyboardSearch() matches the given string against the model's data.
+
+    The default value is \c{Qt::MatchStartsWith|Qt::MatchWrap}.
+
+    \sa keyboardSearch()
+    \sa QAbstractItemModel::match()
+*/
+
+Qt::MatchFlags QAbstractItemView::keyboardSearchFlags() const
+{
+    Q_D(const QAbstractItemView);
+    return d->keyboardSearchFlags;
+}
+
+void QAbstractItemView::setKeyboardSearchFlags(Qt::MatchFlags searchFlags)
+{
+    Q_D(QAbstractItemView);
+    d->keyboardSearchFlags = searchFlags;
 }
 
 /*!
@@ -3470,6 +3532,10 @@ void QAbstractItemView::dataChanged(const QModelIndex &topLeft, const QModelInde
         accessibleEvent.setLastRow(bottomRight.row());
         accessibleEvent.setLastColumn(bottomRight.column());
         QAccessible::updateAccessibility(&accessibleEvent);
+
+        // send accessibility events as needed when current item is modified
+        if (topLeft.isValid() && topLeft == bottomRight && topLeft == currentIndex())
+            d->updateItemAccessibility(topLeft, roles);
     }
 #endif
     d->updateGeometry();

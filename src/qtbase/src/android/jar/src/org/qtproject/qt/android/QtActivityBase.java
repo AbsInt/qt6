@@ -5,6 +5,7 @@ package org.qtproject.qt.android;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -21,13 +22,16 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
+import android.util.Log;
 import java.lang.IllegalArgumentException;
 
 import android.widget.Toast;
 
 public class QtActivityBase extends Activity
 {
+    public static final String TAG = "QtActivityBase";
     public static final String EXTRA_SOURCE_INFO = "org.qtproject.qt.android.sourceInfo";
+    public static final String EXTRA_FATAL_MESSAGE = "org.qtproject.qt.android.fatalMessage";
 
     private String m_applicationParams = "";
     private boolean m_isCustomThemeSet = false;
@@ -82,7 +86,9 @@ public class QtActivityBase extends Activity
     private void restartApplication() {
         Intent intent = Intent.makeRestartActivityTask(getComponentName());
         startActivity(intent);
-        QtNative.quitApp();
+        QtNative.setStarted(false);
+        // FIXME: calling exit() right after this gives no time to get onDestroy().
+        finish();
         Runtime.getRuntime().exit(0);
     }
 
@@ -98,9 +104,11 @@ public class QtActivityBase extends Activity
         requestWindowFeature(Window.FEATURE_ACTION_BAR);
 
         if (!m_isCustomThemeSet) {
-            setTheme(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ?
-                    android.R.style.Theme_DeviceDefault_DayNight :
-                    android.R.style.Theme_Holo_Light);
+            @SuppressWarnings("deprecation")
+            int themeId = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                ? android.R.style.Theme_DeviceDefault_DayNight
+                : android.R.style.Theme_Holo_Light;
+            setTheme(themeId);
         }
 
         if (QtNative.getStateDetails().isStarted) {
@@ -114,16 +122,22 @@ public class QtActivityBase extends Activity
         addReferrer(getIntent());
 
         try {
-            QtActivityLoader loader = QtActivityLoader.getActivityLoader(this);
-            loader.appendApplicationParameters(m_applicationParams);
+            if (isLaunchedAsAlias()) {
+                Log.d(TAG, "Starting an alias-activity, skipping loading of the Qt libraries.");
+            } else {
+                QtActivityLoader loader = QtActivityLoader.getActivityLoader(this);
+                QtLoader.LoadingResult result = loader.loadQtLibraries();
 
-            QtLoader.LoadingResult result = loader.loadQtLibraries();
-            if (result == QtLoader.LoadingResult.Succeeded) {
-                m_delegate.startNativeApplication(loader.getApplicationParameters(),
-                        loader.getMainLibraryPath());
-            } else if (result == QtLoader.LoadingResult.Failed) {
-                showFatalFinishingToast();
-                return;
+                if (result == QtLoader.LoadingResult.Failed) {
+                    showFatalFinishingToast();
+                    return;
+                }
+
+                if (result == QtLoader.LoadingResult.Succeeded) {
+                    loader.appendApplicationParameters(m_applicationParams);
+                    final String params = loader.getApplicationParameters();
+                    m_delegate.startNativeApplication(params, loader.getMainLibraryPath());
+                }
             }
         } catch (IllegalArgumentException e) {
             e.printStackTrace();
@@ -138,12 +152,29 @@ public class QtActivityBase extends Activity
     private void showFatalFinishingToast() {
         Resources resources = getResources();
         String packageName = getPackageName();
-        @SuppressLint("DiscouragedApi") int id = resources.getIdentifier(
-                "fatal_error_msg", "string", packageName);
-        String message = resources.getString(id);
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+        String message = null;
+        try {
+            @SuppressLint("DiscouragedApi")
+            int id = resources.getIdentifier("fatal_error_msg", "string", packageName);
+            message = resources.getString(id);
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+        } catch (Resources.NotFoundException ignored) { }
+        Intent fatalIntent = new Intent();
+        if (message != null)
+            fatalIntent.putExtra(EXTRA_FATAL_MESSAGE, message);
+        setResult(Activity.RESULT_CANCELED, fatalIntent);
+        super.finish();
+    }
 
-        finish();
+    private boolean isLaunchedAsAlias() {
+        final ComponentName component = getIntent().getComponent();
+        if (component == null)
+            return false;
+
+        final String launchedClassName = component.getClassName();
+        final String runtimeClassName = this.getClass().getName();
+
+        return !launchedClassName.equals(runtimeClassName);
     }
 
     @Override
@@ -164,7 +195,7 @@ public class QtActivityBase extends Activity
             m_delegate.displayManager().registerDisplayListener();
             QtWindow.updateWindows();
             // Suspending the app clears the immersive mode, so we need to set it again.
-            m_delegate.displayManager().reinstateFullScreen();
+            QtWindowInsetsController.restoreFullScreenVisibility(this);
         }
     }
 
@@ -185,9 +216,8 @@ public class QtActivityBase extends Activity
 
         if (!m_retainNonConfigurationInstance) {
             QtNative.unregisterAppStateListener(m_delegate);
-            QtNative.terminateQt();
+            QtNative.terminateQtNativeApplication();
             QtNative.setActivity(null);
-            QtNative.getQtThread().exit();
             System.exit(0);
         }
     }
@@ -308,9 +338,7 @@ public class QtActivityBase extends Activity
             return;
 
         QtNative.setStarted(savedInstanceState.getBoolean("Started"));
-        boolean isFullScreen = savedInstanceState.getBoolean("isFullScreen");
-        boolean expandedToCutout = savedInstanceState.getBoolean("expandedToCutout");
-        m_delegate.displayManager().setSystemUiVisibility(isFullScreen, expandedToCutout);
+        QtWindowInsetsController.restoreFullScreenVisibility(this);
         // FIXME restore all surfaces
     }
 
@@ -326,8 +354,6 @@ public class QtActivityBase extends Activity
     protected void onSaveInstanceState(Bundle outState)
     {
         super.onSaveInstanceState(outState);
-        outState.putBoolean("isFullScreen", m_delegate.displayManager().isFullScreen());
-        outState.putBoolean("expandedToCutout", m_delegate.displayManager().expandedToCutout());
         outState.putBoolean("Started", QtNative.getStateDetails().isStarted);
     }
 
@@ -336,7 +362,7 @@ public class QtActivityBase extends Activity
     {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus)
-            m_delegate.displayManager().reinstateFullScreen();
+            QtWindowInsetsController.restoreFullScreenVisibility(this);
     }
 
     @Override

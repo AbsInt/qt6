@@ -18,13 +18,14 @@
 #include <QMap>
 #include <QVariant>
 #include <QtGui/private/qbezier_p.h>
+#include "qquickgenerator_p.h"
 
 QT_BEGIN_NAMESPACE
 
-class QQuickAnimatedProperty
+class Q_QUICKVECTORIMAGEGENERATOR_EXPORT QQuickAnimatedProperty
 {
 public:
-    struct PropertyAnimation {
+    struct Q_QUICKVECTORIMAGEGENERATOR_EXPORT PropertyAnimation {
         enum Flag {
             NoFlags = 0,
             FreezeAtEnd = 1,
@@ -39,12 +40,17 @@ public:
         quint8 flags = NoFlags;
 
         bool isConstant() const {
+            if (startOffset > 0)
+                return false;
+
             for (const auto& frame : frames) {
                 if (frame != frames.first())
                     return false;
             }
             return true;
         }
+
+        PropertyAnimation simplified() const;
     };
 
     QQuickAnimatedProperty(const QVariant &defaultValue)
@@ -82,7 +88,7 @@ public:
         if (m_animationGroups.isEmpty())
             beginAnimationGroup();
 
-        m_animations.append(animation);
+        m_animations.append(animation.simplified());
     }
 
     qsizetype animationGroupCount() const

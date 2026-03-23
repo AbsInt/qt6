@@ -59,7 +59,7 @@ DECLARE_DEBUG_VAR(statistics)
     is in the treatment of parentless windows. In no-rootwindow mode, these windows are
     created as application windows while in rootwindow mode, the first window on a screen
     is created as an application window while subsequent windows are created as child
-    windows. The only exception to this is any window of type Qt::Desktop or Qt::CoverWindow;
+    windows. The only exception to this is any window of type Qt::CoverWindow;
     these are created as application windows, but will never become the root window,
     even if they are the first window created.
 
@@ -147,9 +147,6 @@ QQnxWindow::QQnxWindow(QWindow *window, screen_context_t context, bool needRootW
         // otherwise only the first window is.
         m_isTopLevel = !needRootWindow || !platformScreen->rootWindow();
     }
-
-    if (window->type() == Qt::Desktop)  // A desktop widget does not need a libscreen window
-        return;
 
     QVariant type = window->property("_q_platform_qnxWindowType");
     if (type.isValid() && type.canConvert<int>()) {
@@ -314,8 +311,7 @@ void QQnxWindow::setGeometry(const QRect &rect)
     if (shouldMakeFullScreen())
         newGeometry = screen()->geometry();
 
-    if (window()->type() != Qt::Desktop)
-        setGeometryHelper(newGeometry);
+    setGeometryHelper(newGeometry);
 
     if (isExposed())
         QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), newGeometry.size()));
@@ -360,7 +356,7 @@ void QQnxWindow::setVisible(bool visible)
 {
     qCDebug(lcQpaWindow) << "window =" << window() << "visible =" << visible;
 
-    if (m_visible == visible || window()->type() == Qt::Desktop)
+    if (m_visible == visible)
         return;
 
     // The first time through we join a window group if appropriate.
@@ -779,9 +775,6 @@ void QQnxWindow::setRotation(int rotation)
 
 void QQnxWindow::initWindow()
 {
-    if (window()->type() == Qt::Desktop)
-        return;
-
     // Alpha channel is always pre-multiplied if present
     int val = SCREEN_PRE_MULTIPLIED_ALPHA;
     Q_SCREEN_CHECKERROR(screen_set_window_property_iv(m_window, SCREEN_PROPERTY_ALPHA_MODE, &val),

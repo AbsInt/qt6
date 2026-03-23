@@ -38,7 +38,8 @@ public:
         Directory,
         ClearCache,
         Zoom,
-        Fps
+        Fps,
+        AnimationSpeed,
     };
 
     static const QString s_key;
@@ -66,6 +67,7 @@ Q_SIGNALS:
     void rerun();
     void clearCache();
     void zoom(qreal factor);
+    void animationSpeed(qreal factor);
 
 private:
     QScopedPointer<QQmlPreviewFileEngineHandler> m_fileEngine;

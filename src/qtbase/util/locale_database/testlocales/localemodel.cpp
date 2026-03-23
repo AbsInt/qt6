@@ -692,6 +692,9 @@ const LocaleListItem g_locale_list[] = {
     {    344,   110 }, // Kuvi/India
     {    345,   251 }, // Kara-Kalpak/Uzbekistan
     {    346,    41 }, // Swampy Cree/Canada
+    {    347,   117 }, // Ladin/Italy
+    {    348,   161 }, // Shan/Myanmar
+    {    348,   231 }, // Shan/Thailand
 };
 
 // GENERATED PART ENDS HERE

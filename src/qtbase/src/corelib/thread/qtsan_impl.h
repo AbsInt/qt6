@@ -34,6 +34,16 @@ inline void futexRelease(void *addr, void *addr2 = nullptr)
     ::__tsan_release(addr);
 }
 
+inline void latchWait(const void *addr)
+{
+    ::__tsan_acquire(const_cast<void *>(addr));
+}
+
+inline void latchCountDown(void *addr)
+{
+    ::__tsan_release(addr);
+}
+
 inline void mutexPreLock(void *addr, unsigned flags)
 {
     ::__tsan_mutex_pre_lock(addr, flags);
@@ -58,15 +68,19 @@ enum : unsigned {
     MutexWriteReentrant = ::__tsan_mutex_write_reentrant,
     TryLock = ::__tsan_mutex_try_lock,
     TryLockFailed = ::__tsan_mutex_try_lock_failed,
+    ReadLock = ::__tsan_mutex_read_lock,
 };
 #else
 inline void futexAcquire(void *, void * = nullptr) {}
 inline void futexRelease(void *, void * = nullptr) {}
+inline void latchCountDown(void *) {}
+inline void latchWait(const void *) {}
 
 enum : unsigned {
     MutexWriteReentrant,
     TryLock,
     TryLockFailed,
+    ReadLock,
 };
 inline void mutexPreLock(void *, unsigned) {}
 inline void mutexPostLock(void *, unsigned, int) {}

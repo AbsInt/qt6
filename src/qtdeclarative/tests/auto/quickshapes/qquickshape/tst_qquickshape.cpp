@@ -22,11 +22,11 @@ using namespace QQuickVisualTestUtils;
 class PolygonProvider : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QVector<QPolygonF> paths READ paths WRITE setPaths NOTIFY pathsChanged)
+    Q_PROPERTY(QList<QPolygonF> paths READ paths WRITE setPaths NOTIFY pathsChanged)
 
 public:
-    QVector<QPolygonF> paths() const { return m_paths; }
-    void setPaths(QVector<QPolygonF> paths)
+    QList<QPolygonF> paths() const { return m_paths; }
+    void setPaths(QList<QPolygonF> paths)
     {
         if (m_paths == paths)
             return;
@@ -38,7 +38,7 @@ signals:
     void pathsChanged();
 
 private:
-    QVector<QPolygonF> m_paths;
+    QList<QPolygonF> m_paths;
 };
 
 class tst_QQuickShape : public QQmlDataTest
@@ -67,7 +67,7 @@ private slots:
     void changeElementsImperatively();
 
 private:
-    QVector<QPolygonF> m_lowPolyLogo;
+    QList<QPolygonF> m_lowPolyLogo;
 };
 
 tst_QQuickShape::tst_QQuickShape()
@@ -147,6 +147,7 @@ void tst_QQuickShape::vpInitValues()
     QCOMPARE(pathList.count(), 0);
     QCOMPARE(vp->strokeColor(), QColor(Qt::white));
     QCOMPARE(vp->strokeWidth(), 1.0f);
+    QCOMPARE(vp->cosmeticStroke(), false);
     QCOMPARE(vp->fillColor(), QColor(Qt::white));
     QCOMPARE(vp->fillRule(), QQuickShapePath::OddEvenFill);
     QCOMPARE(vp->joinStyle(), QQuickShapePath::BevelJoin);
@@ -154,7 +155,7 @@ void tst_QQuickShape::vpInitValues()
     QCOMPARE(vp->capStyle(), QQuickShapePath::SquareCap);
     QCOMPARE(vp->strokeStyle(), QQuickShapePath::SolidLine);
     QCOMPARE(vp->dashOffset(), 0.0f);
-    QCOMPARE(vp->dashPattern(), QVector<qreal>() << 4 << 2);
+    QCOMPARE(vp->dashPattern(), QList<qreal>() << 4 << 2);
     QVERIFY(!vp->fillGradient());
 
     delete obj;
@@ -174,11 +175,22 @@ void tst_QQuickShape::basicShape()
     QQuickShapePath *vp = qobject_cast<QQuickShapePath *>(list.at(0));
     QVERIFY(vp != nullptr);
     QCOMPARE(vp->strokeWidth(), 4.0f);
+    QCOMPARE(vp->cosmeticStroke(), false);
     QVERIFY(vp->fillGradient() != nullptr);
     QCOMPARE(vp->strokeStyle(), QQuickShapePath::DashLine);
 
     vp->setStrokeWidth(5.0f);
     QCOMPARE(vp->strokeWidth(), 5.0f);
+    vp->setStrokeWidth(-5.0f);
+    QCOMPARE(vp->strokeWidth(), -5.0f); // but it won't render
+    QCOMPARE(vp->cosmeticStroke(), false);
+    vp->setCosmeticStroke(true);
+    QCOMPARE(vp->cosmeticStroke(), true);
+    QCOMPARE(vp->strokeWidth(), -5.0f);
+    vp->setStrokeWidth(5.0f);
+    QCOMPARE(vp->strokeWidth(), 5.0f);
+    QCOMPARE(vp->strokeWidth(), 5.0f);
+    QCOMPARE(vp->cosmeticStroke(), true);
 
     QQuickShapeLinearGradient *lgrad = qobject_cast<QQuickShapeLinearGradient *>(vp->fillGradient());
     QVERIFY(lgrad != nullptr);
@@ -226,7 +238,7 @@ void tst_QQuickShape::changeSignals()
     vp->setMiterLimit(5);
     vp->setCapStyle(QQuickShapePath::RoundCap);
     vp->setDashOffset(10);
-    vp->setDashPattern(QVector<qreal>() << 1 << 2 << 3 << 4);
+    vp->setDashPattern(QList<qreal>() << 1 << 2 << 3 << 4);
     QCOMPARE(strokeColorPropSpy.size(), 1);
     QCOMPARE(vpChangeSpy.size(), 10);
 
@@ -402,7 +414,7 @@ void tst_QQuickShape::polylineDataTypes_data()
 
     QTest::newRow("polygon") << QVariant::fromValue(m_lowPolyLogo.first());
     {
-        QVector<QPointF> points;
+        QList<QPointF> points;
         points << m_lowPolyLogo.first();
         QTest::newRow("vector of points") << QVariant::fromValue(points);
     }
@@ -419,12 +431,12 @@ void tst_QQuickShape::polylineDataTypes_data()
         QTest::newRow("QVariantList of points") << QVariant::fromValue(points);
     }
     {
-        QVector<QPoint> points;
+        QList<QPoint> points;
         for (const auto &point : m_lowPolyLogo.first())
             points << point.toPoint();
         QTest::newRow("vector of QPoint (integer points)") << QVariant::fromValue(points);
     }
-    // Oddly, QPolygon is not supported, even though it's really QVector<QPoint>.
+    // Oddly, QPolygon is not supported, even though it's really QList<QPoint>.
     // We don't want to have a special case for it in QQuickPathPolyline::setPath(),
     // but it could potentially be supported by fixing one of the QVariant conversions.
 }
@@ -459,7 +471,7 @@ void tst_QQuickShape::polylineDataTypes()
     }
     QVERIFY2(res, qPrintable(errorMessage));
 
-    QCOMPARE(shape->property("path").value<QVector<QPointF>>(), m_lowPolyLogo.first());
+    QCOMPARE(shape->property("path").value<QList<QPointF>>(), m_lowPolyLogo.first());
     // Verify that QML sees it as an array of points
     int i = 0;
     for (QPointF p : m_lowPolyLogo.first()) {
@@ -474,18 +486,18 @@ void tst_QQuickShape::multilineDataTypes_data()
 
     QTest::newRow("vector of polygons") << QVariant::fromValue(m_lowPolyLogo);
     {
-        QVector<QVector<QPointF>> paths;
+        QList<QList<QPointF>> paths;
         for (const auto &poly : m_lowPolyLogo) {
-            QVector<QPointF> points;
+            QList<QPointF> points;
             points << poly;
             paths << points;
         }
         QTest::newRow("vector of point vectors") << QVariant::fromValue(paths);
     }
     {
-        QList<QVector<QPointF>> paths;
+        QList<QList<QPointF>> paths;
         for (const auto &poly : m_lowPolyLogo) {
-            QVector<QPointF> points;
+            QList<QPointF> points;
             points << poly;
             paths << points;
         }
@@ -504,7 +516,7 @@ void tst_QQuickShape::multilineDataTypes_data()
     {
         QVariantList paths;
         for (const auto &poly : m_lowPolyLogo) {
-            QVector<QPointF> points;
+            QList<QPointF> points;
             points << poly;
             paths << QVariant::fromValue(points);
         }
@@ -540,7 +552,7 @@ void tst_QQuickShape::multilineDataTypes_data()
         QTest::newRow("list of QPolygon (integer points)") << QVariant::fromValue(paths);
     }
     {
-        QVector<QPolygon> paths;
+        QList<QPolygon> paths;
         for (const auto &poly : m_lowPolyLogo)
             paths << poly.toPolygon();
         QTest::newRow("vector of QPolygon (integer points)") << QVariant::fromValue(paths);
@@ -557,7 +569,7 @@ void tst_QQuickShape::multilineDataTypes_data()
         QTest::newRow("list of integer point lists") << QVariant::fromValue(paths);
     }
     {
-        QVector<QList<QPoint>> paths;
+        QList<QList<QPoint>> paths;
         for (const auto &poly : m_lowPolyLogo) {
             QList<QPoint> points;
             for (const auto &point : poly)
@@ -567,9 +579,9 @@ void tst_QQuickShape::multilineDataTypes_data()
         QTest::newRow("vector of integer point lists") << QVariant::fromValue(paths);
     }
     {
-        QList<QVector<QPoint>> paths;
+        QList<QList<QPoint>> paths;
         for (const auto &poly : m_lowPolyLogo) {
-            QVector<QPoint> points;
+            QList<QPoint> points;
             for (const auto &point : poly)
                 points << point.toPoint();
             paths << points;
@@ -608,10 +620,10 @@ void tst_QQuickShape::multilineDataTypes()
     }
     QVERIFY2(res, qPrintable(errorMessage));
 
-    QVector<QVector<QPointF>> pointVectors;
+    QList<QList<QPointF>> pointVectors;
     for (auto v : m_lowPolyLogo)
         pointVectors << v;
-    QCOMPARE(shape->property("paths").value<QVector<QVector<QPointF>>>(), pointVectors);
+    QCOMPARE(shape->property("paths").value<QList<QList<QPointF>>>(), pointVectors);
     // Verify that QML sees it as an array of arrays of points
     int i = 0;
     for (auto pv : m_lowPolyLogo) {
@@ -654,10 +666,10 @@ void tst_QQuickShape::multilineStronglyTyped()
     }
     QVERIFY2(res, qPrintable(errorMessage));
 
-    QVector<QVector<QPointF>> pointVectors;
+    QList<QList<QPointF>> pointVectors;
     for (auto v : m_lowPolyLogo)
         pointVectors << v;
-    QCOMPARE(shape->property("paths").value<QVector<QVector<QPointF>>>(), pointVectors);
+    QCOMPARE(shape->property("paths").value<QList<QList<QPointF>>>(), pointVectors);
     // Verify that QML sees it as an array of arrays of points
     int i = 0;
     for (auto pv : m_lowPolyLogo) {

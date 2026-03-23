@@ -284,6 +284,17 @@ function(qt_internal_add_3rdparty_library target)
             INSTALL_DESTINATION "${config_install_dir}"
         )
 
+        qt_configure_file(
+            OUTPUT "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}TargetsPrecheck.cmake"
+            CONTENT
+"
+_qt_internal_should_include_targets(
+    TARGETS ${target}
+    NAMESPACE ${INSTALL_CMAKE_NAMESPACE}::
+    OUT_VAR_SHOULD_SKIP __qt_${target}_skip_include_targets_file
+)
+")
+
         write_basic_package_version_file(
             "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}ConfigVersionImpl.cmake"
             VERSION ${PROJECT_VERSION}
@@ -298,6 +309,7 @@ function(qt_internal_add_3rdparty_library target)
             "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}Config.cmake"
             "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}ConfigVersion.cmake"
             "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}ConfigVersionImpl.cmake"
+            "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}TargetsPrecheck.cmake"
             DESTINATION "${config_install_dir}"
             COMPONENT Devel
         )

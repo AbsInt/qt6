@@ -14,6 +14,7 @@ set(qml_files
     "CheckDelegate.qml"
     "ComboBox.qml"
     "DelayButton.qml"
+    "DoubleSpinBox.qml"
     "Frame.qml"
     "GroupBox.qml"
     "ItemDelegate.qml"
@@ -37,6 +38,10 @@ set(qml_files
     "TextField.qml"
     "ScrollBar.qml"
     "ScrollView.qml"
+)
+
+set_source_files_properties(SearchField.qml PROPERTIES
+    QT_QML_SOURCE_VERSIONS "6.10"
 )
 
 qt_internal_add_qml_module(qtquickcontrols2windowsstyleplugin

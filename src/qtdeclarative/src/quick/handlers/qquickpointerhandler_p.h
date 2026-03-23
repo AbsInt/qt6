@@ -142,7 +142,7 @@ protected:
     void cancelAllGrabs(QPointerEvent *event, QEventPoint &point);
     QPointF eventPos(const QEventPoint &point) const;
     bool parentContains(const QEventPoint &point) const;
-    bool parentContains(const QPointF &scenePosition) const;
+    bool parentContains(const QPointF &localPosition, const QPointF &scenePosition) const;
 
     friend class QQuickDeliveryAgentPrivate;
     friend class QQuickItemPrivate;

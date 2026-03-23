@@ -1,5 +1,6 @@
 // Copyright (C) 2018 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 // This file is included from qnsview.mm, and only used to organize the code
 
@@ -113,6 +114,9 @@ static bool sendAsShortcut(const KeyEvent &keyEvent, QWindow *window)
 
                     qCDebug(lcQpaKeys) << "Interpreting key event for focus object" << focusObject;
                     m_currentlyInterpretedKeyEvent = nsevent;
+                    // Asking the input context to handle the event will involve both
+                    // the current input method, as well as NSKeyBindingManager, which
+                    // may result in action callbacks to doCommandBySelector.
                     if (![self.inputContext handleEvent:nsevent]) {
                         qCDebug(lcQpaKeys) << "Input context did not consume event";
                         m_sendKeyEvent = true;

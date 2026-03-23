@@ -72,6 +72,7 @@ installPackages+=(libxss-dev)
 installPackages+=(rustc)
 installPackages+=(bindgen)
 installPackages+=(clang)
+installPackages+=(libclang-dev)
 installPackages+=(python3-html5lib)
 
 # Common event loop handling
@@ -150,9 +151,8 @@ installPackages+=(libcurl4-openssl-dev)
 installPackages+=(libicu-dev)
 installPackages+=(zlib1g-dev)
 installPackages+=(zlib1g)
-installPackages+=(openjdk-8-jdk)
-#Java 17 for Android, needed by RTA
-installPackages+=(openjdk-17-jdk)
+#Java 21 for Android
+installPackages+=(openjdk-21-jdk)
 installPackages+=(libgtk-3-dev)
 installPackages+=(ninja-build)
 installPackages+=(libssl-dev)
@@ -272,6 +272,9 @@ source "${BASH_SOURCE%/*}/../common/unix/SetEnvVar.sh"
 # 'The script sbom2doc is installed in '/home/qt/.local/bin' which is not on PATH.'
 # hence the explicit assignment to SBOM_PYTHON_APPS_PATH.
 SetEnvVar "SBOM_PYTHON_APPS_PATH" "/home/qt/.local/bin"
+
+# Set SBOM_PYTHON_INTERP_PATH to Python3 instance which was used to install SBOM packages from requirements
+SetEnvVar "SBOM_PYTHON_INTERP_PATH" "/usr/bin/python3"
 
 gccVersion="$(gcc --version |grep -Eo '[0-9]+\.[0-9]+(\.[0-9]+)?' |head -n 1)"
 echo "GCC = $gccVersion" >> versions.txt

@@ -28,7 +28,7 @@ public:
 
     void initializeGenerator() override;
     void terminateGenerator() override;
-    QString format() override;
+    QString format() const override;
     void generateDocs() override;
 
     QString protectEnc(const QString &string);
@@ -53,8 +53,13 @@ private:
                                const QString &buildversion, bool tableItems = false);
     void generateHeader(const QString &title, const Node *node = nullptr,
                         CodeMarker *marker = nullptr);
-    void generateTitle(const QString &title, const Text &subTitle, SubTitleSize subTitleSize,
+    void generateTitle(const Text &title, const Text &subTitle, SubTitleSize subTitleSize,
                        const Node *relative, CodeMarker *marker);
+    void generateTitle(const QString &title, const Text &subTitle, SubTitleSize subTitleSize,
+                       const Node *relative, CodeMarker *marker)
+    {
+        generateTitle(Text() << title, subTitle, subTitleSize, relative, marker);
+    }
     void generateFooter(const Node *node = nullptr);
     void generateRequisites(Aggregate *inner, CodeMarker *marker);
     void generateQmlRequisites(QmlTypeNode *qcn, CodeMarker *marker);
@@ -97,6 +102,8 @@ private:
     void generateSourceLink(const Node *node);
     void generateDetailedMember(const Node *node, const PageNode *relative, CodeMarker *marker);
     void generateLink(const Atom *atom);
+
+    void emitGroupHeader(const SharedCommentNode *scn);
 
     QString fileBase(const Node *node) const override;
     QString fileName(const Node *node);

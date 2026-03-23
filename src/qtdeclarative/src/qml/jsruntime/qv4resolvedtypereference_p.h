@@ -32,11 +32,6 @@ class ResolvedTypeReference
     Q_DISABLE_COPY_MOVE(ResolvedTypeReference)
 public:
     ResolvedTypeReference() = default;
-    ~ResolvedTypeReference()
-    {
-        if (m_stronglyReferencesCompilationUnit && m_compilationUnit)
-            m_compilationUnit->release();
-    }
 
     QQmlPropertyCache::ConstPtr createPropertyCache();
     bool addToHash(QCryptographicHash *hash, QHash<quintptr, QByteArray> *checksums);
@@ -46,40 +41,23 @@ public:
     QQmlType type() const { return m_type; }
     void setType(QQmlType type)  {  m_type = std::move(type); }
 
+    // The compilation unit is stored for all composite type references that aren't
+    // self-references. It is needed both for object creation and for dependency
+    // checksum computation. Cyclic references between compilation units cannot
+    // occur because the type loader detects circular dependencies at resolution
+    // time, before buildTypeResolutionCaches runs.
+    // If the reference points to a type from the same compilation unit, it won't
+    // hold a compilation unit since the object creator can just use the one it has already.
     QQmlRefPointer<QV4::CompiledData::CompilationUnit> compilationUnit()
     {
+        Q_ASSERT(!m_isSelfReference);
         return m_compilationUnit;
     }
 
-    void setCompilationUnit(QQmlRefPointer<QV4::CompiledData::CompilationUnit> unit)
+    void setCompilationUnit(const QQmlRefPointer<QV4::CompiledData::CompilationUnit> &unit)
     {
-        if (m_compilationUnit == unit.data())
-            return;
-        if (m_stronglyReferencesCompilationUnit) {
-            if (m_compilationUnit)
-                m_compilationUnit->release();
-            m_compilationUnit = unit.take();
-        } else {
-            m_compilationUnit = unit.data();
-        }
-    }
-
-    bool referencesCompilationUnit() const { return m_stronglyReferencesCompilationUnit; }
-    void setReferencesCompilationUnit(bool doReference)
-    {
-        if (doReference == m_stronglyReferencesCompilationUnit)
-            return;
-        m_stronglyReferencesCompilationUnit = doReference;
-        if (!m_compilationUnit)
-            return;
-        if (doReference) {
-            m_compilationUnit->addref();
-        } else if (m_compilationUnit->count() == 1) {
-            m_compilationUnit->release();
-            m_compilationUnit = nullptr;
-        } else {
-            m_compilationUnit->release();
-        }
+        Q_ASSERT(!m_isSelfReference);
+        m_compilationUnit = unit;
     }
 
     QQmlPropertyCache::ConstPtr typePropertyCache() const { return m_typePropertyCache; }
@@ -94,16 +72,21 @@ public:
     bool isFullyDynamicType() const { return m_isFullyDynamicType; }
     void setFullyDynamicType(bool fullyDynamic) { m_isFullyDynamicType = fullyDynamic; }
 
+    // Whether the reference points to a type from the same compilation unit. This doesn't
+    // have to be the top-level type but can also be an inline component.
+    bool isSelfReference() const { return m_isSelfReference; }
+    void setIsSelfReference(bool selfReference) { m_isSelfReference = selfReference; }
+
 private:
     QQmlType m_type;
     QQmlPropertyCache::ConstPtr m_typePropertyCache;
-    QV4::CompiledData::CompilationUnit *m_compilationUnit = nullptr;
+    QQmlRefPointer<QV4::CompiledData::CompilationUnit> m_compilationUnit;
 
     QTypeRevision m_version = QTypeRevision::zero();
     // Types such as QQmlPropertyMap can add properties dynamically at run-time and
     // therefore cannot have a property cache installed when instantiated.
     bool m_isFullyDynamicType = false;
-    bool m_stronglyReferencesCompilationUnit = true;
+    bool m_isSelfReference = false;
 };
 
 } // namespace QV4

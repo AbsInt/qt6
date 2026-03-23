@@ -85,7 +85,7 @@ target_link_libraries(appuntitled27
 )
 \endcode
 The C++ dependency \c{Quick} was declared, such that this class can compile and the QQuickItem
-include can be found. Also, mymodule does not have any dependency on QtQuick.
+include can be found. Also, mymodule does not have any QML dependency on \l{Qt Quick}.
 
 Now, lets try to handle this \c{helloWorld} signal in QML:
 \qml
@@ -97,7 +97,7 @@ MyCppObject {
 \endqml
 
 The reason of the warning message is that in the QML code, \c{QQuickItem} and its QML counterpart
-\c{Item} are not known: the dependency 'QtQuick' of MyModule was not declared in the CMakeLists.txt!
+\c{Item} are not known: the dependency \c QtQuick of MyModule was not declared in the CMakeLists.txt!
 
 You can add it as following in the qt_add_qml_module() call:
 \badcode

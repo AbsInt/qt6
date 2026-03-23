@@ -37,9 +37,6 @@ public:
 
     void clear();
     void regenerate();
-#if QT_CONFIG(qml_delegate_model)
-    void makeModel();
-#endif
     void _q_createdItem(int, QObject *);
     void _q_modelUpdated(const QQmlChangeSet &, bool);
     QObject *modelObject(int index, bool async);
@@ -47,18 +44,49 @@ public:
     static QQmlInstantiatorPrivate *get(QQmlInstantiator *instantiator) { return instantiator->d_func(); }
     static const QQmlInstantiatorPrivate *get(const QQmlInstantiator *instantiator) { return instantiator->d_func(); }
 
+    void connectModel(QQmlInstantiator *q, QQmlDelegateModelPointer *model)
+    {
+        Q_UNUSED(q);
+        QQmlInstanceModel *instanceModel = model->instanceModel();
+        if (!instanceModel)
+            return;
+        QObjectPrivate::connect(instanceModel, &QQmlInstanceModel::modelUpdated,
+                                this, &QQmlInstantiatorPrivate::_q_modelUpdated);
+        QObjectPrivate::connect(instanceModel, &QQmlInstanceModel::createdItem,
+                                this, &QQmlInstantiatorPrivate::_q_createdItem);
+        if (ownModel) {
+            QObject::connect(model->delegateModel(), &QQmlDelegateModel::modelChanged,
+                             q, &QQmlInstantiator::modelChanged);
+        }
+
+        regenerate();
+    }
+
+    void disconnectModel(QQmlInstantiator *q, QQmlDelegateModelPointer *model)
+    {
+        Q_UNUSED(q);
+        QQmlInstanceModel *instanceModel = model->instanceModel();
+        if (!instanceModel)
+            return;
+        QObjectPrivate::disconnect(instanceModel, &QQmlInstanceModel::modelUpdated,
+                                   this, &QQmlInstantiatorPrivate::_q_modelUpdated);
+        QObjectPrivate::disconnect(instanceModel, &QQmlInstanceModel::createdItem,
+                                   this, &QQmlInstantiatorPrivate::_q_createdItem);
+        if (ownModel) {
+            QObject::disconnect(model->delegateModel(), &QQmlDelegateModel::modelChanged,
+                                q, &QQmlInstantiator::modelChanged);
+        }
+    }
+
+    QPointer<QQmlInstanceModel> model;
+    QList<QPointer<QObject>> objects;
+    QQmlComponent *delegate = nullptr;
+    int requestedIndex = -1;
     bool componentComplete:1;
-    bool effectiveReset:1;
     bool active:1;
     bool async:1;
-#if QT_CONFIG(qml_delegate_model)
     bool ownModel:1;
     QQmlDelegateModel::DelegateModelAccess delegateModelAccess = QQmlDelegateModel::Qt5ReadWrite;
-#endif
-    int requestedIndex = -1;
-    QQmlInstanceModel *instanceModel = nullptr;
-    QQmlComponent *delegate = nullptr;
-    QVector<QPointer<QObject> > objects;
 };
 
 QT_END_NAMESPACE

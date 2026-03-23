@@ -19,6 +19,7 @@ class tst_QScopeGuard : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void commit();
     void construction();
     void constructionFromLvalue();
     void constructionFromRvalue();
@@ -71,6 +72,20 @@ int Callable::copied = 0;
 int Callable::moved = 0;
 
 static int s_globalState = 0;
+
+void tst_QScopeGuard::commit()
+{
+    int i = 0;
+    auto lambda = [&] { ++i; };
+    {
+        auto sg = qScopeGuard(lambda);
+        QVERIFY(sg.m_invoke);
+        sg.commit();
+        QVERIFY(!sg.m_invoke);
+        QCOMPARE(i, 1);
+    }
+    QCOMPARE(i, 1); // dtor skipped execution
+}
 
 void tst_QScopeGuard::construction()
 {

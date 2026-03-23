@@ -25,70 +25,51 @@ bool qtTypeInherits(const QMetaObject *mo) {
 void ResolvedTypeReference::doDynamicTypeCheck()
 {
     const QMetaObject *mo = nullptr;
-    if (m_typePropertyCache) {
+    if (m_typePropertyCache)
         mo = m_typePropertyCache->firstCppMetaObject();
-    } else if (m_type.isValid()) {
+    else if (m_type.isValid())
         mo = m_type.metaObject();
-    } else if (m_compilationUnit) {
-        if (const auto cache = m_compilationUnit->rootPropertyCache())
-            mo = cache->firstCppMetaObject();
-    }
     m_isFullyDynamicType = qtTypeInherits<QQmlPropertyMap>(mo);
 }
 
 /*!
-Returns the property cache, creating one if it doesn't already exist.  The cache is not referenced.
+    \internal
+    Returns the property cache, creating one if it doesn't already exist. The
+    cache is not referenced.
 */
 QQmlPropertyCache::ConstPtr ResolvedTypeReference::createPropertyCache()
 {
-    if (m_typePropertyCache) {
-        return m_typePropertyCache;
-    } else if (m_type.isValid()) {
+    if (!m_typePropertyCache && m_type.isValid()) {
         const QMetaObject *metaObject = m_type.metaObject();
         if (!metaObject) // value type of non-Q_GADGET base with extension
             metaObject = m_type.extensionMetaObject();
         if (metaObject)
             m_typePropertyCache = QQmlMetaType::propertyCache(metaObject, m_version);
-        return m_typePropertyCache;
-    } else {
-        Q_ASSERT(m_compilationUnit);
-        return m_compilationUnit->rootPropertyCache();
     }
+
+    return m_typePropertyCache;
 }
 
 bool ResolvedTypeReference::addToHash(
         QCryptographicHash *hash, QHash<quintptr, QByteArray> *checksums)
 {
-    if (m_type.isInlineComponentType()) {
+    // No need to add types from the same document to the hash.
+    if (m_isSelfReference)
+        return true;
 
-        // A reference to an inline component in the same file will have
-        // - no compilation unit since we cannot resolve the compilation unit before it's built.
-        // - a property cache since we've assigned one in buildMetaObjectsIncrementally().
-        // - a QQmlType that says it's an inline component.
-        // We don't have to add such a thing to the hash since if it changes, the QML document
-        // itself changes, leading to a new timestamp, which is checked before the checksum.
-        if (!m_compilationUnit)
-            return !m_typePropertyCache.isNull();
+    if (m_compilationUnit) {
+        hash->addData({m_compilationUnit->unitData()->md5Checksum,
+                        sizeof(m_compilationUnit->unitData()->md5Checksum)});
+        return true;
+    }
 
-    } else if (m_type.isValid()) {
+    if (QQmlPropertyCache::ConstPtr propertyCache = createPropertyCache()) {
         bool ok = false;
-        if (QQmlPropertyCache::ConstPtr propertyCache = createPropertyCache())
-            hash->addData(propertyCache->checksum(checksums, &ok));
-        else
-            Q_ASSERT(m_type.module() == QLatin1String("QML")); // a builtin without metaobject
+        hash->addData(propertyCache->checksum(checksums, &ok));
         return ok;
     }
 
-    // If there is no compilation unit and no type, then it's a self reference.
-    // We don't have to add anything to the hash since if it changes, the QML document itself
-    // changes, leading to a new timestamp, which is checked before the checksum.
-    // Self references don't even set m_typePropertyCache, so there is nothing to check here.
-    if (!m_compilationUnit)
-        return true;
-
-    hash->addData({m_compilationUnit->unitData()->md5Checksum,
-                  sizeof(m_compilationUnit->unitData()->md5Checksum)});
-    return true;
+    return false;
 }
 
 } // namespace QV4

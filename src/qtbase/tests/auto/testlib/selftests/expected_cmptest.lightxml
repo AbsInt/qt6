@@ -486,6 +486,32 @@
     <Incident type="pass" file="" line="0" />
     <Duration msecs="0"/>
   </TestFunction>
+  <TestFunction name="defaultTryVerifyTimeout">
+    <Incident type="xfail" file="qtbase/tests/auto/testlib/selftests/cmptest/tst_cmptest.cpp" line="0">
+      <DataTag><![CDATA[times-out]]></DataTag>
+      <Description><![CDATA[The timeout (std::chrono::milliseconds) is deliberately too short]]></Description>
+    </Incident>
+    <Incident type="pass" file="" line="0">
+      <DataTag><![CDATA[times-out]]></DataTag>
+    </Incident>
+    <Incident type="pass" file="" line="0">
+      <DataTag><![CDATA[ample-time]]></DataTag>
+    </Incident>
+    <Duration msecs="0"/>
+  </TestFunction>
+  <TestFunction name="defaultTryCompareTimeout">
+    <Incident type="xfail" file="qtbase/tests/auto/testlib/selftests/cmptest/tst_cmptest.cpp" line="0">
+      <DataTag><![CDATA[times-out]]></DataTag>
+      <Description><![CDATA[The timeout (std::chrono::milliseconds) is deliberately too short]]></Description>
+    </Incident>
+    <Incident type="pass" file="" line="0">
+      <DataTag><![CDATA[times-out]]></DataTag>
+    </Incident>
+    <Incident type="pass" file="" line="0">
+      <DataTag><![CDATA[ample-time]]></DataTag>
+    </Incident>
+    <Duration msecs="0"/>
+  </TestFunction>
   <TestFunction name="cleanupTestCase">
     <Incident type="pass" file="" line="0" />
     <Duration msecs="0"/>

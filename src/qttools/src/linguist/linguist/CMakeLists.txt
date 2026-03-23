@@ -5,17 +5,39 @@
 ## linguist App:
 #####################################################################
 
+if(NOT QT_BUILDING_QT)
+    # Standalone linguist build settings.
+
+    # Let qt_internal_add_app build the executable in our build directory instead of the Qt build
+    # tree.
+    set(QT_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+    find_package(Qt6UiToolsPrivate CONFIG REQUIRED)
+endif()
+
 qt_internal_add_app(linguist
     SOURCES
+        ../../shared/helpclient/helpclient.cpp ../../shared/helpclient/helpclient.h
         ../shared/numerus.cpp
         ../shared/po.cpp
         ../shared/qm.cpp
         ../shared/qph.cpp
         ../shared/simtexth.cpp ../shared/simtexth.h
         ../shared/translator.cpp ../shared/translator.h
+        ../shared/validator.cpp ../shared/validator.h
         ../shared/translatormessage.cpp ../shared/translatormessage.h
         ../shared/ts.cpp
         ../shared/xliff.cpp
+        ../shared/auto-translation/translationprotocol.h
+        ../shared/auto-translation/translationsettings.cpp
+        ../shared/auto-translation/translationsettings.h
+        ../shared/auto-translation/translationutils.cpp
+        ../shared/auto-translation/translationutils.h
+        ../shared/auto-translation/ollama.cpp
+        ../shared/auto-translation/ollama.h
+        ../shared/auto-translation/openaicompatible.cpp
+        ../shared/auto-translation/openaicompatible.h
+        ../shared/auto-translation/machinetranslator.cpp
+        ../shared/auto-translation/machinetranslator.h
         ../shared/xmlparser.cpp ../shared/xmlparser.h
         batchtranslation.ui
         batchtranslationdialog.cpp batchtranslationdialog.h
@@ -40,6 +62,9 @@ qt_internal_add_app(linguist
         translatedialog.cpp translatedialog.h translatedialog.ui
         translationsettings.ui
         translationsettingsdialog.cpp translationsettingsdialog.h
+        machinetranslationdialog.h machinetranslationdialog.cpp machinetranslationdialog.ui
+    NO_UNITY_BUILD_SOURCES
+        ../shared/auto-translation/translationsettings.cpp
     DEFINES
         QFORMINTERNAL_NAMESPACE
         QT_KEYWORDS
@@ -47,6 +72,7 @@ qt_internal_add_app(linguist
         QT_NO_CAST_TO_ASCII
     INCLUDE_DIRECTORIES
         ../shared
+        ../../shared/helpclient
     LIBRARIES
         Qt::CorePrivate
         Qt::Gui
@@ -57,6 +83,11 @@ qt_internal_add_app(linguist
         Qt::QuickLayouts
 )
 
+qt_internal_extend_target(linguist CONDITION QT_FEATURE_process
+    SOURCES
+        ../../shared/helpclient/assistantclient.cpp ../../shared/helpclient/assistantclient.h
+)
+
 qt_internal_extend_target(linguist CONDITION QT_FEATURE_printsupport
     SOURCES
         printout.cpp printout.h
@@ -64,45 +95,47 @@ qt_internal_extend_target(linguist CONDITION QT_FEATURE_printsupport
         Qt::PrintSupport
 )
 
-set(available_plugins "")
+if(QT_BUILDING_QT)
+    set(available_plugins "")
 
-set(plugin_targets
-    Qt::qtquickcontrols2plugin
-    Qt::qtquick2plugin
-    Qt::qtquickdialogsplugin
-    Qt::qtquickcontrols2universalstyleplugin
-    Qt::qtquickcontrols2basicstyleplugin
-    Qt::qtquickcontrols2fluentwinui3styleplugin
-    Qt::qtquickcontrols2fusionstyleplugin
-    Qt::qtquickcontrols2imaginestyleplugin
-    Qt::qtquickcontrols2iosstyleplugin
-    Qt::qtquickcontrols2macosstyleplugin
-    Qt::qtquickcontrols2materialstyleplugin
-    Qt::qtquicktemplates2plugin
-    Qt::qtquickcontrols2implplugin
-    Qt::qtquickdialogs2quickimplplugin
-    Qt::qtquickcontrols2universalstyleimplplugin
-    Qt::qtquickcontrols2basicstyleimplplugin
-    Qt::qtquickcontrols2fluentwinui3styleimplplugin
-    Qt::qtquickcontrols2fusionstyleimplplugin
-    Qt::qtquickcontrols2imaginestyleimplplugin
-    Qt::qtquickcontrols2iosstyleimplplugin
-    Qt::qtquickcontrols2macosstyleimplplugin
-    Qt::qtquickcontrols2materialstyleimplplugin
-    Qt::quickwindow
-)
+    set(plugin_targets
+        Qt::qtquickcontrols2plugin
+        Qt::qtquick2plugin
+        Qt::qtquickdialogsplugin
+        Qt::qtquickcontrols2universalstyleplugin
+        Qt::qtquickcontrols2basicstyleplugin
+        Qt::qtquickcontrols2fluentwinui3styleplugin
+        Qt::qtquickcontrols2fusionstyleplugin
+        Qt::qtquickcontrols2imaginestyleplugin
+        Qt::qtquickcontrols2iosstyleplugin
+        Qt::qtquickcontrols2macosstyleplugin
+        Qt::qtquickcontrols2materialstyleplugin
+        Qt::qtquicktemplates2plugin
+        Qt::qtquickcontrols2implplugin
+        Qt::qtquickdialogs2quickimplplugin
+        Qt::qtquickcontrols2universalstyleimplplugin
+        Qt::qtquickcontrols2basicstyleimplplugin
+        Qt::qtquickcontrols2fluentwinui3styleimplplugin
+        Qt::qtquickcontrols2fusionstyleimplplugin
+        Qt::qtquickcontrols2imaginestyleimplplugin
+        Qt::qtquickcontrols2iosstyleimplplugin
+        Qt::qtquickcontrols2macosstyleimplplugin
+        Qt::qtquickcontrols2materialstyleimplplugin
+        Qt::quickwindow
+    )
 
-foreach(plugin ${plugin_targets})
-    if(TARGET ${plugin})
-        list(APPEND available_plugins ${plugin})
-    endif()
-endforeach()
+    foreach(plugin ${plugin_targets})
+        if(TARGET ${plugin})
+            list(APPEND available_plugins ${plugin})
+        endif()
+    endforeach()
 
-if (available_plugins)
-    if(BUILD_SHARED_LIBS)
-        add_dependencies(linguist ${available_plugins})
-    else()
-        qt_internal_extend_target(linguist LIBRARIES ${available_plugins})
+    if(available_plugins)
+        if(BUILD_SHARED_LIBS)
+            add_dependencies(linguist ${available_plugins})
+        else()
+            qt_internal_extend_target(linguist LIBRARIES ${available_plugins})
+        endif()
     endif()
 endif()
 
@@ -115,6 +148,7 @@ qt_add_ui(linguist
         statistics.ui
         translatedialog.ui
         translationsettings.ui
+        machinetranslationdialog.ui
 )
 
 # Resources:
@@ -305,7 +339,9 @@ if(APPLE)
 else()
     set_property(SOURCE main.cpp PROPERTY SKIP_AUTOMOC ON)
 endif()
-qt_internal_add_docs(linguist
-    doc/qtlinguist.qdocconf
-)
 
+if(QT_BUILDING_QT)
+    qt_internal_add_docs(linguist
+        doc/qtlinguist.qdocconf
+    )
+endif()

@@ -25,25 +25,11 @@ public:
     QByteArray peek(qint64 maxSize) override;
 
 #ifndef QT_NO_QOBJECT
-    // private slots
-    void _q_emitSignals();
-
     qint64 writtenSinceLastEmit = 0;
     int signalConnectionCount = 0;
     bool signalsEmitted = false;
 #endif
 };
-
-#ifndef QT_NO_QOBJECT
-void QBufferPrivate::_q_emitSignals()
-{
-    Q_Q(QBuffer);
-    emit q->bytesWritten(writtenSinceLastEmit);
-    writtenSinceLastEmit = 0;
-    emit q->readyRead();
-    signalsEmitted = false;
-}
-#endif
 
 qint64 QBufferPrivate::peek(char *data, qint64 maxSize)
 {
@@ -420,7 +406,13 @@ qint64 QBuffer::writeData(const char *data, qint64 len)
     d->writtenSinceLastEmit += len;
     if (d->signalConnectionCount && !d->signalsEmitted && !signalsBlocked()) {
         d->signalsEmitted = true;
-        QMetaObject::invokeMethod(this, "_q_emitSignals", Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, [](QBuffer *q) {
+            auto d = q->d_func();
+            emit q->bytesWritten(d->writtenSinceLastEmit);
+            d->writtenSinceLastEmit = 0;
+            emit q->readyRead();
+            d->signalsEmitted = false;
+        }, Qt::QueuedConnection, this);
     }
 #endif
     return len;

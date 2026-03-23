@@ -25,25 +25,31 @@ QT_BEGIN_NAMESPACE
 
 namespace QV4 {
 namespace Heap {
-// clang-format off
-#define UrlObjectMembers(class, Member) \
-    Member(class, Pointer, String *, hash) \
-    Member(class, Pointer, String *, host) \
-    Member(class, Pointer, String *, hostname) \
-    Member(class, Pointer, String *, href) \
-    Member(class, Pointer, String *, origin) \
-    Member(class, Pointer, String *, password) \
-    Member(class, Pointer, String *, pathname) \
-    Member(class, Pointer, String *, port) \
-    Member(class, Pointer, String *, protocol) \
-    Member(class, Pointer, String *, search) \
-    Member(class, Pointer, String *, username)
-// clang-format on
-
+#define UrlObjectMembers(class, Member)
 DECLARE_HEAP_OBJECT(UrlObject, Object)
 {
     DECLARE_MARKOBJECTS(UrlObject)
-    void init() { Object::init(); }
+    void init()
+    {
+        new (&m_url) QUrl;
+        Object::init();
+    }
+    void init(const QUrl &url)
+    {
+        new (&m_url) QUrl(url);
+        Object::init();
+    }
+
+    void destroy()
+    {
+        std::destroy_at<QUrl>(reinterpret_cast<QUrl *>(&m_url));
+    }
+
+    QUrl url() const { return *reinterpret_cast<const QUrl *>(&m_url); }
+    void setUrl(QUrl &&url) { *reinterpret_cast<QUrl *>(&m_url) = std::move(url); }
+
+    static constexpr auto alignment = alignof(QUrl);
+    alignas(alignment) std::byte m_url[sizeof(QUrl)];
 };
 
 struct UrlCtor : FunctionObject
@@ -74,52 +80,100 @@ struct UrlSearchParamsCtor : FunctionObject
 struct UrlObject : Object
 {
     V4_OBJECT2(UrlObject, Object)
+    V4_NEEDS_DESTROY
     Q_MANAGED_TYPE(UrlObject)
     V4_PROTOTYPE(urlPrototype)
 
-    QString hash() const { return QLatin1String("#") + toQString(d()->hash); }
-    bool setHash(QString hash);
+    QString hash() const
+    {
+        const QUrl url = constD()->url();
+        return QLatin1Char('#') + url.fragment();
+    }
+    bool setHash(const QString &hash);
 
-    QString host() const { return toQString(d()->host); }
-    bool setHost(QString host);
+    QString host() const
+    {
+        const QUrl url = constD()->url();
+        const int port = url.port();
+        return port == -1 ? url.host() : (url.host() + QLatin1Char(':') + QString::number(port));
+    }
+    bool setHost(const QString &host);
 
-    QString hostname() const { return toQString(d()->hostname); }
-    bool setHostname(QString hostname);
+    QString hostname() const
+    {
+        const QUrl url = constD()->url();
+        return url.isValid() ? url.host() : QString();
+    }
+    bool setHostname(const QString &hostname);
 
-    QString href() const { return toQString(d()->href); }
-    bool setHref(QString href);
+    QString href() const
+    {
+        return constD()->url().toString(QUrl::ComponentFormattingOption::FullyEncoded);
+    }
+    bool setHref(const QString &href);
 
-    QString origin() const { return toQString(d()->origin); }
+    QString origin() const
+    {
+        const auto resolve = [](const QUrl &url) {
+            const QString proto = url.scheme();
+            if (proto != QLatin1String("http") && proto != QLatin1String("https")
+                    && proto != QLatin1String("ftp")) {
+                return QString();
+            }
 
-    QString password() const { return toQString(d()->password); }
-    bool setPassword(QString password);
+            if (const int port = url.port(); port != -1)
+                return QLatin1String("%1://%2:%3").arg(proto, url.host(), QString::number(port));
 
-    QString pathname() const { return toQString(d()->pathname); }
-    bool setPathname(QString pathname);
+            return QLatin1String("%1://%2").arg(proto, url.host());
+        };
 
-    QString port() const { return toQString(d()->port); }
-    bool setPort(QString port);
+        const QUrl url = constD()->url();
 
-    QString protocol() const { return toQString(d()->protocol); }
-    bool setProtocol(QString protocol);
+        // A blob's origin is the origin of the URL that it points to
+        return url.scheme() == QLatin1String("blob") ? resolve(QUrl(url.path())) : resolve(url);
+    }
+
+    QString password() const { return constD()->url().password(); }
+    bool setPassword(const QString &password);
+
+    QString pathname() const { return constD()->url().path(); }
+    bool setPathname(const QString &pathname);
+
+    QString port() const
+    {
+        const int port = constD()->url().port();
+        return port == -1 ? QString() : QString::number(port);
+    }
+    bool setPort(const QString &port);
+
+    QString protocol() const { return constD()->url().scheme() + QLatin1Char(':'); }
+    bool setProtocol(const QString &protocol);
 
     Q_QML_AUTOTEST_EXPORT QString search() const;
-    bool setSearch(QString search);
+    bool setSearch(const QString &search);
 
-    QString username() const { return toQString(d()->username); }
-    bool setUsername(QString username);
+    QString username() const { return constD()->url().userName(); }
+    bool setUsername(const QString &username);
 
-    QUrl toQUrl() const;
+    QUrl toQUrl() const
+    {
+        return d()->url();
+    }
     void setUrl(const QUrl &url);
 
 private:
-    static QString toQString(const Heap::String *string)
-    {
-        return string ? string->toQString() : QString();
-    }
+    const Heap::UrlObject *constD() const { return d(); }
 
-    void updateOrigin();
-    void updateHost();
+    template<typename F>
+    bool updateUrl(F &&f) {
+        QUrl url = d()->url();
+        f(&url);
+        if (!url.isValid())
+            return false;
+
+        d()->setUrl(std::move(url));
+        return true;
+    }
 };
 
 template<>

@@ -46,7 +46,7 @@ public:
     QQmlComponent *modeless() const;
     void setModeless(QQmlComponent *modeless);
 
-    static QQuickOverlay *overlay(QQuickWindow *window);
+    static QQuickOverlay *overlay(QQuickWindow *window, QQuickItem *parent = nullptr);
 
     static QQuickOverlayAttached *qmlAttachedProperties(QObject *object);
 

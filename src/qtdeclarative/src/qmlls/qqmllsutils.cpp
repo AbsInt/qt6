@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <utility>
 
 QT_BEGIN_NAMESPACE
@@ -1184,7 +1185,7 @@ propertyBindingFromReferrerScope(const QQmlJSScope::ConstPtr &referrerScope, con
     }
 
     const auto typeIdentifier =
-            bindingIsAttached ? AttachedTypeIdentifier : GroupedPropertyIdentifier;
+            bindingIsAttached ? AttachedTypeIdentifierInBindingTarget : GroupedPropertyIdentifier;
 
     const auto getScope = [bindingIsAttached, binding]() -> QQmlJSScope::ConstPtr {
         if (bindingIsAttached)
@@ -1309,8 +1310,11 @@ resolveTypeName(const std::shared_ptr<QQmlJSTypeResolver> &resolver, const QStri
     if (fieldMemberAccessName.isEmpty() || !fieldMemberAccessName.front().isLower())
         return ExpressionType{ name, scope, QmlComponentIdentifier };
 
-    return ExpressionType{ name, options == ResolveOwnerType ? scope : scope->attachedType(),
-                           IdentifierType::AttachedTypeIdentifier };
+    if (scope->attachedType()) {
+        return ExpressionType{ name, options == ResolveOwnerType ? scope : scope->attachedType(),
+                               IdentifierType::AttachedTypeIdentifier };
+    }
+    return {};
 }
 
 static std::optional<ExpressionType> resolveFieldMemberExpressionType(const DomItem &item,
@@ -1358,9 +1362,11 @@ static std::optional<ExpressionType> resolveFieldMemberExpressionType(const DomI
         // Enumerations should live under the root element scope of the file that defines the enum,
         // therefore use the DomItem to find the root element of the qml file instead of directly
         // using owner->semanticScope.
-        if (const auto scope = item.goToFile(owner->semanticScope->filePath())
-                                       .rootQmlObject(GoTo::MostLikely)
-                                       .semanticScope()) {
+        if (const auto scope = owner->semanticScope->isComposite()
+                    ? item.goToFile(owner->semanticScope->filePath())
+                              .rootQmlObject(GoTo::MostLikely)
+                              .semanticScope()
+                    : owner->semanticScope) {
             if (scope->hasEnumerationKey(name)) {
                 return ExpressionType{ name, scope, EnumeratorValueIdentifier };
             }
@@ -1751,7 +1757,7 @@ std::optional<ExpressionType> resolveExpressionType(const QQmlJS::Dom::DomItem &
 
             // in case scope is the semantic scope for the function bodies: grab the owner's scope
             // this happens for all methods but not for signals (they do not have a body)
-            if (scope.value()->scopeType() == QQmlJSScope::ScopeType::JSFunctionScope)
+            if (QQmlSA::isFunctionScope(scope.value()->scopeType()))
                 scope = scope.value()->parentScope();
 
             if (const auto result = resolveSignalOrPropertyExpressionType(
@@ -1906,6 +1912,43 @@ DomItem sourceLocationToDomItem(const DomItem &file, const QQmlJS::SourceLocatio
 }
 
 static std::optional<Location>
+findEnumDefinitionOf(const DomItem &file, QQmlJS::SourceLocation location, const QString &name)
+{
+    const DomItem enumeration = [&file, &location, &name]() -> DomItem {
+        const DomItem enumerations = QQmlLSUtils::sourceLocationToDomItem(file, location)
+                                             .qmlObject()
+                                             .component()
+                                             .field(Fields::enumerations);
+        const QSet<QString> enumerationNames = enumerations.keys();
+        for (const QString &enumName : enumerationNames) {
+            const DomItem currentKey = enumerations.key(enumName).index(0);
+            if (enumName == name)
+                return currentKey;
+            const DomItem values = currentKey.field(Fields::values);
+            for (int i = 0, end = values.size(); i < end; ++i) {
+                const DomItem currentValue = values.index(i);
+                if (currentValue.field(Fields::name).value().toStringView() == name)
+                    return currentValue;
+            }
+        }
+        return {};
+    }();
+
+    auto fileLocation = FileLocations::treeOf(enumeration);
+
+    if (!fileLocation)
+        return {};
+
+    auto regions = fileLocation->info().regions;
+
+    if (auto it = regions.constFind(IdentifierRegion); it != regions.constEnd()) {
+        return Location::tryFrom(enumeration.canonicalFilePath(), *it, file);
+    }
+
+    return {};
+}
+
+static std::optional<Location>
 findMethodDefinitionOf(const DomItem &file, QQmlJS::SourceLocation location, const QString &name)
 {
     DomItem owner = QQmlLSUtils::sourceLocationToDomItem(file, location).qmlObject();
@@ -1943,7 +1986,43 @@ findPropertyDefinitionOf(const DomItem &file, QQmlJS::SourceLocation propertyDef
     return {};
 }
 
-std::optional<Location> findDefinitionOf(const DomItem &item)
+static QQmlJS::SourceLocation sourceLocationOrDefault(const QQmlJS::SourceLocation &location)
+{
+    return location.startLine == 0 ? QQmlJS::SourceLocation{ 0, 0, 1, 1 } : location;
+}
+
+static std::optional<Location> createCppTypeLocation(const QQmlJSScope::ConstPtr &type,
+                                                     const QStringList &headerLocations,
+                                                     const QQmlJS::SourceLocation &location)
+{
+    const TextPosition endPosition{ static_cast<int>(location.startLine) + 1, 1 };
+    const QFileInfo filePathInfo(type->filePath());
+    if (filePathInfo.isAbsolute() && filePathInfo.exists())
+        return Location{ type->filePath(), location, endPosition };
+
+    const QString filePath = findFilePathFromFileName(headerLocations, type->filePath(), {});
+    if (filePath.isEmpty()) {
+        qCWarning(QQmlLSUtilsLog) << "Couldn't find the C++ file '%1'."_L1.arg(type->filePath());
+        return {};
+    }
+
+    return Location{ filePath, location, endPosition };
+}
+
+static std::optional<Location> findDefinitionOfType(const QQmlJSScope::ConstPtr &scope,
+                                                    const DomItem &item,
+                                                    const QStringList &headerDirectories)
+{
+    if (!scope)
+        return {};
+    if (scope->isComposite())
+        if (const auto result = Location::tryFrom(scope->filePath(), scope->sourceLocation(), item))
+            return result;
+    return createCppTypeLocation(scope, headerDirectories,
+                                 sourceLocationOrDefault(scope->sourceLocation()));
+}
+
+std::optional<Location> findDefinitionOf(const DomItem &item, const QStringList &headerDirectories)
 {
     auto resolvedExpression = resolveExpressionType(item, ResolveOptions::ResolveOwnerType);
 
@@ -1965,7 +2044,14 @@ std::optional<Location> findDefinitionOf(const DomItem &item)
                                  jsIdentifier->location, item);
     }
 
+    case GroupedPropertyIdentifier:
     case PropertyIdentifier: {
+        if (!resolvedExpression->semanticScope->isComposite()) {
+            return createCppTypeLocation(
+                    resolvedExpression->semanticScope, headerDirectories,
+                    resolvedExpression->semanticScope->property(*resolvedExpression->name)
+                            .sourceLocation());
+        }
         const DomItem ownerFile = item.goToFile(resolvedExpression->semanticScope->filePath());
         const QQmlJS::SourceLocation ownerLocation =
                 resolvedExpression->semanticScope->sourceLocation();
@@ -1976,6 +2062,14 @@ std::optional<Location> findDefinitionOf(const DomItem &item)
     case SignalIdentifier:
     case SignalHandlerIdentifier:
     case MethodIdentifier: {
+        if (!resolvedExpression->semanticScope->isComposite()) {
+            const auto methods =
+                    resolvedExpression->semanticScope->methods(*resolvedExpression->name);
+            if (methods.isEmpty())
+                return {};
+            return createCppTypeLocation(resolvedExpression->semanticScope, headerDirectories,
+                                         methods.front().sourceLocation());
+        }
         const DomItem ownerFile = item.goToFile(resolvedExpression->semanticScope->filePath());
         const QQmlJS::SourceLocation ownerLocation =
                 resolvedExpression->semanticScope->sourceLocation();
@@ -2000,10 +2094,14 @@ std::optional<Location> findDefinitionOf(const DomItem &item)
                                  FileLocations::treeOf(domId)->info().fullRegion, domId);
     }
     case AttachedTypeIdentifier:
-    case QmlComponentIdentifier: {
-        return Location::tryFrom(resolvedExpression->semanticScope->filePath(),
-                                 resolvedExpression->semanticScope->sourceLocation(), item);
-    }
+        return findDefinitionOfType(resolvedExpression->semanticScope->attachedType(), item,
+                                    headerDirectories);
+    case AttachedTypeIdentifierInBindingTarget:
+        return findDefinitionOfType(resolvedExpression->semanticScope->baseType(), item,
+                                    headerDirectories);
+    case QmlComponentIdentifier:
+    case SingletonIdentifier:
+        return findDefinitionOfType(resolvedExpression->semanticScope, item, headerDirectories);
     case QualifiedModuleIdentifier: {
         const DomItem imports = item.fileObject().field(Fields::imports);
         for (int i = 0; i < imports.indexes(); ++i) {
@@ -2017,10 +2115,27 @@ std::optional<Location> findDefinitionOf(const DomItem &item)
         }
         return {};
     }
-    case SingletonIdentifier:
     case EnumeratorIdentifier:
-    case EnumeratorValueIdentifier:
-    case GroupedPropertyIdentifier:
+    case EnumeratorValueIdentifier: {
+        if (!resolvedExpression->semanticScope->isComposite()) {
+            const auto enumerations = resolvedExpression->semanticScope->enumerations();
+            for (const auto &enumeration : enumerations) {
+                if (enumeration.hasKey(*resolvedExpression->name)
+                    || enumeration.name() == *resolvedExpression->name) {
+                    return createCppTypeLocation(
+                            resolvedExpression->semanticScope, headerDirectories,
+                            sourceLocationOrDefault(QQmlJS::SourceLocation::fromQSizeType(
+                                    0, 0, enumeration.lineNumber(), 1)));
+                }
+            }
+            return {};
+        }
+        const DomItem ownerFile = item.goToFile(resolvedExpression->semanticScope->filePath());
+        const QQmlJS::SourceLocation ownerLocation =
+                resolvedExpression->semanticScope->sourceLocation();
+        return findEnumDefinitionOf(ownerFile, ownerLocation, *resolvedExpression->name);
+    }
+
     case LambdaMethodIdentifier:
     case NotAnIdentifier:
         qCDebug(QQmlLSUtilsLog) << "QQmlLSUtils::findDefinitionOf was not implemented for type"
@@ -2096,6 +2211,7 @@ static QQmlJSScope::ConstPtr expressionTypeWithDefinition(const ExpressionType &
     case EnumeratorIdentifier:
     case EnumeratorValueIdentifier:
     case AttachedTypeIdentifier:
+    case AttachedTypeIdentifierInBindingTarget:
     case GroupedPropertyIdentifier:
     case QmlComponentIdentifier:
     case LambdaMethodIdentifier:
@@ -2121,7 +2237,7 @@ std::optional<ErrorMessage> checkNameForRename(const DomItem &item, const QStrin
     const auto userSemanticScope = item.nearestSemanticScope();
 
     if (!ownerType || !userSemanticScope) {
-        return ErrorMessage{ 0, u"Requested item cannot be renamed"_s };
+        return ErrorMessage{ 0, u"Requested item cannot be renamed."_s };
     }
 
     // type specific checks
@@ -2405,11 +2521,13 @@ https://doc.qt.io/qt-6/windows-building.html#step-2-install-build-requirements c
 to have CMake in your path to build Qt. So a developer machine running qmlls has a high chance of
 having CMake in their path, if CMake is installed and used.
 */
-std::pair<QString, QStringList> cmakeBuildCommand(const QString &path)
+std::pair<QString, QStringList> cmakeBuildCommand(const QString &path, int cmakeJobs)
 {
-    const std::pair<QString, QStringList> result{
+    std::pair<QString, QStringList> result{
         u"cmake"_s, { u"--build"_s, path, u"-t"_s, u"all_qmltyperegistrations"_s }
     };
+    if (cmakeJobs > 0)
+        result.second << "-j"_L1 << QString::number(cmakeJobs);
     return result;
 }
 
@@ -2437,6 +2555,79 @@ RenameUsages::RenameUsages(const QList<Edit> &renamesInFile,
 {
     std::sort(m_renamesInFile.begin(), m_renamesInFile.end());
     std::sort(m_renamesInFilename.begin(), m_renamesInFilename.end());
+}
+
+enum SearchOption { FindFirst, FindAll };
+static QStringList findFilePathsFromFileNamesImpl(const QStringList &rootDirs,
+                                                  const QStringList &fileNamesToSearch,
+                                                  SearchOption option,
+                                                  const QSet<QString> &ignoredFilePaths)
+{
+    if (fileNamesToSearch.isEmpty() || rootDirs.isEmpty())
+        return {};
+
+    const qint64 maxFilesToSearch =
+            qEnvironmentVariableIntegerValue("QMLLS_MAX_FILES_TO_SEARCH")
+                    .value_or(20'000); // 20'000 entries need around one second on my machine
+    qint64 visitedItems = 0;
+
+    QStringList result;
+    std::queue<QString> toVisit;
+    for (const QString &rootDir : rootDirs)
+        toVisit.push(rootDir);
+
+    while (!toVisit.empty()) {
+        const QString current = toVisit.front();
+        toVisit.pop();
+
+        for (const auto &entry : QDirListing{ current, QDirListing::IteratorFlag::ExcludeOther }) {
+            // timeout to avoid qmlls from recursing too much, in case rootDir is the filesystem
+            // root for example
+            if (++visitedItems > maxFilesToSearch) {
+                qInfo(QQmlLSUtilsLog).noquote().nospace()
+                        << "Aborting search for \"" << fileNamesToSearch.join("\", \""_L1)
+                        << "\" inside \"" << rootDirs.join("\", \""_L1)
+                        << "\" after reaching QMLLS_MAX_FILES_TO_SEARCH (currently set to "
+                        << maxFilesToSearch
+                        << "). Set the environment variable \"QMLLS_MAX_FILES_TO_SEARCH\" to a "
+                           "higher value to spend more time on searching.";
+                return result;
+            }
+
+            if (entry.isDir()) {
+                toVisit.push(entry.filePath());
+                continue;
+            }
+            Q_ASSERT(entry.isFile());
+            if (!fileNamesToSearch.contains(entry.fileName()))
+                continue;
+
+            if (ignoredFilePaths.contains(entry.absoluteFilePath()))
+                continue;
+
+            if (option == FindFirst)
+                return { entry.absoluteFilePath() };
+
+            result << entry.absoluteFilePath();
+        }
+    }
+
+    return result;
+}
+
+QStringList findFilePathsFromFileNames(const QString &rootDir, const QStringList &fileNamesToSearch,
+                                       const QSet<QString> &ignoredFilePaths)
+{
+    return findFilePathsFromFileNamesImpl({ rootDir }, fileNamesToSearch, FindAll,
+                                          ignoredFilePaths);
+}
+
+QString findFilePathFromFileName(const QStringList &rootDirs, const QString &fileNameToSearch,
+                                 const QSet<QString> &ignoredFilePaths)
+{
+    const QStringList result = findFilePathsFromFileNamesImpl(rootDirs, { fileNameToSearch },
+                                                              FindFirst, ignoredFilePaths);
+    return result.isEmpty() ? QString{} : result.front();
 }
 
 } // namespace QQmlLSUtils

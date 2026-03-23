@@ -39,20 +39,21 @@ public:
 
     void setModelData(QObject *modelData)
     {
-        if (modelData == object)
+        if (modelData == m_modelData)
             return;
 
-        object = modelData;
+        m_modelData = modelData;
         emit modelDataChanged();
     }
 
-    QObject *modelData() const { return object; }
+    QObject *modelData() const { return m_modelData; }
     QQmlRefPointer<QQmlContextData> initProxy() final;
-
-    QPointer<QObject> object;
 
 Q_SIGNALS:
     void modelDataChanged();
+
+private:
+    QPointer<QObject> m_modelData;
 };
 
 class VDMObjectDelegateDataType final
@@ -131,7 +132,7 @@ public:
         release();
     }
 
-    bool notify(const QQmlAdaptorModel &model, const QList<QQmlDelegateModelItem *> &items, int index, int count, const QVector<int> &) const override
+    bool notify(const QQmlAdaptorModel &model, const QList<QQmlDelegateModelItem *> &items, int index, int count, const QList<int> &) const override
     {
         for (auto modelItem : items) {
             const int modelItemIndex = modelItem->modelIndex();
@@ -175,8 +176,11 @@ public:
                 && (call == QMetaObject::ReadProperty
                 || call == QMetaObject::WriteProperty
                 || call == QMetaObject::ResetProperty)) {
-            if (m_data->object)
-                QMetaObject::metacall(m_data->object, call, id - m_type->propertyOffset + objectPropertyOffset, arguments);
+            if (QObject *modelData = m_data->modelData()) {
+                QMetaObject::metacall(
+                        modelData, call, id - m_type->propertyOffset + objectPropertyOffset,
+                        arguments);
+            }
             return -1;
         } else if (id >= m_type->signalOffset && call == QMetaObject::InvokeMetaMethod) {
             QMetaObject::activate(m_data, this, id - m_type->signalOffset, nullptr);
@@ -188,9 +192,10 @@ public:
 
     int createProperty(const char *name, const char *) override
     {
-        if (!m_data->object)
+        QObject *modelData = m_data->modelData();
+        if (!modelData)
             return -1;
-        const QMetaObject *metaObject = m_data->object->metaObject();
+        const QMetaObject *metaObject = modelData->metaObject();
         static const int objectPropertyOffset = QObject::staticMetaObject.propertyCount();
 
         const int previousPropertyCount = propertyCount() - propertyOffset();
@@ -232,7 +237,7 @@ public:
             QMetaProperty property = metaObject->property(i + objectPropertyOffset);
             if (property.hasNotifySignal()) {
                 QQmlPropertyPrivate::connect(
-                        m_data->object, property.notifySignalIndex(), m_data, notifierId);
+                        modelData, property.notifySignalIndex(), m_data, notifierId);
                 ++notifierId;
             }
         }

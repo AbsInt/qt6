@@ -475,6 +475,9 @@ public:
         decompressedSafetyCheckThreshold = other.decompressedSafetyCheckThreshold;
 #endif
         transferTimeout = other.transferTimeout;
+        idleTimeBeforeProbes = other.idleTimeBeforeProbes;
+        intervalBetweenProbes = other.intervalBetweenProbes;
+        probeCount = other.probeCount;
     }
 
     inline bool operator==(const QNetworkRequestPrivate &other) const
@@ -491,6 +494,9 @@ public:
 #endif
             && transferTimeout == other.transferTimeout
             && QHttpHeadersHelper::compareStrict(httpHeaders, other.httpHeaders)
+            && idleTimeBeforeProbes == other.idleTimeBeforeProbes
+            && intervalBetweenProbes == other.intervalBetweenProbes
+            && probeCount == other.probeCount;
             ;
         // don't compare cookedHeaders
     }
@@ -508,6 +514,9 @@ public:
     qint64 decompressedSafetyCheckThreshold = 10ll * 1024ll * 1024ll;
 #endif
     std::chrono::milliseconds transferTimeout = 0ms;
+    std::chrono::duration<int> idleTimeBeforeProbes{0};
+    std::chrono::duration<int> intervalBetweenProbes{0};
+    int probeCount = 0;
 };
 
 /*!
@@ -1034,6 +1043,96 @@ void QNetworkRequest::setDecompressedSafetyCheckThreshold(qint64 threshold)
     d->decompressedSafetyCheckThreshold = threshold;
 }
 #endif // QT_CONFIG(http)
+
+/*!
+    \since 6.11
+
+    Returns the time the connection needs to remain idle before TCP
+    starts sending keepalive probes, if the TCP Keepalive functionality has
+    been turned on.
+
+    \sa setTcpKeepAliveIdleTimeBeforeProbes()
+*/
+
+std::chrono::seconds QNetworkRequest::tcpKeepAliveIdleTimeBeforeProbes() const
+{
+    return d->idleTimeBeforeProbes;
+}
+
+/*!
+    \fn void QNetworkRequest::setTcpKeepAliveIdleTimeBeforeProbes(std::chrono::seconds idle)
+    \since 6.11
+
+    Sets the time the connection needs to remain idle before TCP starts
+    sending keepalive probes to be \a idle, if the TCP Keepalive
+    functionality has been turned on.
+
+    \sa tcpKeepAliveIdleTimeBeforeProbes()
+*/
+
+void QNetworkRequest::doSetIdleTimeBeforeProbes(std::chrono::duration<int> seconds)
+{
+    d->idleTimeBeforeProbes = seconds;
+}
+
+/*!
+    \since 6.11
+
+    Returns the time between individual keepalive probes, if the TCP
+    Keepalive functionality has been turned on.
+
+    \sa setTcpKeepAliveIntervalBetweenProbes()
+*/
+
+std::chrono::seconds QNetworkRequest::tcpKeepAliveIntervalBetweenProbes() const
+{
+    return d->intervalBetweenProbes;
+}
+
+/*!
+    \fn void QNetworkRequest::setTcpKeepAliveIntervalBetweenProbes(std::chrono::seconds interval)
+    \since 6.11
+
+    Sets the time between individual keepalive probes to be \a interval,
+    if the TCP Keepalive functionality has been turned on.
+
+    \sa tcpKeepAliveIntervalBetweenProbes()
+*/
+
+void QNetworkRequest::doSetIntervalBetweenProbes(std::chrono::duration<int> seconds)
+{
+    d->intervalBetweenProbes = seconds;
+}
+
+/*!
+    \since 6.11
+
+    Returns the maximum number of keepalive probes TCP should send before
+    dropping the connection, if the TCP Keepalive functionality has been
+    turned on.
+
+    \sa setTcpKeepAliveProbeCount()
+*/
+
+int QNetworkRequest::tcpKeepAliveProbeCount() const
+{
+    return d->probeCount;
+}
+
+/*!
+    \since 6.11
+
+    Sets the maximum number of keepalive \a probes TCP should send
+    before dropping the connection, if the TCP Keepalive functionality has
+    been turned on.
+
+    \sa tcpKeepAliveProbeCount()
+*/
+
+void QNetworkRequest::setTcpKeepAliveProbeCount(int probes)
+{
+    d->probeCount = probes;
+}
 
 #if QT_CONFIG(http) || defined (Q_OS_WASM)
 /*!

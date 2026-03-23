@@ -17,9 +17,6 @@ QT_BEGIN_NAMESPACE
 QT_IMPL_METATYPE_EXTERN(QNetworkAddressEntry)
 QT_IMPL_METATYPE_EXTERN(QNetworkInterface)
 
-static_assert(QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
-           && sizeof(QScopedPointer<QNetworkAddressEntryPrivate>) == sizeof(std::unique_ptr<QNetworkAddressEntryPrivate>));
-
 static QList<QNetworkInterfacePrivate *> postProcess(QList<QNetworkInterfacePrivate *> list)
 {
     // Some platforms report a netmask but don't report a broadcast address

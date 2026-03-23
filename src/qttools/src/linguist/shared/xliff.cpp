@@ -592,7 +592,7 @@ bool XLIFFHandler::endElement(QStringView namespaceURI, QStringView localName,
     } else if (localName == "context-group"_L1) {
         if (popContext(XC_context_group)) {
             m_refs.append(TranslatorMessage::Reference(
-                m_extraFileName.isEmpty() ? m_fileName : m_extraFileName, m_lineNumber));
+                m_extraFileName.isEmpty() ? m_fileName : m_extraFileName, m_lineNumber, -1, -1));
             m_extraFileName.clear();
             m_lineNumber = -1;
         } else {

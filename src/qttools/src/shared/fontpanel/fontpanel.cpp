@@ -3,13 +3,14 @@
 
 #include "fontpanel_p.h"
 
-#include <QtWidgets/QLabel>
-#include <QtWidgets/QComboBox>
-#include <QtWidgets/QFormLayout>
-#include <QtWidgets/QSpacerItem>
-#include <QtWidgets/QFontComboBox>
-#include <QtCore/QTimer>
-#include <QtWidgets/QLineEdit>
+#include <QtWidgets/qcombobox.h>
+#include <QtWidgets/qfontcombobox.h>
+#include <QtWidgets/qformlayout.h>
+#include <QtWidgets/qlabel.h>
+#include <QtWidgets/qlayoutitem.h>
+#include <QtWidgets/qlineedit.h>
+
+#include <QtCore/qtimer.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -21,12 +22,11 @@ FontPanel::FontPanel(QWidget *parentWidget) :
     m_writingSystemComboBox(new QComboBox),
     m_familyComboBox(new QFontComboBox),
     m_styleComboBox(new QComboBox),
-    m_pointSizeComboBox(new QComboBox),
-    m_previewFontUpdateTimer(0)
+    m_pointSizeComboBox(new QComboBox)
 {
     setTitle(tr("Font"));
 
-    QFormLayout *formLayout = new QFormLayout(this);
+    auto *formLayout = new QFormLayout(this);
     // writing systems
     m_writingSystemComboBox->setEditable(false);
 

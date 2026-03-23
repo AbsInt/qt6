@@ -232,20 +232,11 @@
                 "file type": "3rd party",
                 "spdx": ["MIT"]
             },
-            "examples/quick/quickshapes/weatherforecast/Gear_generated.qml": {
-                "comment": "Framework7",
-                "file type": "3rd party",
-                "spdx": ["MIT"]
-            },
             "examples/quick/quickshapes/weatherforecast/assets/WorkSans-Regular.ttf": {
                 "file type": "3rd party",
                 "spdx": ["OFL-1.1"]
             },
             "examples/quick/quickshapes/weatherforecast/assets/Europe.svg": {
-                "file type": "3rd party",
-                "spdx": ["CC-BY-3.0"]
-            },
-            "examples/quick/quickshapes/weatherforecast/Europe_generated.qml": {
                 "file type": "3rd party",
                 "spdx": ["CC-BY-3.0"]
             },

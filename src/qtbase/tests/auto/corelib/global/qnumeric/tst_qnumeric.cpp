@@ -990,12 +990,6 @@ using ushort = unsigned short;
 using uint = unsigned int;
 using ulong = unsigned long;
 
-#if CHAR_MAX == 127 // char is signed
-SIGNED_TYPE_TEST(char, CHAR_MIN, CHAR_MAX)
-#else
-UNSIGNED_TYPE_TEST(char, CHAR_MAX)
-#endif
-
 SIGNED_TYPE_TEST(schar, SCHAR_MIN, SCHAR_MAX)
 UNSIGNED_TYPE_TEST(uchar, UCHAR_MAX)
 

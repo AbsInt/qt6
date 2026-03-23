@@ -10,12 +10,12 @@
 #include <QtCore/qcontainertools_impl.h>
 #include <QtCore/qnamespace.h>
 
-#include <memory>
+#include <QtCore/q20functional.h>
+#include <QtCore/q20memory.h>
 #include <new>
 #include <string.h>
 #include <utility>
 #include <iterator>
-#include <tuple>
 #include <type_traits>
 
 QT_BEGIN_NAMESPACE
@@ -845,7 +845,6 @@ protected:
 public:
     // using Base::truncate;
     // using Base::destroyAll;
-    // using Base::assign;
 
     template<typename It>
     void appendIteratorRange(It b, It e, QtPrivate::IfIsForwardIterator<It> = true)
@@ -910,6 +909,157 @@ public:
         else
             std::uninitialized_default_construct(b, e);
         this->size = newSize;
+    }
+
+    using Base::assign;
+
+    template <typename InputIterator, typename Projection = q20::identity>
+    void assign(InputIterator first, InputIterator last, Projection proj = {})
+    {
+        // This function only provides the basic exception guarantee.
+        using Category = typename std::iterator_traits<InputIterator>::iterator_category;
+        constexpr bool IsFwdIt = std::is_convertible_v<Category, std::forward_iterator_tag>;
+
+        const qsizetype n = IsFwdIt ? std::distance(first, last) : 0;
+        bool undoPrependOptimization = true;
+        bool needCapacity = n > this->constAllocatedCapacity();
+        if (needCapacity || this->needsDetach()) {
+            qsizetype newCapacity = this->detachCapacity(n);
+            bool wasLastRef = !this->deref();
+            if (wasLastRef && needCapacity) {
+                // free memory we can't reuse
+                this->destroyAll();
+                Data::deallocate(this->d);
+            }
+            if (!needCapacity && wasLastRef) {
+                // we were the last reference and can reuse the storage
+                this->d->ref_.storeRelaxed(1);
+            } else {
+                // we must allocate new memory
+                std::tie(this->d, this->ptr) = Data::allocate(newCapacity);
+                this->size = 0;
+                undoPrependOptimization = false;
+            }
+        }
+
+        if constexpr (!std::is_nothrow_constructible_v<T, decltype(std::invoke(proj, *first))>
+                      || !std::is_nothrow_invocable_v<Projection, decltype(*first)>)
+        {
+            // If construction can throw, and we have freeSpaceAtBegin(),
+            // it's easiest to just clear the container and start fresh.
+            // The alternative would be to keep track of two active, disjoint ranges.
+            if (undoPrependOptimization) {
+                this->truncate(0);
+                this->setBegin(Data::dataStart(this->d, alignof(typename Data::AlignmentDummy)));
+                undoPrependOptimization = false;
+            }
+        }
+
+        const auto dend = this->end();
+        T *dst = this->begin();
+        T *capacityBegin = dst;
+        if (undoPrependOptimization) {
+            capacityBegin = Data::dataStart(this->d, alignof(typename Data::AlignmentDummy));
+            this->setBegin(capacityBegin); // undo prepend optimization
+        }
+
+        assign_impl(first, last, capacityBegin, dst, dend, proj, Category{});
+    }
+
+    template <typename InputIterator, typename Projection>
+    void assign_impl(InputIterator first, InputIterator last, T *capacityBegin, T *dst, T *dend,
+                     Projection proj, std::input_iterator_tag)
+    {
+        if (qsizetype offset = dst - capacityBegin) {
+            T *prependBufferEnd = dst;
+            dst = capacityBegin;
+
+            // By construction, the following loop is nothrow!
+            // (otherwise, we can't reach here)
+            // Assumes InputIterator operations don't throw.
+            // (but we can't statically assert that, as these operations
+            //  have preconditons, so typically aren't noexcept)
+            while (true) {
+                if (dst == prependBufferEnd) {  // ran out of prepend buffer space
+                    this->size += offset;
+                    // we now have a contiguous buffer, continue with the main loop:
+                    break;
+                }
+                if (first == last) {            // ran out of elements to assign
+                    std::destroy(prependBufferEnd, dend);
+                    this->size = dst - this->begin();
+                    return;
+                }
+                // construct element in prepend buffer
+                q20::construct_at(dst, std::invoke(proj, *first));
+                ++dst;
+                ++first;
+            }
+        }
+        while (true) {
+            if (first == last) {    // ran out of elements to assign
+                std::destroy(dst, dend);
+                break;
+            }
+            if (dst == dend) {      // ran out of existing elements to overwrite
+                do {
+                    this->emplace(this->size, std::invoke(proj, *first));
+                } while (++first != last);
+                return;         // size() is already correct (and dst invalidated)!
+            }
+            *dst = std::invoke(proj, *first);    // overwrite existing element
+            ++dst;
+            ++first;
+        }
+        this->size = dst - this->begin();
+    }
+
+    template <typename InputIterator, typename Projection>
+    void assign_impl(InputIterator first, InputIterator last, T *capacityBegin, T *dst, T *dend,
+                     Projection proj, std::forward_iterator_tag)
+    {
+        constexpr bool IsIdentity = std::is_same_v<Projection, q20::identity>;
+        const qsizetype n = std::distance(first, last);
+        if constexpr (IsIdentity && !QTypeInfo<T>::isComplex) {
+            // For non-complex types, we prefer a single std::copy() -> memcpy()
+            // call. We can do that because either the default constructor is
+            // trivial (so the lifetime has started) or the copy constructor is
+            // (and won't care what the stored value is).
+            std::copy(first, last, capacityBegin);
+        } else {
+            // There are two possibilities:
+            // 1) fewer elements than the current allocated space
+            //    | prepend buffer | array |  destroy  |
+            // 2) more elements than the current allocated space
+            //    | prepend buffer | array | construct |
+            //
+            // Both the prepend buffer and the current array may be empty.
+
+            // construct elements in the prepend buffer
+            while (first != last && capacityBegin != dst) {
+                q20::construct_at(capacityBegin, std::invoke(proj, *first));
+                ++first;
+                ++capacityBegin;
+            }
+
+            // overwrite elements in the existing array
+            while (first != last && dst != dend) {
+                *dst = std::invoke(proj, *first);    // overwrite existing element
+                ++first;
+                ++dst;
+            }
+
+            // construct new elements in the append buffer
+            while (first != last) {
+                q20::construct_at(dst, std::invoke(proj, *first));
+                ++first;
+                ++dst;
+            }
+            // or destroy elements from the existing array
+            if (dst < dend)
+                std::destroy(dst, dend);
+        }
+        this->size = n;
     }
 };
 

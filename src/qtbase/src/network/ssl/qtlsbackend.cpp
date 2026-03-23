@@ -1388,7 +1388,7 @@ QByteArray TlsKey::pemHeader() const
         return QByteArrayLiteral("-----BEGIN DSA PRIVATE KEY-----");
     else if (algorithm() == QSsl::Ec)
         return QByteArrayLiteral("-----BEGIN EC PRIVATE KEY-----");
-    else if (algorithm() == QSsl::Dh)
+    else if (algorithm() == QSsl::Dh || algorithm() == QSsl::MlDsa)
         return QByteArrayLiteral("-----BEGIN PRIVATE KEY-----");
 
     Q_UNREACHABLE_RETURN({});
@@ -1409,7 +1409,7 @@ QByteArray TlsKey::pemFooter() const
         return QByteArrayLiteral("-----END DSA PRIVATE KEY-----");
     else if (algorithm() == QSsl::Ec)
         return QByteArrayLiteral("-----END EC PRIVATE KEY-----");
-    else if (algorithm() == QSsl::Dh)
+    else if (algorithm() == QSsl::Dh || algorithm() == QSsl::MlDsa)
         return QByteArrayLiteral("-----END PRIVATE KEY-----");
 
     Q_UNREACHABLE_RETURN({});

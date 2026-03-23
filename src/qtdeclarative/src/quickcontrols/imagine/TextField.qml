@@ -33,6 +33,10 @@ T.TextField {
     placeholderTextColor: control.palette.placeholderText
     verticalAlignment: Qt.AlignVCenter
 
+    ContextMenu.menu: TextEditingContextMenu {
+        editor: control
+    }
+
     PlaceholderText {
         id: placeholder
         x: control.leftPadding

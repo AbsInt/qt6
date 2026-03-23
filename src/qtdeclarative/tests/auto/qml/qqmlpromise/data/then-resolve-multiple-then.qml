@@ -5,10 +5,10 @@ import QtQuick 2.0
 QtObject {
     property int resolveValue: 5
 
-    property bool was1stCallSucessfull: false
-    property bool was2ndCallSucessfull: false
+    property bool was1stCallSuccessful: false
+    property bool was2ndCallSuccessful: false
 
-    property bool wasTestSuccessful: was1stCallSucessfull && was2ndCallSucessfull
+    property bool wasTestSuccessful: was1stCallSuccessful && was2ndCallSuccessful
 
     property var promise: new Promise(function (resolve, reject) {
         resolve(resolveValue)
@@ -16,12 +16,12 @@ QtObject {
 
     Component.onCompleted: {
         promise.then(function (result) {
-            was1stCallSucessfull = (result === resolveValue);
+            was1stCallSuccessful = (result === resolveValue);
         }, function() {
             throw new Error("Should never be called")
         })
         promise.then(function (result) {
-            was2ndCallSucessfull = (result === resolveValue);
+            was2ndCallSuccessful = (result === resolveValue);
         }, function() {
             throw new Error("Should never be called")
         })

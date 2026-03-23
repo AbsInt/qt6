@@ -28,8 +28,10 @@ public:
     void setClassNode(ClassNode *cn) override { m_classNode = cn; }
     [[nodiscard]] bool isAbstract() const override { return m_abstract; }
     [[nodiscard]] bool isWrapper() const override { return m_wrapper; }
+    [[nodiscard]] bool isSingleton() const { return m_singleton; }
     void setAbstract(bool b) override { m_abstract = b; }
     void setWrapper() override { m_wrapper = true; }
+    void setSingleton(bool singleton = true) { m_singleton = singleton; }
     [[nodiscard]] bool isInternal() const override { return (status() == Internal); }
     [[nodiscard]] QString qmlFullBaseName() const override;
     [[nodiscard]] QString logicalModuleName() const override;
@@ -39,13 +41,14 @@ public:
     void setQmlModule(CollectionNode *t) override { m_logicalModule = t; }
 
     void setImportList(const ImportList &il) { m_importList = il; }
+    [[nodiscard]] const ImportList &importList() const { return m_importList; }
     [[nodiscard]] const QString &qmlBaseName() const { return m_qmlBaseName; }
     void setQmlBaseName(const QString &name) { m_qmlBaseName = name; }
     [[nodiscard]] QmlTypeNode *qmlBaseNode() const override { return m_qmlBaseNode; }
     void resolveInheritance(NodeMap &previousSearches);
     void checkInheritance();
     static void addInheritedBy(const Node *base, Node *sub);
-    static void subclasses(const Node *base, NodeList &subs);
+    static void subclasses(const Node *base, NodeList &subs, bool recurse = false);
     static void terminate();
     bool inherits(Aggregate *type);
 
@@ -55,6 +58,7 @@ public:
 private:
     bool m_abstract { false };
     bool m_wrapper { false };
+    bool m_singleton { false };
     ClassNode *m_classNode { nullptr };
     QString m_qmlBaseName {};
     CollectionNode *m_logicalModule { nullptr };

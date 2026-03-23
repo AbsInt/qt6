@@ -1235,13 +1235,6 @@ void QQmlXMLHttpRequest::requestFromUrl(const QUrl &url)
         }
     }
 
-    if (!m_nam) {
-        qWarning() << "XMLHttpRequest:" << qPrintable(m_method)
-                   << "No network accessmanager available.";
-        m_state = Done;
-        return;
-    }
-
     if (m_method == QLatin1String("GET")) {
         m_network = networkAccessManager()->get(request);
     } else if (m_method == QLatin1String("HEAD")) {
@@ -1680,7 +1673,8 @@ struct QQmlXMLHttpRequestCtor : public FunctionObject
         Scope scope(f->engine());
         const QQmlXMLHttpRequestCtor *ctor = static_cast<const QQmlXMLHttpRequestCtor *>(f);
 
-        QQmlXMLHttpRequest *r = new QQmlXMLHttpRequest(scope.engine->networkAccessManager(scope.engine), scope.engine);
+        QQmlXMLHttpRequest *r = new QQmlXMLHttpRequest(
+                scope.engine->getNetworkAccessManager(), scope.engine);
         Scoped<QQmlXMLHttpRequestWrapper> w(scope, scope.engine->memoryManager->allocate<QQmlXMLHttpRequestWrapper>(r));
         ScopedObject proto(scope, ctor->d()->proto);
         w->setPrototypeUnchecked(proto);

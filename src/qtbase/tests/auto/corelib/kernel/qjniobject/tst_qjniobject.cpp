@@ -8,12 +8,31 @@
 #include <QtCore/QJniObject>
 #include <QTest>
 
+#if defined(__cpp_lib_expected)
+# include <expected>
+
+template <typename T>
+using QJniReturnValue = std::expected<T, jthrowable>;
+using BadAccessException = std::bad_expected_access<jthrowable>;
+
+// even with __cpp_lib_expected >= 202211L, monadic functions seem to be rather
+// broken or not reliably available
+#define EXPECTED_HAS_MONADIC (__cpp_lib_expected >= 202211L)
+
+static_assert(QtJniTypes::Traits<QJniReturnValue<int>>::signature() ==
+              QtJniTypes::Traits<int>::signature());
+static_assert(QtJniTypes::Traits<QJniReturnValue<QString>>::signature() ==
+              QtJniTypes::Traits<QString>::signature());
+#endif
+
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
 static constexpr const char testClassName[] = "org/qtproject/qt/android/testdatapackage/QtJniObjectTestClass";
 Q_DECLARE_JNI_CLASS(QtJniObjectTestClass, testClassName)
+Q_DECLARE_JNI_CLASS(NoSuchClass, "no/such/Class")
+
 using TestClass = QtJniTypes::QtJniObjectTestClass;
 
 static const jbyte A_BYTE_VALUE = 127;
@@ -124,6 +143,24 @@ private slots:
     void callback_data();
     void callback();
     void callStaticOverloadResolution();
+
+    void implicitExceptionHandling_construct();
+    void implicitExceptionHandling_callMethod();
+    void implicitExceptionHandling_callStaticMethod();
+    void implicitExceptionHandling_getField();
+    void implicitExceptionHandling_setField();
+    void implicitExceptionHandling_getStaticField();
+    void implicitExceptionHandling_setStaticField();
+
+    void constructWithException();
+    void callMethodWithException();
+    void callMethodWithMonadic();
+    void callMethodWithTryCatch();
+    void callStaticMethodWithException();
+    void getFieldWithException();
+    void setFieldWithException();
+    void getStaticFieldWithException();
+    void setStaticFieldWithException();
 
     void cleanupTestCase();
 };
@@ -2303,8 +2340,555 @@ void tst_QJniObject::callStaticOverloadResolution()
     QCOMPARE(result, value);
 }
 
-QT_END_NAMESPACE
+void tst_QJniObject::implicitExceptionHandling_construct()
+{
+    QJniEnvironment env;
+    const QRegularExpression invalidClass("java.lang.ClassNotFoundException: .*");
+    const QRegularExpression invalidMethod("java.lang.NoSuchMethodError: .*");
+
+    // Constructor, including named constructor
+    {
+        QTest::ignoreMessage(QtWarningMsg, invalidClass);
+        QJniObject testObject("NoSuchClass");
+        QVERIFY(!env.checkAndClearExceptions());
+    }
+    {
+        QTest::ignoreMessage(QtWarningMsg, invalidMethod);
+        QJniObject testObject = QJniObject::construct<TestClass>(u"NoSuchConstructor"_s);
+        QVERIFY(!env.checkAndClearExceptions());
+    }
+}
+
+void tst_QJniObject::implicitExceptionHandling_callMethod()
+{
+    QJniEnvironment env;
+    const QRegularExpression invalidMethod("java.lang.NoSuchMethodError: .*");
+    const QRegularExpression throwingMethod("java.lang.Throwable: .*");
+
+    QJniObject testObject = QJniObject::construct<TestClass>();
+
+    QTest::ignoreMessage(QtWarningMsg, invalidMethod);
+    testObject.callMethod<void>("noSuchMethod1");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidMethod);
+    testObject.callMethod<void>("noSuchMethod2", "()V");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, throwingMethod);
+    testObject.callMethod<void>("throwingMethod");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidMethod);
+    (void)testObject.callObjectMethod<jstring>("noSuchMethod");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidMethod);
+    testObject.callObjectMethod("noSuchMethod", "()V");
+    QVERIFY(!env.checkAndClearExceptions());
+}
+
+void tst_QJniObject::implicitExceptionHandling_callStaticMethod()
+{
+    QJniEnvironment env;
+    const QRegularExpression invalidClass("java.lang.ClassNotFoundException: .*");
+    const QRegularExpression invalidMethod("java.lang.NoSuchMethodError: .*");
+    const QRegularExpression throwingMethod("java.lang.Throwable: .*");
+
+    const jclass classId = env.findClass<TestClass>();
+    QVERIFY(classId != nullptr);
+
+    QTest::ignoreMessage(QtWarningMsg, invalidMethod);
+    TestClass::callStaticMethod<void>("noSuchStaticMethod");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidMethod);
+    QJniObject::callStaticMethod<void>(QtJniTypes::Traits<TestClass>::className(),
+                                       "noSuchStaticMethod2", "()V");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidClass);
+    QJniObject::callStaticMethod<void>("noSuchClass", "noSuchStaticMethod2", "()V");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, throwingMethod);
+    jmethodID methodId = env.findStaticMethod<void>(classId, "staticThrowingMethod");
+    QVERIFY(methodId != nullptr);
+    QJniObject::callStaticMethod<void>(classId, methodId);
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidClass);
+    QJniObject::callStaticObjectMethod("noSuchClass", "noSuchStaticMethod", "()V");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidMethod);
+    QJniObject::callStaticObjectMethod(classId, "noSuchStaticMethod", "()V");
+    QVERIFY(!env.checkAndClearExceptions());
+}
+
+void tst_QJniObject::implicitExceptionHandling_getField()
+{
+    QJniEnvironment env;
+    const QRegularExpression invalidField("java.lang.NoSuchFieldError: .*");
+
+    QJniObject testObject = QJniObject::construct<TestClass>();
+    QTest::ignoreMessage(QtWarningMsg, invalidField);
+    (void)testObject.getField<int>("noSuchField");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidField);
+    (void)testObject.getObjectField<jobject>("noSuchObjectField");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidField);
+    (void)testObject.getObjectField("noSuchObjectField2", "Ljava/lang/Object;");
+    QVERIFY(!env.checkAndClearExceptions());
+}
+
+void tst_QJniObject::implicitExceptionHandling_setField()
+{
+    QJniEnvironment env;
+    const QRegularExpression invalidField("java.lang.NoSuchFieldError: .*");
+
+    QJniObject testObject = QJniObject::construct<TestClass>();
+    QTest::ignoreMessage(QtWarningMsg, invalidField);
+    testObject.setField("noSuchField", 123);
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidField);
+    testObject.setField("BOOLEAN_VAR", "I", 123);
+    QVERIFY(!env.checkAndClearExceptions());
+
+    // make sure that code specifying deducible type explicitly still works
+    static_assert(std::is_same_v<decltype(testObject.setField<jboolean>("BOOLEAN_VAR", true)),
+                                 void>);
+}
+
+void tst_QJniObject::implicitExceptionHandling_getStaticField()
+{
+    QJniEnvironment env;
+    const QRegularExpression invalidClass("java.lang.ClassNotFoundException: .*");
+    const QRegularExpression invalidField("java.lang.NoSuchFieldError: .*");
+
+    const jclass classId = env.findClass<TestClass>();
+    QVERIFY(classId != nullptr);
+
+    QTest::ignoreMessage(QtWarningMsg, invalidField);
+    (void)TestClass::getStaticField<int>("noSuchStaticField");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidField);
+    (void)QJniObject::getStaticField<int>(classId, "noSuchStaticField");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidClass);
+    (void)QJniObject::getStaticObjectField("noSuchClass", "noSuchStaticField", "I");
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidField);
+    (void)QJniObject::getStaticObjectField(classId, "S_BOOLEAN_VAR", "I");
+    QVERIFY(!env.checkAndClearExceptions());
+}
+
+void tst_QJniObject::implicitExceptionHandling_setStaticField()
+{
+    QJniEnvironment env;
+    const QRegularExpression invalidClass("java.lang.ClassNotFoundException: .*");
+    const QRegularExpression invalidField("java.lang.NoSuchFieldError: .*");
+
+    const jclass classId = env.findClass<TestClass>();
+    QVERIFY(classId != nullptr);
+
+    QTest::ignoreMessage(QtWarningMsg, invalidField);
+    TestClass::setStaticField("noSuchStaticField", 123);
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidField);
+    QJniObject::setStaticField(classId, "noSuchStaticField", 123);
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidClass);
+    QJniObject::setStaticField("noSuchClass", "noSuchStaticField", 123);
+    QVERIFY(!env.checkAndClearExceptions());
+
+    QTest::ignoreMessage(QtWarningMsg, invalidField);
+    QJniObject::setStaticField(QtJniTypes::Traits<TestClass>::className(),
+                               "S_BOOLEAN_VAR", "I", 123);
+    QVERIFY(!env.checkAndClearExceptions());
+
+    // make sure that code specifying deducible type explicitly still works
+    static_assert(std::is_same_v<decltype(TestClass::setStaticField<jboolean>("S_BOOLEAN_VAR", true)),
+                                 void>);
+}
+
+void tst_QJniObject::constructWithException()
+{
+#ifndef __cpp_lib_expected
+    QSKIP("std::expected not available.");
+#else
+    qInfo() << "Testing explicit exception handling with std::expected" << __cpp_lib_expected;
+
+    const QRegularExpression invalidClass("java.lang.ClassNotFoundException: .*");
+    {
+        QTest::ignoreMessage(QtWarningMsg, invalidClass);
+        QJniObject invalid = QJniObject::construct<QtJniTypes::NoSuchClass>();
+    }
+
+    QVERIFY(!QJniEnvironment().checkAndClearExceptions());
+
+    {
+        // can only handle exceptions when using the named constructor
+        auto result = QJniObject::construct<QJniReturnValue<TestClass>>();
+        QVERIFY(result);
+        result = QJniObject::construct<QJniReturnValue<TestClass>>(u"123"_s);
+        QVERIFY(!result);
+        QVERIFY(result.error());
+    }
+
+    QVERIFY(!QJniEnvironment().checkAndClearExceptions());
+
+    {
+        const auto result = QJniObject::construct<QJniReturnValue<QtJniTypes::NoSuchClass>>();
+        QVERIFY(!result);
+        QVERIFY(result.error());
+    }
+
+    QVERIFY(!QJniEnvironment().checkAndClearExceptions());
+
+    {
+        // no way to prevent implicit exception here
+        QTest::ignoreMessage(QtWarningMsg, invalidClass);
+        QtJniTypes::NoSuchClass noSuchClass;
+        QVERIFY(!noSuchClass.isValid());
+    }
+
+    QVERIFY(!QJniEnvironment().checkAndClearExceptions());
+#endif
+}
+
+void tst_QJniObject::callMethodWithException()
+{
+#ifndef __cpp_lib_expected
+    QSKIP("std::expected not available.");
+#else
+    TestClass testObject;
+    {
+        auto result = testObject.callMethod<QJniReturnValue<void>>("voidMethod");
+        QVERIFY(result);
+        result = testObject.callMethod<QJniReturnValue<void>>("voidMethod", 123);
+        QVERIFY(!result);
+        QVERIFY(result.error());
+    }
+
+    {
+        auto result = testObject.callMethod<QJniReturnValue<jint>>("intMethod");
+        QVERIFY(result);
+        QCOMPARE(result.value(), A_INT_VALUE);
+        result = testObject.callMethod<QJniReturnValue<jint>>("intMethod", 123);
+        QVERIFY(!result);
+        QVERIFY(result.error());
+        QCOMPARE(result.value_or(456), 456);
+    }
+
+    {
+        auto result = testObject.callMethod<QJniReturnValue<jstring>>("stringMethod");
+        QVERIFY(result);
+        QVERIFY(result.value());
+        result = testObject.callMethod<QJniReturnValue<jstring>>("stringMethod", 123);
+        QVERIFY(!result);
+        QVERIFY(result.error());
+    }
+
+    {
+        auto result = testObject.callMethod<QJniReturnValue<QString>>("stringMethod");
+        QVERIFY(result);
+        QVERIFY(!result.value().isEmpty());
+        result = testObject.callMethod<QJniReturnValue<QString>>("stringMethod", 123);
+        QVERIFY(!result);
+        QVERIFY(result.error());
+        QCOMPARE(result.value_or(u"Default"_s), u"Default"_s);
+    }
+
+    {
+        QJniArray<jboolean> newArray(QList<jboolean>{true, false, false});
+        auto result = testObject.callMethod<QJniReturnValue<QJniArray<jboolean>>>("reverseBooleanArray", newArray);
+        // this shorthand cannot work with e.g. std::expected
+        // result = testObject.callMethod<QJniReturnValue<jboolean[]>>("reverseBooleanArray", newArray);
+        QVERIFY(result);
+        QCOMPARE(result.value().toContainer(), (QList<jboolean>{false, false, true}));
+        result = testObject.callMethod<QJniReturnValue<QJniArray<jboolean>>>("reverseBooleanArray", 123);
+        QVERIFY(!result);
+        QVERIFY(result.error());
+    }
+
+    // throwing method - QJniObject cleans the exception and prints qWarning
+    {
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(u"java.lang.Throwable: "_s + A_STRING_OBJECT() + u".*"_s));
+        testObject.callMethod<void>("throwingMethod");
+
+        auto result = testObject.callMethod<QJniReturnValue<void>>("throwingMethod");
+        QVERIFY(!result);
+        const QStringList stackTrace = QJniEnvironment::stackTrace(result.error());
+        QCOMPARE_GE(stackTrace.size(), 1);
+        QCOMPARE(stackTrace.at(0), u"java.lang.Throwable: "_s + A_STRING_OBJECT());
+    }
+#endif
+}
+
+void tst_QJniObject::callMethodWithMonadic()
+{
+#ifndef __cpp_lib_expected
+    QSKIP("std::expected not available.");
+#elif !EXPECTED_HAS_MONADIC
+    QSKIP("Used version of std::expected does not have monadic functions");
+#else
+    enum Monadic {
+        AndThen,
+        OrElse,
+        Transform,
+    };
+
+    TestClass testObject;
+    {
+        QList<Monadic> flow;
+        const auto result = testObject.callMethod<QJniReturnValue<void>>("voidMethod")
+            .and_then([&flow]{
+                flow << AndThen;
+                return QJniReturnValue<void>();
+            })
+            .or_else([&flow](jthrowable error){
+                if (error)
+                    flow << OrElse;
+                else
+                    qWarning("Invalid call to or_else monadic");
+                return QJniReturnValue<void>();
+            })
+            .transform([&flow](){
+                flow << Transform;
+                return 42;
+            });
+        QCOMPARE(flow, (QList<Monadic>{AndThen, Transform}));
+        QVERIFY(result);
+        QCOMPARE(*result, 42);
+    }
+    {
+        QList<Monadic> flow;
+        const auto result = testObject.callMethod<QJniReturnValue<void>>("voidMethod", 123)
+            .and_then([&flow]{
+                flow << AndThen;
+                return QJniReturnValue<void>();
+            })
+            .or_else([&flow](jthrowable error){
+                if (error)
+                    flow << OrElse;
+                else
+                    qWarning("Invalid call to or_else monadic");
+                return QJniReturnValue<void>(typename QJniReturnValue<void>::unexpected_type(error));
+            })
+            .transform([&flow](){
+                flow << Transform;
+                return 42;
+            });
+        QCOMPARE(flow, (QList<Monadic>{OrElse}));
+        QVERIFY(!result);
+    }
+
+    {
+        QList<Monadic> flow;
+        const auto result = testObject.callMethod<QJniReturnValue<jobject>>("objectMethod")
+            .and_then([&flow](auto &&obj){
+                flow << AndThen;
+                return QJniReturnValue<jobject>(obj);
+            })
+            .or_else([&flow](jthrowable error){
+                if (error)
+                    flow << OrElse;
+                else
+                    qWarning("Invalid call to or_else monadic");
+                return QJniReturnValue<jobject>(typename QJniReturnValue<void>::unexpected_type(error));
+            })
+            .transform([&flow](auto &&obj){
+                flow << Transform;
+                return QJniObject(obj).template getField<int>("INT_FIELD");
+            })
+            .and_then([&flow](auto value){
+                flow << AndThen;
+                return QJniReturnValue<int>(value * 2);
+            });
+        QCOMPARE(flow, (QList<Monadic>{AndThen, Transform, AndThen}));
+        QVERIFY(result);
+        QCOMPARE(*result, 246);
+    }
+    {
+        QList<Monadic> flow;
+        const auto result = testObject.callMethod<QJniReturnValue<jobject>>("objectMethod", 123)
+            .and_then([&flow](const QJniObject &obj){
+                flow << AndThen;
+                return QJniReturnValue<jobject>(obj.object());
+            })
+            .or_else([&flow](jthrowable error){
+                if (error)
+                    flow << OrElse;
+                else
+                    qWarning("Invalid call to or_else monadic");
+                return QJniReturnValue<jobject>(typename QJniReturnValue<jobject>::unexpected_type(error));
+            })
+            .transform([&flow](const QJniObject &obj){
+                flow << Transform;
+                return obj.getField<int>("INT_FIELD");
+            });
+        QCOMPARE(flow, (QList<Monadic>{OrElse}));
+        QVERIFY(!result);
+    }
+#endif
+}
+
+void tst_QJniObject::callMethodWithTryCatch()
+{
+#ifndef __cpp_lib_expected
+    QSKIP("std::expected not available.");
+#else
+    TestClass testObject;
+
+    const QRegularExpression invalidMethod("java.lang.NoSuchMethodError: .*");
+    QTest::ignoreMessage(QtWarningMsg, invalidMethod);
+
+    try {
+        const auto result = testObject.callMethod<QJniReturnValue<QJniObject>>("objectMethod", 123);
+        result.value().getField<int>("INT_FIELD");
+    }
+    catch (BadAccessException &e) {
+        qWarning().noquote() << QJniEnvironment::stackTrace(e.error()).join('\n');
+    }
+#endif
+}
+
+void tst_QJniObject::callStaticMethodWithException()
+{
+#ifndef __cpp_lib_expected
+    QSKIP("std::expected not available.");
+#else
+    {
+        auto result = TestClass::callStaticMethod<QJniReturnValue<int>>("staticIntMethod");
+        QVERIFY(result);
+        QCOMPARE(*result, A_INT_VALUE);
+        result = TestClass::callStaticMethod<QJniReturnValue<int>>("staticIntMethod", 123);
+        QVERIFY(!result && result.error());
+    }
+
+    {
+        auto result = TestClass::callStaticMethod<QJniReturnValue<QString>>("staticStringMethod");
+        QVERIFY(result);
+        QCOMPARE(*result, A_STRING_OBJECT());
+        result = TestClass::callStaticMethod<QJniReturnValue<QString>>("staticStringMethod", 123);
+        QVERIFY(!result && result.error());
+    }
+
+    // throwing method
+    {
+        const auto result = TestClass::callStaticMethod<QJniReturnValue<void>>("staticThrowingMethod");
+        QVERIFY(!result);
+        QStringList stackTrace = QJniEnvironment::stackTrace(result.error());
+        QCOMPARE_GE(stackTrace.size(), 1);
+        QCOMPARE(stackTrace.at(0), u"java.lang.Throwable: "_s + A_STRING_OBJECT());
+    }
+#endif
+}
+
+void tst_QJniObject::getFieldWithException()
+{
+#ifndef __cpp_lib_expected
+    QSKIP("std::expected not available.");
+#else
+    TestClass testObject;
+    {
+        auto result = testObject.getField<QJniReturnValue<jboolean>>("BOOL_FIELD");
+        QVERIFY(result);
+        result = testObject.getField<QJniReturnValue<jboolean>>("INVALID_BOOL");
+        QVERIFY(!result && result.error());
+    }
+
+    {
+        auto result = testObject.getField<QJniReturnValue<QString>>("STRING_OBJECT_VAR");
+        QVERIFY(result);
+        result = testObject.getField<QJniReturnValue<QString>>("INVALID_STRING");
+        QVERIFY(!result && result.error());
+    }
+#endif
+}
+
+void tst_QJniObject::setFieldWithException()
+{
+#ifndef __cpp_lib_expected
+    QSKIP("std::expected not available.");
+#else
+    TestClass testObject;
+    {
+        auto result = testObject.setField<QJniReturnValue<jboolean>>("BOOL_FIELD", true);
+        QVERIFY(result);
+        result = testObject.setField<QJniReturnValue<jboolean>>("SET_INVALID_BOOL", true);
+        QVERIFY(!result);
+        QVERIFY(result.error());
+    }
+
+    {
+        auto result = testObject.setField<QJniReturnValue<QString>>("STRING_OBJECT_VAR", u"test"_s);
+        QVERIFY(result);
+        result = testObject.setField<QJniReturnValue<QString>>("SET_INVALID_STRING", u"test"_s);
+        QVERIFY(!result);
+        QVERIFY(result.error());
+    }
+#endif
+}
+
+void tst_QJniObject::getStaticFieldWithException()
+{
+#ifndef __cpp_lib_expected
+    QSKIP("std::expected not available.");
+#else
+    {
+        auto result = TestClass::getStaticField<QJniReturnValue<jshort>>("S_SHORT_VAR");
+        QVERIFY(result);
+        result = TestClass::getStaticField<QJniReturnValue<jshort>>("S_INVALID_SHORT");
+        QVERIFY(!result);
+        QVERIFY(result.error());
+    }
+
+    {
+        auto result = TestClass::getStaticField<QJniReturnValue<QString>>("S_STRING_OBJECT_VAR");
+        QVERIFY(result);
+        result = TestClass::getStaticField<QJniReturnValue<QString>>("S_INVALID_STRING");
+        QVERIFY(!result);
+        QVERIFY(result.error());
+    }
+#endif
+}
+
+void tst_QJniObject::setStaticFieldWithException()
+{
+#ifndef __cpp_lib_expected
+    QSKIP("std::expected not available.");
+#else
+    {
+        auto result = TestClass::setStaticField<QJniReturnValue<jboolean>>("S_BOOLEAN_VAR", true);
+        QVERIFY(result);
+        result = TestClass::setStaticField<QJniReturnValue<jboolean>>("SET_S_INVALID_BOOL", true);
+        QVERIFY(!result);
+        QVERIFY(result.error());
+    }
+
+    {
+        auto result = TestClass::setStaticField<QJniReturnValue<QString>>("S_STRING_OBJECT_VAR", u"test"_s);
+        QVERIFY(result);
+        result = TestClass::setStaticField<QJniReturnValue<QString>>("SET_S_INVALID_STRING", u"test"_s);
+        QVERIFY(!result);
+        QVERIFY(result.error());
+    }
+#endif
+}
 
 QTEST_MAIN(tst_QJniObject)
+
+QT_END_NAMESPACE
 
 #include "tst_qjniobject.moc"

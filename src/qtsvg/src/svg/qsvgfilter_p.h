@@ -1,5 +1,7 @@
 // Copyright (C) 2023 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QSVGFILTER_P_H
 #define QSVGFILTER_P_H
@@ -20,8 +22,6 @@
 #include "qsvgstructure_p.h"
 #include "qgenericmatrix.h"
 
-#include "QtCore/qlist.h"
-#include "QtCore/qhash.h"
 #include "QtGui/qvector4d.h"
 
 QT_BEGIN_NAMESPACE
@@ -45,12 +45,9 @@ public:
                          QPainter *p, const QRectF &itemBounds, const QRectF &filterBounds,
                          QtSvg::UnitTypes primitiveUnits, QtSvg::UnitTypes filterUnits) const = 0;
     virtual bool requiresSourceAlpha() const;
-    QString input() const {
-        return m_input;
-    }
-    QString result() const {
-        return m_result;
-    }
+    QString input() const { return m_input; }
+    QString result() const { return m_result; }
+    QSvgRectF rect() const { return m_rect; }
 
     static const QSvgFeFilterPrimitive *castToFilterPrimitive(const QSvgNode *node);
 
@@ -58,8 +55,6 @@ protected:
     QString m_input;
     QString m_result;
     QSvgRectF m_rect;
-
-
 };
 
 class Q_SVG_EXPORT QSvgFeColorMatrix : public QSvgFeFilterPrimitive
@@ -81,6 +76,11 @@ public:
     QImage apply(const QMap<QString, QImage> &sources,
                  QPainter *p, const QRectF &itemBounds, const QRectF &filterBounds,
                  QtSvg::UnitTypes primitiveUnits, QtSvg::UnitTypes filterUnits) const override;
+    Matrix matrix() const
+    {
+        return m_matrix;
+    }
+
 private:
     Matrix m_matrix;
 };
@@ -101,6 +101,11 @@ public:
     QImage apply(const QMap<QString, QImage> &sources,
                  QPainter *p, const QRectF &itemBounds, const QRectF &filterBounds,
                  QtSvg::UnitTypes primitiveUnits, QtSvg::UnitTypes filterUnits) const override;
+
+    qreal stdDeviationX() const { return m_stdDeviationX; }
+    qreal stdDeviationY() const { return m_stdDeviationY; }
+    EdgeMode edgeMode() const { return m_edgemode; }
+
 private:
     qreal m_stdDeviationX;
     qreal m_stdDeviationY;
@@ -116,6 +121,10 @@ public:
     QImage apply(const QMap<QString, QImage> &sources,
                  QPainter *p, const QRectF &itemBounds, const QRectF &filterBounds,
                  QtSvg::UnitTypes primitiveUnits, QtSvg::UnitTypes filterUnits) const override;
+
+    qreal dx() const { return m_dx; }
+    qreal dy() const { return m_dy; }
+
 private:
     qreal m_dx;
     qreal m_dy;
@@ -163,6 +172,11 @@ public:
                  QPainter *p, const QRectF &itemBounds, const QRectF &filterBounds,
                  QtSvg::UnitTypes primitiveUnits, QtSvg::UnitTypes filterUnits) const override;
     bool requiresSourceAlpha() const override;
+
+    QString input2() const { return m_input2; }
+    Operator compositionOperator() const { return m_operator; }
+    QVector4D k() const { return m_k; }
+
 private:
     QString m_input2;
     Operator m_operator;
@@ -178,6 +192,8 @@ public:
     QImage apply(const QMap<QString, QImage> &sources,
                  QPainter *p, const QRectF &itemBounds, const QRectF &filterBounds,
                  QtSvg::UnitTypes primitiveUnits, QtSvg::UnitTypes filterUnits) const override;
+
+    QColor color() const { return m_color; }
 private:
     QColor m_color;
 };
@@ -199,6 +215,10 @@ public:
                  QPainter *p, const QRectF &itemBounds, const QRectF &filterBounds,
                  QtSvg::UnitTypes primitiveUnits, QtSvg::UnitTypes filterUnits) const override;
     bool requiresSourceAlpha() const override;
+
+    QString input2() const { return m_input2; }
+    Mode mode() const { return m_mode; }
+
 private:
     QString m_input2;
     Mode m_mode;

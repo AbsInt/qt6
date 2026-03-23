@@ -29,6 +29,8 @@ private Q_SLOTS:
     void equalityOperators();
 
     void isMethodSupported();
+
+    void testClear();
 };
 
 tst_QAuthenticator::tst_QAuthenticator()
@@ -186,6 +188,27 @@ void tst_QAuthenticator::isMethodSupported()
 #endif
 
     QVERIFY(!QAuthenticatorPrivate::isMethodSupported("Bearer"));
+}
+
+void tst_QAuthenticator::testClear()
+{
+    QAuthenticator qauth;
+    QVERIFY(qauth.isNull());
+
+    qauth.setUser("User");
+    qauth.setPassword("Password");
+    qauth.setRealm("Nether");
+
+    QVERIFY(!qauth.isNull());
+    QCOMPARE(qauth.user(), "User");
+    QCOMPARE(qauth.password(), "Password");
+    QCOMPARE(qauth.realm(), "Nether");
+
+    qauth.clear();
+    QVERIFY(!qauth.isNull());
+    QCOMPARE(qauth.user(), QString());
+    QCOMPARE(qauth.password(), QString());
+    QCOMPARE(qauth.realm(), QString());
 }
 
 QTEST_MAIN(tst_QAuthenticator);

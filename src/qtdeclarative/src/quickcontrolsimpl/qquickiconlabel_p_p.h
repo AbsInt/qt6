@@ -73,6 +73,7 @@ public:
     QColor color;
     QString text;
     QQuickIcon icon;
+    QColor defaultIconColor = Qt::transparent;
     QQuickIconImage *image = nullptr;
     QQuickMnemonicLabel *label = nullptr;
 };

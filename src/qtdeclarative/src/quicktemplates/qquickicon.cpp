@@ -3,35 +3,17 @@
 // Qt-Security score:significant reason:default
 
 #include "qquickicon_p.h"
+#include "qquickicon_p_p.h"
 
 #include <private/qqmlcontextdata_p.h>
 #include <private/qqmldata_p.h>
 
 QT_BEGIN_NAMESPACE
 
-class QQuickIconPrivate : public QSharedData
+bool QQuickIconPrivate::isResolved(const QQuickIcon &icon, int resolveMask)
 {
-public:
-    // This is based on QFont's resolve_mask.
-    enum ResolveProperties {
-        NameResolved = 0x0001,
-        SourceResolved = 0x0002,
-        WidthResolved = 0x0004,
-        HeightResolved = 0x0008,
-        ColorResolved = 0x0010,
-        CacheResolved = 0x0020,
-        AllPropertiesResolved = 0x1ffff
-    };
-    int resolveMask = 0;
-
-    QString name;
-    QUrl source;
-    QUrl resolvedSource;
-    int width = 0;
-    int height = 0;
-    QColor color = Qt::transparent;
-    bool cache = true;
-};
+    return icon.d->resolveMask & resolveMask;
+}
 
 QQuickIcon::QQuickIcon()
     : d(new QQuickIconPrivate)
@@ -115,7 +97,7 @@ void QQuickIcon::setSource(const QUrl &source)
 void QQuickIcon::resetSource()
 {
     d.detach();
-    d->source = QString();
+    d->source = {};
     d->resolvedSource.clear();
     d->resolveMask &= ~QQuickIconPrivate::SourceResolved;
 }
@@ -195,7 +177,7 @@ void QQuickIcon::setColor(const QColor &color)
 
     d.detach();
     d->color = color;
-    d->resolveMask |= QQuickIconPrivate::ColorResolved;
+    resolveColor();
 }
 
 void QQuickIcon::resetColor()
@@ -203,6 +185,11 @@ void QQuickIcon::resetColor()
     d.detach();
     d->color = Qt::transparent;
     d->resolveMask &= ~QQuickIconPrivate::ColorResolved;
+}
+
+void QQuickIcon::resolveColor()
+{
+    d->resolveMask |= QQuickIconPrivate::ColorResolved;
 }
 
 bool QQuickIcon::cache() const

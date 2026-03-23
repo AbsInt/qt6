@@ -43,14 +43,17 @@ qhp.QtQuick.subprojects.examples.sortPages = true
 tagfile = qtquick.tags
 
 depends += \
+    qtconcurrent \
     qtcore \
     qtopengl \
     qtqml \
     qtqmlmodels \
     qtqmlxmllistmodel \
+    qtqmlworkerscript \
     qtqmltest \
     qtqmlcore \
     qtgui \
+    qtlinguist \
     qtlottieanimation \
     qtquickcontrols \
     qtquick3d \
@@ -63,7 +66,10 @@ depends += \
     qtsvg \
     qmake \
     qtcmake \
-    qtquickeffectmaker
+    qtquickeffectmaker \
+    qtlocation \
+    qtmultimedia \
+    qtgraphicaleffects5compat
 
 {headerdirs,sourcedirs} += \
     .. \
@@ -77,10 +83,11 @@ depends += \
     ../../quickcontrols/doc/src/includes/ \
     ../../qmlmodels/doc/src/includes/
 
-# both have their own documentation project
+# the following projects have their own documentation project
 excludedirs += \
     ../../labs/platform \
-    ../../labs/models
+    ../../labs/models \
+    ../../labs/stylekit
 
 exampledirs += \
     ../../../examples/quick \

@@ -12,8 +12,12 @@
     a few different ways the \l{QtQuick.Shapes} API might be useful in an application, and how
     different properties can affect the quality and performance of the rendering.
 
-    All graphics in the example originated as \c .svg files which were converted to QML
-    using the \l{svgtoqml} tool.
+    All graphics in the example originated as \c .svg files which are converted to QML
+    using the \l{svgtoqml} tool automatically at build time.
+
+    \snippet quickshapes/weatherforecast/CMakeLists.txt svgtoqml
+
+    The generated QML files can be used in the application code like any other.
 
     \section1 Different Types of Shapes
 

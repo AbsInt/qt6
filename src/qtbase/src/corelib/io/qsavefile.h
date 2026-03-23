@@ -27,10 +27,11 @@ class Q_CORE_EXPORT QSaveFile : public QFileDevice
     Q_DECLARE_PRIVATE(QSaveFile)
 
 public:
-
+#if QT_CORE_REMOVED_SINCE(6, 11)
     explicit QSaveFile(const QString &name);
+#endif
     explicit QSaveFile(QObject *parent = nullptr);
-    explicit QSaveFile(const QString &name, QObject *parent);
+    explicit QSaveFile(const QString &name, QObject *parent = nullptr);
     ~QSaveFile();
 
     QString fileName() const override;
@@ -43,6 +44,20 @@ public:
 
     void setDirectWriteFallback(bool enabled);
     bool directWriteFallback() const;
+
+#if QT_CONFIG(cxx17_filesystem) || defined(Q_QDOC)
+    Q_WEAK_OVERLOAD QSaveFile(const std::filesystem::path &path, QObject *parent = nullptr)
+        : QSaveFile(QtPrivate::fromFilesystemPath(path), parent)
+    {
+    }
+
+    std::filesystem::path filesystemFileName() const
+    { return QtPrivate::toFilesystemPath(fileName()); }
+    Q_WEAK_OVERLOAD void setFileName(const std::filesystem::path &name)
+    {
+        setFileName(QtPrivate::fromFilesystemPath(name));
+    }
+#endif // QT_CONFIG(cxx17_filesystem)
 
 protected:
     qint64 writeData(const char *data, qint64 len) override;

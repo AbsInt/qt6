@@ -1,20 +1,22 @@
 // Copyright (C) 2017 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
-#include <QFileInfo>
-#include <QJSEngine>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QLibraryInfo>
-#include <QProcess>
-#include <QtQuickTestUtils/private/qmlutils_p.h>
-#include <QtTest/QTest>
-
 #include "test262runner.h"
-#include "private/qqmlbuiltinfunctions_p.h"
-#include "private/qv4arraybuffer_p.h"
-#include "private/qv4globalobject_p.h"
-#include "private/qv4script_p.h"
+
+#include <QtQml/qjsengine.h>
+
+#include <QtTest/qtest.h>
+
+#include <QtCore/qfileinfo.h>
+#include <QtCore/qjsondocument.h>
+#include <QtCore/qjsonobject.h>
+#include <QtCore/qlibraryinfo.h>
+
+#include <private/qmlutils_p.h>
+#include <private/qqmlbuiltinfunctions_p.h>
+#include <private/qv4arraybuffer_p.h>
+#include <private/qv4globalobject_p.h>
+#include <private/qv4script_p.h>
 
 #include <stdio.h>
 
@@ -85,7 +87,8 @@ void tst_EcmaScriptTests::cleanupTestCase()
 
 void tst_EcmaScriptTests::runInterpreted()
 {
-    Test262Runner runner(QString(), dataDirectory(), directory() + QStringLiteral("/TestExpectations"));
+    Test262Runner runner(dataDirectory(), directory() + QStringLiteral("/TestExpectations"));
+    runner.setFilter(qEnvironmentVariable("QML_TEST262_FILTER"));
     runner.setFlags(Test262Runner::ForceBytecode
                     | Test262Runner::WithTestExpectations
                     | Test262Runner::Parallel
@@ -96,7 +99,8 @@ void tst_EcmaScriptTests::runInterpreted()
 
 void tst_EcmaScriptTests::runJitted()
 {
-    Test262Runner runner(QString(), dataDirectory(), directory() + QStringLiteral("/TestExpectations"));
+    Test262Runner runner(dataDirectory(), directory() + QStringLiteral("/TestExpectations"));
+    runner.setFilter(qEnvironmentVariable("QML_TEST262_FILTER"));
     runner.setFlags(Test262Runner::ForceJIT
                     | Test262Runner::WithTestExpectations
                     | Test262Runner::Parallel
@@ -155,7 +159,9 @@ void doRunnerProcess()
         readInput(done, mode, testData, testCasePath, harnessForModules, runAsModule);
         if (done)
             break;
-        Test262Runner::executeTest(vm, testData, testCasePath, harnessForModules, runAsModule);
+        Test262Runner::executeTest(
+                vm, testData, testCasePath, harnessForModules, runAsModule,
+                mode == QLatin1String("strict"));
         printResult(vm, mode);
     }
 }

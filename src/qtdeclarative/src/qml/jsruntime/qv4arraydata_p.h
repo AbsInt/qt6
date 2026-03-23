@@ -138,6 +138,7 @@ struct Q_QML_EXPORT ArrayData : public Managed
 {
     typedef Heap::ArrayData::Type Type;
     V4_MANAGED(ArrayData, Managed)
+    Q_MANAGED_TYPE(ArrayData);
     enum {
         IsArrayData = true
     };

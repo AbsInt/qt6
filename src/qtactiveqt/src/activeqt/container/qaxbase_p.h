@@ -23,6 +23,7 @@
 #include <QtCore/qmetaobject.h>
 #include <QtCore/quuid.h>
 #include <QtCore/qt_windows.h>
+#include <QtCore/private/qcomptr_p.h>
 
 struct tagEXCEPINFO;
 
@@ -56,11 +57,11 @@ public:
     IDispatch *dispatch() const
     {
         if (disp)
-            return disp;
+            return disp.Get();
 
         if (ptr)
-            ptr->QueryInterface(IID_IDispatch, reinterpret_cast<void **>(&disp));
-        return disp;
+            ptr->QueryInterface(IID_IDispatch, &disp);
+        return disp.Get();
     }
 
     bool checkHRESULT(long hres, tagEXCEPINFO *exc, const QString &name, uint argerr);
@@ -79,8 +80,8 @@ public:
     uint tryCache           :1;
     unsigned long classContext = CLSCTX_SERVER;
 
-    IUnknown *ptr = nullptr;
-    mutable IDispatch *disp = nullptr;
+    ComPtr<IUnknown> ptr;
+    mutable ComPtr<IDispatch> disp;
 
     QMap<QByteArray, bool> propWritable;
 

@@ -68,7 +68,7 @@ void tst_qquickspringanimation::values()
     QCOMPARE(obj->mass(), 2.0);
     QCOMPARE(obj->isRunning(), true);
 
-    QTRY_COMPARE(obj->isRunning(), false);
+    QTRY_COMPARE_WITH_TIMEOUT(obj->isRunning(), false, 3s);
 
     delete obj;
 }

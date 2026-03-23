@@ -42,5 +42,8 @@ qhp = true
 # Disable writing host-specific paths into .index files
 locationinfo = false
 
+# Automatically mark classes declared in private headers as \internal
+internalfilepatterns = *_p.h
+
 # Include the warninglimit used for documentation testing in CI
 include(warninglimit.qdocconf)

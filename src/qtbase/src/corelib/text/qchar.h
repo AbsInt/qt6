@@ -597,59 +597,59 @@ public:
         return char16_t(ucs4%0x400 + 0xdc00);
     }
 
-    static Category QT_CHAR_FASTCALL category(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static Direction QT_CHAR_FASTCALL direction(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static JoiningType QT_CHAR_FASTCALL joiningType(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static unsigned char QT_CHAR_FASTCALL combiningClass(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION static Category QT_CHAR_FASTCALL category(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static Direction QT_CHAR_FASTCALL direction(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static JoiningType QT_CHAR_FASTCALL joiningType(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static unsigned char QT_CHAR_FASTCALL combiningClass(char32_t ucs4) noexcept;
 
-    static char32_t QT_CHAR_FASTCALL mirroredChar(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static bool QT_CHAR_FASTCALL hasMirrored(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION static char32_t QT_CHAR_FASTCALL mirroredChar(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static bool QT_CHAR_FASTCALL hasMirrored(char32_t ucs4) noexcept;
 
     static QString QT_CHAR_FASTCALL decomposition(char32_t ucs4);
-    static Decomposition QT_CHAR_FASTCALL decompositionTag(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION static Decomposition QT_CHAR_FASTCALL decompositionTag(char32_t ucs4) noexcept;
 
-    static int QT_CHAR_FASTCALL digitValue(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static char32_t QT_CHAR_FASTCALL toLower(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static char32_t QT_CHAR_FASTCALL toUpper(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static char32_t QT_CHAR_FASTCALL toTitleCase(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static char32_t QT_CHAR_FASTCALL toCaseFolded(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION static int QT_CHAR_FASTCALL digitValue(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static char32_t QT_CHAR_FASTCALL toLower(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static char32_t QT_CHAR_FASTCALL toUpper(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static char32_t QT_CHAR_FASTCALL toTitleCase(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static char32_t QT_CHAR_FASTCALL toCaseFolded(char32_t ucs4) noexcept;
 
-    static Script QT_CHAR_FASTCALL script(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION static Script QT_CHAR_FASTCALL script(char32_t ucs4) noexcept;
 
-    static UnicodeVersion QT_CHAR_FASTCALL unicodeVersion(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION static UnicodeVersion QT_CHAR_FASTCALL unicodeVersion(char32_t ucs4) noexcept;
 
-    static UnicodeVersion QT_CHAR_FASTCALL currentUnicodeVersion() noexcept Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION static UnicodeVersion QT_CHAR_FASTCALL currentUnicodeVersion() noexcept;
 
-    static bool QT_CHAR_FASTCALL isPrint(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static constexpr inline bool isSpace(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION
+    Q_DECL_CONST_FUNCTION static bool QT_CHAR_FASTCALL isPrint(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static constexpr inline bool isSpace(char32_t ucs4) noexcept
     {
         // note that [0x09..0x0d] + 0x85 are exceptional Cc-s and must be handled explicitly
         return ucs4 == 0x20 || (ucs4 <= 0x0d && ucs4 >= 0x09)
                 || (ucs4 > 127 && (ucs4 == 0x85 || ucs4 == 0xa0 || QChar::isSpace_helper(ucs4)));
     }
-    static bool QT_CHAR_FASTCALL isMark(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static bool QT_CHAR_FASTCALL isPunct(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static bool QT_CHAR_FASTCALL isSymbol(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static constexpr inline bool isLetter(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION
+    Q_DECL_CONST_FUNCTION static bool QT_CHAR_FASTCALL isMark(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static bool QT_CHAR_FASTCALL isPunct(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static bool QT_CHAR_FASTCALL isSymbol(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static constexpr inline bool isLetter(char32_t ucs4) noexcept
     {
         return (ucs4 >= 'A' && ucs4 <= 'z' && (ucs4 >= 'a' || ucs4 <= 'Z'))
                 || (ucs4 > 127 && QChar::isLetter_helper(ucs4));
     }
-    static constexpr inline bool isNumber(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION
+    Q_DECL_CONST_FUNCTION static constexpr inline bool isNumber(char32_t ucs4) noexcept
     { return (ucs4 <= '9' && ucs4 >= '0') || (ucs4 > 127 && QChar::isNumber_helper(ucs4)); }
-    static constexpr inline bool isLetterOrNumber(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION
+    Q_DECL_CONST_FUNCTION static constexpr inline bool isLetterOrNumber(char32_t ucs4) noexcept
     {
         return (ucs4 >= 'A' && ucs4 <= 'z' && (ucs4 >= 'a' || ucs4 <= 'Z'))
                 || (ucs4 >= '0' && ucs4 <= '9')
                 || (ucs4 > 127 && QChar::isLetterOrNumber_helper(ucs4));
     }
-    static constexpr inline bool isDigit(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION
+    Q_DECL_CONST_FUNCTION static constexpr inline bool isDigit(char32_t ucs4) noexcept
     { return (ucs4 <= '9' && ucs4 >= '0') || (ucs4 > 127 && QChar::category(ucs4) == Number_DecimalDigit); }
-    static constexpr inline bool isLower(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION
+    Q_DECL_CONST_FUNCTION static constexpr inline bool isLower(char32_t ucs4) noexcept
     { return (ucs4 <= 'z' && ucs4 >= 'a') || (ucs4 > 127 && QChar::category(ucs4) == Letter_Lowercase); }
-    static constexpr inline bool isUpper(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION
+    Q_DECL_CONST_FUNCTION static constexpr inline bool isUpper(char32_t ucs4) noexcept
     { return (ucs4 <= 'Z' && ucs4 >= 'A') || (ucs4 > 127 && QChar::category(ucs4) == Letter_Uppercase); }
-    static constexpr inline bool isTitleCase(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION
+    Q_DECL_CONST_FUNCTION static constexpr inline bool isTitleCase(char32_t ucs4) noexcept
     { return ucs4 > 127 && QChar::category(ucs4) == Letter_Titlecase; }
 
     friend constexpr bool comparesEqual(const QChar &lhs, const QChar &rhs) noexcept
@@ -667,16 +667,16 @@ public:
     Q_DECLARE_STRONGLY_ORDERED_LITERAL_TYPE(QChar, std::nullptr_t)
 
 private:
-    static bool QT_CHAR_FASTCALL isSpace_helper(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static bool QT_CHAR_FASTCALL isLetter_helper(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static bool QT_CHAR_FASTCALL isNumber_helper(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
-    static bool QT_CHAR_FASTCALL isLetterOrNumber_helper(char32_t ucs4) noexcept Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION static bool QT_CHAR_FASTCALL isSpace_helper(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static bool QT_CHAR_FASTCALL isLetter_helper(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static bool QT_CHAR_FASTCALL isNumber_helper(char32_t ucs4) noexcept;
+    Q_DECL_CONST_FUNCTION static bool QT_CHAR_FASTCALL isLetterOrNumber_helper(char32_t ucs4) noexcept;
 
     // defined in qstring.cpp, because we need to go via QUtf8StringView
     static bool QT_CHAR_FASTCALL
-    equal_helper(QChar lhs, const char *rhs) noexcept Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION equal_helper(QChar lhs, const char *rhs) noexcept;
     static int QT_CHAR_FASTCALL
-    compare_helper(QChar lhs, const char *rhs) noexcept Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION compare_helper(QChar lhs, const char *rhs) noexcept;
 
 #if !defined(QT_NO_CAST_FROM_ASCII) && !defined(QT_RESTRICTED_CAST_FROM_ASCII)
     Q_WEAK_OVERLOAD

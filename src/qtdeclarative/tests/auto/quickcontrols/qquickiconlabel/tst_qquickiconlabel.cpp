@@ -39,6 +39,8 @@ private slots:
     void colorChanges();
     void iconSourceContext();
     void childPaintOrder();
+    void defaultIconColor_data();
+    void defaultIconColor();
 };
 
 tst_qquickiconlabel::tst_qquickiconlabel()
@@ -359,6 +361,55 @@ void tst_qquickiconlabel::childPaintOrder()
     QVERIFY(childText);
     const QList<QQuickItem *> expectedPaintOrder = { iconLabelPrivate->label, iconLabelPrivate->image, childText };
     QCOMPARE(iconLabelPrivate->paintOrderChildItems(), expectedPaintOrder);
+}
+
+void tst_qquickiconlabel::defaultIconColor_data()
+{
+    QTest::addColumn<QString>("qmlFileName");
+    QTest::addColumn<QColor>("expectedColorPropertyValue");
+    QTest::addColumn<QColor>("expectedPixelColor");
+
+    const auto grey = QColor("grey");
+    const auto green = QColor("green");
+    const auto red = QColor("red");
+    const auto transparent = QColor("transparent");
+
+    QTest::addRow("default icon color set")
+        << "defaultIconColorSet.qml" << grey << grey;
+    QTest::addRow("icon color and default icon color set")
+        << "iconColorAndDefaultIconColorSet.qml" << green << green;
+    QTest::addRow("menu item action default icon color set")
+        << "menuItemActionDefaultIconColorSet.qml" << grey << grey;
+    QTest::addRow("menu item action icon color and default icon color set")
+        << "menuItemActionIconColorAndDefaultIconColorSet.qml" << green << green;
+    QTest::addRow("no icon color set")
+        << "noIconColorSet.qml" << transparent << red;
+    QTest::addRow("transparent icon color and default icon colour set")
+        << "transparentIconColorAndDefaultIconColorSet.qml" << transparent << red;
+    QTest::addRow("transparent action icon color and default icon colour set")
+        << "transparentActionIconColorAndDefaultIconColorSet.qml" << transparent << red;
+}
+
+void tst_qquickiconlabel::defaultIconColor()
+{
+    QFETCH(QString, qmlFileName);
+    QFETCH(QColor, expectedColorPropertyValue);
+    QFETCH(QColor, expectedPixelColor);
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl(qmlFileName)));
+
+    auto *iconImage = window.findChild<QQuickIconImage *>();
+    QVERIFY(iconImage);
+    QCOMPARE(iconImage->color(), expectedColorPropertyValue);
+
+    SKIP_IF_NO_WINDOW_GRAB;
+#ifdef Q_OS_ANDROID
+    QSKIP("Image grabbing is buggy on Android");
+#endif
+    const QImage windowContents = window.grabWindow();
+    QCOMPARE(windowContents.pixelColor(windowContents.width() / 2, windowContents.height() / 2),
+        expectedPixelColor);
 }
 
 QTEST_MAIN(tst_qquickiconlabel)

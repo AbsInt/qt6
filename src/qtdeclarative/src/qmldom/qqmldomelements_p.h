@@ -193,7 +193,7 @@ public:
             return QString::number(minorVersion);
         return QString();
     }
-    int compare(const Version &o) const
+    int compare(Version o) const
     {
         int c = majorVersion - o.majorVersion;
         if (c != 0)
@@ -204,27 +204,27 @@ public:
     qint32 majorVersion;
     qint32 minorVersion;
 };
-inline bool operator==(const Version &v1, const Version &v2)
+inline bool operator==(Version v1, Version v2)
 {
     return v1.compare(v2) == 0;
 }
-inline bool operator!=(const Version &v1, const Version &v2)
+inline bool operator!=(Version v1, Version v2)
 {
     return v1.compare(v2) != 0;
 }
-inline bool operator<(const Version &v1, const Version &v2)
+inline bool operator<(Version v1, Version v2)
 {
     return v1.compare(v2) < 0;
 }
-inline bool operator<=(const Version &v1, const Version &v2)
+inline bool operator<=(Version v1, Version v2)
 {
     return v1.compare(v2) <= 0;
 }
-inline bool operator>(const Version &v1, const Version &v2)
+inline bool operator>(Version v1, Version v2)
 {
     return v1.compare(v2) > 0;
 }
-inline bool operator>=(const Version &v1, const Version &v2)
+inline bool operator>=(Version v1, Version v2)
 {
     return v1.compare(v2) >= 0;
 }
@@ -268,8 +268,8 @@ public:
     constexpr static DomType kindValue = DomType::Import;
 
     static Import fromUriString(
-            const QString &importStr, Version v = Version(), const QString &importId = QString(),
-            const ErrorHandler &handler = nullptr);
+            const QString &importStr, Version v = Version(),
+            const QString &importId = QString(), const ErrorHandler &handler = nullptr);
     static Import fromFileString(
             const QString &importStr, const QString &importId = QString(),
             const ErrorHandler &handler = nullptr);
@@ -323,8 +323,9 @@ public:
     bool iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const
     {
         bool cont = true;
-        cont = cont && self.dvWrapField(visitor, Fields::import, import);
-        cont = cont && self.dvValueField(visitor, Fields::inheritVersion, inheritVersion);
+        cont = cont && self.invokeVisitorOnField(visitor, Fields::import, import);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::inheritVersion),
+                                             inheritVersion);
         return cont;
     }
 
@@ -353,9 +354,9 @@ public:
 
     bool iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const
     {
-        bool cont = self.dvValueField(visitor, Fields::name, name);
-        cont = cont && self.dvValueField(visitor, Fields::values, values);
-        cont = cont && self.dvWrapField(visitor, Fields::comments, comments);
+        bool cont = self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::name), name);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::values), values);
+        cont = cont && self.invokeVisitorOnField(visitor, Fields::comments, comments);
         return cont;
     }
 
@@ -405,25 +406,22 @@ public:
     constexpr static DomType kindValue = DomType::ScriptExpression;
     DomType kind() const override { return kindValue; }
 
-    explicit ScriptExpression(
-            QStringView code, const std::shared_ptr<QQmlJS::Engine> &engine, AST::Node *ast,
-            const std::shared_ptr<AstComments> &comments, ExpressionType expressionType,
-            SourceLocation localOffset = SourceLocation(), int derivedFrom = 0,
-            QStringView preCode = QStringView(), QStringView postCode = QStringView());
+    explicit ScriptExpression(QStringView code, const std::shared_ptr<QQmlJS::Engine> &engine,
+                              AST::Node *ast, const std::shared_ptr<AstComments> &comments,
+                              ExpressionType expressionType,
+                              const SourceLocation &localOffset = SourceLocation());
 
     ScriptExpression()
         : ScriptExpression(QStringView(), std::shared_ptr<QQmlJS::Engine>(), nullptr,
                            std::shared_ptr<AstComments>(), ExpressionType::BindingExpression,
-                           SourceLocation(), 0)
+                           SourceLocation())
     {
     }
 
-    explicit ScriptExpression(
-            const QString &code, ExpressionType expressionType, int derivedFrom = 0,
-            const QString &preCode = QString(), const QString &postCode = QString())
-        : OwningItem(derivedFrom), m_expressionType(expressionType)
+    explicit ScriptExpression(const QString &code, ExpressionType expressionType)
+        : OwningItem(), m_expressionType(expressionType)
     {
-        setCode(code, preCode, postCode);
+        setCode(code);
     }
 
     ScriptExpression(const ScriptExpression &e);
@@ -432,8 +430,6 @@ public:
     {
         return std::static_pointer_cast<ScriptExpression>(doCopy(self));
     }
-
-    std::shared_ptr<ScriptExpression> copyWithUpdatedCode(const DomItem &self, const QString &code) const;
 
     bool iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const override;
 
@@ -468,13 +464,11 @@ public:
         QMutexLocker l(mutex());
         return m_engine;
     }
-    QStringView loc2Str(SourceLocation) const;
+    QStringView loc2Str(const SourceLocation &) const;
     std::shared_ptr<AstComments> astComments() const { return m_astComments; }
     void writeOut(const DomItem &self, OutWriter &lw) const override;
     SourceLocation globalLocation(const DomItem &self) const;
     SourceLocation localOffset() const { return m_localOffset; }
-    QStringView preCode() const { return m_preCode; }
-    QStringView postCode() const { return m_postCode; }
     void setScriptElement(const ScriptElementVariant &p);
     ScriptElementVariant scriptElement() { return m_element; }
 
@@ -484,19 +478,7 @@ protected:
         return std::make_shared<ScriptExpression>(*this);
     }
 
-    std::function<SourceLocation(SourceLocation)> locationToGlobalF(const DomItem &self) const
-    {
-        SourceLocation loc = globalLocation(self);
-        return [loc, this](SourceLocation x) {
-            return SourceLocation(x.offset - m_localOffset.offset + loc.offset, x.length,
-                                  x.startLine - m_localOffset.startLine + loc.startLine,
-                                  ((x.startLine == m_localOffset.startLine) ? x.startColumn
-                                                   - m_localOffset.startColumn + loc.startColumn
-                                                                            : x.startColumn));
-        };
-    }
-
-    SourceLocation locationToLocal(SourceLocation x) const
+    SourceLocation locationToLocal(const SourceLocation &x) const
     {
         return SourceLocation(
                 x.offset - m_localOffset.offset, x.length, x.startLine - m_localOffset.startLine,
@@ -505,39 +487,13 @@ protected:
                          : x.startColumn)); // are line and column 1 based? then we should + 1
     }
 
-    std::function<SourceLocation(SourceLocation)> locationToLocalF(const DomItem &) const
-    {
-        return [this](SourceLocation x) { return locationToLocal(x); };
-    }
-
 private:
-    enum class ParseMode {
-        QML,
-        JS,
-        ESM, // ECMAScript module
-    };
-
-    inline ParseMode resolveParseMode()
-    {
-        switch (m_expressionType) {
-        case ExpressionType::BindingExpression:
-            // unfortunately there are no documentation explaining this resolution
-            // this was just moved from the original implementation
-            return ParseMode::QML;
-        case ExpressionType::ESMCode:
-            return ParseMode::ESM;
-        default:
-            return ParseMode::JS;
-        }
-    }
-    void setCode(const QString &code, const QString &preCode, const QString &postCode);
-    [[nodiscard]] AST::Node *parse(ParseMode mode);
+    void setCode(const QString &code);
+    [[nodiscard]] AST::Node *parse();
 
     ExpressionType m_expressionType;
     QString m_codeStr;
     QStringView m_code;
-    QStringView m_preCode;
-    QStringView m_postCode;
     mutable std::shared_ptr<QQmlJS::Engine> m_engine;
     mutable AST::Node *m_ast;
     std::shared_ptr<AstComments> m_astComments;
@@ -553,7 +509,7 @@ public:
     constexpr static DomType kindValue = DomType::Binding;
 
     Binding(const QString &m_name = QString());
-    Binding(const QString &m_name, std::unique_ptr<BindingValue> value,
+    Binding(const QString &m_name, std::unique_ptr<BindingValue> &&value,
             BindingType bindingType = BindingType::Normal);
     Binding(const QString &m_name, const std::shared_ptr<ScriptExpression> &value,
             BindingType bindingType = BindingType::Normal);
@@ -606,7 +562,7 @@ public:
     void setBindingIdentifiers(const ScriptElementVariant &bindingIdentifiers) { m_bindingIdentifiers = bindingIdentifiers; }
 
 private:
-    friend class QQmlDomAstCreator;
+    friend class QQmlDomAstCreatorBase;
     BindingType m_bindingType;
     QString m_name;
     std::unique_ptr<BindingValue> m_value;
@@ -668,20 +624,23 @@ public:
     bool iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const
     {
         bool cont = AttributeInfo::iterateDirectSubpaths(self, visitor);
-        cont = cont && self.dvValueField(visitor, Fields::isPointer, isPointer);
-        cont = cont && self.dvValueField(visitor, Fields::isFinal, isFinal);
-        cont = cont && self.dvValueField(visitor, Fields::isAlias, isAlias());
-        cont = cont && self.dvValueField(visitor, Fields::isDefaultMember, isDefaultMember);
-        cont = cont && self.dvValueField(visitor, Fields::isRequired, isRequired);
-        cont = cont && self.dvValueField(visitor, Fields::read, read);
-        cont = cont && self.dvValueField(visitor, Fields::write, write);
-        cont = cont && self.dvValueField(visitor, Fields::bindable, bindable);
-        cont = cont && self.dvValueField(visitor, Fields::notify, notify);
-        cont = cont && self.dvReferenceField(visitor, Fields::type, typePath());
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::isPointer), isPointer);
+        // virtual and override don't need to be accessed through DomItem API for now
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::isFinal), isFinal);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::isAlias), isAlias());
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::isDefaultMember),
+                                             isDefaultMember);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::isRequired),
+                                             isRequired);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::read), read);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::write), write);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::bindable), bindable);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::notify), notify);
+        cont = cont && self.invokeVisitorOnReference(visitor, Fields::type, typePath());
         if (m_nameIdentifiers) {
-            cont = cont && self.dvItemField(visitor, Fields::nameIdentifiers, [this, &self]() {
-                return self.subScriptElementWrapperItem(m_nameIdentifiers);
-            });
+            cont = cont && visitor(PathEls::Field(Fields::nameIdentifiers), [this, &self]() {
+                       return self.subScriptElementWrapperItem(m_nameIdentifiers);
+                   });
         }
         return cont;
     }
@@ -698,6 +657,8 @@ public:
     QString write;
     QString bindable;
     QString notify;
+    bool isVirtual = false;
+    bool isOverride = false;
     bool isFinal = false;
     bool isPointer = false;
     bool isDefaultMember = false;
@@ -766,18 +727,10 @@ public:
     }
 
     bool iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const;
-    QString preCode(const DomItem &) const; // ### REVISIT, might be simplified by using different toplevel production rules at usage site
-    QString postCode(const DomItem &) const;
     void writePre(const DomItem &self, OutWriter &ow) const;
     void writeOut(const DomItem &self, OutWriter &ow) const;
     QString signature(const DomItem &self) const;
 
-    void setCode(const QString &code)
-    {
-        body = std::make_shared<ScriptExpression>(
-                code, ScriptExpression::ExpressionType::FunctionBody, 0,
-                                     QLatin1String("function foo(){\n"), QLatin1String("\n}\n"));
-    }
     MethodInfo() = default;
 
     // TODO: make private + add getters/setters
@@ -786,10 +739,11 @@ public:
     std::shared_ptr<ScriptExpression> body;
     std::shared_ptr<ScriptExpression> returnType;
     bool isConstructor = false;
+    bool isGenerator = false;
 
 private:
     void writeOutArguments(const DomItem &self, OutWriter &ow) const;
-    void writeOutReturnType(OutWriter &ow) const;
+    void writeOutReturnType(const DomItem &self, OutWriter &ow) const;
     void writeOutBody(const DomItem &self, OutWriter &ow) const;
 };
 
@@ -827,8 +781,8 @@ public:
     constexpr static DomType kindValue = DomType::EnumDecl;
     DomType kind() const override { return kindValue; }
 
-    EnumDecl(const QString &name = QString(), QList<EnumItem> values = QList<EnumItem>(),
-             Path pathFromOwner = Path())
+    EnumDecl(const QString &name = QString(), const QList<EnumItem> &values = QList<EnumItem>(),
+             const Path &pathFromOwner = Path())
         : CommentableDomElement(pathFromOwner), m_name(name), m_values(values)
     {
     }
@@ -842,8 +796,8 @@ public:
     void setIsFlag(bool flag) { m_isFlag = flag; }
     QString alias() const { return m_alias; }
     void setAlias(const QString &aliasName) { m_alias = aliasName; }
-    void setValues(QList<EnumItem> values) { m_values = values; }
-    Path addValue(EnumItem value)
+    void setValues(const QList<EnumItem> &values) { m_values = values; }
+    Path addValue(const EnumItem &value)
     {
         m_values.append(value);
         return Path::fromField(Fields::values).withIndex(index_type(m_values.size() - 1));
@@ -895,7 +849,7 @@ public:
     void setIdStr(const QString &id) { m_idStr = id; }
     void setName(const QString &name) { m_name = name; }
     void setDefaultPropertyName(const QString &name) { m_defaultPropertyName = name; }
-    void setPrototypePaths(QList<Path> prototypePaths) { m_prototypePaths = prototypePaths; }
+    void setPrototypePaths(const QList<Path> &prototypePaths) { m_prototypePaths = prototypePaths; }
     Path addPrototypePath(const Path &prototypePath)
     {
         index_type idx = index_type(m_prototypePaths.indexOf(prototypePath));
@@ -906,12 +860,15 @@ public:
         return Path::fromField(Fields::prototypes).withIndex(idx);
     }
     void setNextScopePath(const Path &nextScopePath) { m_nextScopePath = nextScopePath; }
-    void setPropertyDefs(QMultiMap<QString, PropertyDefinition> propertyDefs)
+    void setPropertyDefs(const QMultiMap<QString, PropertyDefinition> &propertyDefs)
     {
         m_propertyDefs = propertyDefs;
     }
-    void setBindings(QMultiMap<QString, Binding> bindings) { m_bindings = bindings; }
-    void setMethods(QMultiMap<QString, MethodInfo> functionDefs) { m_methods = functionDefs; }
+    void setBindings(const QMultiMap<QString, Binding> &bindings) { m_bindings = bindings; }
+    void setMethods(const QMultiMap<QString, MethodInfo> &functionDefs)
+    {
+        m_methods = functionDefs;
+    }
     void setChildren(const QList<QmlObject> &children)
     {
         m_children = children;
@@ -934,24 +891,24 @@ public:
     MutableDomItem addPropertyDef(MutableDomItem &self, const PropertyDefinition &propertyDef,
                                   AddOption option);
 
-    Path addBinding(Binding binding, AddOption option, Binding **bPtr = nullptr)
+    Path addBinding(const Binding &binding, AddOption option, Binding **bPtr = nullptr)
     {
         return insertUpdatableElementInMultiMap(pathFromOwner().withField(Fields::bindings), m_bindings,
                                                 binding.name(), binding, option, bPtr);
     }
-    MutableDomItem addBinding(MutableDomItem &self, Binding binding, AddOption option);
+    MutableDomItem addBinding(MutableDomItem &self, const Binding &binding, AddOption option);
     Path addMethod(const MethodInfo &functionDef, AddOption option, MethodInfo **mPtr = nullptr)
     {
         return insertUpdatableElementInMultiMap(pathFromOwner().withField(Fields::methods), m_methods,
                                                 functionDef.name, functionDef, option, mPtr);
     }
     MutableDomItem addMethod(MutableDomItem &self, const MethodInfo &functionDef, AddOption option);
-    Path addChild(QmlObject child, QmlObject **cPtr = nullptr)
+    Path addChild(const QmlObject &child, QmlObject **cPtr = nullptr)
     {
         return appendUpdatableElementInQList(pathFromOwner().withField(Fields::children), m_children,
                                              child, cPtr);
     }
-    MutableDomItem addChild(MutableDomItem &self, QmlObject child)
+    MutableDomItem addChild(MutableDomItem &self, const QmlObject &child)
     {
         Path p = addChild(child);
         return MutableDomItem(self.owner().item(), p);
@@ -967,10 +924,12 @@ public:
     using Attributes = QList<std::pair<SourceLocation, DomItem>>;
     void writeOutAttributes(OutWriter &ow, const Attributes &attribs, const QString &code) const;
 
-    void writeOutSortedEnumerations(const DomItem &component, OutWriter &ow) const;
-    void writeOutSortedAttributes(const DomItem &self, OutWriter &ow, const DomItem &component) const;
+    void writeOutSortedEnumerations(const QList<DomItem> &descs, OutWriter &ow) const;
+    void writeOutSortedAttributes(const DomItem &self, OutWriter &ow, const DomItem &component,
+                                  const Attributes &attribs) const;
     void writeOutSortedPropertyDefinition(const DomItem &self, OutWriter &ow,
-                                          QSet<QString> &mergedDefBinding) const;
+                                          QSet<QString> &mergedDefBinding,
+                                          const QStringList &keys) const;
 
     void writeOutId(const DomItem &self, OutWriter &ow) const;
     void writeOut(const DomItem &self, OutWriter &ow, const QString &onTarget) const;
@@ -987,7 +946,7 @@ public:
     void setNameIdentifiers(const ScriptElementVariant &name) { m_nameIdentifiers = name; }
 
 private:
-    friend class QQmlDomAstCreator;
+    friend class QQmlDomAstCreatorBase;
     QString m_idStr;
     QString m_name;
     QList<Path> m_prototypePaths;
@@ -1014,15 +973,18 @@ public:
     bool iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const
     {
         bool cont = true;
-        cont = cont && self.dvValueField(visitor, Fields::uri, uri);
-        cont = cont && self.dvValueField(visitor, Fields::typeName, typeName);
-        cont = cont && self.dvWrapField(visitor, Fields::version, version);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::uri), uri);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::typeName), typeName);
+        cont = cont && self.invokeVisitorOnField(visitor, Fields::version, version);
         if (typePath)
-            cont = cont && self.dvReferenceField(visitor, Fields::type, typePath);
-        cont = cont && self.dvValueField(visitor, Fields::isInternal, isInternal);
-        cont = cont && self.dvValueField(visitor, Fields::isSingleton, isSingleton);
+            cont = cont && self.invokeVisitorOnReference(visitor, Fields::type, typePath);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::isInternal),
+                                             isInternal);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::isSingleton),
+                                             isSingleton);
         if (exportSourcePath)
-            cont = cont && self.dvReferenceField(visitor, Fields::exportSource, exportSourcePath);
+            cont = cont && self.invokeVisitorOnReference(visitor, Fields::exportSource,
+                                                     exportSourcePath);
         return cont;
     }
 
@@ -1057,7 +1019,7 @@ public:
     Path attachedTypePath(const DomItem &) const { return m_attachedTypePath; }
 
     void setName(const QString &name) { m_name = name; }
-    void setEnumerations(QMultiMap<QString, EnumDecl> enumerations)
+    void setEnumerations(const QMultiMap<QString, EnumDecl> &enumerations)
     {
         m_enumerations = enumerations;
     }
@@ -1077,7 +1039,7 @@ public:
     void setAttachedTypePath(const Path &p) { m_attachedTypePath = p; }
 
 private:
-    friend class QQmlDomAstCreator;
+    friend class QQmlDomAstCreatorBase;
     QString m_name;
     QMultiMap<QString, EnumDecl> m_enumerations;
     QList<QmlObject> m_objects;
@@ -1112,17 +1074,17 @@ public:
     bool iterateDirectSubpaths(const DomItem &, DirectVisitor) const override;
     const QList<Export> &exports() const & { return m_exports; }
     QString fileName() const { return m_fileName; }
-    void setExports(QList<Export> exports) { m_exports = exports; }
+    void setExports(const QList<Export> &exports) { m_exports = exports; }
     void addExport(const Export &exportedEntry) { m_exports.append(exportedEntry); }
     void setFileName(const QString &fileName) { m_fileName = fileName; }
     const QList<int> &metaRevisions() const & { return m_metaRevisions; }
-    void setMetaRevisions(QList<int> metaRevisions) { m_metaRevisions = metaRevisions; }
+    void setMetaRevisions(const QList<int> &metaRevisions) { m_metaRevisions = metaRevisions; }
     void setInterfaceNames(const QStringList& interfaces) { m_interfaceNames = interfaces; }
     const QStringList &interfaceNames() const & { return m_interfaceNames; }
     QString extensionTypeName() const { return m_extensionTypeName; }
     void setExtensionTypeName(const QString &name) { m_extensionTypeName =  name; }
-    QString valueTypeName() const { return m_valueTypeName; }
-    void setValueTypeName(const QString &name) { m_valueTypeName = name; }
+    QString elementTypeName() const { return m_elementTypeName; }
+    void setElementTypeName(const QString &name) { m_elementTypeName = name; }
     bool hasCustomParser() const { return m_hasCustomParser; }
     void setHasCustomParser(bool v) { m_hasCustomParser = v; }
     bool extensionIsJavaScript() const { return m_extensionIsJavaScript; }
@@ -1143,7 +1105,7 @@ private:
     bool m_hasCustomParser = false;
     bool m_extensionIsJavaScript = false;
     bool m_extensionIsNamespace = false;
-    QString m_valueTypeName;
+    QString m_elementTypeName;
     QString m_extensionTypeName;
     QQmlJSScope::AccessSemantics m_accessSemantics = QQmlJSScope::AccessSemantics::None;
     QQmlJSScope::ConstPtr m_semanticScope;
@@ -1165,7 +1127,7 @@ public:
 
     const QMultiMap<QString, Id> &ids() const & { return m_ids; }
     Path nextComponentPath() const { return m_nextComponentPath; }
-    void setIds(QMultiMap<QString, Id> ids) { m_ids = ids; }
+    void setIds(const QMultiMap<QString, Id> &ids) { m_ids = ids; }
     void setNextComponentPath(const Path &p) { m_nextComponentPath = p; }
     void updatePathFromOwner(const Path &newPath) override;
     Path addId(const Id &id, AddOption option = AddOption::Overwrite, Id **idPtr = nullptr)
@@ -1184,7 +1146,7 @@ public:
     void setNameIdentifiers(const ScriptElementVariant &name) { m_nameIdentifiers = name; }
 
 private:
-    friend class QQmlDomAstCreator;
+    friend class QQmlDomAstCreatorBase;
     Path m_nextComponentPath;
     QMultiMap<QString, Id> m_ids;
     QQmlJSScope::ConstPtr m_semanticScope;
@@ -1262,14 +1224,12 @@ public:
 
     bool iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const;
 
-    void addImport(QStringList p, const Path &targetExports)
+    void addImport(const QStringList &p, const Path &targetExports)
     {
-        if (!p.isEmpty()) {
-            const QString current = p.takeFirst();
-            m_subImports[current].addImport(std::move(p), targetExports);
-        } else if (!m_importSourcePaths.contains(targetExports)) {
+        if (!p.isEmpty())
+            m_subImports[p.first()].addImport(p.mid(1), targetExports);
+        else if (!m_importSourcePaths.contains(targetExports))
             m_importSourcePaths.append(targetExports);
-        }
     }
 
 private:

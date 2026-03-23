@@ -18,7 +18,7 @@
 
 #include "documentSymbolSupport/qqmldocumentsymbolsupport_p.h"
 #include "qlanguageserver_p.h"
-#include "qqmlcodemodel_p.h"
+#include "qqmlcodemodelmanager_p.h"
 #include "qqmlfindusagessupport_p.h"
 #include "qtextsynchronization_p.h"
 #include "qqmllintsuggestions_p.h"
@@ -43,7 +43,7 @@ class QQmlLanguageServer : public QLanguageServerModule
     Q_OBJECT
 public:
     QQmlLanguageServer(std::function<void(const QByteArray &)> sendData,
-                       QQmlToolingSettings *settings = nullptr);
+                       QQmlToolingSharedSettings *settings = nullptr);
     ~QQmlLanguageServer();
 
     QString name() const final;
@@ -53,7 +53,7 @@ public:
 
     int returnValue() const;
 
-    QQmlCodeModel *codeModel();
+    QQmlCodeModelManager *codeModelManager();
     QLanguageServer *server();
     TextSynchronization *textSynchronization();
     QmlLintSuggestions *lint();
@@ -64,7 +64,7 @@ public Q_SLOTS:
     void errorExit();
 
 private:
-    QQmlCodeModel m_codeModel;
+    QQmlCodeModelManager m_codeModelManager;
     QLanguageServer m_server;
 
     TextSynchronization m_textSynchronization;

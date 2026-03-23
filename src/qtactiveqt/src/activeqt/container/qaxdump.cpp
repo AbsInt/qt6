@@ -18,6 +18,8 @@
 
 #include "../shared/qaxtypes_p.h"
 
+#include <QtCore/private/qcomptr_p.h>
+
 QT_BEGIN_NAMESPACE
 
 QString qax_docuFromName(ITypeInfo *typeInfo, const QString &name)
@@ -99,9 +101,9 @@ QString qax_generateDocumentation(QAxBase *that)
     if (that->isNull())
         return QString();
 
-    ITypeInfo *typeInfo = nullptr;
-    IDispatch *dispatch = nullptr;
-    that->queryInterface(IID_IDispatch, reinterpret_cast<void **>(&dispatch));
+    ComPtr<ITypeInfo> typeInfo;
+    ComPtr<IDispatch> dispatch;
+    that->queryInterface(IID_IDispatch, &dispatch);
     if (dispatch)
         dispatch->GetTypeInfo(0, LOCALE_SYSTEM_DEFAULT, &typeInfo);
 
@@ -170,7 +172,7 @@ QString qax_generateDocumentation(QAxBase *that)
                              QLatin1String(name.constData()) + QLatin1Char(' ') +
                              QString::fromLatin1(prototype.constData()) + QLatin1String("<tt> [slot]</tt></h3>\n");
             prototype = namedPrototype(slot.parameterTypes(), {});
-            detail += docuFromName(typeInfo, QString::fromLatin1(name.constData()));
+            detail += docuFromName(typeInfo.Get(), QString::fromLatin1(name.constData()));
             detail += QLatin1String("<p>Connect a signal to this slot:<pre>\n");
             detail += QString::fromLatin1("\tQObject::connect(sender, SIGNAL(someSignal") + QString::fromLatin1(prototype.constData()) +
                       QLatin1String("), object, SLOT(") + QString::fromLatin1(name.constData()) +
@@ -207,13 +209,12 @@ QString qax_generateDocumentation(QAxBase *that)
     }
     int signalCount = mo->methodCount();
     if (signalCount) {
-        ITypeLib *typeLib = nullptr;
+        ComPtr<ITypeLib> typeLib;
         if (typeInfo) {
             UINT index = 0;
             typeInfo->GetContainingTypeLib(&typeLib, &index);
-            typeInfo->Release();
         }
-        typeInfo = nullptr;
+        typeInfo.Reset();
 
         stream << "<h2>Signals:</h2>" << Qt::endl;
         stream << "<ul>" << Qt::endl;
@@ -234,11 +235,9 @@ QString qax_generateDocumentation(QAxBase *that)
             if (typeLib) {
                 UINT interCount = 0;
                 do {
-                    if (typeInfo)
-                        typeInfo->Release();
-                    typeInfo = nullptr;
+                    typeInfo.Reset();
                     typeLib->GetTypeInfo(++interCount, &typeInfo);
-                    QString typeLibDocu = docuFromName(typeInfo, QString::fromLatin1(name.constData()));
+                    QString typeLibDocu = docuFromName(typeInfo.Get(), QString::fromLatin1(name.constData()));
                     if (!typeLibDocu.isEmpty()) {
                         detail += typeLibDocu;
                         break;
@@ -253,14 +252,9 @@ QString qax_generateDocumentation(QAxBase *that)
             detail += QLatin1String("</pre>\n");
 
             methodDetails << detail;
-            if (typeInfo)
-                typeInfo->Release();
-            typeInfo = nullptr;
+            typeInfo.Reset();
         }
         stream << "</ul>" << Qt::endl;
-
-        if (typeLib)
-            typeLib->Release();
     }
 
     const int propCount = mo->propertyCount();
@@ -279,7 +273,7 @@ QString qax_generateDocumentation(QAxBase *that)
             QString detail = QLatin1String("<h3><a name=") + QString::fromLatin1(name.constData()) + QLatin1String("></a>") +
                              QLatin1String(type.constData()) +
                              QLatin1Char(' ') + QLatin1String(name.constData()) + QLatin1String("</h3>\n");
-            detail += docuFromName(typeInfo, QString::fromLatin1(name));
+            detail += docuFromName(typeInfo.Get(), QString::fromLatin1(name));
             if (!prop.isReadable())
                 continue;
 
@@ -359,10 +353,6 @@ QString qax_generateDocumentation(QAxBase *that)
             stream << propDetails.at(i) << Qt::endl;
     }
 
-    if (typeInfo)
-        typeInfo->Release();
-    if (dispatch)
-        dispatch->Release();
     return docu;
 }
 

@@ -10,6 +10,7 @@
 #include "enumnode.h"
 #include "functionnode.h"
 #include "genustypes.h"
+#include "inclusionpolicy.h"
 #include "namespacenode.h"
 #include "propertynode.h"
 #include "qdocdatabase.h"
@@ -19,8 +20,10 @@
 #include "utilities.h"
 
 #include <QtCore/qdebug.h>
+#include <QtCore/qdir.h>
 #include <QtCore/qelapsedtimer.h>
 #include <QtCore/qfile.h>
+#include <QtCore/qregularexpression.h>
 #include <QtCore/qscopedvaluerollback.h>
 #include <QtCore/qtemporarydir.h>
 #include <QtCore/qtextstream.h>
@@ -45,6 +48,8 @@
 #include <cstdio>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::Literals::StringLiterals;
 
 struct CompilationIndex {
     CXIndex index = nullptr;
@@ -172,6 +177,25 @@ static std::string get_fully_qualified_type_name(clang::QualType type, const cla
         declaration_context,
         declaration_context.getPrintingPolicy()
     );
+}
+
+/*
+ * Cleans up anonymous struct names in type strings by replacing
+ * file-path-based identifiers with clean display names.
+ * Only performs expensive cleaning when anonymous types are detected.
+ */
+static QString cleanAnonymousTypeName(const QString &typeName) {
+    if (!typeName.contains("(unnamed "_L1) && !typeName.contains("(anonymous "_L1)) {
+        return typeName; // Fast path for most cases
+    }
+
+    // Only do expensive cleaning when needed
+    static const QRegularExpression pattern(
+        R"(\((unnamed|anonymous) (struct|union|class) at [^)]+\))"
+    );
+    QString cleaned = typeName;
+    cleaned.replace(pattern, "(\\1 \\2)"_L1);
+    return cleaned;
 }
 
 /*
@@ -404,6 +428,12 @@ static RelaxedTemplateDeclaration get_template_declaration(const clang::Template
                     get_template_declaration(template_template_parameter).parameters
                 }) : std::nullopt)
         });
+    }
+
+    if (const clang::Expr* requires_clause = template_parameters->getRequiresClause()) {
+        template_declaration_ir.requires_clause =
+            QString::fromStdString(get_expression_as_string(
+                requires_clause, template_declaration->getASTContext())).simplified().toStdString();
     }
 
     return template_declaration_ir;
@@ -749,8 +779,10 @@ static void setOverridesForFunction(FunctionNode *fn, CXCursor cursor)
 class ClangVisitor
 {
 public:
-    ClangVisitor(QDocDatabase *qdb, const std::set<Config::HeaderFilePath> &allHeaders)
-        : qdb_(qdb), parent_(qdb->primaryTreeRoot())
+    ClangVisitor(QDocDatabase *qdb, const std::set<Config::HeaderFilePath> &allHeaders,
+                 const Config::InternalFilePatterns& internalFilePatterns)
+        : qdb_(qdb), parent_(qdb->primaryTreeRoot()),
+          internalFilePatterns_(internalFilePatterns)
     {
         std::transform(allHeaders.cbegin(), allHeaders.cend(), std::inserter(allHeaders_, allHeaders_.begin()),
                        [](const auto& header_file_path) -> const QString& { return header_file_path.filename; });
@@ -804,6 +836,7 @@ public:
     Node *nodeForCommentAtLocation(CXSourceLocation loc, CXSourceLocation nextCommentLoc);
 
 private:
+    bool detectQmlSingleton(CXCursor cursor);
     /*!
       SimpleLoc represents a simple location in the main source file,
       which can be used as a key in a QMap.
@@ -827,6 +860,7 @@ private:
     Aggregate *parent_;
     std::set<QString> allHeaders_;
     QHash<CXFile, bool> isInterestingCache_; // doing a canonicalFilePath is slow, so keep a cache.
+    const Config::InternalFilePatterns& internalFilePatterns_;
 
     /*!
         Returns true if the symbol should be ignored for the documentation.
@@ -853,6 +887,51 @@ private:
     void readParameterNamesAndAttributes(FunctionNode *fn, CXCursor cursor);
     Aggregate *getSemanticParent(CXCursor cursor);
 };
+
+/*!
+  Detects if a class cursor contains the \e QML_SINGLETON macro.
+  Returns true if the macro is detected, false otherwise.
+
+  The \e QML_SINGLETON macro expands to multiple items including:
+  \list
+      \li \c {Q_CLASSINFO("QML.Singleton", "true")}
+      \li \c {enum class QmlIsSingleton}
+  \endlist
+
+  This method looks for these expansion artifacts to detect the macro.
+*/
+bool ClangVisitor::detectQmlSingleton(CXCursor cursor)
+{
+    bool hasSingletonMacro = false;
+
+    visitChildrenLambda(cursor, [&hasSingletonMacro](CXCursor child) -> CXChildVisitResult {
+        // Look for Q_CLASSINFO calls that indicate QML.Singleton
+        if (clang_getCursorKind(child) == CXCursor_CallExpr) {
+            CXSourceRange range = clang_getCursorExtent(child);
+            QString sourceText = getSpelling(range);
+            // More precise matching: look for the exact Q_CLASSINFO pattern
+            static const QRegularExpression qmlSingletonPattern(
+                R"(Q_CLASSINFO\s*\(\s*["\']QML\.Singleton["\']\s*,\s*["\']true["\']\s*\))");
+            if (qmlSingletonPattern.match(sourceText).hasMatch()) {
+                hasSingletonMacro = true;
+                return CXChildVisit_Break;
+            }
+        }
+
+        // Also check for enum class QmlIsSingleton which is part of the macro expansion
+        if (clang_getCursorKind(child) == CXCursor_EnumDecl) {
+            QString spelling = fromCXString(clang_getCursorSpelling(child));
+            if (spelling == "QmlIsSingleton"_L1) {
+                hasSingletonMacro = true;
+                return CXChildVisit_Break;
+            }
+        }
+
+        return CXChildVisit_Continue;
+    });
+
+    return hasSingletonMacro;
+}
 
 /*!
   Visits a cursor in the .cpp file.
@@ -998,7 +1077,7 @@ CXChildVisitResult ClangVisitor::visitHeader(CXCursor cursor, CXSourceLocation l
         if (findNodeForCursor(qdb_, cursor)) // Was already parsed, probably in another TU
             return CXChildVisit_Continue;
 
-        QString className = fromCXString(clang_getCursorSpelling(cursor));
+        QString className = cleanAnonymousTypeName(fromCXString(clang_getCursorSpelling(cursor)));
 
         Aggregate *semanticParent = getSemanticParent(cursor);
         if (semanticParent && semanticParent->findNonfunctionChild(className, &Node::isClassNode)) {
@@ -1016,7 +1095,21 @@ CXChildVisitResult ClangVisitor::visitHeader(CXCursor cursor, CXSourceLocation l
 
         auto *classe = new ClassNode(type, semanticParent, className);
         classe->setAccess(fromCX_CXXAccessSpecifier(clang_getCXXAccessSpecifier(cursor)));
-        classe->setLocation(fromCXSourceLocation(clang_getCursorLocation(cursor)));
+
+        auto location = fromCXSourceLocation(clang_getCursorLocation(cursor));
+        classe->setLocation(location);
+
+        if (!internalFilePatterns_.exactMatches.isEmpty() || !internalFilePatterns_.globPatterns.isEmpty()
+            || !internalFilePatterns_.regexPatterns.isEmpty()) {
+            if (Config::matchesInternalFilePattern(location.filePath(), internalFilePatterns_))
+                classe->setStatus(Node::Internal);
+        }
+
+        classe->setAnonymous(clang_Cursor_isAnonymous(cursor));
+
+        if (detectQmlSingleton(cursor)) {
+            classe->setQmlSingleton(true);
+        }
 
         if (kind == CXCursor_ClassTemplate) {
             auto template_declaration = llvm::dyn_cast<clang::TemplateDecl>(get_cursor_declaration(cursor));
@@ -1169,10 +1262,10 @@ CXChildVisitResult ClangVisitor::visitHeader(CXCursor cursor, CXSourceLocation l
 
         var->setAccess(access);
         var->setLocation(fromCXSourceLocation(clang_getCursorLocation(cursor)));
-        var->setLeftType(QString::fromStdString(get_fully_qualified_type_name(
+        var->setLeftType(cleanAnonymousTypeName(QString::fromStdString(get_fully_qualified_type_name(
             value_declaration->getType(),
             value_declaration->getASTContext()
-        )));
+        ))));
         var->setStatic(kind == CXCursor_VarDecl && parent_->isClassNode());
 
         return CXChildVisit_Continue;
@@ -1287,11 +1380,11 @@ void ClangVisitor::processFunction(FunctionNode *fn, CXCursor cursor)
         fn->setMetaness(FunctionNode::Ctor);
     else if (kind == CXCursor_Destructor)
         fn->setMetaness(FunctionNode::Dtor);
-    else
-        fn->setReturnType(QString::fromStdString(get_fully_qualified_type_name(
+    else if (kind != CXCursor_ConversionFunction)
+        fn->setReturnType(cleanAnonymousTypeName(QString::fromStdString(get_fully_qualified_type_name(
             function_declaration->getReturnType(),
             function_declaration->getASTContext()
-        )));
+        ))));
 
     const clang::CXXConstructorDecl* constructor_declaration = llvm::dyn_cast<const clang::CXXConstructorDecl>(function_declaration);
 
@@ -1329,6 +1422,26 @@ void ClangVisitor::processFunction(FunctionNode *fn, CXCursor cursor)
         }
     }
 
+    // Extract trailing requires clause.
+    // From Clang 21 we get an AssociatedConstraint struct (upstream commit 49fd0bf35d2e).
+    // Earlier Clang versions return Expr*.
+#if LIBCLANG_VERSION_MAJOR >= 21
+    if (const auto trailing_requires = function_declaration->getTrailingRequiresClause();
+        trailing_requires.ConstraintExpr) {
+        QString requires_str = QString::fromStdString(
+            get_expression_as_string(trailing_requires.ConstraintExpr,
+                                     function_declaration->getASTContext()));
+        fn->setTrailingRequiresClause(requires_str.simplified());
+    }
+#else
+    if (const clang::Expr *trailing_requires = function_declaration->getTrailingRequiresClause()) {
+        QString requires_str = QString::fromStdString(
+            get_expression_as_string(trailing_requires,
+                                     function_declaration->getASTContext()));
+        fn->setTrailingRequiresClause(requires_str.simplified());
+    }
+#endif
+
     CXRefQualifierKind refQualKind = clang_Type_getCXXRefQualifier(funcType);
     if (refQualKind == CXRefQualifier_LValue)
         fn->setRef(true);
@@ -1346,16 +1459,16 @@ void ClangVisitor::processFunction(FunctionNode *fn, CXCursor cursor)
     for (clang::ParmVarDecl* const parameter_declaration : function_declaration->parameters()) {
         clang::QualType parameter_type = parameter_declaration->getOriginalType();
 
-        parameters.append(QString::fromStdString(get_fully_qualified_type_name(
+        parameters.append(cleanAnonymousTypeName(QString::fromStdString(get_fully_qualified_type_name(
             parameter_type,
             parameter_declaration->getASTContext()
-        )));
+        ))));
 
         if (!parameter_type.isCanonical())
-            parameters.last().setCanonicalType(QString::fromStdString(get_fully_qualified_type_name(
+            parameters.last().setCanonicalType(cleanAnonymousTypeName(QString::fromStdString(get_fully_qualified_type_name(
                 parameter_type.getCanonicalType(),
                 parameter_declaration->getASTContext()
-            )));
+            ))));
     }
 
     if (parameters.count() > 0) {
@@ -1511,20 +1624,11 @@ ClangCodeParser::ClangCodeParser(
     m_pch{pch}
 {
     m_allHeaders = config.getHeaderFiles();
+    m_internalFilePatterns = config.getInternalFilePatternsCompiled();
 }
 
 static const char *defaultArgs_[] = {
-/*
-  https://bugreports.qt.io/browse/QTBUG-94365
-  An unidentified bug in Clang 15.x causes parsing failures due to errors in
-  the AST. This replicates only with C++20 support enabled - avoid the issue
-  by using C++17 with Clang 15.
- */
-#if LIBCLANG_VERSION_MAJOR == 15
-    "-std=c++17",
-#else
     "-std=c++20",
-#endif
 #ifndef Q_OS_WIN
     "-fPIC",
 #else
@@ -1608,7 +1712,8 @@ std::optional<PCHFile> buildPCH(
     QString module_header,
     const std::set<Config::HeaderFilePath>& all_headers,
     const std::vector<QByteArray>& include_paths,
-    const QList<QByteArray>& defines
+    const QList<QByteArray>& defines,
+    const InclusionPolicy& policy
 ) {
     static std::vector<const char*> arguments{};
 
@@ -1681,12 +1786,14 @@ std::optional<PCHFile> buildPCH(
         QTextStream out(&tmpHeaderFile);
         if (header.isEmpty()) {
             for (const auto& [header_path, header_name] : all_headers) {
-                if (!header_name.endsWith(QLatin1String("_p.h"))
-                    && !header_name.startsWith(QLatin1String("moc_"))) {
-                    QString line = QLatin1String("#include \"") + header_path
-                            + QLatin1String("/") + header_name + QLatin1String("\"");
-                    out << line << "\n";
+                bool shouldInclude = !header_name.startsWith("moc_"_L1);
 
+                // Conditionally include private headers based on showInternal setting
+                if (header_name.endsWith("_p.h"_L1))
+                    shouldInclude = shouldInclude && policy.showInternal;
+
+                if (shouldInclude) {
+                    out << "#include \"" << header_path << "/" << header_name << "\"\n";
                 }
             }
         } else {
@@ -1695,7 +1802,16 @@ std::optional<PCHFile> buildPCH(
                 qWarning() << "Could not find module header file" << header;
                 return std::nullopt;
             }
-            out << QLatin1String("#include \"") + header + QLatin1String("\"");
+
+            out << "#include \"" << header << "\"\n";
+
+            if (policy.showInternal) {
+                for (const auto& [header_path, header_name] : all_headers) {
+                    bool shouldInclude = !header_name.startsWith("moc_"_L1);
+                    if (header_name.endsWith("_p.h"_L1) && shouldInclude)
+                        out << "#include \"" << header_path << "/" << header_name << "\"\n";
+                }
+            }
         }
     }
 
@@ -1724,7 +1840,8 @@ std::optional<PCHFile> buildPCH(
     // Visit the header now, as token from pre-compiled header won't be visited
     // later
     CXCursor cur = clang_getTranslationUnitCursor(tu);
-    ClangVisitor visitor(qdb, all_headers);
+    auto &config = Config::instance();
+    ClangVisitor visitor(qdb, all_headers, config.getInternalFilePatternsCompiled());
     visitor.visitChildren(cur);
     qCDebug(lcQdoc) << "PCH built and visited for" << module_header;
 
@@ -1780,7 +1897,7 @@ ParsedCppFileIR ClangCodeParser::parse_cpp_file(const QString &filePath)
     ParsedCppFileIR parse_result{};
 
     CXCursor tuCur = clang_getTranslationUnitCursor(tu);
-    ClangVisitor visitor(m_qdb, m_allHeaders);
+    ClangVisitor visitor(m_qdb, m_allHeaders, m_internalFilePatterns);
     visitor.visitChildren(tuCur);
 
     CXToken *tokens;
@@ -1962,7 +2079,8 @@ std::variant<Node*, FnMatchError> FnCommandParser::operator()(const Location &lo
           the diagnostics if they stop us finding the node.
          */
         CXCursor cur = clang_getTranslationUnitCursor(tu);
-        ClangVisitor visitor(m_qdb, m_allHeaders);
+        auto &config = Config::instance();
+        ClangVisitor visitor(m_qdb, m_allHeaders, config.getInternalFilePatternsCompiled());
         bool ignoreSignature = false;
         visitor.visitFnArg(cur, &fnNode, ignoreSignature);
 

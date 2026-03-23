@@ -2253,7 +2253,7 @@ void tst_qqmlproperty::interfaceBinding()
     qmlRegisterType<C>("io.qt.bugreports", 1, 0, "C");
     qmlRegisterType<InterfaceConsumer>("io.qt.bugreports", 1, 0, "InterfaceConsumer");
 
-    const QVector<QUrl> urls = {
+    const QList<QUrl> urls = {
         testFileUrl("interfaceBinding.qml"),
         testFileUrl("interfaceBinding2.qml")
     };
@@ -2331,19 +2331,19 @@ void tst_qqmlproperty::bindingToAlias()
 
 void tst_qqmlproperty::nestedQQmlPropertyMap()
 {
-    QQmlPropertyMap mainPropertyMap;
-    QQmlPropertyMap nestedPropertyMap;
-    QQmlPropertyMap deeplyNestedPropertyMap;
+    QScopedPointer<QQmlPropertyMap> mainPropertyMap(QQmlPropertyMap::create());
+    QScopedPointer<QQmlPropertyMap> nestedPropertyMap(QQmlPropertyMap::create());
+    QScopedPointer<QQmlPropertyMap> deeplyNestedPropertyMap(QQmlPropertyMap::create());
 
-    mainPropertyMap.insert("nesting1", QVariant::fromValue(&nestedPropertyMap));
-    nestedPropertyMap.insert("value", 42);
-    nestedPropertyMap.insert("nesting2", QVariant::fromValue(&deeplyNestedPropertyMap));
-    deeplyNestedPropertyMap.insert("value", "success");
+    mainPropertyMap->insert("nesting1", QVariant::fromValue(nestedPropertyMap.data()));
+    nestedPropertyMap->insert("value", 42);
+    nestedPropertyMap->insert("nesting2", QVariant::fromValue(deeplyNestedPropertyMap.data()));
+    deeplyNestedPropertyMap->insert("value", "success");
 
-    QQmlProperty value{&mainPropertyMap, "nesting1.value"};
+    QQmlProperty value{mainPropertyMap.data(), "nesting1.value"};
     QCOMPARE(value.read().toInt(), 42);
 
-    QQmlProperty success{&mainPropertyMap, "nesting1.nesting2.value"};
+    QQmlProperty success{mainPropertyMap.data(), "nesting1.nesting2.value"};
     QCOMPARE(success.read().toString(), QLatin1String("success"));
 }
 
@@ -2645,7 +2645,7 @@ void tst_qqmlproperty::invalidateQPropertyChangeTriggers()
     });
 
     root->setProperty("running", true);
-    QTRY_VERIFY(!root->property("running").toBool());
+    QTRY_VERIFY_WITH_TIMEOUT(!root->property("running").toBool(), 2s);
 
     QCOMPARE(names, (QStringList {
         u""_s, u"1300"_s, u"Create Object"_s,

@@ -13,6 +13,8 @@
 #include <QtCore/QTemporaryFile>
 #include <QtCore/QLibraryInfo>
 
+#include <private/qqmlprofilerqtdwriter_p.h>
+
 #include <iostream>
 
 static const char commandTextC[] =
@@ -44,7 +46,8 @@ static const char *features[] = {
     "binding",
     "handlingsignal",
     "inputevents",
-    "debugmessages"
+    "debugmessages",
+    "quick3d",
 };
 
 Q_STATIC_ASSERT(sizeof(features) == MaximumProfileFeature * sizeof(char *));
@@ -62,7 +65,7 @@ QmlProfilerApplication::QmlProfilerApplication(int &argc, char **argv) :
     m_connectionAttempts(0)
 {
     m_connection.reset(new QQmlDebugConnection);
-    m_profilerData.reset(new QmlProfilerData);
+    m_profilerData.reset(new QQmlProfilerQtdWriter);
     m_qmlProfilerClient.reset(new QmlProfilerClient(m_connection.data(), m_profilerData.data()));
     m_connectTimer.setInterval(1000);
     connect(&m_connectTimer, &QTimer::timeout, this, &QmlProfilerApplication::tryToConnect);
@@ -79,9 +82,9 @@ QmlProfilerApplication::QmlProfilerApplication(int &argc, char **argv) :
     connect(m_qmlProfilerClient.data(), &QmlProfilerClient::error,
             this, &QmlProfilerApplication::logError);
 
-    connect(m_profilerData.data(), &QmlProfilerData::error,
+    connect(m_profilerData.data(), &QQmlProfilerEventReceiver::error,
             this, &QmlProfilerApplication::logError);
-    connect(m_profilerData.data(), &QmlProfilerData::dataReady,
+    connect(m_profilerData.data(), &QQmlProfilerEventReceiver::dataReady,
             this, &QmlProfilerApplication::traceFinished);
 
 }

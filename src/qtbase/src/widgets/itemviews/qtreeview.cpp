@@ -187,7 +187,7 @@ void QTreeView::setModel(QAbstractItemModel *model)
     if (model == d->model)
         return;
     if (d->model && d->model != QAbstractItemModelPrivate::staticEmptyModel()) {
-        for (const QMetaObject::Connection &connection : d->modelConnections)
+        for (QMetaObject::Connection &connection : d->modelConnections)
             QObject::disconnect(connection);
     }
 
@@ -1030,7 +1030,8 @@ void QTreeView::keyboardSearch(const QString &search)
                 searchFrom = searchFrom.sibling(searchFrom.row(), start.column());
             if (searchFrom.parent() == start.parent())
                 searchFrom = start;
-            QModelIndexList match = d->model->match(searchFrom, Qt::DisplayRole, searchString);
+            QModelIndexList match = d->model->match(searchFrom, Qt::DisplayRole, searchString, 1,
+                                                    keyboardSearchFlags());
             if (match.size()) {
                 int hitIndex = d->viewIndex(match.at(0));
                 if (hitIndex >= 0 && hitIndex < startIndex)
@@ -1450,6 +1451,12 @@ QRect QTreeViewPrivate::intersectedRect(const QRect rect, const QModelIndex &top
     }
     return rect.intersected(updateRect);
 }
+
+/*!
+    \class QTreeViewPrivate
+    \inmodule QtWidgets
+    \internal
+*/
 
 /*!
   \reimp
@@ -3134,9 +3141,9 @@ void QTreeViewPrivate::initialize()
 
 void QTreeViewPrivate::clearConnections()
 {
-    for (const QMetaObject::Connection &connection : modelConnections)
+    for (QMetaObject::Connection &connection : modelConnections)
         QObject::disconnect(connection);
-    for (const QMetaObject::Connection &connection : headerConnections)
+    for (QMetaObject::Connection &connection : headerConnections)
         QObject::disconnect(connection);
     QObject::disconnect(selectionmodelConnection);
     QObject::disconnect(sortHeaderConnection);
@@ -4074,13 +4081,16 @@ void QTreeViewPrivate::sortIndicatorChanged(int column, Qt::SortOrder order)
     model->sort(column, order);
 }
 
-int QTreeViewPrivate::accessibleTree2Index(const QModelIndex &index) const
+#if QT_CONFIG(accessibility)
+int QTreeViewPrivate::accessibleChildIndex(const QModelIndex &index) const
 {
     Q_Q(const QTreeView);
+    Q_ASSERT(index.isValid());
 
     // Note that this will include the header, even if its hidden.
     return (q->visualIndex(index) + (q->header() ? 1 : 0)) * index.model()->columnCount() + index.column();
 }
+#endif
 
 void QTreeViewPrivate::updateIndentationFromStyle()
 {
@@ -4106,9 +4116,12 @@ void QTreeView::currentChanged(const QModelIndex &current, const QModelIndex &pr
     if (QAccessible::isActive() && current.isValid() && hasFocus()) {
         Q_D(QTreeView);
 
-        QAccessibleEvent event(this, QAccessible::Focus);
-        event.setChild(d->accessibleTree2Index(current));
-        QAccessible::updateAccessibility(&event);
+        const int entry = d->accessibleChildIndex(current);
+        if (entry >= 0) {
+            QAccessibleEvent event(this, QAccessible::Focus);
+            event.setChild(entry);
+            QAccessible::updateAccessibility(&event);
+        }
     }
 #endif
 }
@@ -4127,19 +4140,21 @@ void QTreeView::selectionChanged(const QItemSelection &selected,
         // ### does not work properly for selection ranges.
         QModelIndex sel = selected.indexes().value(0);
         if (sel.isValid()) {
-            int entry = d->accessibleTree2Index(sel);
-            Q_ASSERT(entry >= 0);
-            QAccessibleEvent event(this, QAccessible::SelectionAdd);
-            event.setChild(entry);
-            QAccessible::updateAccessibility(&event);
+            int entry = d->accessibleChildIndex(sel);
+            if (entry >= 0) {
+                QAccessibleEvent event(this, QAccessible::SelectionAdd);
+                event.setChild(entry);
+                QAccessible::updateAccessibility(&event);
+            }
         }
         QModelIndex desel = deselected.indexes().value(0);
         if (desel.isValid()) {
-            int entry = d->accessibleTree2Index(desel);
-            Q_ASSERT(entry >= 0);
-            QAccessibleEvent event(this, QAccessible::SelectionRemove);
-            event.setChild(entry);
-            QAccessible::updateAccessibility(&event);
+            int entry = d->accessibleChildIndex(desel);
+            if (entry >= 0) {
+                QAccessibleEvent event(this, QAccessible::SelectionRemove);
+                event.setChild(entry);
+                QAccessible::updateAccessibility(&event);
+            }
         }
     }
 #endif

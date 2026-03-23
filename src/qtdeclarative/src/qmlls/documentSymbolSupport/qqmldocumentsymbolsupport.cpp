@@ -7,8 +7,10 @@
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
-QQmlDocumentSymbolSupport::QQmlDocumentSymbolSupport(QmlLsp::QQmlCodeModel *model)
-    : BaseT(model) { }
+QQmlDocumentSymbolSupport::QQmlDocumentSymbolSupport(QmlLsp::QQmlCodeModelManager *model)
+    : BaseT(model)
+{
+}
 
 QString QQmlDocumentSymbolSupport::name() const
 {
@@ -30,7 +32,7 @@ void QQmlDocumentSymbolSupport::registerHandlers(QLanguageServer *,
 
 void QQmlDocumentSymbolSupport::process(QQmlDocumentSymbolSupport::RequestPointerArgument request)
 {
-    const auto doc = m_codeModel->openDocumentByUrl(
+    const auto doc = m_codeModelManager->openDocumentByUrl(
             QQmlLSUtils::lspUriToQmlUrl(request->m_parameters.textDocument.uri));
     const auto qmlFileItem = doc.snapshot.validDoc.fileObject(QQmlJS::Dom::GoTo::MostLikely);
     QList<QLspSpecification::DocumentSymbol> results;

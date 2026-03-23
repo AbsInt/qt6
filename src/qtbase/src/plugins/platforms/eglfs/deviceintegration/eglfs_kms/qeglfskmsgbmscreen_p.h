@@ -68,7 +68,7 @@ protected:
 
     QMutex m_flipMutex;
     QWaitCondition m_flipCond;
-    static QMutex m_nonThreadedFlipMutex;
+    static QMutex s_nonThreadedFlipMutex;
 
     QScopedPointer<QEglFSKmsGbmCursor> m_cursor;
 

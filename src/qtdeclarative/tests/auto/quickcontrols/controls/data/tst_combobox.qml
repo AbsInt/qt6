@@ -2456,4 +2456,52 @@ TestCase {
             ignoreWarning(/ComboBox\.qml\:[0-9]+\:[0-9]+\: Unable to assign QQmlDMAbstractItemModelData to QString/);
         compare(control.popup.contentItem.itemAtIndex(0).text, "");
     }
+
+    Component {
+        id: delegateComponent1
+
+        ItemDelegate {}
+    }
+
+    Component {
+        id: delegateComponent2
+
+        ItemDelegate {}
+    }
+
+    function test_dontDeleteDelegates() {
+        let control = createTemporaryObject(
+            comboBox, testCase, { model: fruitarray, textRole: "color", delegate: delegateComponent1 })
+        verify(control)
+
+        // When setting a new delegate, the old one shouldn't be destroyed.
+        control.delegate = delegateComponent2
+        verify(delegateComponent1)
+
+        // The same goes for the new delegate: it shouldn't be destroyed when setting the old one.
+        control.delegate = delegateComponent1
+        verify(delegateComponent2)
+    }
+
+    // QTBUG-144146 - verify background size
+    Component {
+        id: comboboxBackgroundResize
+        ComboBox {
+            width: 100
+            height: 30
+        }
+    }
+
+    function test_backgroundResize() {
+        if (StyleInfo.styleName !== "FluentWinUI3")
+            skip("background size problem only exists in FluentWinUI3. " +
+                  "more details in QTBUG-144146")
+
+        let control = createTemporaryObject(comboboxBackgroundResize, testCase)
+        verify(control)
+
+        verify(control.children.length > 0)
+        compare(control.background.children[0].width, 100)
+        compare(control.background.children[0].height, 30)
+    }
 }

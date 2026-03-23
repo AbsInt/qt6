@@ -266,12 +266,9 @@ private:
 class QFileDialogLineEdit : public QLineEdit
 {
 public:
-    QFileDialogLineEdit(QWidget *parent = nullptr) : QLineEdit(parent), d_ptr(nullptr){}
-    void setFileDialogPrivate(QFileDialogPrivate *d_pointer) {d_ptr = d_pointer; }
+    QFileDialogLineEdit(QWidget *parent = nullptr) : QLineEdit(parent) {}
     void keyPressEvent(QKeyEvent *e) override;
     bool hideOnEsc;
-private:
-    QFileDialogPrivate *d_ptr;
 };
 
 class QFileDialogComboBox : public QComboBox

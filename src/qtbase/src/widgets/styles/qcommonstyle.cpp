@@ -1279,6 +1279,9 @@ void QCommonStylePrivate::stopAnimation(const QObject *target) const
 void QCommonStylePrivate::removeAnimation(const QObject *target) const
 {
     animations.remove(target);
+    const auto w = const_cast<QWidget *>(qobject_cast<const QWidget *>(target));
+    if (w)
+        w->update();
 }
 #endif
 
@@ -1625,23 +1628,18 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
         if (const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(opt)) {
             QRect rect = header->rect;
             if (!header->icon.isNull()) {
-                int iconExtent = proxy()->pixelMetric(PM_SmallIconSize, opt, widget);
-                QPixmap pixmap
-                    = header->icon.pixmap(QSize(iconExtent, iconExtent), QStyleHelper::getDpr(p), (header->state & State_Enabled) ? QIcon::Normal : QIcon::Disabled);
-                int pixw = pixmap.width() / pixmap.devicePixelRatio();
-
-                QRect aligned = alignedRect(header->direction, header->iconAlignment, pixmap.size() / pixmap.devicePixelRatio(), rect);
-                QRect inter = aligned.intersected(rect);
-                p->drawPixmap(inter.x(), inter.y(), pixmap,
-                              inter.x() - aligned.x(), inter.y() - aligned.y(),
-                              aligned.width() * pixmap.devicePixelRatio(),
-                              pixmap.height() * pixmap.devicePixelRatio());
+                const int iconExtent = proxy()->pixelMetric(PM_SmallIconSize, opt, widget);
+                const QRect aligned = alignedRect(header->direction, header->iconAlignment,
+                                                  QSize(iconExtent, iconExtent), rect);
+                header->icon.paint(p, aligned, Qt::AlignCenter,
+                                   header->state.testFlag(State_Enabled) ? QIcon::Normal
+                                                                         : QIcon::Disabled);
 
                 const int margin = proxy()->pixelMetric(QStyle::PM_HeaderMargin, opt, widget);
                 if (header->direction == Qt::LeftToRight)
-                    rect.setLeft(rect.left() + pixw + margin);
+                    rect.setLeft(rect.left() + iconExtent + margin);
                 else
-                    rect.setRight(rect.right() - pixw - margin);
+                    rect.setRight(rect.right() - iconExtent - margin);
             }
             QFontMetrics fm(header->fontMetrics);
             if (header->state & QStyle::State_On) {
@@ -1994,12 +1992,9 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                 tr = proxy()->subElementRect(SE_TabBarTabText, opt, widget);
 
             if (!tab->icon.isNull()) {
-                QPixmap tabIcon = tab->icon.pixmap(tab->iconSize, QStyleHelper::getDpr(p),
-                                                   (tab->state & State_Enabled) ? QIcon::Normal
-                                                                                : QIcon::Disabled,
-                                                   (tab->state & State_Selected) ? QIcon::On
-                                                                                 : QIcon::Off);
-                p->drawPixmap(iconRect.x(), iconRect.y(), tabIcon);
+                const auto mode = (tab->state & State_Enabled) ? QIcon::Normal : QIcon::Disabled;
+                const auto state = (tab->state & State_Selected) ? QIcon::On : QIcon::Off;
+                tab->icon.paint(p, iconRect, Qt::AlignCenter, mode, state);
             }
 
             proxy()->drawItemText(p, tr, alignment, tab->palette, tab->state & State_Enabled, tab->text,
@@ -2315,11 +2310,6 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                 } else {
                     p->setPen(vopt->palette.color(cg, QPalette::Text));
                 }
-                if (vopt->state & QStyle::State_Editing) {
-                    p->setPen(vopt->palette.color(cg, QPalette::Text));
-                    p->drawRect(textRect.adjusted(0, 0, -1, -1));
-                }
-
                 d->viewItemDrawText(p, vopt, textRect);
             }
 
@@ -5415,7 +5405,8 @@ int QCommonStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget
     case SH_Menu_AllowActiveAndDisabled:
     case SH_Menu_SpaceActivatesItem:
     case SH_ScrollView_FrameOnlyAroundContents:
-    case SH_ComboBox_ListMouseTracking:
+    case SH_ComboBox_ListMouseTracking_Current:
+    case SH_ComboBox_ListMouseTracking_Active:
     case SH_Menu_MouseTracking:
     case SH_MenuBar_MouseTracking:
     case SH_ItemView_ChangeHighlightOnFocus:

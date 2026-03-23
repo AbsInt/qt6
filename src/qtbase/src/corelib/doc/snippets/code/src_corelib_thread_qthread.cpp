@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 #include <QtCore/QThread>
+
 class MyObject : public QObject
 {
     Q_OBJECT
@@ -77,5 +78,3 @@ signals:
 //! [worker]
 
 void Controller::handleResults(const QString &) { }
-
-#include "src_corelib_thread_qthread.moc"

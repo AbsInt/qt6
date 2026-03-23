@@ -35,6 +35,8 @@ class Q_QUICKTEMPLATES2_EXPORT QQuickDialogButtonBox : public QQuickContainer
     Q_PROPERTY(Position position READ position WRITE setPosition NOTIFY positionChanged FINAL)
     Q_PROPERTY(Qt::Alignment alignment READ alignment WRITE setAlignment RESET resetAlignment NOTIFY alignmentChanged FINAL)
     Q_PROPERTY(QPlatformDialogHelper::StandardButtons standardButtons READ standardButtons WRITE setStandardButtons NOTIFY standardButtonsChanged FINAL)
+    Q_PROPERTY(QPlatformDialogHelper::StandardButton defaultStandardButton READ defaultStandardButton WRITE setDefaultStandardButton NOTIFY defaultStandardButtonChanged FINAL REVISION(6, 11))
+    Q_PROPERTY(QQuickAbstractButton *defaultButton READ defaultButton WRITE setDefaultButton NOTIFY defaultButtonChanged FINAL REVISION(6, 11))
     Q_PROPERTY(QQmlComponent *delegate READ delegate WRITE setDelegate NOTIFY delegateChanged FINAL)
     // 2.5 (Qt 5.12)
     Q_PROPERTY(QPlatformDialogHelper::ButtonLayout buttonLayout READ buttonLayout WRITE setButtonLayout RESET resetButtonLayout NOTIFY buttonLayoutChanged FINAL REVISION(2, 5))
@@ -64,6 +66,12 @@ public:
     void setStandardButtons(QPlatformDialogHelper::StandardButtons buttons);
     Q_INVOKABLE QQuickAbstractButton *standardButton(QPlatformDialogHelper::StandardButton button) const;
 
+    QPlatformDialogHelper::StandardButton defaultStandardButton() const;
+    void setDefaultStandardButton(QPlatformDialogHelper::StandardButton button);
+
+    QQuickAbstractButton *defaultButton() const;
+    void setDefaultButton(QQuickAbstractButton *button);
+
     QQmlComponent *delegate() const;
     void setDelegate(QQmlComponent *delegate);
 
@@ -88,6 +96,8 @@ Q_SIGNALS:
     Q_REVISION(2, 3) void discarded();
     // 2.5 (Qt 5.12)
     Q_REVISION(2, 5) void buttonLayoutChanged();
+    Q_REVISION(6, 11) void defaultStandardButtonChanged();
+    Q_REVISION(6, 11) void defaultButtonChanged();
 
 protected:
     void updatePolish() override;
@@ -104,6 +114,8 @@ protected:
     bool event(QEvent *e) override;
 
 private:
+    void itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &data) override;
+
     Q_DISABLE_COPY(QQuickDialogButtonBox)
     Q_DECLARE_PRIVATE(QQuickDialogButtonBox)
 };

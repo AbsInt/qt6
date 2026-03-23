@@ -38,6 +38,7 @@ static_assert(std::is_trivially_default_constructible_v<MemberData>);
 struct MemberData : Managed
 {
     V4_MANAGED(MemberData, Managed)
+    Q_MANAGED_TYPE(MemberData)
     V4_INTERNALCLASS(MemberData)
 
     const Value &operator[] (uint idx) const { return d()->values[idx]; }

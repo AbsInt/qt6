@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:significant
 
-#ifndef QV8SQLERRORS_P_H
-#define QV8SQLERRORS_P_H
+#ifndef QV4SQLERRORS_P_H
+#define QV4SQLERRORS_P_H
 
 //
 //  W A R N I N G
@@ -36,4 +36,4 @@ void qt_add_sqlexceptions(QV4::ExecutionEngine *engine);
 
 QT_END_NAMESPACE
 
-#endif // QV8SQLERRORS_P_H
+#endif // QV4SQLERRORS_P_H

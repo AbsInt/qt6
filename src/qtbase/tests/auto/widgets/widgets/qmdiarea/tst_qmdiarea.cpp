@@ -1191,44 +1191,38 @@ class MySubWindow : public QMdiSubWindow
 {
 public:
     using QObject::receivers;
+    using QObject::isSignalConnected;
 };
-
-static int numberOfConnectedSignals(MySubWindow *subWindow)
-{
-    if (!subWindow)
-        return 0;
-
-    int numConnectedSignals = 0;
-    for (int i = 0; i < subWindow->metaObject()->methodCount(); ++i) {
-        QMetaMethod method = subWindow->metaObject()->method(i);
-        if (method.methodType() == QMetaMethod::Signal) {
-            QString signature(QLatin1String("2"));
-            signature += QLatin1String(method.methodSignature().constData());
-            numConnectedSignals += subWindow->receivers(signature.toLatin1());
-        }
-    }
-    return numConnectedSignals;
-}
 
 void tst_QMdiArea::removeSubWindow_2()
 {
     QMdiArea mdiArea;
     MySubWindow *subWindow = new MySubWindow;
-    QCOMPARE(numberOfConnectedSignals(subWindow), 0);
+
+    const QMetaMethod mm_aboutToActivate = QMetaMethod::fromSignal(&QMdiSubWindow::aboutToActivate);
+    const QMetaMethod mm_windowStateChanged = QMetaMethod::fromSignal(&QMdiSubWindow::windowStateChanged);
+
+    QCOMPARE(subWindow->isSignalConnected(mm_aboutToActivate), false);
+    QCOMPARE(subWindow->isSignalConnected(mm_windowStateChanged), false);
 
     // Connected to aboutToActivate() and windowStateChanged().
     mdiArea.addSubWindow(subWindow);
-    QVERIFY(numberOfConnectedSignals(subWindow) >= 2);
+    QCOMPARE(subWindow->isSignalConnected(mm_aboutToActivate), true);
+    QCOMPARE(subWindow->isSignalConnected(mm_windowStateChanged), true);
 
     // Ensure we disconnect from all signals.
     mdiArea.removeSubWindow(subWindow);
-    QCOMPARE(numberOfConnectedSignals(subWindow), 0);
+    QCOMPARE(subWindow->isSignalConnected(mm_aboutToActivate), false);
+    QCOMPARE(subWindow->isSignalConnected(mm_windowStateChanged), false);
 
     mdiArea.addSubWindow(subWindow);
-    QVERIFY(numberOfConnectedSignals(subWindow) >= 2);
+    QCOMPARE(subWindow->isSignalConnected(mm_aboutToActivate), true);
+    QCOMPARE(subWindow->isSignalConnected(mm_windowStateChanged), true);
+
     subWindow->setParent(0);
     QScopedPointer<MySubWindow> subWindowGuard(subWindow);
-    QCOMPARE(numberOfConnectedSignals(subWindow), 0);
+    QCOMPARE(subWindow->isSignalConnected(mm_aboutToActivate), false);
+    QCOMPARE(subWindow->isSignalConnected(mm_windowStateChanged), false);
 }
 
 void tst_QMdiArea::closeWindows()

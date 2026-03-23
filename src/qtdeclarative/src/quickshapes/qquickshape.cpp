@@ -6,6 +6,7 @@
 #include "qquickshapegenericrenderer_p.h"
 #include "qquickshapesoftwarerenderer_p.h"
 #include "qquickshapecurverenderer_p.h"
+#include <private/qsgcurvestrokenode_p.h>
 #include <private/qsgplaintexture_p.h>
 #include <private/qquicksvgparser_p.h>
 #include <QtGui/private/qdrawhelper_p.h>
@@ -151,7 +152,7 @@ QQuickShapeStrokeFillParams::QQuickShapeStrokeFillParams()
     Once associated with a Shape, here is the output with a joinStyleIndex
     of 2 (ShapePath.RoundJoin):
 
-    \image visualpath-code-example.png
+    \image visualpath-code-example.png {Black angled line with rounded corner}
 
     \sa {Qt Quick Examples - Shapes}, {Weather Forecast Example}, Shape
  */
@@ -217,6 +218,8 @@ void QQuickShapePath::setStrokeColor(const QColor &color)
     When set to a negative value, no stroking occurs.
 
     The default value is 1.
+
+    \sa cosmeticStroke
  */
 
 qreal QQuickShapePath::strokeWidth() const
@@ -232,6 +235,37 @@ void QQuickShapePath::setStrokeWidth(qreal w)
         d->sfp.strokeWidth = w;
         d->dirty |= QQuickShapePathPrivate::DirtyStrokeWidth;
         emit strokeWidthChanged();
+        emit shapePathChanged();
+    }
+}
+
+/*! \since 6.11
+    \qmlproperty bool QtQuick.Shapes::ShapePath::cosmeticStroke
+
+    This property holds whether the stroke width remains constant despite rendering scale.
+
+    When this property is set to \c true, the outline of the shape
+    is drawn with constant width in \l {High DPI}{device-independent pixels},
+    as specified by \l strokeWidth, regardless of any transformations applied
+    to the shape, such as \l QtQuick::Item::scale.
+
+    The default value is \c false.
+
+    \sa strokeWidth
+*/
+bool QQuickShapePath::cosmeticStroke() const
+{
+    Q_D(const QQuickShapePath);
+    return d->sfp.cosmeticStroke;
+}
+
+void QQuickShapePath::setCosmeticStroke(bool c)
+{
+    Q_D(QQuickShapePath);
+    if (d->sfp.cosmeticStroke != c) {
+        d->sfp.cosmeticStroke = c;
+        d->dirty |= QQuickShapePathPrivate::DirtyStrokeWidth;
+        emit cosmeticStrokeChanged();
         emit shapePathChanged();
     }
 }
@@ -401,13 +435,13 @@ void QQuickShapePath::setDashOffset(qreal offset)
     \include shapepath.qdocinc {dashPattern-property} {QtQuick.Shapes::ShapePath}
 */
 
-QVector<qreal> QQuickShapePath::dashPattern() const
+QList<qreal> QQuickShapePath::dashPattern() const
 {
     Q_D(const QQuickShapePath);
     return d->sfp.dashPattern;
 }
 
-void QQuickShapePath::setDashPattern(const QVector<qreal> &array)
+void QQuickShapePath::setDashPattern(const QList<qreal> &array)
 {
     Q_D(QQuickShapePath);
     if (d->sfp.dashPattern != array) {
@@ -452,6 +486,7 @@ void QQuickShapePath::setFillGradient(QQuickShapeGradient *gradient)
         if (d->sfp.fillGradient)
             qmlobject_connect(d->sfp.fillGradient, QQuickShapeGradient, SIGNAL(updated()),
                               this, QQuickShapePath, SLOT(_q_fillGradientChanged()));
+        emit fillGradientChanged();
         d->dirty |= QQuickShapePathPrivate::DirtyFillGradient;
         emit shapePathChanged();
     }
@@ -791,6 +826,7 @@ void QQuickShapeTrim::setOffset(qreal t)
     \endqml
 
     \image pathitem-code-example.png
+           {Triangle with rainbow gradient fill and red dashed stroke}
 
     Like \l Item, Shape also allows any visual or non-visual objects to be
     declared as children. ShapePath objects are handled specially. This is
@@ -1353,6 +1389,16 @@ void QQuickShape::itemChange(ItemChange change, const ItemChangeData &data)
             QQuickShapePathPrivate::get(d->sp[i])->dirty = QQuickShapePathPrivate::DirtyAll;
         d->_q_shapePathChanged();
         d->handleSceneChange(data.window);
+    } else if (change == ItemTransformHasChanged && d->rendererType == QQuickShape::GeometryRenderer) {
+        bool cosmeticStrokeFound = false;
+        for (int i = 0; i < d->sp.size(); ++i) {
+            if (d->sp[i]->cosmeticStroke()) {
+                QQuickShapePathPrivate::get(d->sp[i])->dirty = QQuickShapePathPrivate::DirtyStrokeWidth;
+                cosmeticStrokeFound = true;
+            }
+        }
+        if (cosmeticStrokeFound)
+            d->_q_shapePathChanged();
     }
 
     QQuickItem::itemChange(change, data);
@@ -1453,6 +1499,9 @@ void QQuickShapePrivate::createRenderer()
     rendererType = selectedType;
     rendererChanged = true;
 
+    // If cosmetic stroking is used with GeometryRenderer, we need to be notified when the transform changes
+    q->setFlag(QQuickItem::ItemObservesViewport, rendererType == QQuickShape::GeometryRenderer);
+
     switch (selectedType) {
     case QQuickShape::SoftwareRenderer:
         renderer = new QQuickShapeSoftwareRenderer;
@@ -1534,8 +1583,10 @@ void QQuickShapePrivate::sync()
 
     const int count = sp.size();
     bool countChanged = false;
+    const qreal det = windowToItemTransform().determinant();
+    const qreal adjTriangulationScale = triangulationScale /
+            (qIsNaN(det) || qIsNull(det) ? qreal(1) : qSqrt(qAbs(det)));
     renderer->beginSync(count, &countChanged);
-    renderer->setTriangulationScale(triangulationScale);
 
     qCDebug(lcShapeSync) << "syncing" << count << "path(s)";
     for (int i = 0; i < count; ++i) {
@@ -1552,8 +1603,21 @@ void QQuickShapePrivate::sync()
             qCDebug(lcShapeSync) << "  - DirtyStrokeColor:" << p->strokeColor();
             renderer->setStrokeColor(i, p->strokeColor());
         }
-        if (dirty & QQuickShapePathPrivate::DirtyStrokeWidth)
+        if (dirty & QQuickShapePathPrivate::DirtyStrokeWidth) {
+            // TODO adjust triangulationScale regardless of the env var, after we're satisfied that there are no significant regressions
+            if (p->cosmeticStroke() || QSGCurveStrokeNode::expandingStrokeEnabled()) {
+                renderer->setTriangulationScale(i, adjTriangulationScale);
+                qCDebug(lcShapeSync) << "  - DirtyStrokeWidth:" << p->strokeWidth()
+                                     << "cosmetic:" << p->cosmeticStroke() << "triangulationScale"
+                                     << triangulationScale << "adjusted to" << adjTriangulationScale;
+            } else {
+                renderer->setTriangulationScale(i, triangulationScale);
+                qCDebug(lcShapeSync) << "  - DirtyStrokeWidth:" << p->strokeWidth()
+                                     << "cosmetic:" << p->cosmeticStroke() << "triangulationScale" << triangulationScale;
+            }
             renderer->setStrokeWidth(i, p->strokeWidth());
+            renderer->setCosmeticStroke(i, p->cosmeticStroke());
+        }
         if (dirty & QQuickShapePathPrivate::DirtyFillColor)
             renderer->setFillColor(i, p->fillColor());
         if (dirty & QQuickShapePathPrivate::DirtyFillRule)
@@ -1783,6 +1847,7 @@ void QQuickShapeLinearGradient::setY2(qreal v)
     \endcode
 
     \image shape-radial-gradient.png
+           {Ellipse with radial gradient from white center to cyan edge}
 
     Extended radial gradients, where a separate focal circle is specified, are
     also supported.

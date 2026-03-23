@@ -718,6 +718,8 @@ void tst_QColumnView::gripMoved()
 void tst_QColumnView::preview()
 {
     QColumnView view;
+    view.resize(800, 300);
+    view.show();
     QCOMPARE(view.previewWidget(), nullptr);
     TreeModel model;
     view.setModel(&model);
@@ -738,18 +740,30 @@ void tst_QColumnView::preview()
     }
     QVERIFY(file.isValid());
     view.setCurrentIndex(file);
-    QVERIFY(view.previewWidget() != nullptr);
+    QCOMPARE(view.previewWidget(), nullptr);
 
     QWidget *previewWidget = new QWidget(&view);
     view.setPreviewWidget(previewWidget);
+    QVERIFY(view.isPreviewColumnVisible());
+
     QCOMPARE(view.previewWidget(), previewWidget);
     QVERIFY(previewWidget->parent() != &view);
+    QTRY_VERIFY(view.previewWidget()->isVisible());
+    view.setPreviewColumnVisible(false);
+    QVERIFY(!view.isPreviewColumnVisible());
+    QTRY_VERIFY(!view.previewWidget()->isVisible());
+    view.setPreviewColumnVisible(true);
+    QVERIFY(view.isPreviewColumnVisible());
+    QTRY_VERIFY(view.previewWidget()->isVisible());
     view.setCurrentIndex(home);
+    QTRY_VERIFY(!view.previewWidget()->isVisible());
 
     // previewWidget should be marked for deletion
     QWidget *previewWidget2 = new QWidget(&view);
     view.setPreviewWidget(previewWidget2);
     QCOMPARE(view.previewWidget(), previewWidget2);
+    view.setPreviewWidget(nullptr);
+    QCOMPARE(view.previewWidget(), nullptr);
 }
 
 void tst_QColumnView::swapPreview()

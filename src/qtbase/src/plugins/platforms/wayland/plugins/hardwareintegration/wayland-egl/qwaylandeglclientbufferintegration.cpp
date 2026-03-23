@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qwaylandeglclientbufferintegration_p.h"
 
@@ -10,6 +11,7 @@
 
 #include <QtCore/QDebug>
 #include <private/qeglconvenience_p.h>
+#include <private/qeglpbuffer_p.h>
 
 #ifndef EGL_EXT_platform_base
 typedef EGLDisplay (*PFNEGLGETPLATFORMDISPLAYEXTPROC) (EGLenum platform, void *native_display, const EGLint *attrib_list);
@@ -132,6 +134,16 @@ QPlatformOpenGLContext *QWaylandEglClientBufferIntegration::createPlatformOpenGL
 QOpenGLContext *QWaylandEglClientBufferIntegration::createOpenGLContext(EGLContext context, EGLDisplay contextDisplay, QOpenGLContext *shareContext) const
 {
     return QEGLPlatformContext::createFrom<QWaylandGLContext>(context, contextDisplay, m_eglDisplay, shareContext);
+}
+
+bool QWaylandEglClientBufferIntegration::canCreatePlatformOffscreenSurface() const
+{
+    return true;
+}
+
+QPlatformOffscreenSurface *QWaylandEglClientBufferIntegration::createPlatformOffscreenSurface(QOffscreenSurface *surface) const
+{
+    return new QEGLPbuffer(m_eglDisplay, surface->requestedFormat(), surface);
 }
 
 void *QWaylandEglClientBufferIntegration::nativeResource(NativeResource resource)

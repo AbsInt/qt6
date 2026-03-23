@@ -94,7 +94,7 @@ public:
 
     int containerDepth() const;
     QCborStreamReader::Type parentContainerType() const;
-    bool hasNext() const noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION bool hasNext() const noexcept;
     bool next(int maxRecursion = 10000);
 
     Type type() const               { return QCborStreamReader::Type(type_); }
@@ -119,7 +119,7 @@ public:
     bool isNull() const             { return isSimpleType(QCborSimpleType::Null); }
     bool isUndefined() const        { return isSimpleType(QCborSimpleType::Undefined); }
 
-    bool isLengthKnown() const noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION bool isLengthKnown() const noexcept;
     quint64 length() const;
 
     bool isContainer() const            { return isMap() || isArray(); }

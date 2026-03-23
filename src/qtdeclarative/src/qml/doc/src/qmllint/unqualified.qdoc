@@ -54,7 +54,7 @@ Item {
 
 \section2 What happened?
 You used an \l{Attached Properties and Attached Signal Handlers}{attached property} type or
-\l{Grouped Properties}{grouped property} that can't be found.
+\l{QML Object Attributes#Grouped Properties}{grouped property} that can't be found.
 This can be caused by a typo or by a missing QML module dependency.
 
 \note If you are importing QML modules with external dependencies, verify that they are
@@ -81,7 +81,8 @@ Indeed, \l{Item} does neither have any attached type nor any grouped property ca
 To fix this warning, remove the attached type and the grouped property.
 
 Refer to \l{Attached Properties and Attached Signal Handlers} on how to use attached
-properties and to \l{Grouped Properties} on how to use grouped properties.
+properties and to \l{QML Object Attributes#Grouped Properties}{Grouped Properties} on how to
+use grouped properties.
 
 \section1 No matching signal found for handler
 

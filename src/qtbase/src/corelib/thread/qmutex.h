@@ -55,7 +55,7 @@ public:
 
         if constexpr (FutexAlwaysAvailable) {
             // we always unlock if we have futexes
-            if (QMutexPrivate *d = d_ptr.fetchAndStoreRelease(nullptr); d != dummyLocked())
+            if (QMutexPrivate *d = d_ptr.fetchAndStoreRelease(nullptr); Q_UNLIKELY(d != dummyLocked()))
                 unlockInternalFutex(d);     // was contended
         } else {
             // if we don't have futexes, we can only unlock if not contended
@@ -85,7 +85,7 @@ public:
 private:
     inline bool fastTryLock() noexcept
     {
-        if (d_ptr.loadRelaxed() != nullptr)
+        if (Q_UNLIKELY(d_ptr.loadRelaxed() != nullptr))
             return false;
         return d_ptr.testAndSetAcquire(nullptr, dummyLocked());
     }

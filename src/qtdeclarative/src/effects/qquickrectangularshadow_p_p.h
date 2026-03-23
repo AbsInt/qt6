@@ -21,6 +21,7 @@ QT_REQUIRE_CONFIG(quick_shadereffect);
 
 #include <private/qquickrectangularshadow_p.h>
 #include <private/qquickitem_p.h>
+#include <private/qlazilyallocated_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -42,8 +43,12 @@ private:
     void updateShaderSource();
     void updateSizeProperties();
     void updateCached();
-    qreal clampedRadius() const;
+    qreal clampedRadius(qreal radius) const;
+    QVector4D clampedRadius4R() const;
     QQuickItem *currentMaterial() const;
+    void maybeSetImplicitAntialiasing();
+    bool useIndividualRadius() const;
+    void updateDefaultShader();
 
     QQuickShaderEffect *m_defaultMaterial = nullptr;
     QQuickItem *m_material = nullptr;
@@ -54,6 +59,30 @@ private:
     qreal m_spread = 0.0;
     bool m_cached = false;
     bool m_initialized = false;
+
+    struct ExtraData {
+        ExtraData()
+            : topLeftRadius(0),
+              topRightRadius(0),
+              bottomLeftRadius(0),
+              bottomRightRadius(0),
+              isTopLeftRadiusSet(false),
+              isTopRightRadiusSet(false),
+              isBottomLeftRadiusSet(false),
+              isBottomRightRadiusSet(false)
+        {
+        }
+        qreal topLeftRadius;
+        qreal topRightRadius;
+        qreal bottomLeftRadius;
+        qreal bottomRightRadius;
+
+        unsigned isTopLeftRadiusSet : 1;
+        unsigned isTopRightRadiusSet : 1;
+        unsigned isBottomLeftRadiusSet : 1;
+        unsigned isBottomRightRadiusSet : 1;
+    };
+    QLazilyAllocated<ExtraData> extra;
 };
 
 QT_END_NAMESPACE

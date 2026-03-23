@@ -116,6 +116,10 @@ public:
     explicit QAccessibleAbstractSlider(QWidget *w, QAccessible::Role r = QAccessible::Slider);
     void *interface_cast(QAccessible::InterfaceType t) override;
 
+    // QAccessibleAttributesInterface
+    QList<QAccessible::Attribute> attributeKeys() const override;
+    QVariant attributeValue(QAccessible::Attribute key) const override;
+
     // QAccessibleValueInterface
     QVariant currentValue() const override;
     void setCurrentValue(const QVariant &value) override;

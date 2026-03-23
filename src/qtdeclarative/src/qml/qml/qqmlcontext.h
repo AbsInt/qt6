@@ -37,6 +37,7 @@ public:
 
     QQmlEngine *engine() const;
     QQmlContext *parentContext() const;
+    QList<QQmlContext *> childContexts() const;
 
     QObject *contextObject() const;
     void setContextObject(QObject *);
@@ -48,6 +49,9 @@ public:
 
     QString nameForObject(const QObject *) const;
     QObject *objectForName(const QString &) const;
+
+    QObject *findObjectRecursively(const QString &id) const;
+    QList<QObject *> findObjectsRecursively(const QString &id) const;
 
     QUrl resolvedUrl(const QUrl &) const;
 

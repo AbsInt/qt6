@@ -10,6 +10,7 @@
 #include "qquickaction_p_p.h"
 #include "qquickshortcutcontext_p_p.h"
 #include "qquickdeferredexecute_p_p.h"
+#include "qquickicon_p_p.h"
 
 #include <QtGui/qstylehints.h>
 #include <QtGui/qguiapplication.h>
@@ -359,11 +360,51 @@ void QQuickAbstractButtonPrivate::updateEffectiveIcon()
     // If we only stored our icon and the action's icon, and resolved in the getter, we'd have
     // no way of knowing what the old value was here. As an added benefit, we only resolve when
     // something has changed, as opposed to doing it unconditionally in the icon() getter.
-    const QQuickIcon newEffectiveIcon = action ? icon.resolve(action->icon()) : icon;
-    if (newEffectiveIcon == effectiveIcon)
+    QQuickIcon newEffectiveIcon = action ? icon.resolve(action->icon()) : icon;
+
+    bool unchanged = newEffectiveIcon == effectiveIcon;
+    if (action) {
+        // We can't rely purely on QQuickIcon::operator== for our unchanged check, because it
+        // doesn't account for the color being resolved. QQuickIconLabelPrivate::syncImage and
+        // createImage rely on the color's resolve mask to determine if a color was set on it
+        // that should override the style default (see QQuickIconLabel::defaultIconColor for
+        // more info). If we didn't check the resolve mask
+        // and the user set the color to transparent (the default), the resolveMask of d->icon
+        // wouldn't indicate that the color was resolved and iconChanged wouldn't be emitted,
+        // leading to the user's request being ignored.
+        const bool actionIconColorResolved = QQuickIconPrivate::isResolved(action->icon(),
+            QQuickIconPrivate::ColorResolved);
+        const bool iconColorResolved = QQuickIconPrivate::isResolved(icon,
+            QQuickIconPrivate::ColorResolved);
+
+        unchanged = newEffectiveIcon == effectiveIcon;
+
+        // Only set it to false if there was a change in icon color that would otherwise
+        // be undetectable.
+        if (unchanged && !iconColorResolved && actionIconColorResolved)
+            unchanged = false;
+
+        // We need to mark the effective icon's color as resolved, too.
+        if (actionIconColorResolved)
+            newEffectiveIcon.resolveColor();
+    }
+
+    // Always update effectiveIcon because the color may have been resolved in icon,
+    // which isn't accounted for QQuickIcon::operator==.
+    effectiveIcon = newEffectiveIcon;
+
+    if (unchanged)
         return;
 
-    effectiveIcon = newEffectiveIcon;
+    if (action && !QQuickIconPrivate::isResolved(effectiveIcon, QQuickIconPrivate::ColorResolved)) {
+        // A color wasn't set on the button's icon (which should always win over an Action's).
+        if (QQuickIconPrivate::isResolved(action->icon(), QQuickIconPrivate::ColorResolved)) {
+            // A color was set on the action's icon; mark the effective icon's color as being
+            // explicitly set so that QQuickIconLabel can detect that it's set and respect it.
+            effectiveIcon.resolveColor();
+        }
+    }
+
     emit q->iconChanged();
 }
 
@@ -800,7 +841,7 @@ void QQuickAbstractButton::setIndicator(QQuickItem *indicator)
     \qmlproperty color QtQuick.Controls::AbstractButton::icon.color
     \qmlproperty bool QtQuick.Controls::AbstractButton::icon.cache
 
-    This property group was added in QtQuick.Controls 2.3.
+    \since QtQuick.Controls 2.3
 
     \include qquickicon.qdocinc grouped-properties
 

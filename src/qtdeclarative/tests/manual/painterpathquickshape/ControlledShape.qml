@@ -90,6 +90,7 @@ Item {
                 strokeStyle: controlPanel.outlineStyle
                 joinStyle: controlPanel.joinStyle
                 capStyle: controlPanel.capStyle
+                cosmeticStroke: controlPanel.cosmeticPen
                 fillTransform: Qt.matrix4x4(controlPanel.fillScaleX,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1)
             }
 
@@ -114,7 +115,7 @@ Item {
         id: debugPaintPath
         shape: shapePath
         visible: controlPanel.painterComparison > 0
-        color: controlPanel.painterComparisonColor
+        color: controlPanel.fillEnabled ? controlPanel.painterComparisonColor : "transparent"
         opacity: controlPanel.painterComparisonAlpha
         z: controlPanel.painterComparison > 1 ? -1 : 0
         pathScale: controlPanel.scale

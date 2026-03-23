@@ -6,3 +6,21 @@ macos arm ci # QTBUG-102817
 # QTBUG-101704
 [ToolTip::test_attachedSizeBug]
 *
+
+[Switch::test_mouseDrag]
+macos-26 # QTBUG-142189
+
+[Switch::test_touchDrag]
+macos-26 # QTBUG-142189
+
+[SwitchDelegate::test_touchDrag]
+macos-26 # QTBUG-142189
+
+[SwitchDelegate::test_touchDrag]
+macos-26 # QTBUG-142189
+
+[Switch::test_touch]
+macos-26 # QTBUG-142189
+
+[Switch::test_touch]
+macos-26 # QTBUG-142189

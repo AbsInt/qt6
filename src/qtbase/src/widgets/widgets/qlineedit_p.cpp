@@ -293,6 +293,12 @@ void QLineEditPrivate::resetInputMethod()
 }
 
 /*!
+    \class QLineEditPrivate
+    \inmodule QtWidgets
+    \internal
+*/
+
+/*!
   This function is not intended as polymorphic usage. Just a shared code
   fragment that calls QInputMethod::invokeAction for this
   class.

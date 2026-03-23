@@ -100,6 +100,7 @@ class Q_QUICK_EXPORT QQuickRotation : public QQuickTransform
     Q_PROPERTY(QVector3D origin READ origin WRITE setOrigin NOTIFY originChanged)
     Q_PROPERTY(qreal angle READ angle WRITE setAngle NOTIFY angleChanged)
     Q_PROPERTY(QVector3D axis READ axis WRITE setAxis NOTIFY axisChanged)
+    Q_PROPERTY(qreal distanceToPlane READ distanceToPlane WRITE setDistanceToPlane NOTIFY distanceToPlaneChanged REVISION(6, 11))
     QML_NAMED_ELEMENT(Rotation)
     QML_ADDED_IN_VERSION(2, 0)
 public:
@@ -115,12 +116,16 @@ public:
     void setAxis(const QVector3D &axis);
     void setAxis(Qt::Axis axis);
 
+    qreal distanceToPlane() const;
+    void setDistanceToPlane(qreal newDistanceToPlane);
+
     void applyTo(QMatrix4x4 *matrix) const override;
 
 Q_SIGNALS:
     void originChanged();
     void angleChanged();
     void axisChanged();
+    Q_REVISION(6, 11) void distanceToPlaneChanged();
 
 private:
     Q_DECLARE_PRIVATE(QQuickRotation)

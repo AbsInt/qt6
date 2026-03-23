@@ -21,8 +21,6 @@ T.RoundButton {
 
     icon.width: 16
     icon.height: 16
-    icon.color: control.checked || control.highlighted ? control.palette.brightText :
-                control.flat && !control.down ? (control.visualFocus ? control.palette.highlight : control.palette.windowText) : control.palette.buttonText
 
     contentItem: IconLabel {
         spacing: control.spacing
@@ -30,6 +28,9 @@ T.RoundButton {
         display: control.display
 
         icon: control.icon
+        defaultIconColor: control.checked || control.highlighted ? control.palette.brightText
+            : control.flat && !control.down ? (control.visualFocus ? control.palette.highlight
+            : control.palette.windowText) : control.palette.buttonText
         text: control.text
         font: control.font
         color: control.palette.buttonText

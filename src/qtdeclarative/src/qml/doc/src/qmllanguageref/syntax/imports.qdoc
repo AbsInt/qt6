@@ -45,9 +45,9 @@ import <ModuleIdentifier> [<Version.Number>] [as <Qualifier>]
 \endlist
 
 An example of an unqualified module import is as follows:
-\code
+\qml
 import QtQuick
-\endcode
+\endqml
 
 This import allows the use of all of the types provided by the \c QtQuick
 module without needing to specify a qualifier.  For example, the client code to
@@ -64,16 +64,16 @@ Rectangle {
 \endqml
 
 An example of an unqualified import with version would be
-\code
+\qml
 import QtQuick 2.10
-\endcode
-In that case, any types defined in QtQuick 2.11 and higher or in any higher major
+\endqml
+In that case, any types defined in Qt Quick 2.11 and higher or in any higher major
 version, like 6.0, would not be available to the file.
 
 An example of a qualified module import is as follows:
-\code
+\qml
 import QtQuick as Quick
-\endcode
+\endqml
 
 This import allows multiple modules which provide conflicting type names to be
 imported at the same time, however since each usage of a type provided by a

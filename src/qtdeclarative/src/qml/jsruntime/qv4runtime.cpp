@@ -91,25 +91,25 @@ struct RuntimeCounters::Data {
         tag2 = Type(signature & 7);
     }
 
-    typedef QVector<quint64> Counters;
+    typedef QList<quint64> Counters;
     QHash<const char *, Counters> counters;
 
     inline void count(const char *func) {
-        QVector<quint64> &cnt = counters[func];
+        QList<quint64> &cnt = counters[func];
         if (cnt.isEmpty())
             cnt.resize(64);
         cnt[0] += 1;
     }
 
     inline void count(const char *func, unsigned tag) {
-        QVector<quint64> &cnt = counters[func];
+        QList<quint64> &cnt = counters[func];
         if (cnt.isEmpty())
             cnt.resize(64);
         cnt[mangle(tag)] += 1;
     }
 
     inline void count(const char *func, unsigned tag1, unsigned tag2) {
-        QVector<quint64> &cnt = counters[func];
+        QList<quint64> &cnt = counters[func];
         if (cnt.isEmpty())
             cnt.resize(64);
         cnt[mangle(tag1, tag2)] += 1;
@@ -1602,13 +1602,13 @@ static CallArgs createSpreadArguments(Scope &scope, Value *argv, int argc)
 
     int argCount = 0;
 
-    Value *v = scope.alloc<Scope::Undefined>();
+    Value *v = scope.constructUndefined(1);
     Value *arguments = v;
     for (int i = 0; i < argc; ++i) {
         if (!argv[i].isEmpty()) {
             *v = argv[i];
             ++argCount;
-            v = scope.alloc<Scope::Undefined>();
+            v = scope.constructUndefined(1);
             continue;
         }
         // spread element
@@ -1629,7 +1629,7 @@ static CallArgs createSpreadArguments(Scope &scope, Value *argv, int argc)
                 scope.engine->throwRangeError(QLatin1String("Too many elements in array to use it with the spread operator"));
                         return { nullptr, 0 };
             }
-            v = scope.alloc<Scope::Undefined>();
+            v = scope.constructUndefined(1);
         }
     }
     return { arguments, argCount };

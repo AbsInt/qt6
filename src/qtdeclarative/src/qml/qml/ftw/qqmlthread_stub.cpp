@@ -72,6 +72,11 @@ bool QQmlThread::isThisThread() const
     return d->thread()->isCurrentThread();
 }
 
+bool QQmlThread::isParentThread() const
+{
+    return d->thread()->isCurrentThread();
+}
+
 void QQmlThread::internalCallMethodInThread(Message *message)
 {
     internalCallMethodInMain(message);

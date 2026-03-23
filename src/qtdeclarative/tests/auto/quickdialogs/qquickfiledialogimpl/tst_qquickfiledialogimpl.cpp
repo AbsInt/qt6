@@ -39,15 +39,6 @@ class tst_QQuickFileDialogImpl : public QQmlDataTest
 
 public:
     tst_QQuickFileDialogImpl();
-    static void initMain()
-    {
-        // We need to set this attribute.
-        QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
-        // We also don't want to run this for every style, as each one will have
-        // different ways of implementing the dialogs.
-        // For now we only test one style.
-        QQuickStyle::setStyle("Basic");
-    }
 
 private slots:
     void initTestCase() override;
@@ -161,6 +152,7 @@ tst_QQuickFileDialogImpl::tst_QQuickFileDialogImpl()
 
 void tst_QQuickFileDialogImpl::initTestCase()
 {
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QQmlDataTest::initTestCase();
 
     qputenv("QT_QUICK_DIALOGS_PRESELECT_FIRST_FILE", "1");
@@ -1072,7 +1064,9 @@ void tst_QQuickFileDialogImpl::changeNameFilters()
         QTRY_VERIFY(findViewDelegateItem(comboBoxPopupListView, 1, htmlDelegate));
         QVERIFY(clickButton(htmlDelegate));
     }
-    QTRY_VERIFY(!comboBoxPopup->isOpened());
+    QTRY_VERIFY(!comboBoxPopup->isVisible());
+    QVERIFY(QQuickTest::qWaitForPolish(comboBox));
+
     // Use QTRY_VERIFY2 here to fix a failure on QEMU armv7 (QT_QPA_PLATFORM=offscreen).
     // Not sure why it's necessary.
     QTRY_VERIFY2(verifyFileDialogDelegates(dialogHelper.fileDialogListView,
@@ -1618,15 +1612,20 @@ void tst_QQuickFileDialogImpl::selectExistingFileShouldWarnUserWhenFileModeEqual
     QVERIFY(clickButton(openButton));
 
     QTRY_VERIFY(confirmationDialog->isOpened());
-    QVERIFY(dialogHelper.dialog->isVisible());
+    QVERIFY(dialogHelper.isQuickDialogOpen());
 
     QVERIFY(QQuickTest::qWaitForPolish(confirmationDialog->popupItem()));
+    QTRY_VERIFY(confirmationButtonBox->standardButton(QPlatformDialogHelper::Yes)->hasActiveFocus());
+    QVERIFY(!confirmationButtonBox->standardButton(QPlatformDialogHelper::No)->hasActiveFocus());
+    QVERIFY(!confirmationButtonBox->standardButton(QPlatformDialogHelper::No)->hasFocus());
+
     QTRY_COMPARE(dialogHelper.popupWindow()->activeFocusItem(), confirmationButtonBox->standardButton(QPlatformDialogHelper::Yes));
 
     // Yes button should have focus by default
     QTest::keyClick(dialogHelper.popupWindow(), Qt::Key_Space, Qt::NoModifier);
 
-    QTRY_VERIFY(!confirmationDialog->isOpened());
+    QTRY_VERIFY(!confirmationDialog->isVisible());
+    QTRY_VERIFY(!QQuickPopupPrivate::get(confirmationDialog)->transitionManager.isRunning());
     QVERIFY(!dialogHelper.dialog->isVisible());
     QCOMPARE(acceptedSpy.count(), 1);
 
@@ -1646,7 +1645,8 @@ void tst_QQuickFileDialogImpl::selectExistingFileShouldWarnUserWhenFileModeEqual
     QVERIFY(clickButton(confirmationNoButton));
 
     // FileDialog is still opened
-    QTRY_VERIFY(!confirmationDialog->isOpened());
+    QTRY_VERIFY(!confirmationDialog->isVisible());
+    QTRY_VERIFY(!QQuickPopupPrivate::get(confirmationDialog)->transitionManager.isRunning());
     QVERIFY(dialogHelper.dialog->isVisible());
     QCOMPARE(acceptedSpy.count(), 1);
 
@@ -1660,7 +1660,8 @@ void tst_QQuickFileDialogImpl::selectExistingFileShouldWarnUserWhenFileModeEqual
     QTRY_COMPARE(dialogHelper.popupWindow()->focusObject(), static_cast<QQuickDialogButtonBox *>(confirmationDialog->footer())->standardButton(QPlatformDialogHelper::Yes));
     QTest::keyClick(dialogHelper.popupWindow(), Qt::Key_Space, Qt::NoModifier);
 
-    QTRY_VERIFY(!confirmationDialog->isOpened());
+    QTRY_VERIFY(!confirmationDialog->isVisible());
+    QTRY_VERIFY(!QQuickPopupPrivate::get(confirmationDialog)->transitionManager.isRunning());
     QVERIFY(!dialogHelper.dialog->isVisible());
     QCOMPARE(acceptedSpy.count(), 2);
 
@@ -1972,12 +1973,16 @@ void tst_QQuickFileDialogImpl::folderBreadcrumbBarDoesntGrow()
     QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, 0, subDirDelegate));
     COMPARE_URL(subDirDelegate->file(), QUrl::fromLocalFile(tempSubDirCanonicalPath));
     QVERIFY(doubleClickButton(subDirDelegate));
+    QVERIFY(QQuickTest::qWaitForPolish(folderBreadcrumbBar));
+
+    QCOMPARE(folderBreadcrumbBar->width(), initialFolderBreadcrumbBarWidth);
 
     // Select the "sub-sub-dir" delegate by double-clicking.
     QQuickFileDialogDelegate *subSubDirDelegate = nullptr;
     QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, 0, subSubDirDelegate));
     COMPARE_URL(subSubDirDelegate->file(), QUrl::fromLocalFile(tempSubSubDir.canonicalPath()));
     QVERIFY(doubleClickButton(subSubDirDelegate));
+    QVERIFY(QQuickTest::qWaitForPolish(folderBreadcrumbBar));
 
     QCOMPARE(folderBreadcrumbBar->width(), initialFolderBreadcrumbBarWidth);
 }
@@ -1994,6 +1999,6 @@ void tst_QQuickFileDialogImpl::checkFrameless()
     QVERIFY(dialogHelper.popupWindow()->flags().testFlag(Qt::FramelessWindowHint));
 }
 
-QTEST_MAIN(tst_QQuickFileDialogImpl)
+QTEST_QUICKDIALOGS_MAIN(tst_QQuickFileDialogImpl)
 
 #include "tst_qquickfiledialogimpl.moc"

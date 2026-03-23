@@ -288,3 +288,5 @@ QString QAbstractFileIconProvider::type(const QFileInfo &info) const
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qabstractfileiconprovider.cpp"

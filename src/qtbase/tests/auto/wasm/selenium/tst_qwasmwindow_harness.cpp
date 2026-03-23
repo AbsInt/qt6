@@ -22,6 +22,12 @@
 #include <QVBoxLayout>
 #include <QSpinBox>
 #include <QToolTip>
+#include <QCheckBox>
+#include <QRadioButton>
+#include <QPushButton>
+#include <QTextEdit>
+#include <QPlainTextEdit>
+#include <QLabel>
 
 #include <QOpenGLWindow>
 #include <QOpenGLFunctions>
@@ -34,6 +40,8 @@
 #include <memory>
 #include <sstream>
 #include <vector>
+
+void QWasmAccessibilityEnable();
 
 // Our dialog to test two things
 // 1) Focus logic
@@ -474,6 +482,123 @@ public:
         widget->setAttribute(Qt::WA_NativeWindow);
     }
 
+    void makeNativeA11yButtonWidgets(const std::string &name)
+    {
+        QWasmAccessibilityEnable();
+        auto widget = std::make_shared<TestWidget>();
+        widget->setWindowTitle("Dialog");
+
+        m_widgets[name] = widget;
+
+        auto *layout = new QVBoxLayout(widget.get());
+        auto *checkBoxA1 = new QCheckBox("CheckBoxA1", widget.get());
+        auto *checkBoxA2 = new QCheckBox("CheckBoxA2", widget.get());
+        auto *radioB1 = new QRadioButton("RadioB1", widget.get());
+        auto *radioB2 = new QRadioButton("RadioB2", widget.get());
+        auto *pushC1 = new QPushButton("PushC1", widget.get());
+        auto *pushC2 = new QPushButton("PushC2", widget.get());
+
+        checkBoxA1->setAccessibleIdentifier("CheckBoxA1");
+        checkBoxA2->setAccessibleIdentifier("CheckBoxA2");
+        radioB1->setAccessibleIdentifier("RadioB1");
+        radioB2->setAccessibleIdentifier("RadioB2");
+        pushC1->setAccessibleIdentifier("PushC1");
+        pushC2->setAccessibleIdentifier("PushC2");
+
+        checkBoxA1->setAccessibleDescription("CheckBoxA1 - Description");
+        checkBoxA2->setAccessibleDescription("CheckBoxA2 - Description");
+        radioB1->setAccessibleDescription("RadioB1 - Description");
+        radioB2->setAccessibleDescription("RadioB2 - Description");
+        pushC1->setAccessibleDescription("PushC1 - Description");
+        pushC2->setAccessibleDescription("PushC2 - Description");
+
+        QObject::connect(pushC1, &QPushButton::clicked, widget.get(), [pushC1]() { pushC1->setText("PushC1 - Clicked"); });
+        QObject::connect(pushC2, &QPushButton::clicked, widget.get(), [pushC2]() { pushC2->setText("PushC2 - Clicked"); });
+
+        layout->addWidget(checkBoxA1);
+        layout->addWidget(checkBoxA2);
+        layout->addWidget(radioB1);
+        layout->addWidget(radioB2);
+        layout->addWidget(pushC1);
+        layout->addWidget(pushC2);
+    }
+
+    void makeNativeA11yTextWidgets(const std::string &name)
+    {
+        QWasmAccessibilityEnable();
+        auto widget = std::make_shared<TestWidget>();
+        widget->setWindowTitle("Dialog");
+
+        m_widgets[name] = widget;
+
+        auto *layout = new QVBoxLayout(widget.get());
+        auto *lineEditA1 = new QLineEdit("LineEditA1", widget.get());
+        auto *lineEditA2 = new QLineEdit("LineEditA2", widget.get());
+        auto *lineEditA3 = new QLineEdit("LineEditA3", widget.get());
+        auto *lineEditA4 = new QLineEdit("LineEditA4", widget.get());
+        auto *lineEditA5 = new QLineEdit("LineEditA5", widget.get());
+
+        auto *textEditB1 = new QTextEdit("TextEditB1", widget.get());
+        auto *textEditB2 = new QTextEdit("TextEditB2", widget.get());
+
+        auto *plainTextEditC1 = new QPlainTextEdit("PlainTextEditC1", widget.get());
+        auto *plainTextEditC2 = new QPlainTextEdit("PlainTextEditC2", widget.get());
+
+        auto *labelD1 = new QLabel("LabelD1", widget.get());
+
+        lineEditA1->setAccessibleIdentifier("LineEditA1");
+        lineEditA2->setAccessibleIdentifier("LineEditA2");
+        lineEditA3->setAccessibleIdentifier("LineEditA3");
+        lineEditA4->setAccessibleIdentifier("LineEditA4");
+        lineEditA5->setAccessibleIdentifier("LineEditA5");
+        textEditB1->setAccessibleIdentifier("TextEditB1");
+        textEditB2->setAccessibleIdentifier("TextEditB2");
+        plainTextEditC1->setAccessibleIdentifier("PlainTextEditC1");
+        plainTextEditC2->setAccessibleIdentifier("PlainTextEditC2");
+        labelD1->setAccessibleIdentifier("LabelD1");
+
+        lineEditA1->setAccessibleDescription("LineEditA1 - Description");
+        lineEditA2->setAccessibleDescription("LineEditA2 - Description");
+        lineEditA3->setAccessibleDescription("LineEditA3 - Description");
+        lineEditA4->setAccessibleDescription("LineEditA4 - Description");
+        lineEditA5->setAccessibleDescription("LineEditA5 - Description");
+        textEditB1->setAccessibleDescription("TextEditB1 - Description");
+        textEditB2->setAccessibleDescription("TextEditB2 - Description");
+        plainTextEditC1->setAccessibleDescription("PlainTextEditC1 - Description");
+        plainTextEditC2->setAccessibleDescription("PlainTextEditC2 - Description");
+        labelD1->setAccessibleDescription("LabelD1 - Description");
+
+        lineEditA1->setText("LineEditA1 - Text");
+        lineEditA2->setText("LineEditA2 - Text");
+        lineEditA3->setText("LineEditA3 - Text");
+        lineEditA4->setText("LineEditA4 - Text");
+        lineEditA5->setText("LineEditA5 - Text");
+        textEditB1->setText("TextEditB1 - Text");
+        textEditB2->setText("TextEditB2 - Text");
+        plainTextEditC1->setPlainText("PlainTextEditC1 - Text");
+        plainTextEditC2->setPlainText("PlainTextEditC2 - Text");
+        labelD1->setText("LabelD1 - Text");
+
+        lineEditA2->setReadOnly(true);
+        textEditB2->setReadOnly(true);
+        plainTextEditC2->setReadOnly(true);
+
+        lineEditA3->setEchoMode(QLineEdit::Password);
+        lineEditA4->setEchoMode(QLineEdit::NoEcho);
+        lineEditA5->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+
+        layout->addWidget(lineEditA1);
+        layout->addWidget(lineEditA2);
+        layout->addWidget(lineEditA3);
+        layout->addWidget(lineEditA4);
+        layout->addWidget(lineEditA5);
+        layout->addWidget(textEditB1);
+        layout->addWidget(textEditB2);
+        layout->addWidget(plainTextEditC1);
+        layout->addWidget(plainTextEditC2);
+        layout->addWidget(labelD1);
+    }
+
     bool closeWidget(const std::string &name)
     {
         TestWidget *widget = findWidget(name);
@@ -589,6 +714,16 @@ void createWidget(const std::string &name)
 void createNativeWidget(const std::string &name)
 {
     WidgetStorage::getInstance()->makeNative(name);
+}
+
+void createNativeA11yButtonWidgets(const std::string &name)
+{
+    WidgetStorage::getInstance()->makeNativeA11yButtonWidgets(name);
+}
+
+void createNativeA11yTextWidgets(const std::string &name)
+{
+    WidgetStorage::getInstance()->makeNativeA11yTextWidgets(name);
 }
 
 void showContextMenuWidget(const std::string &name)
@@ -772,29 +907,39 @@ void getOpenGLColorAt_0_0(const std::string &windowTitle)
                                                  emscripten::val(colorToJs(r, g, b)));
 }
 
+#if QT_CONFIG(wasm_jspi)
+#  define EMSC_BIND_FUNC(name, afunction) \
+      emscripten::function(name, afunction, emscripten::async())
+#else
+#  define EMSC_BIND_FUNC(name, afunction) \
+      emscripten::function(name, afunction)
+#endif
+
 EMSCRIPTEN_BINDINGS(qwasmwindow)
 {
-    emscripten::function("screenInformation", &screenInformation);
-    emscripten::function("windowInformation", &windowInformation);
+    EMSC_BIND_FUNC("screenInformation", &screenInformation);
+    EMSC_BIND_FUNC("windowInformation", &windowInformation);
 
-    emscripten::function("createWindow", &createWindow);
-    emscripten::function("setWindowVisible", &setWindowVisible);
-    emscripten::function("setWindowParent", &setWindowParent);
-    emscripten::function("closeWindow", &closeWindow);
-    emscripten::function("setWindowBackgroundColor", &setWindowBackgroundColor);
+    EMSC_BIND_FUNC("createWindow", &createWindow);
+    EMSC_BIND_FUNC("setWindowVisible", &setWindowVisible);
+    EMSC_BIND_FUNC("setWindowParent", &setWindowParent);
+    EMSC_BIND_FUNC("closeWindow", &closeWindow);
+    EMSC_BIND_FUNC("setWindowBackgroundColor", &setWindowBackgroundColor);
 
-    emscripten::function("getOpenGLColorAt_0_0", &getOpenGLColorAt_0_0);
+    EMSC_BIND_FUNC("getOpenGLColorAt_0_0", &getOpenGLColorAt_0_0);
 
-    emscripten::function("createWidget", &createWidget);
-    emscripten::function("createNativeWidget", &createNativeWidget);
-    emscripten::function("showContextMenuWidget", &showContextMenuWidget);
-    emscripten::function("showToolTipWidget", &showToolTipWidget);
-    emscripten::function("setWidgetNoFocusShow", &setWidgetNoFocusShow);
-    emscripten::function("showWidget", &showWidget);
-    emscripten::function("closeWidget", &closeWidget);
-    emscripten::function("activateWidget", &activateWidget);
-    emscripten::function("hasWidgetFocus", &hasWidgetFocus);
-    emscripten::function("clearWidgets", &clearWidgets);
+    EMSC_BIND_FUNC("createWidget", &createWidget);
+    EMSC_BIND_FUNC("createNativeWidget", &createNativeWidget);
+    EMSC_BIND_FUNC("createNativeA11yButtonWidgets", &createNativeA11yButtonWidgets);
+    EMSC_BIND_FUNC("createNativeA11yTextWidgets", &createNativeA11yTextWidgets);
+    EMSC_BIND_FUNC("showContextMenuWidget", &showContextMenuWidget);
+    EMSC_BIND_FUNC("showToolTipWidget", &showToolTipWidget);
+    EMSC_BIND_FUNC("setWidgetNoFocusShow", &setWidgetNoFocusShow);
+    EMSC_BIND_FUNC("showWidget", &showWidget);
+    EMSC_BIND_FUNC("closeWidget", &closeWidget);
+    EMSC_BIND_FUNC("activateWidget", &activateWidget);
+    EMSC_BIND_FUNC("hasWidgetFocus", &hasWidgetFocus);
+    EMSC_BIND_FUNC("clearWidgets", &clearWidgets);
 }
 
 int main(int argc, char **argv)

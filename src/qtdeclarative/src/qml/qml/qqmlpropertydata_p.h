@@ -55,7 +55,7 @@ public:
         // trySetStaticMetaCallFunction for details.
         // (Note: this padding is done here, because certain compilers have surprising behavior
         // when an enum is declared in-between two bit fields.)
-        enum { BitsLeftInFlags = 16 };
+        enum { BitsLeftInFlags = 14 };
         unsigned otherBits       : BitsLeftInFlags; // align to 32 bits
 
         // Members of the form aORb can only be a when type is not FunctionType, and only be
@@ -80,6 +80,11 @@ public:
 
         unsigned isRequiredORisCloned          : 1; // Has REQUIRED flag OR The function was marked as cloned
         unsigned isConstructorORisBindable     : 1; // The function was marked is a constructor OR property is backed by QProperty<T>
+        unsigned isVirtual                     : 1; // Property: has VIRTUAL specifier
+        // This flag is named doesOverride to avoid potential misspell issues,
+        // that could be caused by naming it isOverriding or isOverride,
+        // since there is alread isOverriden flag
+        unsigned doesOverride                  : 1; // Property: has OVERRIDE specifier, overrides virtual property
         unsigned isOverridden                  : 1; // Is overridden by a extension property
         unsigned hasMetaObject                 : 1;
         unsigned type                          : 3; // stores an entry of Types
@@ -119,6 +124,14 @@ public:
         void setIsFinal(bool b) {
             Q_ASSERT(type != FunctionType);
             isFinalORisV4Function = b;
+        }
+
+        void setIsVirtual(bool b) {
+            isVirtual = b;
+        }
+
+        void setDoesOverride(bool b) {
+            doesOverride = b;
         }
 
         void setIsOverridden(bool b) {
@@ -208,6 +221,8 @@ public:
     bool isResettable() const { return !isFunction() && m_flags.isResettableORisSignal; }
     bool isAlias() const { return !isFunction() && m_flags.isAliasORisVMESignal; }
     bool isFinal() const { return !isFunction() && m_flags.isFinalORisV4Function; }
+    bool isVirtual() const { return m_flags.isVirtual; }
+    bool doesOverride() const { return m_flags.doesOverride; }
     bool isOverridden() const { return m_flags.isOverridden; }
     bool isRequired() const { return !isFunction() && m_flags.isRequiredORisCloned; }
     bool isFunction() const { return m_flags.type == Flags::FunctionType; }
@@ -379,7 +394,7 @@ public:
             : metaObject->property(m_coreIndex).name());
     }
 
-    bool markAsOverrideOf(QQmlPropertyData *predecessor);
+    void markAsOverrideOf(QQmlPropertyData *predecessor);
 
     inline void readProperty(QObject *target, void *property) const
     {
@@ -505,39 +520,40 @@ bool QQmlPropertyData::operator==(const QQmlPropertyData &other) const
 }
 
 QQmlPropertyData::Flags::Flags()
-    : otherBits(0)
-    , isConst(false)
-    , isDeepAliasORisVMEFunction(false)
-    , isWritableORhasArguments(false)
-    , isResettableORisSignal(false)
-    , isAliasORisVMESignal(false)
-    , isFinalORisV4Function(false)
-    , isSignalHandler(false)
-    , isOverridableSignal(false)
-    , isRequiredORisCloned(false)
-    , isConstructorORisBindable(false)
-    , isOverridden(false)
-    , hasMetaObject(false)
-    , type(OtherType)
-    , overrideIndexIsProperty(false)
+    : otherBits(0),
+      isConst(false),
+      isDeepAliasORisVMEFunction(false),
+      isWritableORhasArguments(false),
+      isResettableORisSignal(false),
+      isAliasORisVMESignal(false),
+      isFinalORisV4Function(false),
+      isSignalHandler(false),
+      isOverridableSignal(false),
+      isRequiredORisCloned(false),
+      isConstructorORisBindable(false),
+      isVirtual(false),
+      doesOverride(false),
+      isOverridden(false),
+      hasMetaObject(false),
+      type(OtherType),
+      overrideIndexIsProperty(false)
 {
 }
 
 bool QQmlPropertyData::Flags::operator==(const QQmlPropertyData::Flags &other) const
 {
-    return isConst == other.isConst &&
-            isDeepAliasORisVMEFunction == other.isDeepAliasORisVMEFunction &&
-            isWritableORhasArguments == other.isWritableORhasArguments &&
-            isResettableORisSignal == other.isResettableORisSignal &&
-            isAliasORisVMESignal == other.isAliasORisVMESignal &&
-            isFinalORisV4Function == other.isFinalORisV4Function &&
-            isOverridden == other.isOverridden &&
-            isSignalHandler == other.isSignalHandler &&
-            isRequiredORisCloned == other.isRequiredORisCloned &&
-            hasMetaObject == other.hasMetaObject &&
-            type == other.type &&
-            isConstructorORisBindable == other.isConstructorORisBindable &&
-            overrideIndexIsProperty == other.overrideIndexIsProperty;
+    return isConst == other.isConst
+            && isDeepAliasORisVMEFunction == other.isDeepAliasORisVMEFunction
+            && isWritableORhasArguments == other.isWritableORhasArguments
+            && isResettableORisSignal == other.isResettableORisSignal
+            && isAliasORisVMESignal == other.isAliasORisVMESignal
+            && isFinalORisV4Function == other.isFinalORisV4Function && isVirtual == other.isVirtual
+            && doesOverride == other.doesOverride && isOverridden == other.isOverridden
+            && isSignalHandler == other.isSignalHandler
+            && isRequiredORisCloned == other.isRequiredORisCloned
+            && hasMetaObject == other.hasMetaObject && type == other.type
+            && isConstructorORisBindable == other.isConstructorORisBindable
+            && overrideIndexIsProperty == other.overrideIndexIsProperty;
 }
 
 void QQmlPropertyData::Flags::copyPropertyTypeFlags(QQmlPropertyData::Flags from)

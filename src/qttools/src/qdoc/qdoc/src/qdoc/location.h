@@ -7,9 +7,14 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qstack.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
+class Config;
+class QFile;
 class QRegularExpression;
+class QTextStream;
 
 class Location
 {
@@ -20,6 +25,8 @@ public:
     ~Location() { delete m_stk; }
 
     Location &operator=(const Location &other);
+    bool operator==(const Location &other) const;
+    bool operator!=(const Location &other) const;
 
     void start();
     void advance(QChar ch);
@@ -69,6 +76,10 @@ private:
 
     void emitMessage(MessageType type, const QString &message, const QString &details) const;
     [[nodiscard]] QString top() const;
+    [[nodiscard]] static QString warningLogHeader();
+    static QString formatPathForWarningLog(const QString &path);
+    static void initializeWarningLog(const Config &config);
+    static void writeToWarningLog(MessageType type, const QString &formattedMessage);
 
 private:
     StackEntry m_stkBottom {};
@@ -82,8 +93,11 @@ private:
     static int s_warningLimit;
     static QString s_programName;
     static QString s_project;
+    static QString s_projectRoot;
     static QRegularExpression *s_spuriousRegExp;
     static QSet<QString> s_reports;
+    static std::unique_ptr<QFile> s_warningLogFile;
+    static std::unique_ptr<QTextStream> s_warningLogStream;
 };
 Q_DECLARE_TYPEINFO(Location::StackEntry, Q_RELOCATABLE_TYPE);
 Q_DECLARE_TYPEINFO(Location, Q_COMPLEX_TYPE); // stkTop = &stkBottom

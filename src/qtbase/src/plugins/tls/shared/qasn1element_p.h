@@ -31,6 +31,14 @@ QT_BEGIN_NAMESPACE
 #define EC_ENCRYPTION_OID QByteArrayLiteral("1.2.840.10045.2.1")
 #define DH_ENCRYPTION_OID QByteArrayLiteral(RSADSI_OID "1.3.1")
 
+// ML-DSA
+// https://datatracker.ietf.org/doc/html/draft-ietf-lamps-dilithium-certificates
+#define MLDSA_OID "2.16.840.1.101.3.4.3.17."
+
+#define MLDSA_44_ENCRYPTION_OID QByteArrayLiteral(MLDSA_OID "17")
+#define MLDSA_65_ENCRYPTION_OID QByteArrayLiteral(MLDSA_OID "18")
+#define MLDSA_87_ENCRYPTION_OID QByteArrayLiteral(MLDSA_OID "19")
+
 // These are mostly from the RFC for PKCS#5
 // PKCS#5: https://tools.ietf.org/html/rfc8018#appendix-B
 #define PKCS5_OID RSADSI_OID "1.5."

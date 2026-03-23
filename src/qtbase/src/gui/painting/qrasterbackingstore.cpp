@@ -6,7 +6,6 @@
 #include <QtGui/qbackingstore.h>
 #include <QtGui/qpainter.h>
 
-#include <private/qhighdpiscaling_p.h>
 #include <qpa/qplatformwindow.h>
 
 QT_BEGIN_NAMESPACE
@@ -46,7 +45,7 @@ QImage QRasterBackingStore::toImage() const
 
 bool QRasterBackingStore::scroll(const QRegion &region, int dx, int dy)
 {
-    if (!QPlatformSurface::isRasterSurface(window()))
+    if (window()->surfaceType() != QSurface::RasterSurface)
         return false;
 
     extern void qt_scrollRectInImage(QImage &, const QRect &, const QPoint &);

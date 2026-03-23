@@ -21,9 +21,6 @@ QWindowsDirect2DWindow::QWindowsDirect2DWindow(QWindow *window, const QWindowsWi
     : QWindowsWindow(window, data)
     , m_directRendering(!(data.flags & Qt::FramelessWindowHint && window->format().hasAlpha()))
 {
-    if (window->type() == Qt::Desktop)
-        return; // No further handling for Qt::Desktop
-
     if (m_directRendering)
         setupSwapChain();
 

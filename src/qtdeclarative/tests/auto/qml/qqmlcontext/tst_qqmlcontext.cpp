@@ -54,6 +54,8 @@ private slots:
     void numericContextProperty();
     void gcDeletesContextObject();
 
+    void childContexts();
+
 private:
     QQmlEngine engine;
 };
@@ -897,7 +899,7 @@ void tst_qqmlcontext::outerContextObject()
     });
     timer.start();
 
-    QTRY_VERIFY(iterations >= 100);
+    QTRY_VERIFY_WITH_TIMEOUT(iterations >= 100, 2s);
 }
 
 void tst_qqmlcontext::contextObjectHierarchy()
@@ -1005,6 +1007,33 @@ void tst_qqmlcontext::gcDeletesContextObject()
 
     QTRY_VERIFY(contextObject.isNull());
     QCOMPARE(context->contextObject(), nullptr);
+}
+
+void tst_qqmlcontext::childContexts()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("contextHierarchy.qml"));
+
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+
+    QVERIFY(!o.isNull());
+
+    QQmlContext *context = qmlContext(o.data());
+    QVERIFY(context);
+    QCOMPARE(context->contextObject(), o.data());
+
+    QList<QQmlContext *> childContexts = context->childContexts();
+    QCOMPARE(childContexts.length(), 5);
+
+    QCOMPARE(context->findObjectRecursively("outer"), o.data());
+    QCOMPARE(context->findObjectsRecursively("outer"), QList<QObject *>({o.data()}));
+
+    QVERIFY(context->findObjectRecursively("middle") != nullptr);
+    QCOMPARE(context->findObjectsRecursively("middle").size(), 5);
+
+    QVERIFY(context->findObjectRecursively("inner") != nullptr);
+    QCOMPARE(context->findObjectsRecursively("inner").size(), 25);
 }
 
 QTEST_MAIN(tst_qqmlcontext)

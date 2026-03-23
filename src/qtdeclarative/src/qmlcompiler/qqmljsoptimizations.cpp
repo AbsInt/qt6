@@ -365,15 +365,16 @@ void QQmlJSOptimizations::adjustTypes()
         // Now we don't adjust the type we store, but rather the type we expect to read. We
         // can do this because we've tracked the read type when we defined the array in
         // QQmlJSTypePropagator.
-        if (QQmlJSScope::ConstPtr valueType = it->trackedTypes[0].containedType()->valueType()) {
+        if (const QQmlJSScope::ConstPtr elementType
+                = it->trackedTypes[0].containedType()->elementType()) {
             const QQmlJSRegisterContent content = annotation.readRegisters.begin().value().content;
             const QQmlJSScope::ConstPtr contained = content.containedType();
 
             // If it's the 1-arg Array ctor, and the argument is a number, that's special.
             if (mode != ObjectOrArrayDefinition::ArrayConstruct1ArgId
                     || contained != m_typeResolver->realType()) {
-                if (!m_typeResolver->adjustTrackedType(content, valueType))
-                    addError(adjustErrorMessage(content, valueType));
+                if (!m_typeResolver->adjustTrackedType(content, elementType))
+                    addError(adjustErrorMessage(content, elementType));
             }
         }
 

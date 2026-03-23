@@ -8,8 +8,13 @@
 
 #if QT_CONFIG(accessibility)
 #include "qquickpage_p.h"
+#include "qquickpopupitem_p_p.h"
+#include "qquickscrollbar_p.h"
+#include "accessible/qaccessiblequickapplicationwindow_p.h"
 #include "accessible/qaccessiblequickcontrol_p.h"
 #include "accessible/qaccessiblequickpage_p.h"
+#include "accessible/qaccessiblequickpopupitem_p.h"
+#include "accessible/qaccessiblequickscrollbar_p.h"
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -17,11 +22,16 @@ QT_BEGIN_NAMESPACE
 #if QT_CONFIG(accessibility)
 static QAccessibleInterface *qQuickAccessibleFactory(const QString &classname, QObject *object)
 {
-    if (classname == u"QQuickPage") {
+    if (classname == u"QQuickPage")
         return new QAccessibleQuickPage(qobject_cast<QQuickPage *>(object));
-    }
+    if (classname == u"QQuickScrollBar")
+        return new QAccessibleQuickScrollBar(qobject_cast<QQuickScrollBar *>(object));
     if (classname == u"QQuickControl")
         return new QAccessibleQuickControl(qobject_cast<QQuickControl *>(object));
+    if (classname == u"QQuickPopupItem")
+        return new QAccessibleQuickPopupItem(qobject_cast<QQuickPopupItem *>(object));
+    if (classname == u"QQuickApplicationWindow")
+        return new QAccessibleQuickApplicationWindow(qobject_cast<QQuickApplicationWindow *>(object));
 
     return nullptr;
 }

@@ -1,5 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QTSVGGLOBAL_P_H
 #define QTSVGGLOBAL_P_H
@@ -15,7 +17,7 @@
 // We mean it.
 //
 
-#include "qtsvgglobal.h"
+#include <QtCore/qtypes.h>
 #include <QtSvg/qtsvgexports.h>
 
 QT_BEGIN_NAMESPACE
@@ -31,6 +33,14 @@ enum class UnitTypes : quint32 {
 enum class AnimatorType : quint32 {
     Controlled,
     Automatic,
+};
+
+enum class OffsetRotateType : quint32 {
+    Auto,
+    Angle,
+    AutoAngle,
+    Reverse,
+    ReverseAngle
 };
 
 }

@@ -435,7 +435,7 @@ int extractPkcs8KeyLength(const QList<QAsn1Element> &items, TlsKey *that)
         case QSsl::Dsa: return "DSA";
         case QSsl::Dh: return "DH";
         case QSsl::Ec: return "EC";
-        case QSsl::Opaque: return "Opaque";
+        default: return "Opaque";
         }
         Q_UNREACHABLE();
     };

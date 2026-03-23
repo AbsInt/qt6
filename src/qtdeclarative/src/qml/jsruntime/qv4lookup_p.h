@@ -163,9 +163,15 @@ struct Q_QML_EXPORT Lookup {
             //     We invalidate this data every time the lookup is invoked and thereby force a
             //     re-initialization next time.
 
-            quintptr isConstant; // This is a bool, encoded as 0 or 1. Both values are ignored by gc
-            quintptr metaObject; // a (const QMetaObject* & 1) or nullptr
-            int coreIndex;
+            quintptr metaObject; // a (const QMetaObject* | 1) or nullptr
+            quintptr metaType;   // a (const QtPrivate::QMetaTypeInterface* | 1) or nullptr
+
+            // If it was negative it would be invalid. So 31 bits are enough
+            uint coreIndex: 31;
+
+            // isConstant for getter lookups, isResettable for setter ones
+            uint isConstantOrResettable: 1;
+
             int notifyIndex;
         } qobjectFallbackLookup;
         struct {

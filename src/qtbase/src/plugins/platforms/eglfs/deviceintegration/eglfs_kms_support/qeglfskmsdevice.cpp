@@ -26,4 +26,39 @@ void QEglFSKmsDevice::registerScreen(QPlatformScreen *screen,
     QWindowSystemInterface::handleScreenAdded(s, isPrimary);
 }
 
+void QEglFSKmsDevice::unregisterScreen(QPlatformScreen *screen)
+{
+    QEglFSKmsScreen *s = static_cast<QEglFSKmsScreen *>(screen);
+    for (QPlatformScreen *sibling : s->virtualSiblings())
+        static_cast<QEglFSKmsScreen *>(sibling)->removeSibling(s);
+
+    QWindowSystemInterface::handleScreenRemoved(screen);
+}
+
+void QEglFSKmsDevice::updateScreen(QPlatformScreen *screen, const QPoint &virtualPos,
+                                   const QList<QPlatformScreen *> &virtualSiblings)
+{
+    QEglFSKmsScreen *s = static_cast<QEglFSKmsScreen *>(screen);
+    QRect before = s->geometry();
+    s->setVirtualPosition(virtualPos);
+    s->setVirtualSiblings(virtualSiblings);
+    QRect after = s->geometry();
+
+    if (before != after)
+        QWindowSystemInterface::handleScreenGeometryChange(s->screen(), after,
+                                                           s->availableGeometry());
+}
+
+void QEglFSKmsDevice::updateScreenOutput(QPlatformScreen *screen, const QKmsOutput &output)
+{
+    QEglFSKmsScreen *s = static_cast<QEglFSKmsScreen *>(screen);
+    QRect before = s->geometry();
+    s->updateOutput(output);
+    QRect after = s->geometry();
+
+    if (before != after)
+        QWindowSystemInterface::handleScreenGeometryChange(s->screen(), after,
+                                                           s->availableGeometry());
+}
+
 QT_END_NAMESPACE

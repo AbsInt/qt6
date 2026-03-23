@@ -81,6 +81,7 @@ private slots:
     void invalidDelegate();
     void panMenuBar_data();
     void panMenuBar();
+    void dontDeleteDelegates();
     void clearMenus();
     void popupWindowsKeyboardNavigation();
 
@@ -1866,6 +1867,30 @@ void tst_qquickmenubar::panMenuBar()
     QVERIFY(menuBar_d->currentMenuOpen);
     QTRY_VERIFY(menuBarItem1->menu()->isOpened());
     QTRY_VERIFY(!menuBarItem0->menu()->isOpened());
+}
+
+void tst_qquickmenubar::dontDeleteDelegates()
+{
+    QQuickControlsApplicationHelper helper(this, QLatin1String("dontDeleteDelegates.qml"));
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickApplicationWindow *window = helper.appWindow;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    auto *menuBar = window->property("theMenuBar").value<QQuickMenuBar*>();
+    QVERIFY(menuBar);
+    QPointer<QQmlComponent> delegateComponent1 = window->property("delegateComponent1").value<QQmlComponent *>();
+    QVERIFY(delegateComponent1);
+    QPointer<QQmlComponent> delegateComponent2 = window->property("delegateComponent2").value<QQmlComponent *>();
+    QVERIFY(delegateComponent2);
+
+    // When setting a new delegate, the old one shouldn't be destroyed.
+    menuBar->setDelegate(delegateComponent2);
+    QVERIFY(delegateComponent1);
+
+    // The same goes for the new delegate: it shouldn't be destroyed when setting the old one.
+    menuBar->setDelegate(delegateComponent1);
+    QVERIFY(delegateComponent2);
 }
 
 void tst_qquickmenubar::clearMenus()

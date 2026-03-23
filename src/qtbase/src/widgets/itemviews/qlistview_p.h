@@ -346,6 +346,10 @@ public:
     bool dropOn(QDropEvent *event, int *row, int *col, QModelIndex *index) override;
 #endif
 
+#if QT_CONFIG(accessibility)
+    int accessibleChildIndex(const QModelIndex &index) const override;
+#endif
+
     inline void setGridSize(const QSize &size) { grid = size; }
     inline QSize gridSize() const { return grid; }
     inline void setWrapping(bool b) { wrap = b; }

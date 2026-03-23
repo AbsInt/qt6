@@ -31,7 +31,10 @@ qt_find_package_extend_sbom(TARGETS GLIB2::GLIB2
     LICENSE_EXPRESSION "LGPL-2.1-or-later"
 )
 qt_find_package(ICU 50.1 COMPONENTS i18n uc data PROVIDED_TARGETS ICU::i18n ICU::uc ICU::data
-    MODULE_NAME core QMAKE_LIB icu)
+    MODULE_NAME core QMAKE_LIB icu
+    VCPKG_PORT icu
+    VCPKG_PLATFORM !windows
+)
 
 if(QT_FEATURE_dlopen)
     qt_add_qmake_lib_dependency(icu libdl)
@@ -40,6 +43,8 @@ qt_find_package(JeMalloc MODULE
     PROVIDED_TARGETS PkgConfig::JeMalloc MODULE_NAME core QMAKE_LIB jemalloc)
 qt_find_package(Libsystemd MODULE
     PROVIDED_TARGETS PkgConfig::Libsystemd MODULE_NAME core QMAKE_LIB journald)
+qt_find_package(Liburing MODULE
+    PROVIDED_TARGETS PkgConfig::Liburing MODULE_NAME global QMAKE_LIB liburing)
 qt_find_package(WrapAtomic MODULE
     PROVIDED_TARGETS WrapAtomic::WrapAtomic MODULE_NAME core QMAKE_LIB libatomic)
 qt_find_package(Libb2 MODULE PROVIDED_TARGETS Libb2::Libb2 MODULE_NAME core QMAKE_LIB libb2)
@@ -49,7 +54,9 @@ qt_find_package_extend_sbom(TARGETS Libb2::Libb2
 qt_find_package(WrapRt MODULE
     PROVIDED_TARGETS WrapRt::WrapRt MODULE_NAME core QMAKE_LIB librt)
 qt_find_package(WrapSystemPCRE2 10.20 MODULE
-    PROVIDED_TARGETS WrapSystemPCRE2::WrapSystemPCRE2 MODULE_NAME core QMAKE_LIB pcre2)
+    PROVIDED_TARGETS WrapSystemPCRE2::WrapSystemPCRE2 MODULE_NAME core QMAKE_LIB pcre2
+    VCPKG_PORT pcre2
+)
 set_package_properties(WrapPCRE2 PROPERTIES TYPE REQUIRED)
 if((QNX) OR QT_FIND_ALL_PACKAGES_ALWAYS)
     qt_find_package(PPS MODULE PROVIDED_TARGETS PPS::PPS MODULE_NAME core QMAKE_LIB pps)
@@ -397,6 +404,20 @@ int main(void)
 }
 ")
 
+# liburing
+qt_config_compile_test(liburing
+    LABEL "liburing"
+    LIBRARIES uring
+    CODE
+"#include <liburing.h>
+
+int main(void)
+{
+    io_uring_enter(0, 0, 0, 0, nullptr);
+    return 0;
+}
+")
+
 # linkat
 qt_config_compile_test(linkat
     LABEL "linkat()"
@@ -563,7 +584,7 @@ qt_config_compile_test(renameat2
 int main(int, char **argv)
 {
     /* BEGIN TEST: */
-renameat2(AT_FDCWD, argv[1], AT_FDCWD, argv[2], RENAME_NOREPLACE | RENAME_WHITEOUT);
+renameat2(AT_FDCWD, argv[1], AT_FDCWD, argv[2], RENAME_NOREPLACE);
     /* END TEST: */
     return 0;
 }
@@ -578,6 +599,49 @@ qt_config_compile_test(winsdkicu
 int main(void)
 {
     /* BEGIN TEST: */
+    /* END TEST: */
+    return 0;
+}
+"
+)
+
+qt_config_compile_test(windows_ioring
+    LABEL "Windows SDK: IORing"
+    CODE
+"#include <windows.h>
+#include <ioringapi.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+    IORING_CREATE_FLAGS flags;
+    memset(&flags, 0, sizeof(flags));
+    HIORING ioRingHandle = nullptr;
+    HRESULT hr = CreateIoRing(IORING_VERSION_3, flags, 1, 1, &ioRingHandle);
+    if (hr == IORING_E_SUBMISSION_QUEUE_FULL) // not valid, but test that this #define exists
+        return 0;
+    IORING_HANDLE_REF ref(HANDLE(nullptr));
+    IORING_BUFFER_REF bufRef(nullptr);
+    // The newest API addition that we require:
+    BuildIoRingWriteFile(ioRingHandle, ref, bufRef, -1, 0, FILE_WRITE_FLAGS_NONE, 0, IOSQE_FLAGS_NONE);
+    /* END TEST: */
+    return 0;
+}
+"
+)
+
+qt_config_compile_test(windows_ioring_skip_builder_param_checks
+    LABEL "Windows SDK: IORing IORING_CREATE_SKIP_BUILDER_PARAM_CHECKS"
+    CODE
+"#include <windows.h>
+#include <ioringapi.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+    IORING_CREATE_FLAGS flags;
+    memset(&flags, 0, sizeof(flags));
+    flags.Advisory |= IORING_CREATE_SKIP_BUILDER_PARAM_CHECKS;
     /* END TEST: */
     return 0;
 }
@@ -764,6 +828,16 @@ qt_feature("winsdkicu" PRIVATE
     CONDITION TEST_winsdkicu
     DISABLE QT_FEATURE_icu
 )
+qt_feature("windows-ioring" PRIVATE
+    LABEL "Windows I/O Ring"
+    AUTODETECT WIN32
+    CONDITION TEST_windows_ioring
+)
+qt_feature("windows-ioring-skip-builder-param-checks" PRIVATE
+    LABEL "Windows I/O Ring IORING_CREATE_SKIP_BUILDER_PARAM_CHECKS"
+    AUTODETECT WIN32
+    CONDITION TEST_windows_ioring_skip_builder_param_checks
+)
 qt_feature("inotify" PUBLIC PRIVATE
     LABEL "inotify"
     CONDITION TEST_inotify OR TEST_fsnotify
@@ -803,6 +877,11 @@ qt_feature("linkat" PRIVATE
     LABEL "linkat()"
     AUTODETECT ( LINUX AND NOT ANDROID ) OR HURD
     CONDITION TEST_linkat
+)
+qt_feature("liburing" PRIVATE
+    LABEL "liburing"
+    AUTODETECT LINUX
+    CONDITION Liburing_FOUND
 )
 qt_feature("std-atomic64" PUBLIC
     LABEL "64 bit atomic operations"
@@ -889,7 +968,7 @@ qt_feature("qqnx_pps" PRIVATE
 )
 qt_feature("renameat2" PRIVATE
     LABEL "renameat2()"
-    CONDITION ( LINUX OR HURD ) AND TEST_renameat2
+    CONDITION UNIX AND TEST_renameat2
 )
 qt_feature("slog2" PRIVATE
     LABEL "slog2"
@@ -926,11 +1005,12 @@ qt_feature("vxpipedrv" PRIVATE
     AUTODETECT OFF
     CONDITION VXWORKS
 )
-qt_feature("regularexpression" PUBLIC
+qt_feature_deprecated("regularexpression" PUBLIC
+    REMOVE_BY "7.0"
     SECTION "Kernel"
     LABEL "QRegularExpression"
     PURPOSE "Provides an API to Perl-compatible regular expressions."
-    CONDITION QT_FEATURE_system_pcre2 OR QT_FEATURE_pcre2
+    VALUE ON
 )
 qt_feature_definition("regularexpression" "QT_NO_REGULAREXPRESSION" NEGATE VALUE "1")
 qt_feature("backtrace" PRIVATE
@@ -1229,6 +1309,11 @@ qt_feature("openssl-hash" PRIVATE
     CONDITION QT_FEATURE_openssl_linked AND QT_FEATURE_opensslv30
     PURPOSE "Uses OpenSSL based implementation of cryptographic hash algorithms."
 )
+qt_feature("async-io" PRIVATE
+    LABEL "Async File I/O"
+    PURPOSE "Provides support for asynchronous file I/O."
+    CONDITION QT_FEATURE_thread AND QT_FEATURE_future
+)
 
 qt_configure_add_summary_section(NAME "Qt Core")
 qt_configure_add_summary_entry(ARGS "backtrace")
@@ -1239,6 +1324,9 @@ qt_configure_add_summary_entry(ARGS "forkfd_pidfd" CONDITION LINUX)
 qt_configure_add_summary_entry(ARGS "glib")
 qt_configure_add_summary_entry(ARGS "icu")
 qt_configure_add_summary_entry(ARGS "jemalloc")
+qt_configure_add_summary_entry(ARGS "liburing")
+qt_configure_add_summary_entry(ARGS "windows-ioring")
+qt_configure_add_summary_entry(ARGS "windows-ioring-skip-builder-param-checks")
 qt_configure_add_summary_entry(ARGS "timezone_tzdb")
 qt_configure_add_summary_entry(ARGS "system-libb2")
 qt_configure_add_summary_entry(ARGS "mimetype-database")
@@ -1281,4 +1369,9 @@ qt_configure_add_report_entry(
     TYPE WARNING
     MESSAGE "Basic cpp/winrt support missing. Some features might not be available."
     CONDITION WIN32 AND NOT QT_FEATURE_cpp_winrt
+)
+qt_configure_add_report_entry(
+    TYPE ERROR
+    MESSAGE "Qt requires pcre2 or system-pcre2 feature"
+    CONDITION NOT QT_FEATURE_pcre2 AND NOT QT_FEATURE_system_pcre2
 )

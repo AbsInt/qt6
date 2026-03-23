@@ -26,6 +26,10 @@
 struct wl_output;
 #endif
 
+#if defined(Q_OS_MACOS)
+Q_FORWARD_DECLARE_OBJC_CLASS(NSScreen);
+#endif
+
 QT_BEGIN_NAMESPACE
 
 namespace QNativeInterface {
@@ -51,6 +55,14 @@ struct Q_GUI_EXPORT QAndroidScreen
 {
     QT_DECLARE_NATIVE_INTERFACE(QAndroidScreen, 1, QScreen)
     virtual int displayId() const = 0;
+};
+#endif
+
+#if defined(Q_OS_MACOS) || defined(Q_QDOC)
+struct Q_GUI_EXPORT QCocoaScreen
+{
+    QT_DECLARE_NATIVE_INTERFACE(QCocoaScreen, 1, QScreen)
+    virtual NSScreen *nativeScreen() const = 0;
 };
 #endif
 

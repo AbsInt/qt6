@@ -4091,7 +4091,6 @@ void tst_QQuickGridView::columnCount()
     QQuickView window;
     window.setSource(testFileUrl("gridview4.qml"));
     window.show();
-    window.requestActivate();
     QVERIFY(QTest::qWaitForWindowActive(&window));
 
     QQuickGridView *view = qobject_cast<QQuickGridView*>(window.rootObject());
@@ -4363,7 +4362,7 @@ void tst_QQuickGridView::snapToRow()
         // flick to end
         for (int i = 0; i < 4 && !atEnd(); ++i) {
             QQuickTest::pointerFlick(device, window, 0, flickStart, flickEnd, 180);
-            QTRY_VERIFY(gridview->isMoving() == false); // wait until it stops
+            QTRY_VERIFY_WITH_TIMEOUT(gridview->isMoving() == false, 2s); // wait until it stops
         }
         QVERIFY(atEnd());
     }
@@ -4383,7 +4382,7 @@ void tst_QQuickGridView::snapToRow()
         // flick to start
         for (int i = 0; i < 4 && !atStart(); ++i) {
             QQuickTest::pointerFlick(device, window, 0, flickEnd, flickStart, 180);
-            QTRY_VERIFY(gridview->isMoving() == false); // wait until it stops
+            QTRY_VERIFY_WITH_TIMEOUT(gridview->isMoving() == false, 2s); // wait until it stops
         }
         QVERIFY(atStart());
     }
@@ -6747,7 +6746,6 @@ void tst_QQuickGridView::keyNavigationEnabled()
     QScopedPointer<QQuickView> window(createView());
     window->setSource(testFileUrl("keyNavigationEnabled.qml"));
     window->show();
-    window->requestActivate();
     QVERIFY(QTest::qWaitForWindowActive(window.data()));
 
     QQuickGridView *gridView = qobject_cast<QQuickGridView *>(window->rootObject());
@@ -6853,7 +6851,7 @@ void tst_QQuickGridView::QTBUG_86255()
     QQuickGridView *view = findItem<QQuickGridView>(window->rootObject(), "view");
     QVERIFY(view != nullptr);
     QTRY_COMPARE(view->isFlicking(), true);
-    QTRY_COMPARE(view->isFlicking(), false);
+    QTRY_COMPARE_WITH_TIMEOUT(view->isFlicking(), false, 3s);
 }
 
 void tst_QQuickGridView::resizeDynamicCellWidthRtL()

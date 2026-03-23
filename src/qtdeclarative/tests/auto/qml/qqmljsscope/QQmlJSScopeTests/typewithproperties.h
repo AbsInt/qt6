@@ -23,9 +23,15 @@ public:
     TypeWithProperties(QObject *parent = nullptr) : QObject(parent) { }
     double a() const { return m_a; }
     void setA(double a_) { m_a = a_; }
+    Q_INVOKABLE void myInvokable() { };
+
+    enum MyEnum { Hello, World };
+    Q_ENUM(MyEnum)
 
 Q_SIGNALS:
     void aChanged();
+private Q_SLOTS:
+    void mySlot() { };
 };
 
 #endif // TYPEWITHPROPERTIES_H

@@ -3,6 +3,7 @@
 
 
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -51,26 +52,56 @@ static inline int best(int a, int b, int c)
     return qMin(qMin(a, b), c);
 }
 
-// copied from tst_qmake.cpp
-static void copyDir(const QString &sourceDirPath, const QString &targetDirPath)
+static bool copyDir(const QString &sourceDirPath, const QString &targetDirPath)
 {
-    QDir currentDir;
-    QDirIterator dit(sourceDirPath, QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden);
-    while (dit.hasNext()) {
-        dit.next();
-        const QString targetPath = targetDirPath + QLatin1Char('/') + dit.fileName();
-        currentDir.mkpath(targetPath);
-        copyDir(dit.filePath(), targetPath);
+    QElapsedTimer timer;
+    timer.start();
+    qDebug() << "copyDir" << sourceDirPath << "->" << targetDirPath;
+
+    QDir sourceDir(sourceDirPath);
+    if (!sourceDir.exists()) {
+        qWarning() << "Source directory does not exist:" << sourceDirPath;
+        return false;
     }
 
-    QDirIterator fit(sourceDirPath, QDir::Files | QDir::Hidden);
-    while (fit.hasNext()) {
-        fit.next();
-        const QString targetPath = targetDirPath + QLatin1Char('/') + fit.fileName();
-        QFile::remove(targetPath);  // allowed to fail
-        QFile src(fit.filePath());
-        QVERIFY2(src.copy(targetPath), qPrintable(src.errorString()));
+    QDir targetDir(targetDirPath);
+    if (!targetDir.mkpath(targetDirPath)) {
+        qWarning() << "Failed to create target directory:" << targetDirPath;
+        return false;
     }
+
+    using F = QDirListing::IteratorFlag;
+    QDirListing dirList(sourceDirPath, QStringList(), F::ResolveSymlinks | F::Recursive);
+
+    for (const auto &dirEntry : dirList) {
+        const QString srcPath = dirEntry.filePath();
+        const QString relativePath = sourceDir.relativeFilePath(srcPath);
+        const QString dstPath = targetDir.filePath(relativePath);
+
+        if (dirEntry.isDir()) {
+            if (!targetDir.mkpath(dstPath)) {
+                qWarning() << "Failed to create directory:" << dstPath;
+                return false;
+            }
+        } else if (dirEntry.isFile()) {
+            QFileInfo dstInfo(dstPath);
+            QDir dstParent = dstInfo.dir();
+            if (!dstParent.exists() && !targetDir.mkpath(dstParent.path())) {
+                qWarning() << "Failed to create parent directory:" << dstParent.path();
+                return false;
+            }
+
+            QFile::remove(dstPath); // allowed to fail
+            if (!QFile::copy(srcPath, dstPath)) {
+                qWarning() << "Failed to copy file:" << srcPath << "to" << dstPath;
+                return false;
+            }
+
+        }
+    }
+
+    qDebug() << "copyDir finished in" << (timer.elapsed() / 1000) << "seconds";
+    return true;
 }
 
 template <typename C>

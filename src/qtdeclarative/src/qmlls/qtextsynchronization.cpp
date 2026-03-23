@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:significant reason:default
 
+#include "qqmlcodemodelmanager_p.h"
 #include "qtextsynchronization_p.h"
 #include "qqmllsutils_p.h"
 #include "qtextdocument_p.h"
@@ -11,29 +12,28 @@ using namespace Qt::StringLiterals;
 
 QT_BEGIN_NAMESPACE
 
-TextSynchronization::TextSynchronization(QmlLsp::QQmlCodeModel *codeModel, QObject *parent)
-    : QLanguageServerModule(parent), m_codeModel(codeModel)
+TextSynchronization::TextSynchronization(QmlLsp::QQmlCodeModelManager *codeModelManager,
+                                         QObject *parent)
+    : QLanguageServerModule(parent), m_codeModelManager(codeModelManager)
 {
 }
 
 void TextSynchronization::didCloseTextDocument(const DidCloseTextDocumentParams &params)
 {
-    m_codeModel->closeOpenFile(QQmlLSUtils::lspUriToQmlUrl(params.textDocument.uri));
+    m_codeModelManager->closeOpenFile(QQmlLSUtils::lspUriToQmlUrl(params.textDocument.uri));
 }
 
 void TextSynchronization::didOpenTextDocument(const DidOpenTextDocumentParams &params)
 {
     const TextDocumentItem &item = params.textDocument;
-    const QString fileName = m_codeModel->url2Path(QQmlLSUtils::lspUriToQmlUrl(item.uri));
-    m_codeModel->newOpenFile(QQmlLSUtils::lspUriToQmlUrl(item.uri), item.version,
-                             QString::fromUtf8(item.text));
+    m_codeModelManager->newOpenFile(QQmlLSUtils::lspUriToQmlUrl(item.uri), item.version,
+                                    QString::fromUtf8(item.text));
 }
 
 void TextSynchronization::didDidChangeTextDocument(const DidChangeTextDocumentParams &params)
 {
     QByteArray url = QQmlLSUtils::lspUriToQmlUrl(params.textDocument.uri);
-    const QString fileName = m_codeModel->url2Path(url);
-    auto openDoc = m_codeModel->openDocumentByUrl(url);
+    auto openDoc = m_codeModelManager->openDocumentByUrl(url);
     std::shared_ptr<Utils::TextDocument> document = openDoc.textDocument;
     if (!document) {
         qCWarning(lspServerLog) << "Ignoring changes to non open or closed document"
@@ -64,8 +64,7 @@ void TextSynchronization::didDidChangeTextDocument(const DidChangeTextDocumentPa
         qCDebug(lspServerLog).noquote()
                 << "text is\n:----------" << document->toPlainText() << "\n_________";
     }
-    m_codeModel->addOpenToUpdate(url);
-    m_codeModel->openNeedUpdate();
+    m_codeModelManager->addOpenToUpdate(url);
 }
 
 void TextSynchronization::registerHandlers(QLanguageServer *server, QLanguageServerProtocol *)

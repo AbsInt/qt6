@@ -10,17 +10,6 @@
 #include <QtCore/qstring.h>
 #include <stdio.h>
 
-#if QT_CONFIG(cxx17_filesystem)
-#include <filesystem>
-#elif defined(Q_QDOC)
-namespace std {
-    namespace filesystem {
-        class path {
-        };
-    };
-};
-#endif
-
 #ifdef open
 #error qfile.h must be included before any header file that defines open
 #endif
@@ -57,26 +46,10 @@ public:
 
 #if QT_CONFIG(cxx17_filesystem)
 namespace QtPrivate {
-inline QString fromFilesystemPath(const std::filesystem::path &path)
-{
-    // we could use QAnyStringView, but this allows us to statically determine
-    // the correct toString() call
-    using View = std::conditional_t<sizeof(std::filesystem::path::value_type) == sizeof(char16_t),
-            QStringView, QUtf8StringView>;
-    return View(path.native()).toString();
-}
-
-inline std::filesystem::path toFilesystemPath(const QString &path)
-{
-    if constexpr (sizeof(std::filesystem::path::value_type) == sizeof(char16_t))
-        return std::u16string_view(QStringView(path));
-    else
-        return path.toStdString();
-}
-
 // Both std::filesystem::path and QString (without QT_NO_CAST_FROM_ASCII) can be implicitly
 // constructed from string literals so we force the std::fs::path parameter to only
 // accept std::fs::path with no implicit conversions.
+// ### Qt7: use Q_WEAK_OVERLOAD
 template<typename T>
 using ForceFilesystemPath = typename std::enable_if_t<std::is_same_v<std::filesystem::path, T>, int>;
 }
@@ -213,7 +186,7 @@ public:
     }
 #endif // QT_CONFIG(cxx17_filesystem)
 
-    static bool supportsMoveToTrash() Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION static bool supportsMoveToTrash();
     bool moveToTrash();
     static bool moveToTrash(const QString &fileName, QString *pathInTrash = nullptr);
 #ifdef Q_QDOC

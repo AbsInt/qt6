@@ -158,6 +158,7 @@ private slots:
     void shortcutToFocusProxy();
     void deleteLater();
     void keys();
+    void modifierOnly();
 
 protected:
     static Qt::KeyboardModifiers toButtons( int key );
@@ -1354,6 +1355,43 @@ void tst_QShortcut::keys()
 
     QTest::keyEvent(QTest::Press, QApplication::focusWidget(), Qt::Key_Return);
     QTRY_COMPARE(spy.size(), 2);
+}
+
+void tst_QShortcut::modifierOnly()
+{
+    MainWindow mainW;
+    const QString name = QLatin1String(QTest::currentTestFunction());
+    mainW.setWindowTitle(name);
+    mainW.show();
+    mainW.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&mainW));
+
+    const QKeyCombination altModifier(Qt::AltModifier);
+    const QKeyCombination altKey(Qt::Key_Alt);
+    const QKeyCombination altModifierPlusK(Qt::AltModifier | Qt::Key_K);
+
+    QShortcut *altModifierShortcut = setupShortcut(&mainW, name, altModifier);
+    QSignalSpy altModifierActivated(altModifierShortcut, &QShortcut::activated);
+    QShortcut *altModifierPlusKShortcut = setupShortcut(&mainW, name, altModifierPlusK);
+    QSignalSpy altModifierPlusKActivated(altModifierPlusKShortcut, &QShortcut::activated);
+    QShortcut *altKeyShortcut = setupShortcut(&mainW, name, altKey);
+    QSignalSpy altKeyActivated(altKeyShortcut, &QShortcut::activated);
+
+    // modifier only shortcuts are unsupported
+    sendKeyEvents(&mainW, altModifier);
+    QCOMPARE(altModifierActivated.size(), 0);
+    QCOMPARE(altKeyActivated.size(), 0);
+    QCOMPARE(altModifierPlusKActivated.size(), 0);
+
+    sendKeyEvents(&mainW, altKey);
+    QCOMPARE(altModifierActivated.size(), 0);
+    QCOMPARE(altKeyActivated.size(), 0);
+    QCOMPARE(altModifierPlusKActivated.size(), 0);
+
+    sendKeyEvents(&mainW, altModifierPlusK);
+    QCOMPARE(altModifierActivated.size(), 0);
+    QCOMPARE(altKeyActivated.size(), 0);
+    QCOMPARE(altModifierPlusKActivated.size(), 1);
 }
 
 QTEST_MAIN(tst_QShortcut)

@@ -82,6 +82,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <memory>
 
 Q_DECLARE_METATYPE(QWidgetList)
 
@@ -539,6 +540,13 @@ void QDesignerResource::saveDom(DomUI *ui, QWidget *widget)
 
     if (m_formWindow->useIdBasedTranslations())
         ui->setAttributeIdbasedtr(true);
+
+    if (core()->integration()->qtVersion() >= QVersionNumber(6, 10, 0)) {
+        const QString label = m_formWindow->idBasedTranslationLabel();
+        if (!label.isEmpty())
+            ui->setAttributeLabel(label);
+    }
+
     if (!m_formWindow->connectSlotsByName()) // Don't write out if true (default)
         ui->setAttributeConnectslotsbyname(false);
 
@@ -627,8 +635,8 @@ void QDesignerResource::saveDom(DomUI *ui, QWidget *widget)
 
 QWidget *QDesignerResource::load(QIODevice *dev, QWidget *parentWidget)
 {
-    QScopedPointer<DomUI> ui(readUi(dev));
-    return ui.isNull() ? nullptr : loadUi(ui.data(), parentWidget);
+    std::unique_ptr<DomUI> ui(readUi(dev));
+    return ui ? loadUi(ui.get(), parentWidget) : nullptr;
 }
 
 QWidget *QDesignerResource::loadUi(DomUI *ui, QWidget *parentWidget)
@@ -676,6 +684,7 @@ QWidget *QDesignerResource::create(DomUI *ui, QWidget *parentWidget)
 
     if (m_formWindow) {
         m_formWindow->setUseIdBasedTranslations(ui->attributeIdbasedtr());
+        m_formWindow->setIdBasedTranslationLabel(ui->attributeLabel());
         // Default to true unless set.
         const bool connectSlotsByName = !ui->hasAttributeConnectslotsbyname() || ui->attributeConnectslotsbyname();
         m_formWindow->setConnectSlotsByName(connectSlotsByName);

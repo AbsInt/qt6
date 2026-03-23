@@ -429,7 +429,7 @@ void tst_qquickanimatedimage::qtbug_16520()
 
     anim->setProperty("source", server.urlString("/stickman.gif"));
     QTRY_COMPARE(anim->opacity(), qreal(0));
-    QTRY_COMPARE(anim->opacity(), qreal(1));
+    QTRY_COMPARE_WITH_TIMEOUT(anim->opacity(), qreal(1), 2s);
 
     delete anim;
     delete root;
@@ -553,7 +553,7 @@ void tst_qquickanimatedimage::playingAndPausedChanges()
 
     // Cannot animate this image, playing will be false
     ctxt->setContextProperty("srcImage", testFileUrl("green.png"));
-    QTRY_VERIFY(!obj->isPlaying());
+    QTRY_VERIFY_WITH_TIMEOUT(!obj->isPlaying(), 2s);
     QTRY_VERIFY(!obj->isPaused());
     QTRY_COMPARE(playingSpy.size(), 5);
     QTRY_COMPARE(pausedSpy.size(), 4);
@@ -597,7 +597,7 @@ void tst_qquickanimatedimage::sourceChangesOnFrameChanged()
 {
     QQmlEngine engine;
     QQmlComponent component(&engine, testFileUrl("colors.qml"));
-    QVector<QQuickAnimatedImage*> images;
+    QList<QQuickAnimatedImage*> images;
 
     // Run multiple animations in parallel, this should be fast
     for (int loops = 0; loops < 25; ++loops) {

@@ -6,6 +6,11 @@
 
 QT_BEGIN_NAMESPACE
 
+/*!
+    \class QQmlValueTypeProxyBinding
+    \inmodule QtQml
+    \internal
+*/
 QQmlValueTypeProxyBinding::QQmlValueTypeProxyBinding(QObject *o, QQmlPropertyIndex index)
     : QQmlAbstractBinding(),
       m_bindings(nullptr)
@@ -48,7 +53,9 @@ QQmlAbstractBinding *QQmlValueTypeProxyBinding::binding(QQmlPropertyIndex proper
 }
 
 /*!
-Removes a collection of bindings, corresponding to the set bits in \a mask.
+    \internal
+    Removes a collection of bindings, corresponding to the set bits
+    in \a mask.
 */
 void QQmlValueTypeProxyBinding::removeBindings(quint32 mask)
 {

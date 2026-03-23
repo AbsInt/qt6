@@ -606,13 +606,13 @@ void QTableViewPrivate::init()
 
 void QTableViewPrivate::clearConnections()
 {
-    for (const QMetaObject::Connection &connection : modelConnections)
+    for (QMetaObject::Connection &connection : modelConnections)
         QObject::disconnect(connection);
-    for (const QMetaObject::Connection &connection : verHeaderConnections)
+    for (QMetaObject::Connection &connection : verHeaderConnections)
         QObject::disconnect(connection);
-    for (const QMetaObject::Connection &connection : horHeaderConnections)
+    for (QMetaObject::Connection &connection : horHeaderConnections)
         QObject::disconnect(connection);
-    for (const QMetaObject::Connection &connection : dynHorHeaderConnections)
+    for (QMetaObject::Connection &connection : dynHorHeaderConnections)
         QObject::disconnect(connection);
     QObject::disconnect(selectionmodelConnection);
 #if QT_CONFIG(abstractbutton)
@@ -1289,7 +1289,7 @@ void QTableView::setModel(QAbstractItemModel *model)
         return;
     //let's disconnect from the old model
     if (d->model && d->model != QAbstractItemModelPrivate::staticEmptyModel()) {
-        for (const QMetaObject::Connection &connection : d->modelConnections)
+        for (QMetaObject::Connection &connection : d->modelConnections)
               disconnect(connection);
     }
     if (d->selectionModel) { // support row editing
@@ -1395,7 +1395,7 @@ void QTableView::setHorizontalHeader(QHeaderView *header)
 
     if (!header || header == d->horizontalHeader)
         return;
-    for (const QMetaObject::Connection &connection : d->horHeaderConnections)
+    for (QMetaObject::Connection &connection : d->horHeaderConnections)
         disconnect(connection);
     if (d->horizontalHeader && d->horizontalHeader->parent() == this)
         delete d->horizontalHeader;
@@ -1435,7 +1435,7 @@ void QTableView::setVerticalHeader(QHeaderView *header)
 
     if (!header || header == d->verticalHeader)
         return;
-    for (const QMetaObject::Connection &connection : d->verHeaderConnections)
+    for (QMetaObject::Connection &connection : d->verHeaderConnections)
         disconnect(connection);
     if (d->verticalHeader && d->verticalHeader->parent() == this)
         delete d->verticalHeader;
@@ -2763,9 +2763,8 @@ void QTableView::setSortingEnabled(bool enable)
 {
     Q_D(QTableView);
     horizontalHeader()->setSortIndicatorShown(enable);
-    for (const QMetaObject::Connection &connection : d->dynHorHeaderConnections)
+    for (QMetaObject::Connection &connection : d->dynHorHeaderConnections)
         disconnect(connection);
-    d->dynHorHeaderConnections.clear();
     if (enable) {
         //sortByColumn has to be called before we connect or set the sortingEnabled flag
         // because otherwise it will not call sort on the model.
@@ -3595,7 +3594,7 @@ void QTableView::currentChanged(const QModelIndex &current, const QModelIndex &p
     if (QAccessible::isActive()) {
         if (current.isValid() && hasFocus()) {
             Q_D(QTableView);
-            int entry = d->accessibleTable2Index(current);
+            int entry = d->accessibleChildIndex(current);
             QAccessibleEvent event(this, QAccessible::Focus);
             event.setChild(entry);
             QAccessible::updateAccessibility(&event);
@@ -3618,14 +3617,14 @@ void QTableView::selectionChanged(const QItemSelection &selected,
         // ### does not work properly for selection ranges.
         QModelIndex sel = selected.indexes().value(0);
         if (sel.isValid()) {
-            int entry = d->accessibleTable2Index(sel);
+            int entry = d->accessibleChildIndex(sel);
             QAccessibleEvent event(this, QAccessible::SelectionAdd);
             event.setChild(entry);
             QAccessible::updateAccessibility(&event);
         }
         QModelIndex desel = deselected.indexes().value(0);
         if (desel.isValid()) {
-            int entry = d->accessibleTable2Index(desel);
+            int entry = d->accessibleChildIndex(desel);
             QAccessibleEvent event(this, QAccessible::SelectionRemove);
             event.setChild(entry);
             QAccessible::updateAccessibility(&event);

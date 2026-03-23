@@ -1370,7 +1370,7 @@ QBitmap QPixmap::mask() const
 
     \note QGuiApplication must be created before calling this function.
 
-    \sa depth(), QColormap::depth(), {QPixmap#Pixmap Information}{Pixmap Information}
+    \sa depth(), {QPixmap#Pixmap Information}{Pixmap Information}
 
 */
 int QPixmap::defaultDepth()

@@ -139,6 +139,9 @@ void QQuickControlPrivate::init()
 {
     Q_Q(QQuickControl);
     QObject::connect(q, &QQuickItem::baselineOffsetChanged, q, &QQuickControl::baselineOffsetChanged);
+#if QT_CONFIG(accessibility)
+    setAccessible();
+#endif
 }
 
 #if QT_CONFIG(quicktemplates2_multitouch)

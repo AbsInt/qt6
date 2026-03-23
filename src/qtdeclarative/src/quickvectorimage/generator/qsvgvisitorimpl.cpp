@@ -31,6 +31,7 @@
 #include <QtCore/qloggingcategory.h>
 
 #include <QtSvg/private/qsvgstyle_p.h>
+#include <QtSvg/private/qsvgfilter_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -150,7 +151,7 @@ namespace {
 inline bool isPathContainer(const QSvgStructureNode *node)
 {
     bool foundPath = false;
-    for (const auto *child : node->renderers()) {
+    for (const auto &child : node->renderers()) {
         switch (child->type()) {
             // nodes that shouldn't go inside Shape{}
         case QSvgNode::Switch:
@@ -164,11 +165,13 @@ inline bool isPathContainer(const QSvgStructureNode *node)
         case QSvgNode::Textarea:
         case QSvgNode::Text:
         case QSvgNode::Tspan:
+        case QSvgNode::Mask:
             //qCDebug(lcQuickVectorGraphics) << "NOT path container because" << node->typeName() ;
             return false;
 
             // nodes that could go inside Shape{}
         case QSvgNode::Defs:
+        case QSvgNode::Symbol:
             break;
 
             // nodes that are done as pure ShapePath{}
@@ -180,6 +183,9 @@ inline bool isPathContainer(const QSvgStructureNode *node)
         case QSvgNode::Polygon:
         case QSvgNode::Polyline:
         {
+            if (child->hasFilter())
+                return false;
+
             if (!child->style().opacity.isDefault())
                 return false;
 
@@ -187,7 +193,7 @@ inline bool isPathContainer(const QSvgStructureNode *node)
                 //qCDebug(lcQuickVectorGraphics) << "NOT path container because local transform";
                 return false;
             }
-            const QList<QSvgAbstractAnimation *> animations = child->document()->animator()->animationsForNode(child);
+            const auto animations = child->document()->animator()->animationsForNode(child.get());
             if (!animations.isEmpty()) {
                 //qCDebug(lcQuickVectorGraphics) << "NOT path container because local transform animation";
                 return false;
@@ -280,7 +286,7 @@ QSvgVisitorImpl::QSvgVisitorImpl(const QString svgFileName,
 
 QSvgVisitorImpl::~QSvgVisitorImpl() = default;
 
-bool QSvgVisitorImpl::traverse()
+bool QSvgVisitorImpl::doTraversal()
 {
     if (!m_generator) {
         qCDebug(lcQuickVectorImage) << "No valid QQuickGenerator is set. Genration will stop";
@@ -291,18 +297,21 @@ bool QSvgVisitorImpl::traverse()
     if (m_assumeTrustedSource)
         options.setFlag(QtSvg::AssumeTrustedSource);
 
-    auto *doc = QSvgTinyDocument::load(m_svgFileName, options);
+    const auto doc = QSvgDocument::load(m_svgFileName, options);
     if (!doc) {
         qCDebug(lcQuickVectorImage) << "Not a valid Svg File : " << m_svgFileName;
         return false;
     }
 
-    QSvgVisitor::traverse(doc);
+    QSvgVisitor::traverse(doc.get());
     return true;
 }
 
 void QSvgVisitorImpl::visitNode(const QSvgNode *node)
 {
+    if (m_defsLevel > 0)
+        return;
+
     handleBaseNodeSetup(node);
 
     NodeInfo info;
@@ -316,6 +325,9 @@ void QSvgVisitorImpl::visitNode(const QSvgNode *node)
 
 void QSvgVisitorImpl::visitImageNode(const QSvgImage *node)
 {
+    if (m_defsLevel > 0)
+        return;
+
     // TODO: this requires proper asset management.
     handleBaseNodeSetup(node);
 
@@ -333,6 +345,9 @@ void QSvgVisitorImpl::visitImageNode(const QSvgImage *node)
 
 void QSvgVisitorImpl::visitRectNode(const QSvgRect *node)
 {
+    if (m_defsLevel > 0)
+        return;
+
     QRectF rect = node->rect();
     QPointF rads = node->radius();
     // This is using Qt::RelativeSize semantics: percentage of half rect size
@@ -365,6 +380,9 @@ void QSvgVisitorImpl::visitRectNode(const QSvgRect *node)
 
 void QSvgVisitorImpl::visitEllipseNode(const QSvgEllipse *node)
 {
+    if (m_defsLevel > 0)
+        return;
+
     QRectF rect = node->rect();
 
     QPainterPath p;
@@ -375,11 +393,17 @@ void QSvgVisitorImpl::visitEllipseNode(const QSvgEllipse *node)
 
 void QSvgVisitorImpl::visitPathNode(const QSvgPath *node)
 {
+    if (m_defsLevel > 0)
+        return;
+
     handlePathNode(node, node->path());
 }
 
 void QSvgVisitorImpl::visitLineNode(const QSvgLine *node)
 {
+    if (m_defsLevel > 0)
+        return;
+
     QPainterPath p;
     p.moveTo(node->line().p1());
     p.lineTo(node->line().p2());
@@ -388,12 +412,18 @@ void QSvgVisitorImpl::visitLineNode(const QSvgLine *node)
 
 void QSvgVisitorImpl::visitPolygonNode(const QSvgPolygon *node)
 {
+    if (m_defsLevel > 0)
+        return;
+
     QPainterPath p = QQuickVectorImageGenerator::Utils::polygonToPath(node->polygon(), true);
     handlePathNode(node, p);
 }
 
 void QSvgVisitorImpl::visitPolylineNode(const QSvgPolyline *node)
 {
+    if (m_defsLevel > 0)
+        return;
+
     QPainterPath p = QQuickVectorImageGenerator::Utils::polygonToPath(node->polygon(), false);
     handlePathNode(node, p);
 }
@@ -660,6 +690,9 @@ static QVariant calculateInterpolatedValue(const QSvgAbstractAnimatedProperty *p
 
 void QSvgVisitorImpl::visitTextNode(const QSvgText *node)
 {
+    if (m_defsLevel > 0)
+        return;
+
     handleBaseNodeSetup(node);
     const bool isTextArea = node->type() == QSvgNode::Textarea;
 
@@ -847,9 +880,9 @@ void QSvgVisitorImpl::visitTextNode(const QSvgText *node)
                     lout->setRawFont(rawFont);
                 }
 
-                auto addPathForFormat = [&](QPainterPath p, QTextCharFormat fmt) {
+                auto addPathForFormat = [&](QPainterPath p, QTextCharFormat fmt, int pathIndex) {
                     PathNodeInfo info;
-                    fillCommonNodeInfo(node, info);
+                    fillCommonNodeInfo(node, info, QStringLiteral("_path%1").arg(pathIndex));
                     fillPathAnimationInfo(node, info);
                     auto fillStyle = node->style().fill;
                     if (fillStyle)
@@ -863,7 +896,7 @@ void QSvgVisitorImpl::visitTextNode(const QSvgText *node)
                         info.fillColor.setDefaultValue(m_styleResolver->currentFillColor());
                     }
 
-                    info.painterPath = p;
+                    info.path.setDefaultValue(QVariant::fromValue(p));
 
                     const QGradient *strokeGradient = m_styleResolver->currentStrokeGradient();
                     QPen pen;
@@ -890,13 +923,13 @@ void QSvgVisitorImpl::visitTextNode(const QSvgText *node)
 
                     if (strokeGradient != nullptr) {
                         PathNodeInfo strokeInfo;
-                        fillCommonNodeInfo(node, strokeInfo);
+                        fillCommonNodeInfo(node, strokeInfo, QStringLiteral("_stroke%1").arg(pathIndex));
                         fillPathAnimationInfo(node, strokeInfo);
 
                         strokeInfo.grad = *strokeGradient;
 
                         QPainterPathStroker stroker(pen);
-                        strokeInfo.painterPath = stroker.createStroke(p);
+                        strokeInfo.path.setDefaultValue(QVariant::fromValue(stroker.createStroke(p)));
                         m_generator->generatePath(strokeInfo, boundingRect);
                     }
                 };
@@ -936,8 +969,10 @@ void QSvgVisitorImpl::visitTextNode(const QSvgText *node)
 
                     QList<QGlyphRun> glyphRuns = lout->glyphRuns(range.start, range.length);
                     QList<QPainterPath> paths = glyphsToPath(glyphRuns, lout->minimumWidth());
-                    for (const QPainterPath &path : paths)
-                        addPathForFormat(path, range.format);
+                    for (int j = 0; j < paths.size(); ++j) {
+                        const QPainterPath &path = paths.at(j);
+                        addPathForFormat(path, range.format, j);
+                    }
                 }
             }
 
@@ -998,18 +1033,24 @@ void QSvgVisitorImpl::visitTextNode(const QSvgText *node)
 
 void QSvgVisitorImpl::visitUseNode(const QSvgUse *node)
 {
+    if (m_defsLevel > 0)
+        return;
+
     QSvgNode *link = node->link();
     if (!link)
         return;
 
     handleBaseNodeSetup(node);
     UseNodeInfo info;
+    QPointF startPos = node->start();
+
     fillCommonNodeInfo(node, info);
     fillAnimationInfo(node, info);
 
+    if (!info.bounds.isNull())
+        info.bounds.translate(-startPos);
     info.stage = StructureNodeStage::Start;
 
-    QPointF startPos = node->start();
     if (!startPos.isNull()) {
         QTransform xform;
         if (!info.isDefaultTransform)
@@ -1021,7 +1062,13 @@ void QSvgVisitorImpl::visitUseNode(const QSvgUse *node)
 
     m_generator->generateUseNode(info);
 
+    QString oldLinkSuffix = m_linkSuffix;
+    m_linkSuffix += QStringLiteral("_use") + info.id;
+
+    m_useLevel++;
     QSvgVisitor::traverse(link);
+    m_useLevel--;
+    m_linkSuffix = oldLinkSuffix;
 
     info.stage = StructureNodeStage::End;
     m_generator->generateUseNode(info);
@@ -1030,11 +1077,17 @@ void QSvgVisitorImpl::visitUseNode(const QSvgUse *node)
 
 bool QSvgVisitorImpl::visitSwitchNodeStart(const QSvgSwitch *node)
 {
+    if (m_defsLevel > 0)
+        return false;
+
     QSvgNode *link = node->childToRender();
     if (!link)
         return false;
 
+    QString oldLinkSuffix = m_linkSuffix;
+    m_linkSuffix += QStringLiteral("_switch") + QString::number(quintptr(node), 16);
     QSvgVisitor::traverse(link);
+    m_linkSuffix = oldLinkSuffix;
 
     return false;
 }
@@ -1048,11 +1101,330 @@ bool QSvgVisitorImpl::visitDefsNodeStart(const QSvgDefs *node)
 {
     Q_UNUSED(node)
 
-    return m_generator->generateDefsNode(NodeInfo{});
+    m_defsLevel++;
+    return true;
+}
+
+void QSvgVisitorImpl::visitDefsNodeEnd(const QSvgDefs *node)
+{
+    Q_UNUSED(node)
+
+    m_defsLevel--;
+}
+
+bool QSvgVisitorImpl::visitSymbolNodeStart(const QSvgSymbol *node)
+{
+    if (m_useLevel == 0)
+        return false;
+
+    handleBaseNodeSetup(node);
+
+    StructureNodeInfo info;
+    fillCommonNodeInfo(node, info);
+    fillAnimationInfo(node, info);
+
+    QTransform oldTransform = info.transform.defaultValue().value<QTransform>();
+    info.clipBox = oldTransform.mapRect(node->clipRect());
+
+    QTransform xform = node->aspectRatioTransform();
+    if (!xform.isIdentity()) {
+        info.isDefaultTransform = false;
+        xform = xform * oldTransform;
+        info.transform.setDefaultValue(QVariant::fromValue(xform));
+    }
+    info.stage = StructureNodeStage::Start;
+
+    return m_generator->generateStructureNode(info);
+}
+
+void QSvgVisitorImpl::visitSymbolNodeEnd(const QSvgSymbol *node)
+{
+    Q_ASSERT(m_useLevel > 0);
+    handleBaseNodeSetup(node);
+
+    StructureNodeInfo info;
+    fillCommonNodeInfo(node, info);
+    fillAnimationInfo(node, info);
+
+    info.clipBox = node->clipRect();
+    info.stage = StructureNodeStage::End;
+
+    m_generator->generateStructureNode(info);
+}
+
+bool QSvgVisitorImpl::visitMaskNodeStart(const QSvgMask *node)
+{
+    handleBaseNodeSetup(node);
+
+    MaskNodeInfo info;
+
+    QSvgRectF r = node->rect();
+    info.isMaskRectRelativeCoordinates = r.unitX() == QtSvg::UnitTypes::objectBoundingBox;
+    info.maskRect = r;
+
+    if (node->contentUnits() == QtSvg::UnitTypes::objectBoundingBox)
+        qCWarning(lcQuickVectorImage) << "Only user space content units supported for masks";
+
+    fillCommonNodeInfo(node, info);
+
+    return m_generator->generateMaskNode(info);
+}
+
+void QSvgVisitorImpl::visitMaskNodeEnd(const QSvgMask *node)
+{
+    MaskNodeInfo info;
+    info.stage = StructureNodeStage::End;
+
+    QSvgRectF r = node->rect();
+    info.isMaskRectRelativeCoordinates = r.unitX() == QtSvg::UnitTypes::objectBoundingBox;
+    info.maskRect = r;
+    fillCommonNodeInfo(node, info);
+
+    m_generator->generateMaskNode(info);
+
+    handleBaseNodeEnd(node);
+}
+
+bool QSvgVisitorImpl::visitFilterNodeStart(const QSvgFilterContainer *node)
+{
+    Q_UNUSED(node)
+
+    if (!m_filterPrimitives.isEmpty()) {
+        qCWarning(lcQuickVectorImage) << "Filter defined inside a filter";
+        return false;
+    }
+
+    return true;
+}
+
+void QSvgVisitorImpl::visitFilterNodeEnd(const QSvgFilterContainer *node)
+{
+    if (m_filterPrimitives.isEmpty())
+        return;
+
+    handleBaseNodeSetup(node);
+
+    FilterNodeInfo info;
+    fillCommonNodeInfo(node, info);
+
+    info.filterRect = node->rect();
+    if (node->filterUnits() == QtSvg::UnitTypes::objectBoundingBox)
+        info.csFilterRect = FilterNodeInfo::CoordinateSystem::Relative;
+
+    bool generatedAlpha = false;
+    for (const QSvgFeFilterPrimitive *filterPrimitive : std::as_const(m_filterPrimitives)) {
+        if (filterPrimitive->requiresSourceAlpha() && !generatedAlpha) {
+            FilterNodeInfo::FilterStep alphaStep;
+            alphaStep.filterType = FilterNodeInfo::Type::ColorMatrix;
+            alphaStep.csFilterParameter = FilterNodeInfo::CoordinateSystem::MatchFilterRect;
+
+            // Isolate alpha
+            qreal values[] = { 0.0, 0.0, 0.0, 0.0, 0.0,
+                              0.0, 0.0, 0.0, 0.0, 0.0,
+                              0.0, 0.0, 0.0, 0.0, 0.0,
+                              0.0, 0.0, 0.0, 1.0, 0.0,
+                              0.0, 0.0, 0.0, 0.0, 0.0 };
+            QGenericMatrix<5, 5, qreal> matrix(values);
+            alphaStep.filterParameter = QVariant::fromValue(matrix);
+            alphaStep.outputName = info.id + QStringLiteral("_source_alpha");
+            generatedAlpha = true;
+
+            info.steps.append(alphaStep);
+        }
+
+        fillFilterPrimitiveInfo(node, filterPrimitive, info);
+    }
+
+    m_generator->generateFilterNode(info);
+    m_filterPrimitives.clear();
+}
+
+void QSvgVisitorImpl::fillFilterPrimitiveInfo(const QSvgFilterContainer *node,
+                                              const QSvgFeFilterPrimitive *filterPrimitive,
+                                              FilterNodeInfo &info)
+{
+    FilterNodeInfo::FilterStep step;
+    step.filterPrimitiveRect = filterPrimitive->rect();
+
+    step.outputName = info.id + QStringLiteral("_")
+        + (filterPrimitive->result().isEmpty()
+        ? QStringLiteral("output_") + QString::number(info.steps.size())
+        : filterPrimitive->result());
+
+    auto findInput = [&info, &filterPrimitive](const QString &input, QString *outName) {
+        const QString alphaSource = info.id + QStringLiteral("_source_alpha");
+        if (input == QStringLiteral("SourceGraphic")) {
+            return FilterNodeInfo::FilterInput::SourceColor;
+        } else if (input == QStringLiteral("SourceAlpha")) {
+            *outName = alphaSource;
+            return FilterNodeInfo::FilterInput::SourceAlpha;
+        } else if (info.steps.isEmpty()) {
+            return FilterNodeInfo::FilterInput::SourceColor;
+        }
+
+        if (!input.isEmpty()) {
+            *outName = info.id + QStringLiteral("_") + input;
+        } else {
+            bool insideMergeNode = filterPrimitive->type() == QSvgNode::FeMergenode;
+            for (int i = info.steps.size() - 1; i >= 0; --i) {
+                const auto &prevStep = info.steps.at(i);
+                if (insideMergeNode && prevStep.filterType == FilterNodeInfo::Type::Merge) {
+                    insideMergeNode = false;
+                    continue;
+                }
+
+                if (!prevStep.outputName.isEmpty() && prevStep.outputName != alphaSource) {
+                    *outName = prevStep.outputName;
+                    break;
+                }
+            }
+        }
+
+        return FilterNodeInfo::FilterInput::Name;
+    };
+
+    step.input1 = findInput(filterPrimitive->input(), &step.namedInput1);
+
+    if (node->primitiveUnits() == QtSvg::UnitTypes::objectBoundingBox)
+        step.csFilterParameter = FilterNodeInfo::CoordinateSystem::Relative;
+
+    // We special-case the default filter primitive rect as is done in Qt Svg.
+    // The default is to match the filter's rect and this is represented by making
+    // the types of the filter primitive's rect QtSvg::UnitTypes::unknown. Since
+    // this is not generally handled in Qt Svg, we also just special case it here.
+    if (node->primitiveUnits() == QtSvg::UnitTypes::userSpaceOnUse
+        && filterPrimitive->rect().unitW() == QtSvg::UnitTypes::unknown) {
+        step.csFilterParameter = FilterNodeInfo::CoordinateSystem::MatchFilterRect;
+    }
+
+    switch (filterPrimitive->type()) {
+    case QSvgNode::FeMerge:
+        step.filterType = FilterNodeInfo::Type::Merge;
+        break;
+    case QSvgNode::FeMergenode:
+        step.filterType = FilterNodeInfo::Type::MergeNode;
+        break;
+    case QSvgNode::FeBlend:
+    {
+        const QSvgFeBlend *blend = static_cast<const QSvgFeBlend *>(filterPrimitive);
+        switch (blend->mode()) {
+        case QSvgFeBlend::Mode::Normal:
+            step.filterType = FilterNodeInfo::Type::BlendNormal;
+            break;
+        case QSvgFeBlend::Mode::Multiply:
+            step.filterType = FilterNodeInfo::Type::BlendMultiply;
+            break;
+        case QSvgFeBlend::Mode::Screen:
+            step.filterType = FilterNodeInfo::Type::BlendScreen;
+            break;
+        case QSvgFeBlend::Mode::Darken:
+            step.filterType = FilterNodeInfo::Type::BlendDarken;
+            break;
+        case QSvgFeBlend::Mode::Lighten:
+            step.filterType = FilterNodeInfo::Type::BlendLighten;
+            break;
+        }
+
+        step.input2 = findInput(blend->input2(), &step.namedInput2);
+        break;
+    }
+    case QSvgNode::FeComposite:
+    {
+        const QSvgFeComposite *composite =  static_cast<const QSvgFeComposite *>(filterPrimitive);
+        switch (composite->compositionOperator()) {
+        case QSvgFeComposite::Operator::Over:
+            step.filterType = FilterNodeInfo::Type::CompositeOver;
+            break;
+        case QSvgFeComposite::Operator::In:
+            step.filterType = FilterNodeInfo::Type::CompositeIn;
+            break;
+        case QSvgFeComposite::Operator::Out:
+            step.filterType = FilterNodeInfo::Type::CompositeOut;
+            break;
+        case QSvgFeComposite::Operator::Atop:
+            step.filterType = FilterNodeInfo::Type::CompositeAtop;
+            break;
+        case QSvgFeComposite::Operator::Xor:
+            step.filterType = FilterNodeInfo::Type::CompositeXor;
+            break;
+        case QSvgFeComposite::Operator::Lighter:
+            step.filterType = FilterNodeInfo::Type::CompositeLighter;
+            break;
+        case QSvgFeComposite::Operator::Arithmetic:
+            step.filterType = FilterNodeInfo::Type::CompositeArithmetic;
+            break;
+        };
+
+        step.input2 = findInput(composite->input2(), &step.namedInput2);
+        step.filterParameter = composite->k();
+        break;
+    }
+    case QSvgNode::FeOffset:
+    {
+        const QSvgFeOffset *offset = static_cast<const QSvgFeOffset *>(filterPrimitive);
+        step.filterType = FilterNodeInfo::Type::Offset;
+        step.filterParameter = QVariant::fromValue(QVector2D(offset->dx(), offset->dy()));
+        break;
+
+    }
+    case QSvgNode::FeColormatrix:
+    {
+        const QSvgFeColorMatrix *colorMatrix =
+            static_cast<const QSvgFeColorMatrix *>(filterPrimitive);
+        step.filterType = FilterNodeInfo::Type::ColorMatrix;
+        step.filterParameter = QVariant::fromValue(colorMatrix->matrix());
+        break;
+    }
+
+    case QSvgNode::FeGaussianblur:
+    {
+        const QSvgFeGaussianBlur *gaussianBlur =
+            static_cast<const QSvgFeGaussianBlur *>(filterPrimitive);
+
+        if (gaussianBlur->edgeMode() == QSvgFeGaussianBlur::EdgeMode::Wrap)
+            info.wrapMode = QSGTexture::Repeat;
+        step.filterType = FilterNodeInfo::Type::GaussianBlur;
+        if (!qFuzzyCompare(gaussianBlur->stdDeviationX(), gaussianBlur->stdDeviationY()))
+            qCWarning(lcQuickVectorImage) << "Separate X and Y deviations not supported for gaussian blur";
+        step.filterParameter = std::max(gaussianBlur->stdDeviationX(),
+                                        gaussianBlur->stdDeviationY());
+        break;
+    }
+
+    case QSvgNode::FeFlood:
+    {
+        const QSvgFeFlood *flood =
+            static_cast<const QSvgFeFlood *>(filterPrimitive);
+
+        step.filterType = FilterNodeInfo::Type::Flood;
+        step.filterParameter = flood->color();
+        break;
+    }
+    default:
+        // Create a dummy filter node to make sure bindings still work for unsupported filters
+        step.filterType = FilterNodeInfo::Type::None;
+        break;
+    }
+
+    info.steps.append(step);
+}
+
+bool QSvgVisitorImpl::visitFeFilterPrimitiveNodeStart(const QSvgFeFilterPrimitive *node)
+{
+    m_filterPrimitives.append(node);
+    return true;
+}
+
+void QSvgVisitorImpl::visitFeFilterPrimitiveNodeEnd(const QSvgFeFilterPrimitive *node)
+{
+    Q_UNUSED(node);
 }
 
 bool QSvgVisitorImpl::visitStructureNodeStart(const QSvgStructureNode *node)
 {
+    if (m_defsLevel > 0)
+        return false;
+
     constexpr bool forceSeparatePaths = false;
     handleBaseNodeSetup(node);
 
@@ -1081,15 +1453,21 @@ void QSvgVisitorImpl::visitStructureNodeEnd(const QSvgStructureNode *node)
     m_generator->generateStructureNode(info);
 }
 
-bool QSvgVisitorImpl::visitDocumentNodeStart(const QSvgTinyDocument *node)
+QString QSvgVisitorImpl::nextNodeId() const
 {
+    return QStringLiteral("_qt_node%1").arg(m_nodeIdCounter++);
+}
+
+bool QSvgVisitorImpl::visitDocumentNodeStart(const QSvgDocument *node)
+{
+    Q_ASSERT(m_defsLevel == 0);
     handleBaseNodeSetup(node);
 
     StructureNodeInfo info;
     fillCommonNodeInfo(node, info);
     fillAnimationInfo(node, info);
 
-    const QSvgTinyDocument *doc = static_cast<const QSvgTinyDocument *>(node);
+    const QSvgDocument *doc = static_cast<const QSvgDocument *>(node);
     info.size = doc->size();
     info.viewBox = doc->viewBox();
     info.isPathContainer = isPathContainer(node);
@@ -1099,7 +1477,7 @@ bool QSvgVisitorImpl::visitDocumentNodeStart(const QSvgTinyDocument *node)
     return m_generator->generateRootNode(info);
 }
 
-void QSvgVisitorImpl::visitDocumentNodeEnd(const QSvgTinyDocument *node)
+void QSvgVisitorImpl::visitDocumentNodeEnd(const QSvgDocument *node)
 {
     handleBaseNodeEnd(node);
     qCDebug(lcQuickVectorImage) << "REVERT" << node->nodeId() << node->type() << (m_styleResolver->painter().pen().style() != Qt::NoPen)
@@ -1131,18 +1509,58 @@ static QString scrub(const QString &raw)
     return res;
 }
 
-void QSvgVisitorImpl::fillCommonNodeInfo(const QSvgNode *node, NodeInfo &info)
+void QSvgVisitorImpl::fillCommonNodeInfo(const QSvgNode *node, NodeInfo &info, const QString &idSuffix)
 {
-    info.nodeId = scrub(node->nodeId());
+    const QString nodeId = scrub(node->nodeId());
+    const QString key = nodeId.isEmpty()
+                            ? QString::number(quintptr(node), 16)
+                            : nodeId;
+    info.id = m_idForNodeId.value(key);
+    if (info.id.isEmpty()) {
+        info.id = nextNodeId();
+        m_idForNodeId.insert(key, info.id);
+    }
+
+    // Internal disambiguation when multiple items come from the same node
+    info.id += idSuffix;
+
+    if (!m_linkSuffix.isEmpty())
+        info.id += m_linkSuffix;
+
+    info.nodeId = nodeId;
     info.typeName = node->typeName();
     info.isDefaultTransform = node->style().transform.isDefault();
-    info.transform.setDefaultValue(QVariant::fromValue(!info.isDefaultTransform
-                                                           ? node->style().transform->qtransform()
-                                                           : QTransform()));
+
+    QTransform xf = !info.isDefaultTransform ? node->style().transform->qtransform() : QTransform();
+    info.transform.setDefaultValue(QVariant::fromValue(xf));
     info.isDefaultOpacity = node->style().opacity.isDefault();
     info.opacity.setDefaultValue(!info.isDefaultOpacity ? node->style().opacity->opacity() : 1.0);
     info.isVisible = node->isVisible();
     info.isDisplayed = node->displayMode() != QSvgNode::DisplayMode::NoneMode;
+
+    if (node->hasFilter() || node->hasMask() || node->type() == QSvgNode::Type::Mask) {
+        QImage dummy(1, 1, QImage::Format_RGB32);
+        QPainter p(&dummy);
+        QSvgExtraStates states;
+        p.setPen(QPen(Qt::NoPen));
+        info.bounds = node->internalBounds(&p, states);
+    }
+
+    if (node->hasMask()) {
+        info.maskId = m_idForNodeId.value(node->maskId());
+        if (info.maskId.isEmpty()) {
+            info.maskId = nextNodeId();
+            m_idForNodeId.insert(node->maskId(), info.maskId);
+        }
+    }
+
+    if (node->hasFilter()) {
+        info.filterId = m_idForNodeId.value(node->filterId());
+        if (info.filterId.isEmpty()) {
+            info.filterId = nextNodeId();
+            m_idForNodeId.insert(node->filterId(), info.filterId);
+        }
+    }
 }
 
 QList<QSvgVisitorImpl::AnimationPair> QSvgVisitorImpl::collectAnimations(const QSvgNode *node,
@@ -1189,6 +1607,7 @@ void QSvgVisitorImpl::applyAnimationsToProperty(const QList<AnimationPair> &anim
                                          << ", freeze:" << freeze
                                          << ", replace:" << replace;
 
+        QBezier easing = easingForAnimation(animation);
         QList<qreal> propertyKeyFrames = property->keyFrames();
         QList<QQuickAnimatedProperty::PropertyAnimation> outAnimations;
 
@@ -1257,12 +1676,53 @@ void QSvgVisitorImpl::applyAnimationsToProperty(const QList<AnimationPair> &anim
 
                 const QVariant value = calculateValue(property, j, i);
                 outAnimation.frames[time] = value;
+                outAnimation.easingPerFrame[time] = easing;
                 qCDebug(lcVectorImageAnimations) << "        -> Frame " << time << " is " << value;
             }
 
             outProperty->addAnimation(outAnimation);
         }
     }
+}
+
+QBezier QSvgVisitorImpl::easingForAnimation(const QSvgAbstractAnimation *animation)
+{
+    constexpr QPointF startControlPoint(0, 0);
+    constexpr QPointF endControlPoint(1, 1);
+    constexpr QPointF easeC1(0.25, 0.1);
+    constexpr QPointF easeC2(0.25, 1);
+
+    QBezier easing = QBezier::fromPoints(startControlPoint, startControlPoint, endControlPoint, endControlPoint);
+
+#if QT_CONFIG(cssparser)
+    if (animation->animationType() == QSvgAbstractAnimation::CSS) {
+        QSvgEasingInterface *easingInterface = animation->easing();
+        QSvgCssEasing *cssEasing = static_cast<QSvgCssEasing *>(easingInterface);
+        switch (cssEasing->easingFunction()) {
+        case QSvgCssValues::EasingFunction::Ease:
+        case QSvgCssValues::EasingFunction::EaseIn:
+        case QSvgCssValues::EasingFunction::EaseOut:
+        case QSvgCssValues::EasingFunction::EaseInOut:
+        case QSvgCssValues::EasingFunction::CubicBezier:
+        case QSvgCssValues::EasingFunction::Linear:
+        {
+            const QSvgCssCubicBezierEasing *cssCubicEasing = static_cast<const QSvgCssCubicBezierEasing *>(cssEasing);
+            QPointF c1 = cssCubicEasing->c1();
+            QPointF c2 = cssCubicEasing->c2();
+            easing = QBezier::fromPoints(startControlPoint, c1, c2, endControlPoint);
+            break;
+        }
+        case QSvgCssValues::EasingFunction::Steps:
+        {
+            qCDebug(lcVectorImageAnimations) << "Step easing is not supported reverting to default.";
+            easing = QBezier::fromPoints(startControlPoint, easeC1, easeC2, endControlPoint);
+            break;
+        }
+        }
+    }
+#endif
+
+    return easing;
 }
 
 void QSvgVisitorImpl::fillColorAnimationInfo(const QSvgNode *node, PathNodeInfo &info)
@@ -1343,6 +1803,94 @@ void QSvgVisitorImpl::fillTransformAnimationInfo(const QSvgNode *node, NodeInfo 
     }
 }
 
+void QSvgVisitorImpl::fillMotionPathAnimationInfo(const QSvgNode *node, NodeInfo &info)
+{
+    QList<AnimationPair> animations = collectAnimations(node, QStringLiteral("offset-distance"));
+    if (animations.isEmpty())
+        return;
+
+    if (animations.size() > 1) {
+        qCWarning(lcQuickVectorImage)
+            << "Not supported: More than one offset path animation on same node";
+    }
+
+    if (node->style().offset == nullptr) {
+        qCWarning(lcQuickVectorImage) << "Motion path animation: No offset path";
+        return;
+    }
+
+    const AnimationPair &animationPair = animations.first();
+
+    const QSvgAbstractAnimation *animation = animationPair.first;
+    const QSvgAbstractAnimatedProperty *property = animationPair.second;
+
+    const int start = animation->start();
+    const int repeatCount = animation->iterationCount();
+    const int duration = animation->duration();
+
+    qCDebug(lcVectorImageAnimations) << "Motion path animation:"
+                                     << "start == " << start
+                                     << ", repeatCount == " << repeatCount
+                                     << "; duration == " << duration;
+
+
+    QQuickAnimatedProperty::PropertyAnimation outAnimation;
+    outAnimation.repeatCount = repeatCount;
+    outAnimation.startOffset = start;
+
+    QPainterPath originalPath = node->style().offset->path();
+
+    qreal baseRotation;
+    bool adaptAngle;
+    switch (node->style().offset->rotateType()) {
+    case QtSvg::OffsetRotateType::Auto:
+        adaptAngle = true;
+        baseRotation = 0.0;
+        break;
+    case QtSvg::OffsetRotateType::Angle:
+        adaptAngle = false;
+        baseRotation = node->style().offset->rotateAngle();
+        break;
+    case QtSvg::OffsetRotateType::AutoAngle:
+        adaptAngle = true;
+        baseRotation = node->style().offset->rotateAngle();
+        break;
+    case QtSvg::OffsetRotateType::Reverse:
+        adaptAngle = true;
+        baseRotation = 180.0;
+        break;
+    case QtSvg::OffsetRotateType::ReverseAngle:
+        adaptAngle = true;
+        baseRotation = node->style().offset->rotateAngle() + 180.0f;
+        break;
+    default:
+        Q_UNREACHABLE();
+    }
+
+    // Default value holds additional parameters
+    info.motionPath.setDefaultValue(QVariant::fromValue(QVariantPair(adaptAngle, baseRotation)));
+
+    const QList<qreal> propertyKeyFrames = property->keyFrames();
+
+    qreal previousT = 0.0;
+    for (int j = 0; j < propertyKeyFrames.size(); ++j) {
+        const int time = qRound(propertyKeyFrames.at(j) * duration);
+
+        qreal t = calculateInterpolatedValue(property, j, 0).toReal();
+
+        if (time > 0) {
+            QPainterPath path = originalPath.trimmed(previousT, t);
+
+            outAnimation.frames[time] = QVariant::fromValue(path);
+            qCDebug(lcVectorImageAnimations) << "        -> Frame " << time << " is " << path;
+        }
+
+        previousT = t;
+    }
+
+    info.motionPath.addAnimation(outAnimation);
+}
+
 void QSvgVisitorImpl::fillPathAnimationInfo(const QSvgNode *node, PathNodeInfo &info)
 {
     fillColorAnimationInfo(node, info);
@@ -1358,6 +1906,7 @@ void QSvgVisitorImpl::fillAnimationInfo(const QSvgNode *node, NodeInfo &info)
     }
 
     fillTransformAnimationInfo(node, info);
+    fillMotionPathAnimationInfo(node, info);
 }
 
 void QSvgVisitorImpl::handleBaseNodeSetup(const QSvgNode *node)
@@ -1402,7 +1951,7 @@ void QSvgVisitorImpl::handlePathNode(const QSvgNode *node, const QPainterPath &p
 
     const QGradient *strokeGradient = m_styleResolver->currentStrokeGradient();
 
-    info.painterPath = path;
+    info.path.setDefaultValue(QVariant::fromValue(path));
     info.fillColor.setDefaultValue(m_styleResolver->currentFillColor());
     if (strokeGradient == nullptr) {
         info.strokeStyle = StrokeStyle::fromPen(m_styleResolver->currentStroke());
@@ -1418,12 +1967,12 @@ void QSvgVisitorImpl::handlePathNode(const QSvgNode *node, const QPainterPath &p
 
     if (strokeGradient != nullptr) {
         PathNodeInfo strokeInfo;
-        fillCommonNodeInfo(node, strokeInfo);
+        fillCommonNodeInfo(node, strokeInfo, QStringLiteral("_stroke"));
 
         strokeInfo.grad = *strokeGradient;
 
         QPainterPathStroker stroker(m_styleResolver->currentStroke());
-        strokeInfo.painterPath = stroker.createStroke(path);
+        strokeInfo.path.setDefaultValue(QVariant::fromValue(stroker.createStroke(path)));
         m_generator->generatePath(strokeInfo);
     }
 

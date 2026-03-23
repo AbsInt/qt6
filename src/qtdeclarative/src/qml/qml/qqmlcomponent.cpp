@@ -290,7 +290,7 @@ V4_DEFINE_EXTENSION(QQmlComponentExtension, componentExtension);
     \value Asynchronous Load/compile the component in a background thread.
 */
 
-void QQmlComponentPrivate::typeDataReady(QQmlTypeData *)
+void QQmlComponentPrivate::ready(QQmlNotifyingBlob *)
 {
     Q_Q(QQmlComponent);
 
@@ -302,7 +302,7 @@ void QQmlComponentPrivate::typeDataReady(QQmlTypeData *)
     emit q->statusChanged(q->status());
 }
 
-void QQmlComponentPrivate::typeDataProgress(QQmlTypeData *, qreal p)
+void QQmlComponentPrivate::progress(QQmlNotifyingBlob *, qreal p)
 {
     setProgress(p);
 }
@@ -385,41 +385,46 @@ static void removePendingQPropertyBinding(
 bool QQmlComponentPrivate::setInitialProperty(
         QObject *base, const QString &name, const QVariant &value)
 {
-    const QStringList properties = name.split(u'.');
-
-    if (properties.size() > 1) {
+    bool isComplexProperty = name.contains(u'.');
+    QQmlProperty prop;
+    // we don't allow "fixing" inner required properties - that would seriously hamper local reasoning
+    if (m_state.hasUnsetRequiredProperties() && !isComplexProperty)
+        prop = QQmlComponentPrivate::removePropertyFromRequired(
+                    base, name, m_state.requiredProperties(), m_engine);
+    else if (QQmlContext *ctxt = qmlContext(base); ctxt)
+        prop = QQmlProperty(base, name, ctxt);
+    else
+        prop = QQmlProperty(base, name, m_engine);
+    const bool isValid = prop.isValid();
+    if (!isValid && isComplexProperty) {
+        // QQmlProperty can't handle accesses on value types
+        const QStringList properties = name.split(u'.');
         QV4::Scope scope(m_engine->handle());
         QV4::ScopedObject object(scope, QV4::QObjectWrapper::wrap(scope.engine, base));
         QV4::ScopedString segment(scope);
-
         for (int i = 0; i < properties.size() - 1; ++i) {
             segment = scope.engine->newString(properties.at(i));
             object = object->get(segment);
-            if (scope.engine->hasException)
+            if (scope.engine->hasException || object->isNullOrUndefined())
                 break;
         }
         const QString lastProperty = properties.last();
-        segment = scope.engine->newString(lastProperty);
-        QV4::ScopedValue v(scope, scope.engine->metaTypeToJS(value.metaType(), value.constData()));
-        object->put(segment, v);
+        if (!object->isNullOrUndefined()) {
+            segment = scope.engine->newString(lastProperty);
+            QV4::ScopedValue v(scope, scope.engine->metaTypeToJS(value.metaType(), value.constData()));
+            object->put(segment, v);
+        } else {
+            return false;
+        }
         if (scope.engine->hasException) {
             qmlWarning(base, scope.engine->catchExceptionAsQmlError());
             scope.engine->hasException = false;
             return false;
         }
-
         removePendingQPropertyBinding(object, lastProperty, m_state.creator());
         return true;
     }
-
-    QQmlProperty prop;
-    if (m_state.hasUnsetRequiredProperties())
-        prop = QQmlComponentPrivate::removePropertyFromRequired(
-                    base, name, m_state.requiredProperties(), m_engine);
-    else
-        prop = QQmlProperty(base, name, m_engine);
     QQmlPropertyPrivate *privProp = QQmlPropertyPrivate::get(prop);
-    const bool isValid = prop.isValid();
     if (isValid && privProp->writeValueProperty(value, {})) {
         if (prop.isBindable()) {
             if (QQmlObjectCreator *creator = m_state.creator())
@@ -477,8 +482,7 @@ QQmlComponent::~QQmlComponent()
         if (d->m_engine && !d->m_typeData->isCompleteOrError()) {
             // In this case we have to send it to the type loader thread to be dropped. It will
             // manipulate its "waiting" lists that other blobs may be using concurrently.
-            QQmlEnginePrivate::get(d->m_engine)->typeLoader.drop(
-                    QQmlDataBlob::Ptr(d->m_typeData.data()));
+            QQmlTypeLoader::get(d->m_engine)->drop(QQmlDataBlob::Ptr(d->m_typeData.data()));
         }
         d->m_typeData.reset();
     }
@@ -735,7 +739,7 @@ void QQmlComponent::setData(const QByteArray &data, const QUrl &url)
 
     d->m_url = url;
 
-    QQmlRefPointer<QQmlTypeData> typeData = QQmlEnginePrivate::get(d->m_engine)->typeLoader.getType(data, url);
+    QQmlRefPointer<QQmlTypeData> typeData = QQmlTypeLoader::get(d->m_engine)->getType(data, url);
 
     if (typeData->isCompleteOrError()) {
         d->fromTypeData(typeData);
@@ -834,8 +838,7 @@ void QQmlComponentPrivate::loadUrl(const QUrl &newUrl, QQmlComponent::Compilatio
     QQmlTypeLoader::Mode loaderMode = (mode == QQmlComponent::Asynchronous)
             ? QQmlTypeLoader::Asynchronous
             : QQmlTypeLoader::PreferSynchronous;
-    QQmlRefPointer<QQmlTypeData> data
-            = QQmlEnginePrivate::get(m_engine)->typeLoader.getType(m_url, loaderMode);
+    QQmlRefPointer<QQmlTypeData> data = QQmlTypeLoader::get(m_engine)->getType(m_url, loaderMode);
 
     if (data->isCompleteOrError()) {
         fromTypeData(data);
@@ -885,10 +888,7 @@ QString QQmlComponent::errorString() const
     if(!isError())
         return ret;
     for (const QQmlComponentPrivate::AnnotatedQmlError &annotated : d->m_state.errors) {
-        const QQmlError &e = annotated.error;
-        ret += e.url().toString() + QLatin1Char(':') +
-               QString::number(e.line()) + QLatin1Char(' ') +
-               e.description() + QLatin1Char('\n');
+        ret += annotated.error.toString() + QLatin1Char('\n');
     }
     return ret;
 }
@@ -1430,9 +1430,8 @@ void QQmlComponentPrivate::prepareLoadFromModule(
     if (m_loadHelper)
         m_loadHelper->unregisterCallback(this);
 
-    QQmlTypeLoader *typeLoader = &QQmlEnginePrivate::get(m_engine)->typeLoader;
     // LoadHelper must be on the Heap as it derives from QQmlRefCount
-    m_loadHelper = QQml::makeRefPointer<LoadHelper>(typeLoader, uri, typeName, mode);
+    m_loadHelper = QQml::makeRefPointer<LoadHelper>(QQmlTypeLoader::get(m_engine), uri, typeName, mode);
 }
 
 void QQmlComponentPrivate::completeLoadFromModule(QAnyStringView uri, QAnyStringView typeName)

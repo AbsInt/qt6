@@ -1862,7 +1862,7 @@ void QTextDocumentLayoutPrivate::drawTableCell(const QRectF &cellRect, QPainter 
     }
 
     const QBrush bg = cell.format().background();
-    const QPointF brushOrigin = painter->brushOrigin();
+    const QPointF brushOrigin = painter->brushOriginF();
     if (bg.style() != Qt::NoBrush) {
         const qreal pageHeight = document->pageSize().height();
         const int topPage = pageHeight > 0 ? static_cast<int>(cellRect.top() / pageHeight) : 0;

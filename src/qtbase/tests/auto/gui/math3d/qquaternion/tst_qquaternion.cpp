@@ -27,6 +27,11 @@ static inline bool myFuzzyCompare(const QQuaternion &q1, const QQuaternion &q2)
     return myFuzzyCompare(d * d, 1.0f);
 }
 
+static inline bool myFuzzyCompare(QQuaternion::Axis lhs, QVector3D rhs)
+{
+    return myFuzzyCompare(lhs.toVector3D(), rhs);
+}
+
 static inline bool myFuzzyCompareRadians(float p1, float p2)
 {
     static const float fPI = float(M_PI);
@@ -894,6 +899,13 @@ void tst_QQuaternion::fromAxes()
 
     QQuaternion result = QQuaternion::fromAxisAndAngle(QVector3D(x1, y1, z1), angle);
 
+    {
+        const auto axes = result.toAxes();
+        QVERIFY(myFuzzyCompare(axes.x, xAxis));
+        QVERIFY(myFuzzyCompare(axes.y, yAxis));
+        QVERIFY(myFuzzyCompare(axes.z, zAxis));
+    }
+
     QVector3D axes[3];
     result.getAxes(&axes[0], &axes[1], &axes[2]);
     QVERIFY(myFuzzyCompare(axes[0], xAxis));
@@ -985,14 +997,13 @@ void tst_QQuaternion::fromDirection_data()
 
     // othonormal up and dir
     for (QQuaternion q : orientations) {
-        QVector3D xAxis, yAxis, zAxis;
-        q.getAxes(&xAxis, &yAxis, &zAxis);
+        const auto [xAxis, yAxis, zAxis] = q.toAxes();
 
         QTest::addRow("ortho dirs: (%.1f,%.1f,%.1f), (%.1f,%.1f,%.1f), (%.1f,%.1f,%.1f)",
-                      xAxis.x(), xAxis.y(), xAxis.z(),
-                      yAxis.x(), yAxis.y(), yAxis.z(),
-                      zAxis.x(), zAxis.y(), zAxis.z())
-            << zAxis * 10.0f << yAxis * 10.0f;
+                      xAxis.x, xAxis.y, xAxis.z,
+                      yAxis.x, yAxis.y, yAxis.z,
+                      zAxis.x, zAxis.y, zAxis.z)
+            << zAxis.toVector3D() * 10.0f << yAxis.toVector3D() * 10.0f;
     }
 
     // collinear up and dir
@@ -1007,14 +1018,13 @@ void tst_QQuaternion::fromDirection_data()
 
     // invalid up
     for (QQuaternion q : orientations) {
-        QVector3D xAxis, yAxis, zAxis;
-        q.getAxes(&xAxis, &yAxis, &zAxis);
+        const auto [xAxis, yAxis, zAxis] = q.toAxes();
 
         QTest::addRow("bad dirs: (%.1f,%.1f,%.1f), (%.1f,%.1f,%.1f), (%.1f,%.1f,%.1f)",
-                      xAxis.x(), xAxis.y(), xAxis.z(),
-                      yAxis.x(), yAxis.y(), yAxis.z(),
-                      zAxis.x(), zAxis.y(), zAxis.z())
-            << zAxis * 10.0f << QVector3D();
+                      xAxis.x, xAxis.y, xAxis.z,
+                      yAxis.x, yAxis.y, yAxis.z,
+                      zAxis.x, zAxis.y, zAxis.z)
+            << zAxis.toVector3D() * 10.0f << QVector3D();
     }
 }
 void tst_QQuaternion::fromDirection()
@@ -1029,16 +1039,14 @@ void tst_QQuaternion::fromDirection()
     QQuaternion result = QQuaternion::fromDirection(direction, up);
     QVERIFY(myFuzzyCompare(result, result.normalized()));
 
-    QVector3D xAxis, yAxis, zAxis;
-    result.getAxes(&xAxis, &yAxis, &zAxis);
+    const auto axes = result.toAxes();
 
-    QVERIFY(myFuzzyCompare(zAxis, expectedZ));
-
+    QVERIFY(myFuzzyCompare(axes.z, expectedZ));
 
     const QVector3D expectedX = QVector3D::crossProduct(expectedY, expectedZ);
     if (!qFuzzyIsNull(expectedX.lengthSquared())) {
-        QVERIFY(myFuzzyCompare(xAxis, expectedX));
-        QVERIFY(myFuzzyCompare(yAxis, expectedY));
+        QVERIFY(myFuzzyCompare(axes.x, expectedX));
+        QVERIFY(myFuzzyCompare(axes.y, expectedY));
     }
 }
 
@@ -1171,6 +1179,27 @@ void tst_QQuaternion::fromEulerAngles()
         QVERIFY(myFuzzyCompareDegrees(quaternionYaw, yaw));
         QVERIFY(myFuzzyCompareDegrees(quaternionRoll, roll));
     }
+
+    {
+        const QQuaternion::EulerAngles angles = answer.eulerAngles(); // CTAD
+        QVERIFY(myFuzzyCompareDegrees(angles.pitch, pitch));
+        QVERIFY(myFuzzyCompareDegrees(angles.yaw, yaw));
+        QVERIFY(myFuzzyCompareDegrees(angles.roll, roll));
+    }
+
+    {
+        const QQuaternion::EulerAngles angles = quaternion.eulerAngles(); // CTAD
+        QVERIFY(myFuzzyCompareDegrees(angles.pitch, pitch));
+        QVERIFY(myFuzzyCompareDegrees(angles.yaw, yaw));
+        QVERIFY(myFuzzyCompareDegrees(angles.roll, roll));
+    }
+
+    // ensure braced initialization continues to work (was: QVector3D; now; EulerAngles)
+    answer = QQuaternion::fromEulerAngles({pitch, yaw, roll});
+    QVERIFY(myFuzzyCompare(answer.x(), result.x()));
+    QVERIFY(myFuzzyCompare(answer.y(), result.y()));
+    QVERIFY(myFuzzyCompare(answer.z(), result.z()));
+    QVERIFY(myFuzzyCompare(answer.scalar(), result.scalar()));
 }
 
 // Test spherical interpolation of quaternions.

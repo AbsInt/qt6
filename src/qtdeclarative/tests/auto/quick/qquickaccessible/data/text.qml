@@ -1,4 +1,6 @@
 import QtQuick 2.0
+import QtQuick.Window
+import QtQuick.Controls
 
 Item {
     width: 400
@@ -67,4 +69,12 @@ Item {
         Accessible.description: "Rich text with two hyperlinks"
     }
 
+    TextField {
+        x: 100
+        y: 240
+        width:100
+        height: 40
+        text: "text is TextField"
+        Accessible.description: "This is the TextField description"
+    }
 }

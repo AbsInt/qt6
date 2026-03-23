@@ -747,6 +747,7 @@ private:
     friend class QGuiApplication;
     friend class QGuiApplicationPrivate;
     friend class QBaseApplication;
+    friend class QLabel;
     friend class QPainter;
     friend class QPainterPrivate;
     friend class QPixmap; // for QPixmap::fill()

@@ -156,6 +156,15 @@ void QQuickShapeGenericRenderer::setStrokeWidth(int index, qreal w)
     d.syncDirty |= DirtyStrokeGeom;
 }
 
+void QQuickShapeGenericRenderer::setCosmeticStroke(int index, bool c)
+{
+    ShapePathData &d(m_sp[index]);
+    d.pen.setCosmetic(c);
+    d.syncDirty |= DirtyStrokeGeom;
+    // as long as the stroke is cosmetic,
+    // QQuickShape::itemChange triggers re-triangulation whenever scale changes
+}
+
 void QQuickShapeGenericRenderer::setFillColor(int index, const QColor &color)
 {
     ShapePathData &d(m_sp[index]);
@@ -190,7 +199,7 @@ void QQuickShapeGenericRenderer::setCapStyle(int index, QQuickShapePath::CapStyl
 }
 
 void QQuickShapeGenericRenderer::setStrokeStyle(int index, QQuickShapePath::StrokeStyle strokeStyle,
-                                                   qreal dashOffset, const QVector<qreal> &dashPattern)
+                                                   qreal dashOffset, const QList<qreal> &dashPattern)
 {
     ShapePathData &d(m_sp[index]);
     d.pen.setStyle(Qt::PenStyle(strokeStyle));
@@ -263,10 +272,11 @@ void QQuickShapeGenericRenderer::setFillTransform(int index, const QSGTransform 
     d.syncDirty |= DirtyFillTransform;
 }
 
-void QQuickShapeGenericRenderer::setTriangulationScale(qreal scale)
+void QQuickShapeGenericRenderer::setTriangulationScale(int index, qreal scale)
 {
-    // No dirty, this is called at the start of every sync. Just store the value.
-    m_triangulationScale = scale;
+    ShapePathData &d(m_sp[index]);
+    d.triangulationScale = scale;
+    d.syncDirty |= DirtyStrokeGeom;
 }
 
 void QQuickShapeFillRunnable::run()
@@ -358,7 +368,7 @@ void QQuickShapeGenericRenderer::endSync(bool async)
                 r->path = d.path;
                 r->fillColor = d.fillColor;
                 r->supportsElementIndexUint = supportsElementIndexUint;
-                r->triangulationScale = m_triangulationScale;
+                r->triangulationScale = d.triangulationScale;
                 // Unlikely in practice but in theory m_sp could be
                 // resized. Therefore, capture 'i' instead of 'd'.
                 QObject::connect(r, &QQuickShapeFillRunnable::done, qApp, [this, i](QQuickShapeFillRunnable *r) {
@@ -385,7 +395,7 @@ void QQuickShapeGenericRenderer::endSync(bool async)
             } else {
                 triangulateFill(d.path, d.fillColor, &d.fillVertices, &d.fillIndices, &d.indexType,
                                 supportsElementIndexUint,
-                                m_triangulationScale);
+                                d.triangulationScale);
             }
         }
 
@@ -400,7 +410,7 @@ void QQuickShapeGenericRenderer::endSync(bool async)
                 r->pen = d.pen;
                 r->strokeColor = d.strokeColor;
                 r->clipSize = QSize(m_item->width(), m_item->height());
-                r->triangulationScale = m_triangulationScale;
+                r->triangulationScale = d.triangulationScale;
                 QObject::connect(r, &QQuickShapeStrokeRunnable::done, qApp, [this, i](QQuickShapeStrokeRunnable *r) {
                     if (!r->orphaned && i < m_sp.size()) {
                         ShapePathData &d(m_sp[i]);
@@ -420,7 +430,7 @@ void QQuickShapeGenericRenderer::endSync(bool async)
 #endif
             } else {
                 triangulateStroke(d.path, d.pen, d.strokeColor, &d.strokeVertices,
-                                  QSize(m_item->width(), m_item->height()), m_triangulationScale);
+                                  QSize(m_item->width(), m_item->height()), d.triangulationScale);
             }
         }
     }
@@ -464,7 +474,7 @@ void QQuickShapeGenericRenderer::triangulateFill(const QPainterPath &path,
     size_t indexByteSize;
     if (ts.indices.type() == QVertexIndexVector::UnsignedShort) {
         *indexType = QSGGeometry::UnsignedShortType;
-        // fillIndices is still QVector<quint32>. Just resize to N/2 and pack
+        // fillIndices is still QList<quint32>. Just resize to N/2 and pack
         // the N quint16s into it.
         fillIndices->resize(ts.indices.size() / 2);
         indexByteSize = ts.indices.size() * sizeof(quint16);

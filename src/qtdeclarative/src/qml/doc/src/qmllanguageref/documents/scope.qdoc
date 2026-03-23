@@ -23,7 +23,7 @@ In the following example, the \c {addConstant()} method will add 13 to the
 parameter passed just as the programmer would expect irrespective of the
 value of the QML object's \c a and \c b properties.
 
-\code
+\qml
 QtObject {
     property int a: 3
     property int b: 9
@@ -33,19 +33,19 @@ QtObject {
         return b + a;
     }
 }
-\endcode
+\endqml
 
 That QML respects JavaScript's normal scoping rules even applies in bindings.
 This totally evil, abomination of a binding will assign 12 to the QML object's
 \c a property.
 
-\code
+\qml
 QtObject {
     property int a
 
     a: { var a = 12; a; }
 }
-\endcode
+\endqml
 
 Every JavaScript expression, function or file in QML has its own unique
 variable object.  Local variables declared in one will never conflict
@@ -63,7 +63,7 @@ function in the QML document, even those in nested inline components.  The
 following example shows a simple QML file that accesses some enumeration
 values and calls an imported JavaScript function.
 
-\code
+\qml
 import QtQuick 2.0
 import "code.js" as Code
 
@@ -78,7 +78,7 @@ ListView {
         }
     }
 }
-\endcode
+\endqml
 
 \section1 Binding Scope Object
 
@@ -86,11 +86,11 @@ An object which has a \l{Property Binding}{property binding} is known as the
 binding's \e{scope object}.  In the following example, the \l Item object is
 the binding's scope object.
 
-\code
+\qml
 Item {
     anchors.left: parent.left
 }
-\endcode
+\endqml
 
 Bindings have access to the scope object's properties without qualification.
 In the previous example, the binding accesses the \l Item's \c parent property
@@ -112,7 +112,7 @@ meaningfully attaches these properties to the root object in the delegate, any
 sub-object that accesses them must explicitly qualify the root object, as shown
 below.
 
-\code
+\qml
 PathView {
     delegate: Component {
         Rectangle {
@@ -123,7 +123,7 @@ PathView {
         }
     }
 }
-\endcode
+\endqml
 
 If the \l Image object omitted the \c root prefix, it would inadvertently access
 the unset \c {PathView.scale} attached property on itself.
@@ -176,7 +176,7 @@ their ancestors.
 The easiest way to demonstrate this is with inline sub-components whose component
 scopes are implicitly scoped as children of the outer component.
 
-\code
+\qml
 Item {
     property color defaultColor: "blue"
 
@@ -188,7 +188,7 @@ Item {
         }
     }
 }
-\endcode
+\endqml
 
 The component instance hierarchy allows instances of the delegate component
 to access the \c defaultColor property of the \c Item type.  Of course,
@@ -202,7 +202,7 @@ file, it still has access to the \c title property when it is used from within
 the \c TitlePage.  QML is a dynamically scoped language - depending on where it
 is used, the \c title property may resolve differently.
 
-\code
+\qml
 // TitlePage.qml
 import QtQuick 2.0
 Item {
@@ -226,7 +226,7 @@ Text {
     text: "<b>" + title + "</b>"
     font.pixelSize: size
 }
-\endcode
+\endqml
 
 Dynamic scoping is very powerful, but it must be used cautiously to prevent
 the behavior of QML code from becoming difficult to predict.  In general it
@@ -234,7 +234,7 @@ should only be used in cases where the two components are already tightly
 coupled in another way.  When building reusable components, it is preferable
 to use property interfaces, like this:
 
-\code
+\qml
 // TitlePage.qml
 import QtQuick 2.0
 Item {
@@ -263,7 +263,7 @@ Text {
     text: "<b>" + title + "</b>"
     font.pixelSize: size
 }
-\endcode
+\endqml
 
 \section2 Do Not Reference Root Object \c id From Other QML Components
 
@@ -401,7 +401,7 @@ and testability.
 QML permits property names defined in an object declaration to be overridden by properties
 declared within another object declaration that extends the first.  For example:
 
-\code
+\qml
 // Displayable.qml
 import QtQuick 2.0
 Item {
@@ -425,7 +425,7 @@ Displayable {
 
     function fullName()  { return title + " " + firstName + " " + lastName }
 }
-\endcode
+\endqml
 
 Here, the name \c title is given to both the heading of the output text for Displayable,
 and also to the honorific title of the Person object.

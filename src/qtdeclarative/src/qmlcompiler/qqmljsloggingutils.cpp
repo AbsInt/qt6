@@ -33,17 +33,11 @@ namespace QQmlJS {
 
 LoggerCategory::LoggerCategory() : d_ptr{ new LoggerCategoryPrivate } { }
 
-LoggerCategory::LoggerCategory(QString name, QString settingsName, QString description,
-                               QtMsgType level, bool ignored, bool isDefault)
-    : d_ptr{ new LoggerCategoryPrivate }
+LoggerCategory::LoggerCategory(
+        const QString &name, const QString &settingsName, const QString &description, QtMsgType level,
+        bool isIgnored, bool isDefault)
+    : d_ptr{ new LoggerCategoryPrivate(name, settingsName, description, level, isIgnored, isDefault) }
 {
-    Q_D(LoggerCategory);
-    d->m_name = name;
-    d->m_settingsName = settingsName;
-    d->m_description = description;
-    d->m_level = level;
-    d->m_ignored = ignored;
-    d->m_isDefault = isDefault;
 }
 
 LoggerCategory::LoggerCategory(const LoggerCategory &other)
@@ -66,37 +60,37 @@ LoggerCategory::~LoggerCategory() = default;
 QString LoggerCategory::name() const
 {
     Q_D(const LoggerCategory);
-    return d->m_name;
+    return d->name();
 }
 
 QString LoggerCategory::settingsName() const
 {
     Q_D(const LoggerCategory);
-    return d->m_settingsName;
+    return d->settingsName();
 }
 
 QString LoggerCategory::description() const
 {
     Q_D(const LoggerCategory);
-    return d->m_description;
+    return d->description();
 }
 
 QtMsgType LoggerCategory::level() const
 {
     Q_D(const LoggerCategory);
-    return d->m_level;
+    return d->level();
 }
 
 bool LoggerCategory::isIgnored() const
 {
     Q_D(const LoggerCategory);
-    return d->m_ignored;
+    return d->isIgnored();
 }
 
 bool LoggerCategory::isDefault() const
 {
     Q_D(const LoggerCategory);
-    return d->m_isDefault;
+    return d->isDefault();
 }
 
 LoggerWarningId LoggerCategory::id() const
@@ -109,6 +103,14 @@ void LoggerCategory::setLevel(QtMsgType type)
 {
     Q_D(LoggerCategory);
     d->setLevel(type);
+}
+
+LoggerCategoryPrivate::LoggerCategoryPrivate(const QString &name, const QString &settingsName,
+                                             const QString &description, QtMsgType level,
+                                             bool isIgnored, bool isDefault)
+    : m_name(name), m_settingsName(settingsName), m_description(description), m_level(level)
+    , m_isIgnored(isIgnored), m_isDefault(isDefault)
+{
 }
 
 void LoggerCategoryPrivate::setLevel(QtMsgType type)
@@ -128,16 +130,11 @@ void LoggerCategory::setIgnored(bool isIgnored)
 
 void LoggerCategoryPrivate::setIgnored(bool isIgnored)
 {
-    if (m_ignored == isIgnored)
+    if (m_isIgnored == isIgnored)
         return;
 
-    m_ignored = isIgnored;
+    m_isIgnored = isIgnored;
     m_changed = true;
-}
-
-bool LoggerCategoryPrivate::hasChanged() const
-{
-    return m_changed;
 }
 
 LoggerCategoryPrivate *LoggerCategoryPrivate::get(LoggerCategory *loggerCategory)

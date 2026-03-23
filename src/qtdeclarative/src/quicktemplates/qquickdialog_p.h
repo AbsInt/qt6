@@ -104,6 +104,8 @@ Q_SIGNALS:
 protected:
     QQuickDialog(QQuickDialogPrivate &dd, QObject *parent);
 
+    virtual void itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &data) override;
+
 #if QT_CONFIG(accessibility)
     QAccessible::Role accessibleRole() const override;
     void accessibilityActiveChanged(bool active) override;

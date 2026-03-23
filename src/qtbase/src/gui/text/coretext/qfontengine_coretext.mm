@@ -27,6 +27,8 @@
 #import <UIKit/UIKit.h>
 #endif
 
+#include <Accelerate/Accelerate.h>
+
 // These are available cross platform, exported as kCTFontWeightXXX from CoreText.framework,
 // but they are not documented and are not in public headers so are private API and exposed
 // only through the NSFontWeightXXX and UIFontWeightXXX aliases in AppKit and UIKit (rdar://26109857)
@@ -775,10 +777,13 @@ QImage QCoreTextFontEngine::imageForGlyph(glyph_t glyph, const QFixedPoint &subP
     if (!im.width() || !im.height())
         return im;
 
-    QCFType<CGColorSpaceRef> colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    auto cgImageFormat = qt_mac_cgImageFormatForImage(im);
+    if (!cgImageFormat)
+        return im;
+
     QCFType<CGContextRef> ctx = CGBitmapContextCreate(im.bits(), im.width(), im.height(),
-                                             8, im.bytesPerLine(), colorspace,
-                                             qt_mac_bitmapInfoForImage(im));
+        cgImageFormat->bitsPerComponent, im.bytesPerLine(), cgImageFormat->colorSpace,
+        cgImageFormat->bitmapInfo);
     Q_ASSERT(ctx);
 
     CGContextSetShouldAntialias(ctx, shouldAntialias());

@@ -6,10 +6,9 @@
 #include <private/qcore_mac_p.h>
 #include <private/qcoregraphics_p.h>
 
-#include <QtGui/qcolorspace.h>
-
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
+#include <Accelerate/Accelerate.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -26,37 +25,9 @@ QT_BEGIN_NAMESPACE
 
     This function is fast, and does not copy or convert image data.
 
-    The following image formats are supported, and will be mapped to
-    a corresponding native image type:
-
-    \table
-    \header
-        \li Qt
-        \li CoreGraphics
-    \row
-        \li Format_ARGB32
-        \li kCGImageAlphaFirst | kCGBitmapByteOrder32Host
-    \row
-        \li Format_RGB32
-        \li kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Host
-    \row
-        \li Format_RGBA8888_Premultiplied
-        \li kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big
-    \row
-        \li Format_RGBA8888
-        \li kCGImageAlphaLast | kCGBitmapByteOrder32Big
-    \row
-        \li Format_RGBX8888
-        \li kCGImageAlphaNoneSkipLast | kCGBitmapByteOrder32Big
-    \row
-        \li Format_ARGB32_Premultiplied
-        \li kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host
-    \endtable
-
-    Other formats are not supported; this function returns a null
-    CGImageRef for those cases. Users of this function may then
-    convert the QImage to a supported format first, for example
-    Format_ARGB32_Premultiplied.
+    If the image format can not be converted a null CGImageRef will
+    be returned. Users of this function may then convert the QImage
+    to a supported format first, for example Format_ARGB32_Premultiplied.
 
     If the image does not have a color space set the resulting
     CGImageRef color space is set to the sRGB color space.
@@ -68,10 +39,8 @@ CGImageRef QImage::toCGImage() const
     if (isNull())
         return nil;
 
-    CGBitmapInfo bitmapInfo = qt_mac_bitmapInfoForImage(*this);
-
-    // Format not supported: return nil CGImageRef
-    if (bitmapInfo == kCGImageAlphaNone)
+    auto cgImageFormat = qt_mac_cgImageFormatForImage(*this);
+    if (!cgImageFormat)
         return nil;
 
     // Create a data provider that owns a copy of the QImage and references the image data.
@@ -80,23 +49,14 @@ CGImageRef QImage::toCGImage() const
     QCFType<CGDataProviderRef> dataProvider =
         CGDataProviderCreateWithData(new QImage(*this), bits(), sizeInBytes(), deleter);
 
-    QCFType<CGColorSpaceRef> cgColorSpace = [&]{
-        if (colorSpace().isValid()) {
-            QCFType<CFDataRef> iccData = colorSpace().iccProfile().toCFData();
-            return CGColorSpaceCreateWithICCData(iccData);
-        } else {
-            return CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-        }
-    }();
-
-    const size_t bitsPerComponent = 8;
-    const size_t bitsPerPixel = 32;
-    const CGFloat *decode = nullptr;
     const bool shouldInterpolate = false;
 
-    return CGImageCreate(width(), height(), bitsPerComponent, bitsPerPixel,
-                         this->bytesPerLine(), cgColorSpace, bitmapInfo, dataProvider,
-                         decode, shouldInterpolate, kCGRenderingIntentDefault);
+    return CGImageCreate(width(), height(),
+        cgImageFormat->bitsPerComponent, cgImageFormat->bitsPerPixel,
+        this->bytesPerLine(), cgImageFormat->colorSpace,
+        cgImageFormat->bitmapInfo, dataProvider, cgImageFormat->decode,
+        shouldInterpolate, cgImageFormat->renderingIntent
+    );
 }
 
 QT_END_NAMESPACE

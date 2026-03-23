@@ -140,4 +140,7 @@ Zzz {
     QtObject {
 
     }
+    virtual property int vProp
+    override property int oProp
+    final property int fProp
 }

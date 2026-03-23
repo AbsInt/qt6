@@ -17,6 +17,7 @@ qt_internal_add_qml_module(QuickTemplates2
     SOURCES
         qquickabstractbutton.cpp qquickabstractbutton_p.h
         qquickabstractbutton_p_p.h
+        qquickabstractspinbox_p.h
         qquickaction.cpp qquickaction_p.h
         qquickactiongroup.cpp qquickactiongroup_p.h
         qquickapplicationwindow.cpp
@@ -37,12 +38,15 @@ qt_internal_add_qml_module(QuickTemplates2
         qquickdeferredpointer_p_p.h
         qquickdelaybutton.cpp qquickdelaybutton_p.h
         qquickdial.cpp qquickdial_p.h
+        qquickdoublespinbox.cpp qquickdoublespinbox_p.h
         qquickdrawer.cpp qquickdrawer_p.h
         qquickdrawer_p_p.h
         qquickframe.cpp qquickframe_p.h
         qquickframe_p_p.h
         qquickgroupbox.cpp qquickgroupbox_p.h
-        qquickicon.cpp qquickicon_p.h
+        qquickicon.cpp
+        qquickicon_p.h
+        qquickicon_p_p.h
         qquickindicatorbutton_p.cpp qquickindicatorbutton_p.h
         qquickitemdelegate.cpp qquickitemdelegate_p.h
         qquickitemdelegate_p_p.h
@@ -143,8 +147,11 @@ qt_internal_extend_target(QuickTemplates2 CONDITION TARGET Qt::QmlModels
 
 qt_internal_extend_target(QuickTemplates2 CONDITION QT_FEATURE_accessibility
     SOURCES
+        accessible/qaccessiblequickapplicationwindow.cpp accessible/qaccessiblequickapplicationwindow_p.h
         accessible/qaccessiblequickcontrol.cpp accessible/qaccessiblequickcontrol_p.h
         accessible/qaccessiblequickpage.cpp accessible/qaccessiblequickpage_p.h
+        accessible/qaccessiblequickpopupitem.cpp accessible/qaccessiblequickpopupitem_p.h
+        accessible/qaccessiblequickscrollbar.cpp accessible/qaccessiblequickscrollbar_p.h
 )
 
 qt_internal_extend_target(QuickTemplates2 CONDITION QT_FEATURE_quicktemplates2_container

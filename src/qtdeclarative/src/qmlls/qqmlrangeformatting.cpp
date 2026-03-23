@@ -15,8 +15,8 @@
 
 QT_BEGIN_NAMESPACE
 
-QQmlRangeFormatting::QQmlRangeFormatting(QmlLsp::QQmlCodeModel *codeModel)
-    : QQmlBaseModule(codeModel)
+QQmlRangeFormatting::QQmlRangeFormatting(QmlLsp::QQmlCodeModelManager *codeModelManager)
+    : QQmlBaseModule(codeModelManager)
 {
 }
 
@@ -41,7 +41,7 @@ void QQmlRangeFormatting::process(RequestPointerArgument request)
     using namespace QQmlJS::Dom;
     QList<QLspSpecification::TextEdit> result{};
 
-    QmlLsp::OpenDocument doc = m_codeModel->openDocumentByUrl(
+    QmlLsp::OpenDocument doc = m_codeModelManager->openDocumentByUrl(
             QQmlLSUtils::lspUriToQmlUrl(request->m_parameters.textDocument.uri));
 
     DomItem file = doc.snapshot.doc.fileObject(GoTo::MostLikely);
@@ -83,7 +83,7 @@ void QQmlRangeFormatting::process(RequestPointerArgument request)
     QTextStream out(&resultText);
     IndentingLineWriter lw([&out](QStringView writtenText) { out << writtenText.toUtf8(); },
                            QString(), options, partialStatus.currentStatus);
-    OutWriter ow(lw);
+    OutWriter ow(qmlFile, lw);
     ow.indentNextlines = true;
 
     // TODO: This is a workaround and will/should be handled by the actual formatter

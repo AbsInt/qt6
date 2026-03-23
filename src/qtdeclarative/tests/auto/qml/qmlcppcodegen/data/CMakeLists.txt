@@ -149,6 +149,7 @@ set(qml_files
     convertPrimitiveToVar.qml
     convertQJSPrimitiveValueToIntegral.qml
     convertToOriginalReadAcumulatorForUnaryOperators.qml
+    ctorArgumentConversion.qml
     curlygrouped.qml
     cycleHead.qml
     dateConstruction.qml
@@ -190,7 +191,6 @@ set(qml_files
     failures.qml
     fallbacklookups.qml
     fallbackresettable.qml
-    fileDialog.qml
     finalUser.qml
     flagEnum.qml
     fromBoolValue.qml
@@ -239,6 +239,7 @@ set(qml_files
     listAsArgument.qml
     listConversion.qml
     listIndices.qml
+    listOfInlineComponent.qml
     listOfInvisible.qml
     listPropertyAsModel.qml
     listToString.qml
@@ -369,8 +370,14 @@ set(qml_files
     voidfunction.qml
     writeBackReferenceObject.qml
     writeback.qml
-    dummy_imports.qml
 )
+
+if(QT_FEATURE_qml_labs)
+    list(APPEND qml_files
+        fileDialog.qml
+        dummy_imports.qml
+    )
+endif()
 
 set(resource_files
     ProgressBar/built-with-Qt_Large.png

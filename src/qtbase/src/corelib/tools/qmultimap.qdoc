@@ -91,6 +91,7 @@
     key and iterate from there:
 
     \snippet code/src_corelib_tools_qmultimap.cpp 11
+    \snippet code/src_corelib_tools_qmultimap.cpp 11_better
 
     If you only need to extract the values from a map (not the keys),
     you can also use range-based for:
@@ -456,7 +457,7 @@
 
     Returns the number of items associated with key \a key.
 
-    \sa contains(), QMultiMap::count()
+    \sa contains(), QMultiMap::count(const Key &key, const T &value)
 */
 
 /*! \fn template <class Key, class T> qsizetype QMultiMap<Key, T>::count(const Key &key, const T &value) const
@@ -714,6 +715,7 @@
     the items with the same key:
 
     \snippet code/src_corelib_tools_qmultimap.cpp 11
+    \snippet code/src_corelib_tools_qmultimap.cpp 11_better
 
     \sa constFind(), value(), values(), lowerBound(), upperBound()
 */

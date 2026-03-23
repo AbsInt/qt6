@@ -314,7 +314,7 @@ public:
 #endif
 
     static bool isProtocolSupported(Protocol protocol);
-    static quint16 defaultPortForProtocol(Protocol protocol) noexcept Q_DECL_CONST_FUNCTION;
+    Q_DECL_CONST_FUNCTION static quint16 defaultPortForProtocol(Protocol protocol) noexcept;
 
 public Q_SLOTS:
     void abort();

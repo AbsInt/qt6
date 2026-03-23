@@ -123,6 +123,8 @@ void QQuickDayOfWeekRow::setSource(const QVariant &source)
     delegates.
 
     \snippet basic/DayOfWeekRow.qml delegate
+
+    \include delegate-ownership.qdocinc {no-ownership} {DayOfWeekRow}
 */
 QQmlComponent *QQuickDayOfWeekRow::delegate() const
 {

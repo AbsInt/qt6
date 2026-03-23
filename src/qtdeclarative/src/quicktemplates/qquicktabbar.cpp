@@ -278,8 +278,8 @@ void QQuickTabBar::setPosition(Position position)
     This property holds the content width. It is used for calculating the total
     implicit width of the tab bar.
 
-    \note This property is available in TabBar since QtQuick.Controls 2.2 (Qt 5.9),
-    but it was promoted to the Container base type in QtQuick.Controls 2.5 (Qt 5.12).
+    \note This property is available in TabBar since \l{QtQuick.Controls} 2.2 (Qt 5.9),
+    but it was promoted to the Container base type in \l{QtQuick.Controls} 2.5 (Qt 5.12).
 
     \sa Container::contentWidth
 */
@@ -291,8 +291,8 @@ void QQuickTabBar::setPosition(Position position)
     This property holds the content height. It is used for calculating the total
     implicit height of the tab bar.
 
-    \note This property is available in TabBar since QtQuick.Controls 2.2 (Qt 5.9),
-    but it was promoted to the Container base type in QtQuick.Controls 2.5 (Qt 5.12).
+    \note This property is available in TabBar since \l{QtQuick.Controls} 2.2 (Qt 5.9),
+    but it was promoted to the Container base type in \l{QtQuick.Controls} 2.5 (Qt 5.12).
 
     \sa Container::contentHeight
 */

@@ -24,7 +24,26 @@
 
 using namespace Qt::StringLiterals;
 
-class tst_qmlcachegen: public QQmlDataTest
+#if defined(QTEST_CROSS_COMPILED)
+#  define SKIP_WHEN_CROSS_COMPILED                                    \
+      do {                                                            \
+          QSKIP("Cannot call qmlcachegen on cross-compiled target."); \
+      } while (false);
+#else
+#  define SKIP_WHEN_CROSS_COMPILED
+#endif
+
+#if defined(QTEST_CROSS_COMPILED)
+#  define RETURN_FALSE_WHEN_CROSS_COMPILED                                                       \
+      do {                                                                                       \
+          QTest::qFail("Cannot call qmlcachegen on cross-compiled target.", __FILE__, __LINE__); \
+          return false;                                                                          \
+      } while (false);
+#else
+#  define RETURN_FALSE_WHEN_CROSS_COMPILED
+#endif
+
+class tst_qmlcachegen : public QQmlDataTest
 {
     Q_OBJECT
 
@@ -103,10 +122,8 @@ public:
 
 static bool generateCache(const QString &qmlFileName, QByteArray *capturedStderr = nullptr)
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QTest::qFail("You cannot call qmlcachegen on the target.", __FILE__, __LINE__);
-    return false;
-#endif
+    RETURN_FALSE_WHEN_CROSS_COMPILED
+
     QProcess proc;
     if (capturedStderr == nullptr)
         proc.setProcessChannelMode(QProcess::ForwardedChannels);
@@ -127,10 +144,8 @@ static bool generateCache(const QString &qmlFileName, QByteArray *capturedStderr
 
 static bool generateCpp(const QString &qmlFileName, QByteArray *capturedStderr = nullptr)
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QTest::qFail("You cannot call qmlcachegen on the target.", __FILE__, __LINE__);
-    return false;
-#endif
+    RETURN_FALSE_WHEN_CROSS_COMPILED
+
     QProcess proc;
     if (capturedStderr == nullptr)
         proc.setProcessChannelMode(QProcess::ForwardedChannels);
@@ -198,9 +213,7 @@ static void testWithEnvironment(
 
 void tst_qmlcachegen::loadGeneratedFile()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
 
@@ -279,9 +292,7 @@ public:
 
 void tst_qmlcachegen::translationExpressionSupport()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
@@ -330,9 +341,7 @@ void tst_qmlcachegen::translationExpressionSupport()
 
 void tst_qmlcachegen::signalHandlerParameters()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
@@ -398,9 +407,7 @@ void tst_qmlcachegen::signalHandlerParameters()
 
 void tst_qmlcachegen::errorOnArgumentsInSignalHandler()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
@@ -427,9 +434,7 @@ void tst_qmlcachegen::errorOnArgumentsInSignalHandler()
 
 void tst_qmlcachegen::aheadOfTimeCompilation()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
@@ -566,9 +571,7 @@ void tst_qmlcachegen::workerScripts()
 
 void tst_qmlcachegen::functionExpressions()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
@@ -685,9 +688,7 @@ void tst_qmlcachegen::qrcScriptImport()
 
 void tst_qmlcachegen::fsScriptImport()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
@@ -816,9 +817,7 @@ void tst_qmlcachegen::reproducibleCache_data()
 
 void tst_qmlcachegen::reproducibleCache()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     QFETCH(QString, filePath);
 
@@ -851,9 +850,7 @@ void tst_qmlcachegen::parameterAdjustment()
 
 void tst_qmlcachegen::inlineComponent()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     QByteArray errors;
     bool ok = generateCache(testFile("inlineComponentWithId.qml"), &errors);
@@ -868,9 +865,7 @@ void tst_qmlcachegen::inlineComponent()
 
 void tst_qmlcachegen::posthocRequired()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     bool ok = generateCache(testFile("posthocrequired.qml"));
     QVERIFY(ok);
@@ -885,9 +880,7 @@ void tst_qmlcachegen::posthocRequired()
 
 void tst_qmlcachegen::gracefullyHandleTruncatedCacheFile()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     bool ok = generateCache(testFile("truncateTest.qml"));
     QVERIFY(ok);
@@ -902,9 +895,7 @@ void tst_qmlcachegen::gracefullyHandleTruncatedCacheFile()
 
 void tst_qmlcachegen::scriptStringCachegenInteraction()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     bool ok = generateCache(testFile("scriptstring.qml"));
     QVERIFY(ok);
@@ -1043,9 +1034,8 @@ void tst_qmlcachegen::aotstatsGeneration_data()
 
 void tst_qmlcachegen::aotstatsGeneration()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
+
     QFETCH(QString, qmlFile);
     QFETCH(QString, aotstatsFile);
     QFETCH(QList<FunctionEntry>, entries);
@@ -1069,8 +1059,8 @@ void tst_qmlcachegen::aotstatsGeneration()
         const auto it = std::find_if(fileEntries.cbegin(), fileEntries.cend(),
                                      [&](const auto &e) { return e.functionName == entry.name; });
         QVERIFY(it != fileEntries.cend());
-        QVERIFY(it->codegenResult == entry.codegenResult);
-        QVERIFY(it->message == entry.message);
+        QCOMPARE(it->codegenResult, entry.codegenResult);
+        QCOMPARE(it->message, entry.message);
     }
 }
 
@@ -1091,9 +1081,7 @@ void tst_qmlcachegen::crash_data()
 
 void tst_qmlcachegen::crash()
 {
-#if defined(QTEST_CROSS_COMPILED)
-    QSKIP("Cannot call qmlcachegen on cross-compiled target.");
-#endif
+    SKIP_WHEN_CROSS_COMPILED
 
     QFETCH(QString, fileName);
     const QString filePath = testFile("crashes/" + fileName);

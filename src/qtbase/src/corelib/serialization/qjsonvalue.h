@@ -191,13 +191,13 @@ protected:
     Q_DECLARE_EQUALITY_COMPARABLE_NON_NOEXCEPT(QJsonValueConstRef, QJsonValue)
 
     Q_CORE_EXPORT static QJsonValue::Type
-    concreteType(QJsonValueConstRef self) noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION concreteType(QJsonValueConstRef self) noexcept;
     Q_CORE_EXPORT static bool
-    concreteBool(QJsonValueConstRef self, bool defaultValue) noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION concreteBool(QJsonValueConstRef self, bool defaultValue) noexcept;
     Q_CORE_EXPORT static qint64
-    concreteInt(QJsonValueConstRef self, qint64 defaultValue, bool clamp) noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION concreteInt(QJsonValueConstRef self, qint64 defaultValue, bool clamp) noexcept;
     Q_CORE_EXPORT static double
-    concreteDouble(QJsonValueConstRef self, double defaultValue) noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION concreteDouble(QJsonValueConstRef self, double defaultValue) noexcept;
     Q_CORE_EXPORT static QString concreteString(QJsonValueConstRef self, const QString &defaultValue);
     Q_CORE_EXPORT static QAnyStringView concreteStringView(QJsonValueConstRef self, QAnyStringView defaultValue);
     Q_CORE_EXPORT static QJsonValue concrete(QJsonValueConstRef self) noexcept;

@@ -84,7 +84,7 @@ QQnxScreen::QQnxScreen(screen_context_t screenContext, screen_display_t display,
       m_keyboardHeight(0),
       m_nativeOrientation(Qt::PrimaryOrientation),
       m_coverWindow(0),
-      m_cursor(new QQnxCursor())
+      m_cursor(new QQnxCursor(screenContext))
 {
     qCDebug(lcQpaScreen) << Q_FUNC_INFO;
     // Cache initial orientation of this display
@@ -503,17 +503,7 @@ void QQnxScreen::addWindow(QQnxWindow *window)
         return;
 
     if (window->window()->type() != Qt::CoverWindow) {
-        // Ensure that the desktop window is at the bottom of the zorder.
-        // If we do not do this then we may end up activating the desktop
-        // when the navigator service gets an event that our window group
-        // has been activated (see QQnxScreen::activateWindowGroup()).
-        // Such a situation would strangely break focus handling due to the
-        // invisible desktop widget window being layered on top of normal
-        // windows
-        if (window->window()->type() == Qt::Desktop)
-            m_childWindows.push_front(window);
-        else
-            m_childWindows.push_back(window);
+        m_childWindows.push_back(window);
         updateHierarchy();
     }
 }

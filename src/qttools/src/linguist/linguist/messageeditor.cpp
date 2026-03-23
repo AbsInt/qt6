@@ -8,8 +8,6 @@
 
 #include "messageeditor.h"
 #include "messageeditorwidgets.h"
-#include "simtexth.h"
-#include "phrasemodel.h"
 
 #include <QApplication>
 #include <QBoxLayout>
@@ -642,7 +640,7 @@ void MessageEditor::showMessage(const MultiDataIndex &index)
             if (!item->extraComment().isEmpty()) {
                 if (!commentText.isEmpty())
                     commentText += u'\n';
-                commentText += item->extraComment().simplified();
+                commentText += item->extraComment();
             }
 
             m_commentText->setTranslation(commentText);

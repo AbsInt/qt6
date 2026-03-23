@@ -110,7 +110,7 @@ available when you import \c QtQuick.
     \l{qtqml-cppintegration-data.html}{passed into QML from C++} is automatically
     converted into a \c color value, and vice-versa.
 
-    This value type is provided by the QtQuick import.
+    This value type is provided by the \l[QML]{QtQuick} import.
 
     \section1 SVG Color Reference
 
@@ -234,7 +234,7 @@ available when you import \c QtQuick.
     \l{qtqml-cppintegration-data.html}{passed into QML from C++} is automatically
     converted into a \c font value, and vice-versa.
 
-    This value type is provided by the QtQuick import.
+    This value type is provided by the \l[QML]{QtQuick} import.
 
     Numerical values for font weights follow the CSS specification, where a
     weight of 100 is extremely light, and 900 is extremely bold.
@@ -397,7 +397,7 @@ console.log(c + " " + d); // false true
             \endcode
 \endtable
 
-    This value type is provided by the QtQuick import.
+    This value type is provided by the \l[QML]{QtQuick} import.
 
     \sa {QML Value Types}
 */
@@ -571,7 +571,7 @@ console.log(c + " " + d); // false true
             \endcode
 \endtable
 
-    This value type is provided by the QtQuick import.
+    This value type is provided by the \l[QML]{QtQuick} import.
 
     \sa {QML Value Types}
 */
@@ -716,7 +716,7 @@ console.log(c + " " + d); // false true
             \endcode
 \endtable
 
-    This value type is provided by the QtQuick import.
+    This value type is provided by the \l[QML]{QtQuick} import.
 
     \sa {QML Value Types}
 */
@@ -879,7 +879,7 @@ console.log(c + " " + d); // false true
     Properties of type \c quaternion have \c {Qt.quaternion(1, 0, 0, 0)} as their
     default value.
 
-    This value type is provided by the QtQuick import.
+    This value type is provided by the \l[QML]{QtQuick} import.
 
     \sa {QML Value Types}
 */
@@ -1153,7 +1153,7 @@ console.log(c + " " + d); // false true
             \endcode
 \endtable
 
-    This value type is provided by the QtQuick import.
+    This value type is provided by the \l[QML]{QtQuick} import.
 
     \sa {QML Value Types}
 */

@@ -173,8 +173,6 @@ void QQuickColorInputs::setDelegate(QQmlComponent *delegate)
     Q_D(QQuickColorInputs);
     if (d->m_delegate == delegate)
         return;
-    if (d->m_delegate)
-        delete d->m_delegate;
     d->m_delegate = delegate;
     emit delegateChanged();
 }

@@ -121,6 +121,58 @@ Item {
                     settings.radius = value
                 }
             }
+            SettingsComponentCheckBox {
+                id: individualRadiusCheckBox
+                text: qsTr("Individual corner radius")
+                checked: settings.individualRadius
+                onCheckedChanged: {
+                    settings.individualRadius = checked;
+                }
+            }
+            SettingsComponentSlider {
+                id: radiusTRSlider
+                text: qsTr("Radius Top-Right") + ": " + value.toFixed()
+                enabled: individualRadiusCheckBox.checked
+                value: settings.radiustr
+                from: 0
+                to: settings.itemSize * 0.5
+                onMoved: {
+                    settings.radiustr = value
+                }
+            }
+            SettingsComponentSlider {
+                id: radiusBRSlider
+                text: qsTr("Radius Bottom-Right") + ": " + value.toFixed()
+                enabled: individualRadiusCheckBox.checked
+                value: settings.radiusbr
+                from: 0
+                to: settings.itemSize * 0.5
+                onMoved: {
+                    settings.radiusbr = value
+                }
+            }
+            SettingsComponentSlider {
+                id: radiusBLSlider
+                text: qsTr("Radius Bottom-Left") + ": " + value.toFixed()
+                enabled: individualRadiusCheckBox.checked
+                value: settings.radiusbl
+                from: 0
+                to: settings.itemSize * 0.5
+                onMoved: {
+                    settings.radiusbl = value
+                }
+            }
+            SettingsComponentSlider {
+                id: radiusTLSlider
+                text: qsTr("Radius Top-Left") + ": " + value.toFixed()
+                enabled: individualRadiusCheckBox.checked
+                value: settings.radiustl
+                from: 0
+                to: settings.itemSize * 0.5
+                onMoved: {
+                    settings.radiustl = value
+                }
+            }
             SettingsComponentSlider {
                 text: qsTr("Blur") + ": " + value.toFixed()
                 value: settings.blur
@@ -147,58 +199,6 @@ Item {
                 to: settings.itemSize * 0.1
                 onMoved: {
                     settings.spread = value;
-                }
-            }
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                color: "#e0e0e0"
-                font.pixelSize: 16 * dp
-                text: "Offset (" + settings.offsetX.toFixed(0) + ", " +
-                      settings.offsetY.toFixed(0) + ")"
-            }
-            Rectangle {
-                id: lightArea
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: settings.settingsViewWidth * 0.6
-                height: width
-                radius: 5
-                color: Qt.lighter(mainWindow.mainColor, 0.5)
-                border.width: 1
-                border.color: "#e0e0e0"
-                Item {
-                    id: lightItem
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 10
-                        height: width
-                        radius: width / 2
-                        color: "#e0e0e0"
-                        RectangularShadow {
-                            anchors.centerIn: parent
-                            width: parent.width * 3.0
-                            height: width
-                            radius: width / 2
-                            blur: width
-                            color: "#fff9f0"
-                            opacity: settings.opacity
-                        }
-                    }
-                }
-                MouseArea {
-                    id: lightMouseArea
-                    anchors.fill: parent
-                    preventStealing: true
-                    Component.onCompleted: {
-                        resetPosition()
-                    }
-                    onPositionChanged:
-                        (mouse)=> {
-                            updatePosition(mouse.x, mouse.y);
-                        }
-                    onPressed:
-                        (mouse)=> {
-                            updatePosition(mouse.x, mouse.y);
-                        }
                 }
             }
         }

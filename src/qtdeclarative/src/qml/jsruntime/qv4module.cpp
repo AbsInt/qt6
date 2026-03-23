@@ -204,9 +204,9 @@ PropertyKey ModuleNamespaceIterator::next(const Object *o, Property *pd, Propert
         Scope scope(module->engine());
         ScopedString exportName(scope, scope.engine->newString(exportedNames.at(exportIndex)));
         exportIndex++;
-        const Value *v = module->resolveExport(exportName->toPropertyKey());
         if (pd) {
-            if (v->isEmpty())
+            const Value *v = module->resolveExport(exportName->toPropertyKey());
+            if (!v || v->isEmpty())
                 scope.engine->throwReferenceError(exportName);
             else
                 pd->value = *v;

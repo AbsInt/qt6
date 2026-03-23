@@ -19,7 +19,6 @@
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qfile.h>
-#include <QtCore/qlibraryinfo.h>
 #include <QtCore/qlocale.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qtimer.h>
@@ -28,12 +27,9 @@
 #include <QtCore/qdebug.h>
 #include <QtCore/qcommandlineparser.h>
 #include <QtCore/qcommandlineoption.h>
-#include <QtCore/qversionnumber.h>
 #include <QtCore/qvariant.h>
 
 #include <QtDesigner/QDesignerComponents>
-
-#include <optional>
 
 QT_BEGIN_NAMESPACE
 
@@ -137,17 +133,6 @@ static void showHelp(QCommandLineParser &parser, const QString &errorMessage = Q
     box.exec();
 }
 
-struct Options
-{
-    QStringList files;
-    QString resourceDir{QLibraryInfo::path(QLibraryInfo::TranslationsPath)};
-    QStringList pluginPaths;
-    std::optional<QVersionNumber> qtVersion;
-    bool server{false};
-    quint16 clientPort{0};
-    bool enableInternalDynamicProperties{false};
-};
-
 static inline QDesigner::ParseArgumentsResult
     parseDesignerCommandLineArguments(QCommandLineParser &parser, Options *options,
                                       QString *errorMessage)
@@ -162,6 +147,10 @@ static inline QDesigner::ParseArgumentsResult
                                           u"Client mode"_s,
                                           u"port"_s);
     parser.addOption(clientOption);
+    const QCommandLineOption webHelpOption(u"web-help"_s, u"Use the Web documentation"_s);
+    parser.addOption(webHelpOption);
+    const QCommandLineOption pythonHelpOption(u"python-help"_s, u"Use the Python documentation"_s);
+    parser.addOption(pythonHelpOption);
     const QCommandLineOption resourceDirOption(u"resourcedir"_s,
                                           u"Resource directory"_s,
                                           u"directory"_s);
@@ -195,13 +184,17 @@ static inline QDesigner::ParseArgumentsResult
         parser.process(QCoreApplication::arguments()); // exits
     options->server = parser.isSet(serverOption);
     if (parser.isSet(clientOption)) {
-        bool ok;
+        bool ok = false;
         options->clientPort = parser.value(clientOption).toUShort(&ok);
         if (!ok) {
             *errorMessage = u"Non-numeric argument specified for -client"_s;
             return QDesigner::ParseArgumentsError;
         }
     }
+    if (parser.isSet(webHelpOption))
+        options->helpMode = HelpClientType::Web;
+    else if (parser.isSet(pythonHelpOption))
+        options->helpMode = HelpClientType::Python;
     if (parser.isSet(resourceDirOption))
         options->resourceDir = parser.value(resourceDirOption);
     const auto pluginPathValues = parser.values(pluginPathsOption);
@@ -245,7 +238,7 @@ QDesigner::ParseArgumentsResult QDesigner::parseCommandLineArguments()
             installTranslator(qtTranslator.release());
     }
 
-    m_workbench = new QDesignerWorkbench(options.pluginPaths);
+    m_workbench = new QDesignerWorkbench(options);
 
     emit initialized();
     previousMessageHandler = qInstallMessageHandler(designerMessageHandler); // Warn when loading faulty forms
@@ -291,7 +284,7 @@ bool QDesigner::isServerOrClientEnabled() const
 
 bool QDesigner::event(QEvent *ev)
 {
-    bool eaten;
+    bool eaten = false;
     switch (ev->type()) {
     case QEvent::FileOpen:
         m_workbench->readInForm(static_cast<QFileOpenEvent *>(ev)->file());
@@ -299,13 +292,13 @@ bool QDesigner::event(QEvent *ev)
         eaten = true;
         break;
     case QEvent::Close: {
-        QCloseEvent *closeEvent = static_cast<QCloseEvent *>(ev);
+        auto *closeEvent = static_cast<QCloseEvent *>(ev);
         closeEvent->setAccepted(m_workbench->handleClose());
         if (closeEvent->isAccepted()) {
             // We're going down, make sure that we don't get our settings saved twice.
             if (m_mainWindow)
                 m_mainWindow->setCloseEventPolicy(MainWindowBase::AcceptCloseEvents);
-            eaten = QApplication::event(ev);
+            QApplication::event(ev);
         }
         eaten = true;
         break;

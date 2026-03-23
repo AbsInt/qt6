@@ -19,6 +19,7 @@ qt_internal_add_tool(${target_name}
         QT_NO_FOREACH
         QT_RCC
         QT_USE_NODISCARD_FILE_OPEN
+        QT_NO_URL_CAST_FROM_STRING
     INCLUDE_DIRECTORIES
         ${CMAKE_CURRENT_SOURCE_DIR}
 )

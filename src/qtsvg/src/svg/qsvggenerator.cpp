@@ -1,5 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #include "qsvggenerator.h"
 
@@ -7,9 +9,10 @@
 
 #include "qpainterpath.h"
 
-#include "private/qpaintengine_p.h"
-#include "private/qtextengine_p.h"
 #include "private/qdrawhelper_p.h"
+#include "private/qpaintengine_p.h"
+#include "private/qpainter_p.h"
+#include "private/qtextengine_p.h"
 
 #include "qfile.h"
 #include "qtextstream.h"
@@ -570,7 +573,14 @@ public:
     by setting the \l size property, and in some cases where the drawing will be included in
     another, the \l viewBox property also needs to be set.
 
-    \snippet svggenerator/window.cpp configure SVG generator
+    \code
+    QSvgGenerator generator;
+    generator.setFileName(path);
+    generator.setSize(QSize(200, 200));
+    generator.setViewBox(QRect(0, 0, 200, 200));
+    generator.setTitle(tr("SVG Generator Drawing"));
+    generator.setDescription(tr("An SVG drawing created by the SVG Generator"));
+    \endcode
 
     Other meta-data can be specified by setting the \a title, \a description and \a resolution
     properties.
@@ -578,9 +588,12 @@ public:
     As with other QPaintDevice subclasses, a QPainter object is used to paint onto an instance
     of this class:
 
-    \snippet svggenerator/window.cpp begin painting
-    \dots
-    \snippet svggenerator/window.cpp end painting
+    \code
+    QPainter painter;
+    painter.begin(&generator);
+    ...
+    painter.end();
+    \endcode
 
     Painting is performed in the same way as for any other paint device. However,
     it is necessary to use the QPainter::begin() and \l{QPainter::}{end()} to
@@ -892,6 +905,21 @@ int QSvgGenerator::metric(QPaintDevice::PaintDeviceMetric metric) const
     return 0;
 }
 
+/*!
+    \since 6.11
+    \reimp
+*/
+void QSvgGenerator::initPainter(QPainter *painter) const
+{
+    QPainterPrivate *painterPrivate = QPainterPrivate::get(painter);
+
+    for (QFont *font : { &painterPrivate->state->deviceFont, &painterPrivate->state->font }) {
+        if (font->hintingPreference() == QFont::PreferDefaultHinting)
+            font->setHintingPreference(QFont::PreferNoHinting);
+    }
+    painterPrivate->setEngineDirtyFlags({ QPaintEngine::DirtyFont });
+}
+
 /*****************************************************************************
  * class QSvgPaintEngine
  */
@@ -1139,10 +1167,22 @@ void QSvgPaintEngine::drawPath(const QPainterPath &p)
                << (p.fillRule() == Qt::OddEvenFill ? "evenodd" : "nonzero")
                << "\" d=\"";
 
-    for (int i=0; i<p.elementCount(); ++i) {
+    int i = 0;
+    QPointF subPathStart;
+    auto endSubPath = [&]() {
+        if (i > 0) {
+            const QPointF subPathEnd = p.elementAt(i - 1);
+            if (subPathEnd == subPathStart)
+                *d->stream << "Z ";
+        }
+    };
+
+    for (i = 0; i < p.elementCount(); ++i) {
         const QPainterPath::Element &e = p.elementAt(i);
         switch (e.type) {
         case QPainterPath::MoveToElement:
+            endSubPath();
+            subPathStart = e;
             *d->stream << 'M' << e.x << ',' << e.y;
             break;
         case QPainterPath::LineToElement:
@@ -1165,10 +1205,9 @@ void QSvgPaintEngine::drawPath(const QPainterPath &p)
         default:
             break;
         }
-        if (i != p.elementCount() - 1) {
-            *d->stream << ' ';
-        }
+        *d->stream << ' ';
     }
+    endSubPath();
 
     *d->stream << "\"/>" << Qt::endl;
 }

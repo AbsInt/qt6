@@ -1,5 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QSVGSTRUCTURE_P_H
 #define QSVGSTRUCTURE_P_H
@@ -16,13 +18,12 @@
 //
 
 #include "qsvgnode_p.h"
-
-#include "QtCore/qlist.h"
-#include "QtCore/qhash.h"
+#include <QtSvg/private/qsvghelper_p.h>
+#include <QtCore/qlist.h>
 
 QT_BEGIN_NAMESPACE
 
-class QSvgTinyDocument;
+class QSvgDocument;
 class QSvgNode;
 class QPainter;
 class QSvgDefs;
@@ -33,16 +34,18 @@ public:
     QSvgStructureNode(QSvgNode *parent);
     ~QSvgStructureNode();
     QSvgNode *scopeNode(const QString &id) const;
-    void addChild(QSvgNode *child, const QString &id);
+    void addChild(std::unique_ptr<QSvgNode> child, const QString &id);
     QRectF internalBounds(QPainter *p, QSvgExtraStates &states) const override;
     QRectF decoratedInternalBounds(QPainter *p, QSvgExtraStates &states) const override;
     QSvgNode *previousSiblingNode(QSvgNode *n) const;
-    QList<QSvgNode*> renderers() const { return m_renderers; }
+    const std::vector<std::unique_ptr<QSvgNode>> &renderers() const { return m_renderers; }
 protected:
-    QList<QSvgNode*>          m_renderers;
-    QHash<QString, QSvgNode*> m_scope;
-    QList<QSvgStructureNode*> m_linkedScopes;
+    std::vector<std::unique_ptr<QSvgNode>>          m_renderers;
     mutable bool              m_recursing = false;
+
+private:
+    Q_DISABLE_COPY_X(QSvgStructureNode, "Class has a vector of unique"
+                                        "pointers as member variable")
 };
 
 class Q_SVG_EXPORT QSvgG : public QSvgStructureNode
@@ -99,6 +102,35 @@ public:
     void drawCommand(QPainter *, QSvgExtraStates &) override {};
     QRectF decoratedInternalBounds(QPainter *p, QSvgExtraStates &states) const override;
     bool requiresGroupRendering() const override;
+
+    QRectF viewBox() const
+    {
+        return m_viewBox;
+    }
+
+    QRectF rect() const
+    {
+        return m_rect;
+    }
+
+    QPointF refP() const
+    {
+        return m_refP;
+    }
+
+    QTransform aspectRatioTransform() const;
+    QRectF clipRect() const;
+
+    Overflow overflow() const
+    {
+        return m_overflow;
+    }
+
+    PreserveAspectRatios preserveAspectRatios() const
+    {
+        return m_pAspectRatios;
+    }
+
 protected:
     void setPainterToRectAndAdjustment(QPainter *p) const;
 protected:
@@ -172,6 +204,11 @@ public:
     void setSupported(bool supported);
     bool supported() const;
     QRectF filterRegion(const QRectF &itemBounds) const;
+
+    QSvgRectF rect() const { return m_rect; }
+    QtSvg::UnitTypes filterUnits() const { return m_filterUnits; }
+    QtSvg::UnitTypes primitiveUnits() const { return m_primitiveUnits; }
+
 private:
     QSvgRectF m_rect;
     QtSvg::UnitTypes m_filterUnits;

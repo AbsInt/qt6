@@ -76,6 +76,7 @@
 #include <qimageiohandler.h>
 #include <qset.h>
 #include <qvariant.h>
+#include <qloggingcategory.h>
 
 // factory loader
 #include <qcoreapplication.h>
@@ -96,6 +97,8 @@
 
 QT_BEGIN_NAMESPACE
 
+Q_STATIC_LOGGING_CATEGORY(lcImageWriter, "qt.gui.imageio.writer")
+
 using namespace Qt::StringLiterals;
 
 static QImageIOHandler *createWriteHandlerHelper(QIODevice *device,
@@ -105,6 +108,8 @@ static QImageIOHandler *createWriteHandlerHelper(QIODevice *device,
     QByteArray suffix;
     QImageIOHandler *handler = nullptr;
 
+    qCDebug(lcImageWriter) << "Finding write handler for" << device << "and format" << format;
+
 #ifndef QT_NO_IMAGEFORMATPLUGIN
     typedef QMultiMap<int, QString> PluginKeyMap;
 
@@ -112,6 +117,8 @@ static QImageIOHandler *createWriteHandlerHelper(QIODevice *device,
     auto l = QImageReaderWriterHelpers::pluginLoader();
     const PluginKeyMap keyMap = l->keyMap();
     int suffixPluginIndex = -1;
+
+    qCDebug(lcImageWriter) << keyMap.uniqueKeys().size() << "plugins available:" << keyMap.values();
 #endif
 
     if (device && format.isEmpty()) {
@@ -120,6 +127,7 @@ static QImageIOHandler *createWriteHandlerHelper(QIODevice *device,
         // this allows plugins to override our built-in handlers.
         if (QFileDevice *file = qobject_cast<QFileDevice *>(device)) {
             if (!(suffix = QFileInfo(file->fileName()).suffix().toLower().toLatin1()).isEmpty()) {
+                qCDebug(lcImageWriter) << "Resolved format" << suffix << "from file name suffix";
 #ifndef QT_NO_IMAGEFORMATPLUGIN
                 const int index = keyMap.key(QString::fromLatin1(suffix), -1);
                 if (index != -1)
@@ -135,17 +143,23 @@ static QImageIOHandler *createWriteHandlerHelper(QIODevice *device,
     if (suffixPluginIndex != -1) {
         // when format is missing, check if we can find a plugin for the
         // suffix.
+        qCDebug(lcImageWriter) << "Checking if any plugins have explicitly declared support"
+                               << "for the format" << testFormat;
         const int index = keyMap.key(QString::fromLatin1(suffix), -1);
         if (index != -1) {
             QImageIOPlugin *plugin = qobject_cast<QImageIOPlugin *>(l->instance(index));
-            if (plugin && (plugin->capabilities(device, suffix) & QImageIOPlugin::CanWrite))
+            if (plugin && (plugin->capabilities(device, suffix) & QImageIOPlugin::CanWrite)) {
                 handler = plugin->create(device, suffix);
+                qCDebug(lcImageWriter) << plugin << "can write the format" << testFormat;
+            }
         }
     }
 #endif // QT_NO_IMAGEFORMATPLUGIN
 
     // check if any built-in handlers can write the image
     if (!handler && !testFormat.isEmpty()) {
+        qCDebug(lcImageWriter) << "Checking if any built in handlers recognize the format"
+                               << testFormat;
         if (false) {
 #ifndef QT_NO_IMAGEFORMAT_PNG
         } else if (testFormat == "png") {
@@ -173,23 +187,30 @@ static QImageIOHandler *createWriteHandlerHelper(QIODevice *device,
             handler->setOption(QImageIOHandler::SubType, testFormat);
 #endif
         }
+
+        if (handler)
+            qCDebug(lcImageWriter) << "Using the built-in handler for format" << testFormat;
     }
 
 #ifndef QT_NO_IMAGEFORMATPLUGIN
     if (!handler && !testFormat.isEmpty()) {
+        qCDebug(lcImageWriter) << "Checking if any plugins recognize the format" << testFormat;
         const int keyCount = keyMap.size();
         for (int i = 0; i < keyCount; ++i) {
             QImageIOPlugin *plugin = qobject_cast<QImageIOPlugin *>(l->instance(i));
             if (plugin && (plugin->capabilities(device, testFormat) & QImageIOPlugin::CanWrite)) {
                 handler = plugin->create(device, testFormat);
+                qCDebug(lcImageWriter) << plugin << "can write the format" << testFormat;
                 break;
             }
         }
     }
 #endif // QT_NO_IMAGEFORMATPLUGIN
 
-    if (!handler)
+    if (!handler) {
+        qCDebug(lcImageWriter, "No handlers found. Giving up.");
         return nullptr;
+    }
 
     handler->setDevice(device);
     if (!testFormat.isEmpty())

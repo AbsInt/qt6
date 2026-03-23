@@ -88,7 +88,7 @@
 
     If the current value of the QAtomicInteger is an expected value, the
     test-and-set functions assign a new value to the QAtomicInteger and
-    return true. If values are \a not the same, these functions do
+    return true. If values are \e not the same, these functions do
     nothing and return false. This operation equates to the following
     code:
 
@@ -311,6 +311,19 @@
     ordering}{memory ordering} semantics, which ensures that memory
     access before and after the atomic operation (in program order)
     may not be re-ordered.
+
+    \sa deref(), operator++()
+*/
+
+/*!
+    \fn template <typename T> void QAtomicInteger<T>::refRelaxed()
+    \internal
+    Atomically increments the value of this QAtomicInteger.
+
+    In contrast to ref(), this uses relaxed semantics, which is
+    all that is needed for reference counting (together with deref's
+    acquire-release semantics).
+    It also doesn't return anything.
 
     \sa deref(), operator++()
 */
@@ -1281,7 +1294,7 @@
 
     If the current value of the QAtomicPointer is an expected value,
     the test-and-set functions assign a new value to the
-    QAtomicPointer and return true. If values are \a not the same,
+    QAtomicPointer and return true. If values are \e not the same,
     these functions do nothing and return false. This operation
     equates to the following code:
 

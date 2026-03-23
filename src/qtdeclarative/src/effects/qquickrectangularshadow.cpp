@@ -26,6 +26,7 @@ QT_BEGIN_NAMESPACE
     \table 70%
     \row
     \li \image rectangularshadow-example-1.png
+               {Rounded rectangle with soft shadow offset to upper left}
     \li \qml
     import QtQuick
     import QtQuick.Effects
@@ -76,10 +77,9 @@ QT_BEGIN_NAMESPACE
     \li Blurring is calculated mathematically in the shader rather than using
     Gaussian blur, which CSS box-shadow implementations often use. This makes
     the shadow look slightly different, especially with larger blur values.
-    \li All the rectangle corners must have an even radius. When creating a
-    shadow for a \l Rectangle with different radiuses, select the best-matching
-    radius for the shadow or use an alternative shadow method, for example,
-    \l MultiEffect.
+    \li Since Qt 6.11, RectangularShadow also supports individual corner
+    radius values. When not needed, for best performance, set only the common
+    \l radius.
     \endlist
 
     Here is a table with screenshots to compare the rendering output of
@@ -97,23 +97,31 @@ QT_BEGIN_NAMESPACE
     \li offset: (0, 0) \br
         blur: 20 \br
         spread: 0 \br
-    \li \image rectangularshadow-css-1.png
-    \li \image rectangularshadow-item-1.png
+    \li \image rectangularshadow-css-1.png {CSS box-shadow with blur 20}
+    \li \image rectangularshadow-item-1.png {RectangularShadow with blur 20}
     \li \image rectangularshadow-itemblur-1.png
+               {RectangularShadow with blur 24 for closer CSS match}
     \row
     \li offset: (-10, -20) \br
         blur: 40 \br
         spread: 0 \br
     \li \image rectangularshadow-css-2.png
+               {CSS box-shadow with offset and blur 40}
     \li \image rectangularshadow-item-2.png
+               {RectangularShadow with offset and blur 40}
     \li \image rectangularshadow-itemblur-2.png
+               {RectangularShadow with blur 48 for closer CSS match}
     \row
     \li offset: (-10, -20) \br
         blur: 40 \br
         spread: 10 \br
     \li \image rectangularshadow-css-3.png
+               {CSS box-shadow with offset, blur 40, and spread 10}
     \li \image rectangularshadow-item-3.png
+               {RectangularShadow with offset, blur 40, and spread 10}
     \li \image rectangularshadow-itemblur-3.png
+               {RectangularShadow with blur 48 and spread 10 for closer CSS
+               match}
     \endtable
 
 
@@ -264,6 +272,7 @@ void QQuickRectangularShadow::setRadius(qreal radius)
         return;
 
     d->m_radius = radius;
+    d->maybeSetImplicitAntialiasing();
     d->updateSizeProperties();
     update();
     Q_EMIT radiusChanged();
@@ -346,7 +355,8 @@ void QQuickRectangularShadow::setCached(bool cached)
     RectangularShadow item, due to \l blur, \l offset and \l spread.
 
     The material can also be replaced with a custom one. The default material
-    is a \l ShaderEffect with the following \l {ShaderEffect::}{fragmentShader}:
+    when not using individual corner radius is a \l ShaderEffect with the
+    following \l {ShaderEffect::}{fragmentShader}:
 
     \badcode
     #version 440
@@ -376,6 +386,10 @@ void QQuickRectangularShadow::setCached(bool cached)
         fragColor = color * qt_Opacity * a * a;
     }
     \endcode
+
+    When using individual corner radius, the value of "float radius" uniform
+    is < 0 and there is an additional uniform "vec4 radius4". The corner radius
+    values order in the vec4 is top-left, top-right, bottom-left, bottom-right.
 
     Qt Quick Effect Maker contains the RectangularShadow node that can be used
     as a starting point for a custom material. You can directly use the exported
@@ -414,6 +428,214 @@ void QQuickRectangularShadow::setMaterial(QQuickItem *item)
     Q_EMIT materialChanged();
 }
 
+/*!
+    \since 6.11
+    \qmlproperty real QtQuick.Effects::RectangularShadow::topLeftRadius
+    This property holds the radius used to draw the top left corner.
+
+    If \l topLeftRadius is not set, \l radius will be used instead.
+    If \l topLeftRadius is zero, the corner will be sharp.
+
+    \sa radius, topRightRadius, bottomLeftRadius, bottomRightRadius
+*/
+qreal QQuickRectangularShadow::topLeftRadius() const
+{
+    Q_D(const QQuickRectangularShadow);
+    if (d->extra.isAllocated() && d->extra->isTopLeftRadiusSet)
+        return d->extra->topLeftRadius;
+    return d->m_radius;
+}
+
+void QQuickRectangularShadow::setTopLeftRadius(qreal radius)
+{
+    Q_D(QQuickRectangularShadow);
+    if (d->extra.isAllocated()
+        && d->extra->topLeftRadius == radius
+        && d->extra->isTopLeftRadiusSet) {
+        return;
+    }
+
+    d->extra.value().topLeftRadius = radius;
+    d->extra.value().isTopLeftRadiusSet = true;
+    d->maybeSetImplicitAntialiasing();
+
+    d->updateSizeProperties();
+    update();
+    emit topLeftRadiusChanged();
+}
+
+void QQuickRectangularShadow::resetTopLeftRadius()
+{
+    Q_D(QQuickRectangularShadow);
+    if (!d->extra.isAllocated())
+        return;
+    if (!d->extra->isTopLeftRadiusSet)
+        return;
+
+    d->extra->isTopLeftRadiusSet = false;
+    d->maybeSetImplicitAntialiasing();
+
+    d->updateSizeProperties();
+    update();
+    emit topLeftRadiusChanged();
+}
+
+/*!
+    \since 6.11
+    \qmlproperty real QtQuick.Effects::RectangularShadow::topRightRadius
+    This property holds the radius used to draw the top right corner.
+
+    If \l topRightRadius is not set, \l radius will be used instead.
+    If \l topRightRadius is zero, the corner will be sharp.
+
+    \sa radius, topLeftRadius, bottomLeftRadius, bottomRightRadius
+*/
+qreal QQuickRectangularShadow::topRightRadius() const
+{
+    Q_D(const QQuickRectangularShadow);
+    if (d->extra.isAllocated() && d->extra->isTopRightRadiusSet)
+        return d->extra->topRightRadius;
+    return d->m_radius;
+}
+
+void QQuickRectangularShadow::setTopRightRadius(qreal radius)
+{
+    Q_D(QQuickRectangularShadow);
+    if (d->extra.isAllocated()
+        && d->extra->topRightRadius == radius
+        && d->extra->isTopRightRadiusSet) {
+        return;
+    }
+
+    d->extra.value().topRightRadius = radius;
+    d->extra.value().isTopRightRadiusSet = true;
+    d->maybeSetImplicitAntialiasing();
+
+    d->updateSizeProperties();
+    update();
+    emit topRightRadiusChanged();
+}
+
+void QQuickRectangularShadow::resetTopRightRadius()
+{
+    Q_D(QQuickRectangularShadow);
+    if (!d->extra.isAllocated())
+        return;
+    if (!d->extra.value().isTopRightRadiusSet)
+        return;
+
+    d->extra->isTopRightRadiusSet = false;
+    d->maybeSetImplicitAntialiasing();
+
+    d->updateSizeProperties();
+    update();
+    emit topRightRadiusChanged();
+}
+
+/*!
+    \since 6.11
+    \qmlproperty real QtQuick.Effects::RectangularShadow::bottomLeftRadius
+    This property holds the radius used to draw the bottom left corner.
+
+    If \l bottomLeftRadius is not set, \l radius will be used instead.
+    If \l bottomLeftRadius is zero, the corner will be sharp.
+
+    \sa radius, topLeftRadius, topRightRadius, bottomRightRadius
+*/
+qreal QQuickRectangularShadow::bottomLeftRadius() const
+{
+    Q_D(const QQuickRectangularShadow);
+    if (d->extra.isAllocated() && d->extra->isBottomLeftRadiusSet)
+        return d->extra->bottomLeftRadius;
+    return d->m_radius;
+}
+
+void QQuickRectangularShadow::setBottomLeftRadius(qreal radius)
+{
+    Q_D(QQuickRectangularShadow);
+    if (d->extra.isAllocated()
+        && d->extra->bottomLeftRadius == radius
+        && d->extra->isBottomLeftRadiusSet) {
+        return;
+    }
+
+    d->extra.value().bottomLeftRadius = radius;
+    d->extra.value().isBottomLeftRadiusSet = true;
+    d->maybeSetImplicitAntialiasing();
+
+    d->updateSizeProperties();
+    update();
+    emit bottomLeftRadiusChanged();
+}
+
+void QQuickRectangularShadow::resetBottomLeftRadius()
+{
+    Q_D(QQuickRectangularShadow);
+    if (!d->extra.isAllocated())
+        return;
+    if (!d->extra.value().isBottomLeftRadiusSet)
+        return;
+
+    d->extra->isBottomLeftRadiusSet = false;
+    d->maybeSetImplicitAntialiasing();
+
+    d->updateSizeProperties();
+    update();
+    emit bottomLeftRadiusChanged();
+}
+
+/*!
+    \since 6.11
+    \qmlproperty real QtQuick.Effects::RectangularShadow::bottomRightRadius
+    This property holds the radius used to draw the bottom right corner.
+
+    If \l bottomRightRadius is not set, \l radius will be used instead.
+    If \l bottomRightRadius is zero, the corner will be sharp.
+
+    \sa radius, topLeftRadius, topRightRadius, bottomLeftRadius
+*/
+qreal QQuickRectangularShadow::bottomRightRadius() const
+{
+    Q_D(const QQuickRectangularShadow);
+    if (d->extra.isAllocated() && d->extra->isBottomRightRadiusSet)
+        return d->extra->bottomRightRadius;
+    return d->m_radius;
+}
+
+void QQuickRectangularShadow::setBottomRightRadius(qreal radius)
+{
+    Q_D(QQuickRectangularShadow);
+    if (d->extra.isAllocated()
+        && d->extra->bottomRightRadius == radius
+        && d->extra->isBottomRightRadiusSet) {
+        return;
+    }
+
+    d->extra.value().bottomRightRadius = radius;
+    d->extra.value().isBottomRightRadiusSet = true;
+    d->maybeSetImplicitAntialiasing();
+
+    d->updateSizeProperties();
+    update();
+    emit bottomRightRadiusChanged();
+}
+
+void QQuickRectangularShadow::resetBottomRightRadius()
+{
+    Q_D(QQuickRectangularShadow);
+    if (!d->extra.isAllocated())
+        return;
+    if (!d->extra.value().isBottomRightRadiusSet)
+        return;
+
+    d->extra->isBottomRightRadiusSet = false;
+    d->maybeSetImplicitAntialiasing();
+
+    d->updateSizeProperties();
+    update();
+    emit bottomRightRadiusChanged();
+}
+
 // *** protected ***
 
 void QQuickRectangularShadow::componentComplete()
@@ -449,8 +671,20 @@ QQuickRectangularShadowPrivate::QQuickRectangularShadowPrivate()
     m_defaultMaterial->setProperty("iResolution", QVector3D());
     m_defaultMaterial->setProperty("rectSize", QPointF());
     m_defaultMaterial->setProperty("color", QColorConstants::Black);
+    // Add both radius variants, shader decides which one to use
     m_defaultMaterial->setProperty("radius", 0.0);
+    m_defaultMaterial->setProperty("radius4", QVector4D());
     m_defaultMaterial->setProperty("blur", 10.0);
+}
+
+void QQuickRectangularShadowPrivate::updateDefaultShader()
+{
+    QUrl fs;
+    if (useIndividualRadius())
+        fs = QUrl(QStringLiteral("qrc:/data/shaders/rectangularshadow4r.frag.qsb"));
+    else
+        fs = QUrl(QStringLiteral("qrc:/data/shaders/rectangularshadow.frag.qsb"));
+    m_defaultMaterial->setFragmentShader(fs);
 }
 
 void QQuickRectangularShadowPrivate::initialize()
@@ -470,8 +704,7 @@ void QQuickRectangularShadowPrivate::initialize()
     // Default to antialiased
     setImplicitAntialiasing(true);
 
-    QUrl fs = QUrl(QStringLiteral("qrc:/data/shaders/rectangularshadow.frag.qsb"));
-    m_defaultMaterial->setFragmentShader(fs);
+    updateDefaultShader();
     QUrl vs = QUrl(QStringLiteral("qrc:/data/shaders/rectangularshadow.vert.qsb"));
     m_defaultMaterial->setVertexShader(vs);
 
@@ -521,10 +754,13 @@ void QQuickRectangularShadowPrivate::updateShaderSource()
 void QQuickRectangularShadowPrivate::updateSizeProperties()
 {
     Q_Q(QQuickRectangularShadow);
+
+    // Check if we should switch the shader
+    updateDefaultShader();
+
     auto *material = currentMaterial();
 
     const qreal padding = getPadding();
-    const qreal clampedRad = clampedRadius();
     const qreal effectWidth = q->width() + padding;
     const qreal effectHeight = q->height() + padding;
 
@@ -544,7 +780,14 @@ void QQuickRectangularShadowPrivate::updateSizeProperties()
     QPointF rectSize = QPointF((effectWidth * 0.5 - blurReduction),
                                (effectHeight * 0.5 - blurReduction));
     material->setProperty("rectSize", rectSize);
-    material->setProperty("radius", clampedRad);
+    if (useIndividualRadius()) {
+        const QVector4D clampedRad4 = clampedRadius4R();
+        material->setProperty("radius4", clampedRad4);
+        material->setProperty("radius", -1);
+    } else {
+        const qreal clampedRad = clampedRadius(m_radius);
+        material->setProperty("radius", clampedRad);
+    }
     // Extend blur amount to match with how the CSS box-shadow blur behaves.
     // and to fully utilize the item size.
     const qreal shaderBlur = m_blur * 2.1 + aa;
@@ -557,19 +800,19 @@ void QQuickRectangularShadowPrivate::updateCached()
     effectPrivate->layer()->setEnabled(m_cached);
 }
 
-qreal QQuickRectangularShadowPrivate::clampedRadius() const
+qreal QQuickRectangularShadowPrivate::clampedRadius(qreal radius) const
 {
     Q_Q(const QQuickRectangularShadow);
     qreal maxRadius = qMin(q->width(), q->height()) * 0.5;
     maxRadius += m_spread * 2;
-    qreal spreadRadius = m_radius + m_spread;
-    if (m_radius < m_spread && !qFuzzyIsNull(m_spread)) {
+    qreal spreadRadius = radius + m_spread;
+    if (radius < m_spread && !qFuzzyIsNull(m_spread)) {
         // CSS box-shadow has a specific math to calculate radius with spread
         // https://www.w3.org/TR/css-backgrounds-3/#shadow-shape
         // "the spread distance is first multiplied by the proportion 1 + (r-1)^3,
         // where r is the ratio of the border radius to the spread distance".
-        qreal r = (m_radius / m_spread) - 1;
-        spreadRadius = m_radius + m_spread * (1 + r * r * r);
+        qreal r = (radius / m_spread) - 1;
+        spreadRadius = radius + m_spread * (1 + r * r * r);
     }
     // Reduce the radius when the blur increases
     const qreal blurReduce = m_blur * 0.75;
@@ -578,12 +821,49 @@ qreal QQuickRectangularShadowPrivate::clampedRadius() const
     return qMin(limitedRadius, maxRadius);
 }
 
+QVector4D QQuickRectangularShadowPrivate::clampedRadius4R() const
+{
+    Q_Q(const QQuickRectangularShadow);
+    // Clamp each corner individually
+    qreal tl = clampedRadius(q->topLeftRadius());
+    qreal tr = clampedRadius(q->topRightRadius());
+    qreal bl = clampedRadius(q->bottomLeftRadius());
+    qreal br = clampedRadius(q->bottomRightRadius());
+    return QVector4D(tl, tr, bl, br);
+}
+
 QQuickItem *QQuickRectangularShadowPrivate::currentMaterial() const
 {
     if (m_material)
         return m_material;
     else
         return m_defaultMaterial;
+}
+
+void QQuickRectangularShadowPrivate::maybeSetImplicitAntialiasing()
+{
+    bool implicitAA = (m_radius > 0);
+    if (extra.isAllocated() && !implicitAA) {
+        const auto &e = extra.value();
+        implicitAA = (e.isTopLeftRadiusSet && e.topLeftRadius > 0)
+                || (e.isTopRightRadiusSet && e.topRightRadius > 0)
+                || (e.isBottomLeftRadiusSet && e.bottomLeftRadius > 0)
+                || (e.isBottomRightRadiusSet && e.bottomRightRadius > 0);
+    }
+    setImplicitAntialiasing(implicitAA);
+}
+
+bool QQuickRectangularShadowPrivate::useIndividualRadius() const
+{
+    bool individualRadius = false;
+    if (extra.isAllocated()) {
+        const auto &e = extra.value();
+        individualRadius = e.isTopLeftRadiusSet
+                || e.isTopRightRadiusSet
+                || e.isBottomLeftRadiusSet
+                || e.isBottomRightRadiusSet;
+    }
+    return individualRadius;
 }
 
 QT_END_NAMESPACE

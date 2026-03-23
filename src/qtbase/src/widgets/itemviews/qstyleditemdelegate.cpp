@@ -36,9 +36,6 @@
 #include <private/qlayoutengine_p.h>
 #include <qdebug.h>
 #include <qlocale.h>
-#if QT_CONFIG(tableview)
-#include <qtableview.h>
-#endif
 
 #include <array>
 #include <limits.h>

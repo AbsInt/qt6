@@ -268,12 +268,30 @@ bool QQmlPreviewFileEngine::link(const QString &newName)
 bool QQmlPreviewFileEngine::mkdir(const QString &dirName, bool createParentDirectories,
                                   std::optional<QFile::Permissions> permissions) const
 {
-    return m_fallback ? m_fallback->mkdir(dirName, createParentDirectories, permissions) : false;
+    if (m_fallback)
+        return m_fallback->mkdir(dirName, createParentDirectories, permissions);
+
+    if (isRelative(dirName))
+        return false;
+
+    // If we're creating a directory from an absolute path, it can be anywhere.
+    // The result is unrelated to the currently running preview.
+    return QAbstractFileEngine::create(QDir::rootPath())
+            ->mkdir(dirName, createParentDirectories, permissions);
 }
 
 bool QQmlPreviewFileEngine::rmdir(const QString &dirName, bool recurseParentDirectories) const
 {
-    return m_fallback ? m_fallback->rmdir(dirName, recurseParentDirectories) : false;
+    if (m_fallback)
+        m_fallback->rmdir(dirName, recurseParentDirectories);
+
+    if (isRelative(dirName))
+        return false;
+
+    // If we're removing a directory at an absolute path, it can be anywhere.
+    // The result is unrelated to the currently running preview.
+    return QAbstractFileEngine::create(QDir::rootPath())
+            ->rmdir(dirName, recurseParentDirectories);
 }
 
 bool QQmlPreviewFileEngine::setSize(qint64 size)
@@ -301,13 +319,6 @@ bool QQmlPreviewFileEngine::caseSensitive() const
 bool QQmlPreviewFileEngine::isRelativePath() const
 {
     return m_fallback ? m_fallback->isRelativePath() : isRelative(m_name);
-}
-
-QStringList QQmlPreviewFileEngine::entryList(QDir::Filters filters,
-                                             const QStringList &filterNames) const
-{
-    return m_fallback ? m_fallback->entryList(filters, filterNames)
-                      : QAbstractFileEngine::entryList(filters, filterNames);
 }
 
 bool QQmlPreviewFileEngine::setPermissions(uint perms)

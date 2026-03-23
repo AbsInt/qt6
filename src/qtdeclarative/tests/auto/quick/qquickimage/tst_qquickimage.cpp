@@ -234,7 +234,7 @@ void tst_qquickimage::imageSource()
     if (remote || async)
         QTRY_COMPARE(obj->status(), QQuickImage::Loading);
 
-    QCOMPARE(obj->source(), remote ? source : QUrl(source));
+    QCOMPARE(obj->source(), QUrl(source));
 
     if (error.isEmpty()) {
         QTRY_COMPARE(obj->status(), QQuickImage::Ready);

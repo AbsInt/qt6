@@ -13,12 +13,14 @@
                         "index": 0,
                         "lineNumber": 11,
                         "name": "test",
+                        "override": false,
                         "read": "test",
                         "required": false,
                         "scriptable": true,
                         "stored": true,
                         "type": "int",
-                        "user": false
+                        "user": false,
+                        "virtual": false
                     }
                 ],
                 "qualifiedClassName": "MetaType",

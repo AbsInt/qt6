@@ -20,6 +20,7 @@ if(NOT (CMAKE_CROSSCOMPILING OR (MACOS AND TEST_architecture_arch STREQUAL "x86_
     add_subdirectory(qqmldebuggingenabler)
     add_subdirectory(qqmldebugprocess)
     add_subdirectory(qqmlpreview)
+    add_subdirectory(qquickeventreplay)
 endif()
 
 if(QT_FEATURE_private_tests)

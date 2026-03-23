@@ -102,18 +102,17 @@ Event::Event(EventType type, emscripten::val webEvent)
 {
 }
 
-bool Event::isTargetedForQtElement() const
+bool Event::isTargetedForElement(emscripten::val element) const
 {
     // Check event target via composedPath, which returns the true path even
     // if the browser retargets the event for Qt's shadow DOM container. This
     // is needed to avoid capturing the pointer in cases where foreign html
     // elements are embedded inside Qt's shadow DOM.
-    emscripten::val path = webEvent.call<emscripten::val>("composedPath");
-    QString topElementClassName = QString::fromEcmaString(path[0]["className"]);
-    return topElementClassName.startsWith("qt-"); // .e.g. qt-window-canvas
+    emscripten::val topTarget = webEvent.call<emscripten::val>("composedPath")[0];
+    return element == topTarget;
 }
 
-KeyEvent::KeyEvent(EventType type, emscripten::val event, QWasmDeadKeySupport *deadKeySupport) : Event(type, event)
+KeyEvent::KeyEvent(EventType type, emscripten::val event) : Event(type, event)
 {
     const auto code = event["code"].as<std::string>();
     const auto webKey = event["key"].as<std::string>();
@@ -138,8 +137,6 @@ KeyEvent::KeyEvent(EventType type, emscripten::val event, QWasmDeadKeySupport *d
 
     if (key == Qt::Key_Tab)
         text = "\t";
-
-    deadKeySupport->applyDeadKeyTranslations(this);
 }
 
 MouseEvent::MouseEvent(EventType type, emscripten::val event) : Event(type, event)

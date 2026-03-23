@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qiosapplicationdelegate.h"
 
@@ -14,6 +15,8 @@
 #include <qpa/qplatformintegration.h>
 
 #include <QtCore/QtCore>
+
+#include <QtCore/private/qdarwinsecurityscopedfileengine_p.h>
 
 @interface QIOSWindowSceneDelegate : NSObject<UIWindowSceneDelegate>
 @property (nullable, nonatomic, strong) UIWindow *window;
@@ -110,8 +113,13 @@
 
     QIOSServices *iosServices = static_cast<QIOSServices *>(iosIntegration->services());
 
-    for (UIOpenURLContext *urlContext in URLContexts)
-        iosServices->handleUrl(QUrl::fromNSURL(urlContext.URL));
+    for (UIOpenURLContext *urlContext in URLContexts) {
+        QUrl url = qt_apple_urlFromPossiblySecurityScopedURL(urlContext.URL);
+        if (url.isLocalFile())
+            QWindowSystemInterface::handleFileOpenEvent(url);
+        else
+            iosServices->handleUrl(url);
+    }
 }
 
 - (void)scene:(UIScene *)scene continueUserActivity:(NSUserActivity *)userActivity

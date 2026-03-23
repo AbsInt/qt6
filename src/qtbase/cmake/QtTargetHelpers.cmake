@@ -925,6 +925,12 @@ function(qt_internal_export_additional_targets_file_finalizer id)
 
     list(LENGTH arg_TARGETS num_TARGETS)
 
+    if(num_TARGETS EQUAL 0)
+        # Return early without creating and installing the additional file if there are no targets
+        # to process.
+        return()
+    endif()
+
     # Determine the release configurations we're currently building
     if(QT_GENERATOR_IS_MULTI_CONFIG)
         set(active_configurations ${CMAKE_CONFIGURATION_TYPES})

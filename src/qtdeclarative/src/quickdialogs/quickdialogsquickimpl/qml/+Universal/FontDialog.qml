@@ -95,6 +95,7 @@ FontDialogImpl {
         DialogButtonBox {
             id: buttonBox
             standardButtons: control.standardButtons
+            defaultStandardButton: T.Dialog.Ok
             spacing: 12
             horizontalPadding: 0
 

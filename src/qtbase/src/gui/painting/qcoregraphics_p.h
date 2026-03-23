@@ -37,9 +37,11 @@ Q_FORWARD_DECLARE_OBJC_CLASS(NSImage);
 Q_FORWARD_DECLARE_OBJC_CLASS(UIImage);
 Q_FORWARD_DECLARE_OBJC_CLASS(NSColor);
 
+struct vImage_CGImageFormat;
+
 QT_BEGIN_NAMESPACE
 
-Q_GUI_EXPORT CGBitmapInfo qt_mac_bitmapInfoForImage(const QImage &image);
+Q_GUI_EXPORT std::optional<vImage_CGImageFormat> qt_mac_cgImageFormatForImage(const QImage &image);
 
 #ifdef QT_PLATFORM_UIKIT
 Q_GUI_EXPORT QImage qt_mac_toQImage(const UIImage *image, QSizeF size);

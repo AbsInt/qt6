@@ -1,5 +1,6 @@
 // Copyright (C) 2020 Harald Meyer.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #import <UIKit/UIKit.h>
 #import <MobileCoreServices/MobileCoreServices.h>
@@ -7,6 +8,7 @@
 #include "qiosdocumentpickercontroller.h"
 
 #include <QtCore/qpointer.h>
+#include <QtCore/private/qdarwinsecurityscopedfileengine_p.h>
 
 @implementation QIOSDocumentPickerController {
     QPointer<QIOSFileDialog> m_fileDialog;
@@ -16,9 +18,11 @@
 {
     NSMutableArray <UTType *> *docTypes = [[[NSMutableArray alloc] init] autorelease];
 
-    QStringList nameFilters = fileDialog->options()->nameFilters();
-    if (!nameFilters.isEmpty() && (fileDialog->options()->fileMode() != QFileDialogOptions::Directory
-                               || fileDialog->options()->fileMode() != QFileDialogOptions::DirectoryOnly))
+    const auto options = fileDialog->options();
+
+    const QStringList nameFilters = options->nameFilters();
+    if (!nameFilters.isEmpty() && (options->fileMode() != QFileDialogOptions::Directory
+                               || options->fileMode() != QFileDialogOptions::DirectoryOnly))
     {
         QStringList results;
         for (const QString &filter : nameFilters)
@@ -27,21 +31,8 @@
         docTypes = [self computeAllowedFileTypes:results];
     }
 
-    // FIXME: Handle security scoped URLs instead of copying resource
-    bool asCopy = [&]{
-        switch (fileDialog->options()->fileMode()) {
-        case QFileDialogOptions::AnyFile:
-        case QFileDialogOptions::ExistingFile:
-        case QFileDialogOptions::ExistingFiles:
-            return true;
-        default:
-            // Folders can't be imported
-            return false;
-        }
-    }();
-
     if (!docTypes.count) {
-        switch (fileDialog->options()->fileMode()) {
+        switch (options->fileMode()) {
         case QFileDialogOptions::AnyFile:
         case QFileDialogOptions::ExistingFile:
         case QFileDialogOptions::ExistingFiles:
@@ -57,17 +48,39 @@
         }
     }
 
-    if (self = [super initForOpeningContentTypes:docTypes asCopy:asCopy]) {
-        m_fileDialog = fileDialog;
-        self.modalPresentationStyle = UIModalPresentationFormSheet;
-        self.delegate = self;
-        self.presentationController.delegate = self;
+    if (options->acceptMode() == QFileDialogOptions::AcceptSave) {
+        auto selectedUrls = options->initiallySelectedFiles();
+        auto suggestedFileName = !selectedUrls.isEmpty() ? selectedUrls.first().fileName() : "Untitled";
 
-        if (m_fileDialog->options()->fileMode() == QFileDialogOptions::ExistingFiles)
+        // Create an empty dummy file, so that the export dialog will allow us
+        // to choose the export destination, which we are then given access to
+        // write to.
+        NSURL *dummyExportFile = [NSFileManager.defaultManager.temporaryDirectory
+            URLByAppendingPathComponent:suggestedFileName.toNSString()];
+        [NSFileManager.defaultManager createFileAtPath:dummyExportFile.path contents:nil attributes:nil];
+
+        if (!(self = [super initForExportingURLs:@[dummyExportFile]]))
+            return nil;
+
+        // Note, we don't set the directoryURL, as if the directory can't be
+        // accessed, or written to, the file dialog is shown but is empty.
+        // FIXME: See comment below for open dialogs as well
+    } else {
+        if (!(self = [super initForOpeningContentTypes:docTypes asCopy:NO]))
+            return nil;
+
+        if (options->fileMode() == QFileDialogOptions::ExistingFiles)
             self.allowsMultipleSelection = YES;
 
-        self.directoryURL = m_fileDialog->options()->initialDirectory().toNSURL();
+        // FIXME: This doesn't seem to have any effect
+        self.directoryURL = options->initialDirectory().toNSURL();
     }
+
+    m_fileDialog = fileDialog;
+    self.modalPresentationStyle = UIModalPresentationFormSheet;
+    self.delegate = self;
+    self.presentationController.delegate = self;
+
     return self;
 }
 
@@ -80,7 +93,7 @@
 
     QList<QUrl> files;
     for (NSURL* url in urls)
-        files.append(QUrl::fromNSURL(url));
+        files.append(qt_apple_urlFromPossiblySecurityScopedURL(url));
 
     m_fileDialog->selectedFilesChanged(files);
     emit m_fileDialog->accept();

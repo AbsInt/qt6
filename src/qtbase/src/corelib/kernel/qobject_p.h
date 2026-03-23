@@ -329,16 +329,13 @@ bool QObjectPrivate::disconnect(const typename QtPrivate::FunctionPointer< Func1
                           &SignalType::Object::staticMetaObject);
 }
 
-class QSemaphore;
+class QLatch;
 class Q_CORE_EXPORT QAbstractMetaCallEvent : public QEvent
 {
 public:
-    QAbstractMetaCallEvent(const QObject *sender, int signalId, QSemaphore *semaphore = nullptr)
-        : QEvent(MetaCall), signalId_(signalId), sender_(sender)
-#if QT_CONFIG(thread)
-        , semaphore_(semaphore)
-#endif
-    { Q_UNUSED(semaphore); }
+    QAbstractMetaCallEvent(const QObject *sender, int signalId, QLatch *latch = nullptr)
+        : QEvent(MetaCall), signalId_(signalId), sender_(sender), latch(latch)
+    {}
     ~QAbstractMetaCallEvent();
 
     virtual void placeMetaCall(QObject *object) = 0;
@@ -349,51 +346,27 @@ public:
 private:
     int signalId_;
     const QObject *sender_;
-#if QT_CONFIG(thread)
-    QSemaphore *semaphore_;
-#endif
+    QLatch *latch;
 };
 
 class Q_CORE_EXPORT QMetaCallEvent : public QAbstractMetaCallEvent
 {
 public:
-    // blocking queued with semaphore - args always owned by caller
+    // blocking queued with latch - arguments always remain owned by the caller
     QMetaCallEvent(ushort method_offset, ushort method_relative,
                    QObjectPrivate::StaticMetaCallFunction callFunction,
                    const QObject *sender, int signalId,
-                   void **args, QSemaphore *semaphore);
+                   void **args, QLatch *latch);
     QMetaCallEvent(QtPrivate::QSlotObjectBase *slotObj,
                    const QObject *sender, int signalId,
-                   void **args, QSemaphore *semaphore);
+                   void **args, QLatch *latch);
     QMetaCallEvent(QtPrivate::SlotObjUniquePtr slotObj,
                    const QObject *sender, int signalId,
-                   void **args, QSemaphore *semaphore);
-
-    // queued - args allocated by event, copied by caller
-    QMetaCallEvent(ushort method_offset, ushort method_relative,
-                   QObjectPrivate::StaticMetaCallFunction callFunction,
-                   const QObject *sender, int signalId,
-                   int nargs);
-    QMetaCallEvent(QtPrivate::QSlotObjectBase *slotObj,
-                   const QObject *sender, int signalId,
-                   int nargs);
-    QMetaCallEvent(QtPrivate::SlotObjUniquePtr slotObj,
-                   const QObject *sender, int signalId,
-                   int nargs);
-
-    ~QMetaCallEvent() override;
-
-    inline int id() const { return d.method_offset_ + d.method_relative_; }
-    inline const void * const* args() const { return d.args_; }
-    inline void ** args() { return d.args_; }
-    inline const QMetaType *types() const { return reinterpret_cast<QMetaType *>(d.args_ + d.nargs_); }
-    inline QMetaType *types() { return reinterpret_cast<QMetaType *>(d.args_ + d.nargs_); }
+                   void **args, QLatch *latch);
 
     virtual void placeMetaCall(QObject *object) override;
 
-private:
-    inline void allocArgs();
-
+protected:
     struct Data {
         QtPrivate::SlotObjUniquePtr slotObj_;
         void **args_;
@@ -402,9 +375,48 @@ private:
         ushort method_offset_;
         ushort method_relative_;
     } d;
-    // preallocate enough space for three arguments
-    alignas(void *) char prealloc_[3 * sizeof(void *) + 3 * sizeof(QMetaType)];
+
+    inline QMetaCallEvent(const QObject *sender, int signalId, Data &&data);
 };
+
+class Q_CORE_EXPORT QQueuedMetaCallEvent : public QMetaCallEvent
+{
+public:
+    // queued - arguments are allocated and copied from argValues by these constructors
+    QQueuedMetaCallEvent(ushort method_offset, ushort method_relative,
+                         QObjectPrivate::StaticMetaCallFunction callFunction,
+                         const QObject *sender, int signalId,
+                         int argCount, const QtPrivate::QMetaTypeInterface * const *argTypes,
+                         const void * const *argValues);
+    QQueuedMetaCallEvent(QtPrivate::QSlotObjectBase *slotObj,
+                         const QObject *sender, int signalId,
+                         int argCount, const QtPrivate::QMetaTypeInterface * const *argTypes,
+                         const void * const *argValues);
+    QQueuedMetaCallEvent(QtPrivate::SlotObjUniquePtr slotObj,
+                         const QObject *sender, int signalId,
+                         int argCount, const QtPrivate::QMetaTypeInterface * const *argTypes,
+                         const void * const *argValues);
+
+    ~QQueuedMetaCallEvent() override;
+
+private:
+    inline void allocArgs();
+    inline void copyArgValues(int argCount, const QtPrivate::QMetaTypeInterface * const *argTypes,
+                              const void * const *argValues);
+    static inline bool typeFitsInPlace(const QMetaType type);
+
+    // Space for 5 argument pointers and types (including 1 return arg).
+    // Contiguous so that we can make one calloc() for both the pointers and the types when necessary.
+    static constexpr size_t PtrAndTypeSize = sizeof(void *) + sizeof(QMetaType);
+    alignas(void *) char prealloc_[5 * PtrAndTypeSize];
+    struct ArgValueStorage { // size and alignment matching QString, QList, etc
+        static constexpr size_t MaxSize = 3 * sizeof(void *);
+        alignas(void *) char storage[MaxSize];
+    };
+    static constexpr int InplaceValuesCapacity = 3;
+    ArgValueStorage valuesPrealloc_[InplaceValuesCapacity];
+};
+// The total QQueuedMetaCallEvent size is 224 bytes which is a 32-byte multiple, efficient for memory allocators.
 
 struct QAbstractDynamicMetaObject;
 struct Q_CORE_EXPORT QDynamicMetaObjectData

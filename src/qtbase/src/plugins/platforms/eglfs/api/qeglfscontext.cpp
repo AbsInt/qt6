@@ -80,8 +80,10 @@ void QEglFSContext::swapBuffers(QPlatformSurface *surface)
     // draw the cursor
     if (surface->surface()->surfaceClass() == QSurface::Window) {
         QPlatformWindow *window = static_cast<QPlatformWindow *>(surface);
-        if (QEglFSCursor *cursor = qobject_cast<QEglFSCursor *>(window->screen()->cursor()))
-            cursor->paintOnScreen();
+        if (QPlatformScreen *screen = window->screen()) {
+            if (QEglFSCursor *cursor = qobject_cast<QEglFSCursor *>(screen->cursor()))
+                cursor->paintOnScreen();
+        }
     }
 
     qt_egl_device_integration()->waitForVSync(surface);

@@ -182,7 +182,9 @@ public:
         quint8 m_isSubpathEnd : 1;
         quint8 m_isLine : 1;
         friend class QQuadPath;
+#ifndef QT_NO_DEBUG_STREAM
         friend Q_QUICK_EXPORT QDebug operator<<(QDebug, const QQuadPath::Element &);
+#endif
     };
 
     void moveTo(const QVector2D &to)
@@ -324,7 +326,9 @@ private:
     void addElement(const Element &e);
     Element::FillSide coordinateOrderOfElement(const Element &element) const;
 
+#ifndef QT_NO_DEBUG_STREAM
     friend Q_QUICK_EXPORT QDebug operator<<(QDebug, const QQuadPath &);
+#endif
 
     QList<Element> m_elements;
     QList<Element> m_childElements;
@@ -338,8 +342,10 @@ private:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QQuadPath::PathHints);
 
+#ifndef QT_NO_DEBUG_STREAM
 Q_QUICK_EXPORT QDebug operator<<(QDebug, const QQuadPath::Element &);
 Q_QUICK_EXPORT QDebug operator<<(QDebug, const QQuadPath &);
+#endif
 
 QT_END_NAMESPACE
 

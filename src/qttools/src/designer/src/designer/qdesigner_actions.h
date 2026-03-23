@@ -4,11 +4,12 @@
 #ifndef QDESIGNER_ACTIONS_H
 #define QDESIGNER_ACTIONS_H
 
-#include "assistantclient.h"
 #include "qdesigner_settings.h"
 
 #include <QtCore/qobject.h>
 #include <QtCore/qpointer.h>
+
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 
@@ -33,11 +34,14 @@ namespace qdesigner_internal {
     enum class UicLanguage;
 }
 
+class HelpClient;
+struct Options;
+
 class QDesignerActions: public QObject
 {
     Q_OBJECT
 public:
-    explicit QDesignerActions(QDesignerWorkbench *mainWindow);
+    explicit QDesignerActions(const Options &options, QDesignerWorkbench *mainWindow);
     ~QDesignerActions() override;
 
     QDesignerWorkbench *workbench() const;
@@ -94,7 +98,7 @@ private slots:
     void saveAllForms();
     void saveFormAsTemplate();
     void notImplementedYet();
-    void shutdown();
+    static void shutdown();
     void editWidgetsSlot();
     void openRecentForm();
     void clearRecentFiles();
@@ -131,7 +135,7 @@ private:
     QDesignerWorkbench *m_workbench;
     QDesignerFormEditorInterface *m_core;
     QDesignerSettings m_settings;
-    AssistantClient m_assistantClient;
+    std::unique_ptr<HelpClient> m_helpClient;
     QString m_openDirectory;
     QString m_saveDirectory;
 

@@ -241,6 +241,11 @@ void QPointingDevice::setMaximumTouchPoints(int c)
 #endif // QT_DEPRECATED_SINCE(6, 0)
 
 /*!
+    \property QPointingDevice::pointerType
+    \brief the pointer type
+*/
+
+/*!
     Returns the pointer type.
 */
 QPointingDevice::PointerType QPointingDevice::pointerType() const
@@ -248,6 +253,12 @@ QPointingDevice::PointerType QPointingDevice::pointerType() const
     Q_D(const QPointingDevice);
     return d->pointerType;
 }
+
+/*!
+    \property QPointingDevice::maximumPoints
+    \brief the maximum number of simultaneous touch points (fingers) that
+    can be detected
+*/
 
 /*!
     Returns the maximum number of simultaneous touch points (fingers) that
@@ -260,6 +271,11 @@ int QPointingDevice::maximumPoints() const
 }
 
 /*!
+    \property QPointingDevice::buttonCount
+    \brief the maximum number of on-device buttons that can be detected
+*/
+
+/*!
     Returns the maximum number of on-device buttons that can be detected.
 */
 int QPointingDevice::buttonCount() const
@@ -267,6 +283,13 @@ int QPointingDevice::buttonCount() const
     Q_D(const QPointingDevice);
     return d->buttonCount;
 }
+
+/*!
+    \property QPointingDevice::uniqueId
+    \brief a unique ID (of dubious utility) for the device
+
+    You probably should rather be concerned with QPointerEventPoint::uniqueId().
+*/
 
 /*!
     Returns a unique ID (of dubious utility) for the device.

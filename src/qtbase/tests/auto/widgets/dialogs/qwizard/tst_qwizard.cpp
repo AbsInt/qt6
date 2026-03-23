@@ -389,6 +389,7 @@ void tst_QWizard::setPixmap()
     QPixmap p3(3, 3);
     QPixmap p4(4, 4);
     QPixmap p5(5, 5);
+    QPixmap p6(1024, 40);
 
     QWizard wizard;
     QWizardPage *page = new QWizardPage;
@@ -434,6 +435,28 @@ void tst_QWizard::setPixmap()
     QCOMPARE(page2->pixmap(QWizard::LogoPixmap).size(), p2.size());
     QCOMPARE(page2->pixmap(QWizard::WatermarkPixmap).size(), p3.size());
     QCOMPARE(page2->pixmap(QWizard::BackgroundPixmap).size(), p4.size());
+
+    wizard.setWizardStyle(QWizard::ModernStyle);
+    // Without subtitle QWizard considers there is no header...
+    page2->setSubTitle("SubTitle");
+    page2->setPixmap(QWizard::BannerPixmap, p6);
+    wizard.restart();
+    wizard.next();
+    wizard.show();
+    QCOMPARE(wizard.currentPage(), page2);
+    QCOMPARE(page2->pixmap(QWizard::BannerPixmap).size(), p6.size());
+    int oldWidth = wizard.width();
+    int newWidth = 1240;
+    wizard.resize(newWidth, 720);
+    QCOMPARE(wizard.width(), oldWidth);
+    wizard.setOption(QWizard::StretchBanner, true);
+    wizard.resize(newWidth, 720);
+    QCOMPARE(wizard.width(), newWidth);
+    wizard.setOption(QWizard::StretchBanner, false);
+    QCOMPARE(wizard.width(), oldWidth);
+    wizard.setOption(QWizard::StretchBanner, true);
+    wizard.resize(newWidth, 720);
+    QCOMPARE(wizard.width(), newWidth);
 }
 
 class MyPage1 : public QWizardPage

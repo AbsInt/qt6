@@ -83,7 +83,7 @@
 #include <QtCore/qiterable.h>
 #include <QtCore/qloggingcategory.h>
 #include <QtCore/qmetatype.h>
-#include <QtCore/qsequentialiterable.h>
+#include <QtCore/qmetasequence.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qtimezone.h>
 
@@ -151,7 +151,7 @@ void createNewIteratorIfNonExisting(void **iterator) {
 
 static QtMetaContainerPrivate::QMetaSequenceInterface emptySequenceInterface()
 {
-    // set up some functions so that non-array QSequentialIterables do not crash
+    // set up some functions so that non-array QMetaSequence::Iterables do not crash
     // but instead appear as an empty sequence
 
     using namespace QtMetaContainerPrivate;
@@ -196,7 +196,7 @@ static QtMetaContainerPrivate::QMetaSequenceInterface sequenceInterface()
     /* Lifetime management notes:
      * valueAtIndexFn and valueAtIteratorFn return a pointer to a JSValue allocated via
      * QMetaType::create Because we set QVariantConstructionFlags::ShouldDeleteVariantData,
-     * QSequentialIterable::at and QSequentialIterable::operator*() will free that memory
+     * QMetaSequence::Iterable::at and QMetaSequence::Iterable::operator*() will free that memory
      */
 
     iface.valueAtIndexFn = [](const void *iterable, qsizetype index, void *dataPtr) -> void {
@@ -296,18 +296,18 @@ static QtMetaContainerPrivate::QMetaSequenceInterface sequenceInterface()
     return iface;
 }
 
-static QSequentialIterable jsvalueToSequence (const QJSValue& value) {
+static QMetaSequence::Iterable jsvalueToSequence (const QJSValue& value) {
     using namespace QtMetaTypePrivate;
     using namespace QtMetaContainerPrivate;
 
 
     if (!value.isArray()) {
         static QMetaSequenceInterface emptySequence = emptySequenceInterface();
-        return QSequentialIterable(QMetaSequence(&emptySequence), nullptr);
+        return QMetaSequence::Iterable(QMetaSequence(&emptySequence), nullptr);
     }
 
     static QMetaSequenceInterface sequence = sequenceInterface();
-    return QSequentialIterable(QMetaSequence(&sequence), &value);
+    return QMetaSequence::Iterable(QMetaSequence(&sequence), &value);
 }
 
 void ExecutionEngine::initializeStaticMembers()
@@ -355,10 +355,15 @@ void ExecutionEngine::initializeStaticMembers()
         QMetaType::registerConverter<QJSValue, QVariantList>(convertJSValueToVariantType<QVariantList>);
     if (!QMetaType::hasRegisteredConverterFunction<QJSValue, QStringList>())
         QMetaType::registerConverter<QJSValue, QStringList>(convertJSValueToVariantType<QStringList>);
-    if (!QMetaType::hasRegisteredConverterFunction<QJSValue, QSequentialIterable>())
-        QMetaType::registerConverter<QJSValue, QSequentialIterable>(jsvalueToSequence);
+    if (!QMetaType::hasRegisteredConverterFunction<QJSValue, QMetaSequence::Iterable>())
+        QMetaType::registerConverter<QJSValue, QMetaSequence::Iterable>(jsvalueToSequence);
 }
 
+/*!
+    \class QV4::ExecutionEngine
+    \inmodule QtQml
+    \internal
+*/
 ExecutionEngine::ExecutionEngine(QJSEngine *jsEngine)
     : executableAllocator(new QV4::ExecutableAllocator)
     , regExpAllocator(new QV4::ExecutableAllocator)
@@ -400,7 +405,7 @@ ExecutionEngine::ExecutionEngine(QJSEngine *jsEngine)
                 /* writable */ true, /* executable */ false, /* includesGuardPages */ true);
     jsStackBase = (Value *)jsStack->base();
 #ifdef V4_USE_VALGRIND
-    VALGRIND_MAKE_MEM_UNDEFINED(jsStackBase, m_maxJSStackSize + 256*1024);
+    VALGRIND_MAKE_MEM_UNDEFINED(jsStackBase, s_maxJSStackSize + 256*1024);
 #endif
 
     jsStackTop = jsStackBase;
@@ -874,6 +879,10 @@ ExecutionEngine::ExecutionEngine(QJSEngine *jsEngine)
 
 ExecutionEngine::~ExecutionEngine()
 {
+#if QT_CONFIG(qml_network)
+    delete networkAccessManager;
+#endif
+    m_typeLoader.reset();
     qDeleteAll(m_extensionData);
     delete m_multiplyWrappedQObjects;
     m_multiplyWrappedQObjects = nullptr;
@@ -900,7 +909,18 @@ ExecutionEngine::~ExecutionEngine()
     qt_rem_qmlxmlhttprequest(this, m_xmlHttpRequestData);
     m_xmlHttpRequestData = nullptr;
 #endif
+
+    QQmlMetaType::freeUnusedTypesAndCaches();
 }
+
+#if QT_CONFIG(qml_network)
+QNetworkAccessManager *ExecutionEngine::getNetworkAccessManager()
+{
+    if (!networkAccessManager)
+        networkAccessManager = typeLoader()->createNetworkAccessManager(nullptr);
+    return networkAccessManager;
+}
+#endif
 
 #if QT_CONFIG(qml_debug)
 void ExecutionEngine::setDebugger(Debugging::Debugger *debugger)
@@ -1293,7 +1313,7 @@ static inline char *v4StackTrace(const ExecutionContext *context)
     QTextStream str(&result);
     str << "stack=[";
     if (context && context->engine()) {
-        const QVector<StackFrame> stackTrace = context->engine()->stackTrace(20);
+        const QList<StackFrame> stackTrace = context->engine()->stackTrace(20);
         for (int i = 0; i < stackTrace.size(); ++i) {
             if (i)
                 str << ',';
@@ -1957,8 +1977,8 @@ QV4::ReturnedValue ExecutionEngine::fromData(
     if (listType.isSequentialContainer())
         return createSequence(listType.listMetaSequence());
 
-    QSequentialIterable iterable;
-    if (QMetaType::convert(metaType, ptr, QMetaType::fromType<QSequentialIterable>(), &iterable)) {
+    QMetaSequence::Iterable iterable;
+    if (QMetaType::convert(metaType, ptr, QMetaType::fromType<QMetaSequence::Iterable>(), &iterable)) {
 
         // If the resulting iterable is useful for anything, turn it into a QV4::Sequence.
         const QMetaSequence sequence = iterable.metaContainer();
@@ -2062,58 +2082,6 @@ ReturnedValue ExecutionEngine::global()
     return globalObject->asReturnedValue();
 }
 
-QQmlRefPointer<ExecutableCompilationUnit> ExecutionEngine::compileModule(const QUrl &url)
-{
-    QQmlMetaType::CachedUnitLookupError cacheError = QQmlMetaType::CachedUnitLookupError::NoError;
-    const DiskCacheOptions options = diskCacheOptions();
-    if (const QQmlPrivate::CachedQmlUnit *cachedUnit = (options & DiskCache::Aot)
-            ? QQmlMetaType::findCachedCompilationUnit(
-                url,
-                (options & DiskCache::AotByteCode)
-                    ? QQmlMetaType::AcceptUntyped
-                    : QQmlMetaType::RequireFullyTyped,
-                &cacheError)
-            : nullptr) {
-        return executableCompilationUnit(
-                QQml::makeRefPointer<QV4::CompiledData::CompilationUnit>(
-                        cachedUnit->qmlData, cachedUnit->aotCompiledFunctions, url.fileName(),
-                        url.toString()));
-    }
-
-    QFile f(QQmlFile::urlToLocalFileOrQrc(url));
-    if (!f.open(QIODevice::ReadOnly)) {
-        throwError(QStringLiteral("Could not open module %1 for reading").arg(url.toString()));
-        return nullptr;
-    }
-
-    const QDateTime timeStamp = QFileInfo(f).lastModified();
-
-    const QString sourceCode = QString::fromUtf8(f.readAll());
-    f.close();
-
-    return compileModule(url, sourceCode, timeStamp);
-}
-
-
-QQmlRefPointer<ExecutableCompilationUnit> ExecutionEngine::compileModule(
-        const QUrl &url, const QString &sourceCode, const QDateTime &sourceTimeStamp)
-{
-    QList<QQmlJS::DiagnosticMessage> diagnostics;
-    auto unit = Compiler::Codegen::compileModule(/*debugMode*/debugger() != nullptr, url.toString(),
-                                                 sourceCode, sourceTimeStamp, &diagnostics);
-    for (const QQmlJS::DiagnosticMessage &m : diagnostics) {
-        if (m.isError()) {
-            throwSyntaxError(m.message, url.toString(), m.loc.startLine, m.loc.startColumn);
-            return nullptr;
-        } else {
-            qWarning() << url << ':' << m.loc.startLine << ':' << m.loc.startColumn
-                      << ": warning: " << m.message;
-        }
-    }
-
-    return insertCompilationUnit(std::move(unit));
-}
-
 QQmlRefPointer<ExecutableCompilationUnit> ExecutionEngine::compilationUnitForUrl(const QUrl &url) const
 {
     // Gives the _most recently inserted_ CU of that URL. That's what we want.
@@ -2171,46 +2139,38 @@ void ExecutionEngine::trimCompilationUnitsForUrl(const QUrl &url)
     }
 }
 
-template<typename NotFound>
-ExecutionEngine::Module doFindModule(
-        const QMultiHash<QUrl, QQmlRefPointer<ExecutableCompilationUnit>> &compilationUnits,
-        const QUrl &url, const ExecutableCompilationUnit *referrer, NotFound &&notFound)
+/*!
+ * Returns any _existing_ module for the given \a url and \a referrer. This
+ * does not actually load anything. You must guarantee the existence of the
+ * module by keeping a (direct or indirect) reference to it somewhere, or you
+ * must live with a possible nullptr being returned.
+ */
+ExecutionEngine::Module ExecutionEngine::moduleForUrl(
+        const QUrl &url, const ExecutableCompilationUnit *referrer)
 {
-    const QUrl resolved = referrer
-            ? referrer->finalUrl().resolved(QQmlTypeLoader::normalize(url))
-            : QQmlTypeLoader::normalize(url);
-    auto existingModule = compilationUnits.constFind(resolved);
-    if (existingModule != compilationUnits.constEnd())
+    QUrl resolved = referrer
+            ? referrer->finalUrl().resolved(QQmlMetaType::normalizedUrl(url))
+            : QQmlMetaType::normalizedUrl(url);
+    if (!resolved.path().endsWith(QLatin1String(".mjs")))
+        resolved.setFragment(QLatin1String("module"));
+
+    // Executable compilation unit already present in engine
+    auto existingModule = m_compilationUnits.constFind(resolved);
+    if (existingModule != m_compilationUnits.constEnd())
         return *existingModule;
 
+    // Also try with the relative url, to support native modules.
     if (resolved != url) {
-        // Also try with the relative url, to support native modules.
-        existingModule = compilationUnits.constFind(url);
-        if (existingModule != compilationUnits.constEnd())
+        existingModule = m_compilationUnits.constFind(url);
+        if (existingModule != m_compilationUnits.constEnd())
             return *existingModule;
     }
 
-    return notFound(resolved);
-}
+    if (const auto blob = m_typeLoader->getScript(resolved, QQmlTypeLoader::Synchronous))
+        return executableCompilationUnit(blob->scriptData()->compilationUnit());
 
-ExecutionEngine::Module ExecutionEngine::moduleForUrl(
-        const QUrl &url, const ExecutableCompilationUnit *referrer) const
-{
-    return doFindModule(m_compilationUnits, url, referrer, [](const QUrl &) {
-        return Module();
-    });
-}
-
-ExecutionEngine::Module ExecutionEngine::loadModule(
-        const QUrl &url, const ExecutableCompilationUnit *referrer)
-{
-    return doFindModule(m_compilationUnits, url, referrer, [&](const QUrl &resolved) {
-        if (QQmlTypeLoader *loader = typeLoader()) {
-            if (const auto blob = loader->getScript(resolved, url))
-                return executableCompilationUnit(blob->scriptData()->compilationUnit());
-        }
-        return compileModule(resolved);
-    });
+    // Unavailable
+    return Module();
 }
 
 ExecutionEngine::Module ExecutionEngine::registerNativeModule(
@@ -2224,13 +2184,10 @@ ExecutionEngine::Module ExecutionEngine::registerNativeModule(
         return Module();
 
     QQmlRefPointer<CompiledData::CompilationUnit> cu;
-    if (m_qmlEngine) {
-        // Make sure the type loader doesn't try to resolve the module anymore.
-        // If some other code requests that same module, we need to produce the same CU.
-        cu = QQmlEnginePrivate::get(m_qmlEngine)->typeLoader.injectModule(url, unit);
-    } else {
-        cu = QQml::makeRefPointer<CompiledData::CompilationUnit>(unit);
-    }
+
+    // Make sure the type loader doesn't try to resolve the module anymore.
+    // If some other code requests that same module, we need to produce the same CU.
+    cu = typeLoader()->injectModule(url, unit);
 
     QQmlRefPointer<ExecutableCompilationUnit> newModule = insertCompilationUnit(std::move(cu));
 
@@ -2559,8 +2516,8 @@ void ExecutionEngine::setExtensionData(int index, Deletable *data)
 template<typename Source>
 bool convertToIterable(QMetaType metaType, void *data, Source *sequence)
 {
-    QSequentialIterable iterable;
-    if (!QMetaType::view(metaType, data, QMetaType::fromType<QSequentialIterable>(), &iterable))
+    QMetaSequence::Iterable iterable;
+    if (!QMetaType::view(metaType, data, QMetaType::fromType<QMetaSequence::Iterable>(), &iterable))
         return false;
 
     // Clear the sequence before appending. There may be stale data in there.
@@ -2570,7 +2527,7 @@ bool convertToIterable(QMetaType metaType, void *data, Source *sequence)
     QV4::Scope scope(sequence->engine());
     QV4::ScopedValue v(scope);
 
-    const QMetaType elementMetaType = iterable.valueMetaType();
+    const QMetaType elementMetaType = iterable.metaContainer().valueMetaType();
     QVariant element;
     void *elementData = nullptr;
     if (elementMetaType == QMetaType::fromType<QVariant>()) {
@@ -2583,7 +2540,7 @@ bool convertToIterable(QMetaType metaType, void *data, Source *sequence)
     for (qsizetype i = 0, end = sequence->getLength(); i < end; ++i) {
         v = sequence->get(i);
         ExecutionEngine::metaTypeFromJS(v, elementMetaType, elementData);
-        iterable.addValue(element, QSequentialIterable::AtEnd);
+        iterable.append(element);
     }
 
     return true;
@@ -3017,14 +2974,5 @@ int ExecutionEngine::registerExtension()
 {
     return registrationData()->extensionCount++;
 }
-
-#if QT_CONFIG(qml_network)
-QNetworkAccessManager *QV4::detail::getNetworkAccessManager(ExecutionEngine *engine)
-{
-    if (QQmlEngine *qmlEngine = engine->qmlEngine())
-        return qmlEngine->networkAccessManager();
-    return nullptr;
-}
-#endif // qml_network
 
 QT_END_NAMESPACE

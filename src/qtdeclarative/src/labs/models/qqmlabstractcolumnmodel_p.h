@@ -108,12 +108,15 @@ protected:
     virtual bool validateNewRow(QLatin1StringView functionName, const QVariant &row,
                                 NewRowOperationFlag operation  = OtherOperation) const;
 
+    static QLatin1StringView jsTypeName(const QJSValue &v);
+    std::optional<QVariantList> validateRowsArgument(const QVariant &rows) const;
+
     QList<QQmlTableModelColumn *> mColumns;
 
     bool mComponentCompleted = false;
     int mColumnCount = 0;
     // Each entry contains information about the properties of the column at that index.
-    QVector<ColumnMetadata> mColumnMetadata;
+    QList<ColumnMetadata> mColumnMetadata;
     // key = property index (0 to number of properties across all columns)
     // value = role name
     QHash<int, QByteArray> mRoleNames;

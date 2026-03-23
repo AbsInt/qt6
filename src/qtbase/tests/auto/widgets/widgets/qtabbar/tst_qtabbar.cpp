@@ -63,6 +63,7 @@ private slots:
     void removeLastVisibleTab();
 
     void closeButton();
+    void requestCloseOnMiddleClick();
 
     void tabButton_data();
     void tabButton();
@@ -548,6 +549,28 @@ void tst_QTabBar::closeButton()
     QSignalSpy spy(&tabbar, SIGNAL(tabCloseRequested(int)));
     button->click();
     QCOMPARE(tabbar.count(), 1);
+    QCOMPARE(spy.size(), 1);
+}
+
+void tst_QTabBar::requestCloseOnMiddleClick()
+{
+    QTabBar tabbar;
+    tabbar.addTab("foo");
+    tabbar.addTab("bar");
+    QCOMPARE(tabbar.count(), 2);
+
+    QSignalSpy spy(&tabbar, SIGNAL(tabCloseRequested(int)));
+
+    QCOMPARE(tabbar.tabsClosable(), false);
+    QTest::mouseClick(&tabbar, Qt::MiddleButton, {}, tabbar.tabRect(0).center());
+    QCOMPARE(spy.size(), 0);
+
+    tabbar.setTabsClosable(true);
+    QCOMPARE(tabbar.tabsClosable(), true);
+    QTest::mouseClick(&tabbar, Qt::MiddleButton, {}, tabbar.tabRect(0).center());
+    QCOMPARE(spy.size(), 1);
+
+    QTest::mouseClick(&tabbar, Qt::MiddleButton, {}, tabbar.rect().bottomRight() * 1.1);
     QCOMPARE(spy.size(), 1);
 }
 
@@ -1514,7 +1537,7 @@ void tst_QTabBar::checkPositionsAfterShapeChange()
         using QTabWidget::QTabWidget;
         using QTabWidget::setTabBar;
     };
-  
+
     class TabBar : public QTabBar
     {
     public:

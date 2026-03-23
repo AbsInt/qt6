@@ -113,6 +113,10 @@
 
 #include "qabstractanimation_p.h"
 
+#if defined(Q_OS_WASM)
+#include <QtCore/private/qwasmanimationdriver_p.h>
+#endif
+
 #include <QtCore/qmath.h>
 #include <QtCore/qcoreevent.h>
 #include <QtCore/qpointer.h>
@@ -180,9 +184,9 @@ typedef QList<QAbstractAnimation*>::ConstIterator AnimationListConstIt;
 
 QUnifiedTimer::QUnifiedTimer() :
     QObject(), defaultDriver(this), lastTick(0), timingInterval(DEFAULT_TIMER_INTERVAL),
-    currentAnimationIdx(0), insideTick(false), insideRestart(false), consistentTiming(false), slowMode(false),
+    currentAnimationIdx(0), insideTick(false), insideRestart(false), consistentTiming(false),
     startTimersPending(false), stopTimerPending(false), allowNegativeDelta(false),
-    slowdownFactor(5.0f), profilerCallback(nullptr),
+    speedModifier(1), profilerCallback(nullptr),
     driverStartTime(0), temporalDrift(0)
 {
     time.invalidate();
@@ -266,9 +270,11 @@ void QUnifiedTimer::updateAnimationTimers()
     // ignore consistentTiming in case the pause timer is active
     qint64 delta = (consistentTiming && !pauseTimer.isActive()) ?
                         timingInterval : totalElapsed - lastTick;
-    if (slowMode) {
-        if (slowdownFactor > 0)
-            delta = qRound(delta / slowdownFactor);
+    // Don't use qFuzzyCompare because this won't be set frequently enough
+    // that floating point error can accumulate.
+    if (speedModifier != 1) {
+        if (speedModifier > 0)
+            delta = qRound(delta * speedModifier);
         else
             delta = 0;
     }
@@ -852,6 +858,7 @@ qint64 QAnimationDriver::elapsed() const
  */
 
 /*!
+   \internal
    The default animation driver just spins the timer...
  */
 QDefaultAnimationDriver::QDefaultAnimationDriver(QUnifiedTimer *timer)

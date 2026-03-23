@@ -28,17 +28,16 @@ public:
     constexpr static DomType kindValue = DomType::ModuleScope;
     DomType kind() const override { return kindValue; }
 
-    ModuleScope(const QString &uri = QString(), const Version &version = Version())
+    ModuleScope(const QString &uri = QString(), Version version = Version())
         : uri(uri), version(version)
     {
     }
 
-    Path pathFromOwner() const
+    Path pathFromOwner() const override
     {
         return Path::fromField(Fields::moduleScope)
                 .withKey(version.isValid() ? QString::number(version.minorVersion) : QString());
     }
-    Path pathFromOwner(const DomItem &) const override { return pathFromOwner(); }
     Path canonicalPath(const DomItem &self) const override
     {
         return self.owner().canonicalPath().withPath(pathFromOwner());

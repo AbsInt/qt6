@@ -45,6 +45,7 @@ HelpManager::HelpManager()
 
 void HelpManager::setDocumentationRootPath(const QString &path)
 {
+    QMutexLocker guard(&m_mutex);
     if (m_docRootPath == path)
         return;
     m_docRootPath = path;
@@ -61,6 +62,7 @@ void HelpManager::setDocumentationRootPath(const QString &path)
 
 QString HelpManager::documentationRootPath() const
 {
+    QMutexLocker guard(&m_mutex);
     return m_docRootPath;
 }
 
@@ -72,8 +74,50 @@ void HelpManager::registerDocumentations(const QStringList &docs) const
                   [this](const auto &file) { m_helpPlugin->registerDocumentation(file); });
 }
 
+static QByteArray documentationForImports(const DomItem &item)
+{
+    DomItem domImport;
+    item.filterUp(
+            [&domImport](DomType type, const DomItem &item) {
+                if (type != DomType::Import)
+                    return true;
+                domImport = item;
+                return false;
+            },
+            FilterUpOptions::ReturnOuter);
+    if (!domImport)
+        return {};
+
+    const Import *import = domImport.as<Import>();
+    if (!import)
+        return {};
+    auto domEnvironment = item.environment().ownerAs<DomEnvironment>();
+    if (!domEnvironment)
+        return {};
+    const auto &importer = domEnvironment->semanticAnalysis().m_importer;
+    if (!importer)
+        return {};
+
+    const QString qmldirLocation = importer->pathOfModule(
+            import->uri.toString(),
+            import->version.isLatest() ? QTypeRevision()
+                                       : QTypeRevision::fromVersion(import->version.majorVersion,
+                                                                    import->version.minorVersion));
+
+    return "Library at path %1\n\nImport paths:\n\n * %2"_L1
+            .arg(qmldirLocation, domEnvironment->loadPaths().join("\n * "_L1))
+            .toUtf8();
+}
+
+
 std::optional<QByteArray> HelpManager::extractDocumentation(const DomItem &item) const
 {
+    if (const QByteArray documentation = documentationForImports(item); !documentation.isEmpty())
+        return documentation;
+
+    if (!m_helpPlugin || m_helpPlugin->registeredNamespaces().empty())
+        return std::nullopt;
+
     if (item.internalKind() == DomType::ScriptIdentifierExpression) {
         const auto resolvedType =
                 QQmlLSUtils::resolveExpressionType(item, QQmlLSUtils::ResolveOwnerType);
@@ -112,6 +156,7 @@ HelpManager::extractDocumentationForIdentifiers(const DomItem &item,
     }
     case QQmlLSUtils::SingletonIdentifier:
     case QQmlLSUtils::AttachedTypeIdentifier:
+    case QQmlLSUtils::AttachedTypeIdentifierInBindingTarget:
     case QQmlLSUtils::QmlComponentIdentifier: {
         const auto &keyword = item.field(Fields::identifier).value().toString();
         // The keyword is a qmlobject. Keyword search should be sufficient.
@@ -200,11 +245,7 @@ HelpManager::tryExtract(ExtractDocumentation &extractor,
 std::optional<QByteArray>
 HelpManager::documentationForItem(const DomItem &file, QLspSpecification::Position position)
 {
-    if (!m_helpPlugin)
-        return std::nullopt;
-
-    if (m_helpPlugin->registeredNamespaces().empty())
-        return std::nullopt;
+    QMutexLocker guard(&m_mutex);
 
     // Prepare Cpp types to Qml types mapping.
     const auto fileItem = file.containingFile().as<QmlFile>();

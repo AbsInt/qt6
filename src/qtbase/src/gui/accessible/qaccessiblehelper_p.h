@@ -16,11 +16,29 @@
 //
 
 #include <QtCore/QString>
+#include <QtGui/qaccessible.h>
 #include <QtGui/qtguiglobal.h>
+
+class QTextCursor;
 
 QT_BEGIN_NAMESPACE
 
 Q_GUI_EXPORT QString qt_accStripAmp(const QString &text);
+
+Q_GUI_EXPORT QString qt_accTextBeforeOffsetHelper(const QAccessibleTextInterface &textInterface,
+                                                  const QTextCursor &textCursor, int offset,
+                                                  QAccessible::TextBoundaryType boundaryType,
+                                                  int *startOffset, int *endOffset);
+
+Q_GUI_EXPORT QString qt_accTextAfterOffsetHelper(const QAccessibleTextInterface &textInterface,
+                                                 const QTextCursor &textCursor, int offset,
+                                                 QAccessible::TextBoundaryType boundaryType,
+                                                 int *startOffset, int *endOffset);
+
+Q_GUI_EXPORT QString qt_accTextAtOffsetHelper(const QAccessibleTextInterface &textInterface,
+                                              const QTextCursor &textCursor, int offset,
+                                              QAccessible::TextBoundaryType boundaryType,
+                                              int *startOffset, int *endOffset);
 
 QT_END_NAMESPACE
 

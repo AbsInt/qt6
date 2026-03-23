@@ -160,20 +160,13 @@ PropertyNode *ClassNode::findOverriddenProperty(const FunctionNode *fn)
 }
 
 /*!
-  Returns true if the class or struct represented by this class
-  node must be documented. If this function returns true, then
-  qdoc must find a qdoc comment for this class. If it returns
-  false, then the class need not be documented.
- */
-bool ClassNode::docMustBeGenerated() const
-{
-    if (!hasDoc() || isPrivate() || isInternal() || isDontDocument())
-        return false;
-    if (declLocation().fileName().endsWith(QLatin1String("_p.h")) && !hasDoc())
-        return false;
+    \fn bool ClassNode::docMustBeGenerated() const
 
-    return true;
-}
+    Returns \c true if the class or struct represented by this node
+    matches the inclusion policy and is therefore part of the
+    documented API.
+
+*/
 
 /*!
   \brief Detects circular relationships in class hierarchies.
@@ -408,6 +401,27 @@ void ClassNode::resolvePropertyOverriddenFromPtrs(PropertyNode *pn)
                 cn->resolvePropertyOverriddenFromPtrs(pn);
         }
     }
+}
+
+/*!
+  Returns the display name for this class node. For anonymous structs,
+  returns "(unnamed struct)" instead of the file-based unique identifier.
+*/
+QString ClassNode::plainName() const
+{
+    if (isAnonymous()) {
+        switch (nodeType()) {
+        case NodeType::Struct:
+            return "(unnamed struct)"_L1;
+        case NodeType::Union:
+            return "(unnamed union)"_L1;
+        case NodeType::Class:
+            return "(unnamed class)"_L1;
+        default:
+            break;
+        }
+    }
+    return Node::plainName();
 }
 
 QT_END_NAMESPACE

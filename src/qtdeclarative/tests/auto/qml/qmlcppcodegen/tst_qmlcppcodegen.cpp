@@ -99,6 +99,7 @@ private slots:
     void convertToOriginalReadAcumulatorForUnaryOperators();
     void cppMethodListReturnType();
     void cppValueTypeList();
+    void ctorArgumentConversion();
     void dateConstruction();
     void dateConversions();
     void deadContext_data();
@@ -195,6 +196,7 @@ private slots:
     void listIndices();
     void listLength();
     void listOfInvisible();
+    void listOfInlineComponent();
     void listPropertyAsModel();
     void listToString();
     void lotsOfRegisters();
@@ -1143,7 +1145,8 @@ void tst_QmlCppCodegen::callObjectLookupOnNull()
                 qPrintable(urlString + u":5:5: TypeError: Cannot call method 'getName' of null"));
     o->setProperty("person", QVariant::fromValue<Person *>(nullptr));
 
-    QCOMPARE(o->objectName(), QString());
+    // Since the binding threw an exception, we expect the value _not_ to get updated.
+    QCOMPARE(o->objectName(), u"horst"_s);
 }
 
 void tst_QmlCppCodegen::callWithSpread()
@@ -1661,6 +1664,16 @@ void tst_QmlCppCodegen::cppValueTypeList()
     QCOMPARE(object->property("b").toDouble(), 0.25);
     QMetaObject::invokeMethod(object.data(), "incB");
     QCOMPARE(object->property("b").toDouble(), 13.5);
+}
+
+void tst_QmlCppCodegen::ctorArgumentConversion()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/ctorArgumentConversion.qml"_s));
+    std::unique_ptr<QObject> object(component.create());
+    QVERIFY2(object, component.errorString().toUtf8().constData());
+    LocalWithLength w = object->property("w").value<LocalWithLength>();
+    QCOMPARE(w.length(), 4);
 }
 
 void tst_QmlCppCodegen::dateConstruction()
@@ -2910,7 +2923,7 @@ void tst_QmlCppCodegen::importsFromImportPath()
     // If the compiler accepts the file, it's probably fine.
     QVERIFY(component.isError());
     QCOMPARE(component.errorString(),
-             u"qrc:/qt/qml/TestTypes/importsFromImportPath.qml:1 module \"Module\" is not installed\n"_s);
+             u"qrc:/qt/qml/TestTypes/importsFromImportPath.qml:1:1: module \"Module\" is not installed\n"_s);
 }
 
 void tst_QmlCppCodegen::inPlaceDecrement()
@@ -3832,6 +3845,19 @@ void tst_QmlCppCodegen::listOfInvisible()
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
     QCOMPARE(object->property("width").toDouble(), 27.0);
+}
+
+void tst_QmlCppCodegen::listOfInlineComponent()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/listOfInlineComponent.qml"_s));
+    QVERIFY2(component.isReady(), component.errorString().toUtf8());
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+    const QVariant model = object->property("model");
+    QCOMPARE(model.metaType(), QMetaType::fromType<QQmlListReference>());
+    QQmlListReference ref = model.value<QQmlListReference>();
+    QCOMPARE(ref.count(), 0);
 }
 
 void tst_QmlCppCodegen::listPropertyAsModel()
@@ -5438,6 +5464,10 @@ void tst_QmlCppCodegen::scopeIdLookup()
 
 void tst_QmlCppCodegen::scopeObjectDestruction()
 {
+#if !QT_CONFIG(qml_labs)
+    QSKIP("Test requires feature qml-labs");
+#endif
+
     QQmlEngine engine;
     QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/fileDialog.qml"_s));
 

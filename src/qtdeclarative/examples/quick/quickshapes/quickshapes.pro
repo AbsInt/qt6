@@ -1,2 +1,2 @@
 TEMPLATE = subdirs
-SUBDIRS = shapes weatherforecast
+SUBDIRS = shapes

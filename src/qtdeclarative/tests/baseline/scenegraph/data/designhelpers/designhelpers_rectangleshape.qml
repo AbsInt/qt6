@@ -13,7 +13,7 @@ Rectangle {
     }
 
     Flow {
-        spacing: 10
+        spacing: 8
         anchors.fill: parent
         anchors.margins: 10
 
@@ -86,7 +86,7 @@ Rectangle {
             bottomRightBevel: true
         }
         RectangleShapeBase {
-            strokeColor: "red"
+            strokeColor: "#777777"
             bevel: true
         }
 
@@ -116,20 +116,61 @@ Rectangle {
             }
         }
 
-        // capStyle
+        // capStyle/draw*
         Repeater {
-            model: capStyles
-
-            readonly property var capStyles: [ ShapePath.FlatCap, ShapePath.SquareCap, ShapePath.RoundCap ]
+            model: [
+                { capStyle: ShapePath.FlatCap, topLeftBevel: true, drawRight: false },
+                { capStyle: ShapePath.FlatCap, topRightBevel: true, drawBottom: false },
+                { capStyle: ShapePath.FlatCap, bottomRightBevel: true, drawLeft: false },
+                { capStyle: ShapePath.FlatCap, bottomLeftBevel: true, drawTop: false },
+                { capStyle: ShapePath.SquareCap, topLeftBevel: true, drawRight: false },
+                { capStyle: ShapePath.SquareCap, topRightBevel: true, drawBottom: false },
+                { capStyle: ShapePath.SquareCap, bottomRightBevel: true, drawLeft: false },
+                { capStyle: ShapePath.SquareCap, bottomLeftBevel: true, drawTop: false },
+                { capStyle: ShapePath.RoundCap, topLeftBevel: true, drawRight: false },
+                { capStyle: ShapePath.RoundCap, topRightBevel: true, drawBottom: false },
+                { capStyle: ShapePath.RoundCap, bottomRightBevel: true, drawLeft: false },
+                { capStyle: ShapePath.RoundCap, bottomLeftBevel: true, drawTop: false },
+                { capStyle: ShapePath.RoundCap, drawLeft: false, drawRight: false },
+                { capStyle: ShapePath.RoundCap, drawTop: false, drawBottom: false }
+            ]
 
             RectangleShapeBase {
-                topLeftBevel: true
+                topLeftBevel: !!modelData.topLeftBevel
+                topRightBevel: !!modelData.topRightBevel
+                bottomRightBevel: !!modelData.bottomRightBevel
+                bottomLeftBevel: !!modelData.bottomLeftBevel
                 strokeWidth: 20
                 strokeColor: "darkgray"
-                topLeftRadius: 40
-                capStyle: modelData
+                topLeftRadius: topLeftBevel ? 40 : undefined
+                topRightRadius: topRightBevel ? 40 : undefined
+                bottomRightRadius: bottomRightBevel ? 40 : undefined
+                bottomLeftRadius: bottomLeftBevel ? 40 : undefined
+                capStyle: modelData.capStyle
+                drawRight: !modelData.hasOwnProperty("drawRight")
+                drawBottom: !modelData.hasOwnProperty("drawBottom")
+                drawLeft: !modelData.hasOwnProperty("drawLeft")
+                drawTop: !modelData.hasOwnProperty("drawTop")
 
-                required property int modelData
+                required property var modelData
+
+                // For debugging
+                // Text {
+                //     anchors.fill: parent
+                //     wrapMode: Text.Wrap
+                //     text: "tlb " + parent.topLeftBevel
+                //         + "\ntrb " + parent.topRightBevel
+                //         + "\nbrb " + parent.bottomRightBevel
+                //         + "\nblb " + parent.bottomLeftBevel
+                // }
+                // Text {
+                //     anchors.fill: parent
+                //     wrapMode: Text.Wrap
+                //     text: "dr " + parent.drawRight
+                //         + "\ndb " + parent.drawBottom
+                //         + "\ndl " + parent.drawLeft
+                //         + "\ndt " + parent.drawTop
+                // }
             }
         }
 
@@ -178,6 +219,17 @@ Rectangle {
         }
         RectangleShapeBase {
             borderMode: RectangleShape.Outside
+        }
+
+        // width, height
+        RectangleShapeBase {
+            id: testRect1
+        }
+        Item {
+            Component.onCompleted: {
+                testRect1.width = 100
+                testRect1.height = 75
+            }
         }
     }
 }

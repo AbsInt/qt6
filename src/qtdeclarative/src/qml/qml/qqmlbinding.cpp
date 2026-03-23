@@ -27,7 +27,7 @@
 
 #include <QVariant>
 #include <QtCore/qdebug.h>
-#include <QVector>
+#include <QList>
 
 QT_BEGIN_NAMESPACE
 
@@ -639,9 +639,9 @@ QString QQmlBinding::expression() const
     return QStringLiteral("function() { [native code] }");
 }
 
-QVector<QQmlProperty> QQmlBinding::dependencies() const
+QList<QQmlProperty> QQmlBinding::dependencies() const
 {
-    QVector<QQmlProperty> dependencies;
+    QList<QQmlProperty> dependencies;
     if (!m_target.data())
         return dependencies;
 
@@ -706,7 +706,7 @@ void QQmlBinding::doUpdate(const DeleteWatcher &watcher, QQmlPropertyData::Write
                 if (returnType.flags() & QMetaType::NeedsDestruction)
                     returnType.destruct(result);
             } else if (canWrite()) {
-                error = !write(QV4::Value::undefinded(), true, flags);
+                error = !write(QV4::Value::undefined(), true, flags);
             }
         }
     } else {
@@ -735,12 +735,27 @@ void QQmlBinding::doUpdate(const DeleteWatcher &watcher, QQmlPropertyData::Write
 
 class QObjectPointerBinding: public QQmlBinding
 {
-    QQmlMetaObject targetMetaObject;
+    QBiPointer<const QtPrivate::QMetaTypeInterface, const QMetaObject> targetMeta;
+
+    const QMetaObject *targetMetaObject() {
+        // lazily produce the targetMetaObject as needed. At the point when we want to set
+        // the property, we either have the right type. Then the metaobject has to exist. Or we
+        // don't. Then the object given can't be of the right type.
+
+        if (targetMeta.isT2())
+            return targetMeta.asT2();
+
+        const QMetaObject *metaObject = QQmlPropertyPrivate::rawMetaObjectForType(
+                                                QMetaType(targetMeta.asT1())).metaObject();
+
+        if (metaObject)
+            targetMeta = metaObject;
+
+        return metaObject;
+    }
 
 public:
-    QObjectPointerBinding(QMetaType propertyType)
-        : targetMetaObject(QQmlPropertyPrivate::rawMetaObjectForType(propertyType))
-    {}
+    QObjectPointerBinding(QMetaType propertyType) : targetMeta(propertyType.iface()) {}
 
 protected:
     Q_ALWAYS_INLINE bool write(void *result, QMetaType type, bool isUndefined,
@@ -826,11 +841,15 @@ private:
 
     template<typename SlowWrite>
     bool compareAndSet(const QQmlMetaObject &resultMo, QObject *resultObject, const QQmlPropertyData *pd,
-                       QQmlPropertyData::WriteFlags flags, const SlowWrite &slowWrite) const
+                       QQmlPropertyData::WriteFlags flags, const SlowWrite &slowWrite)
     {
-        if (QQmlMetaObject::canConvert(resultMo, targetMetaObject)) {
+        const QMetaObject *propertyMo = targetMetaObject();
+        if (!propertyMo)
+            return slowWrite();
+
+        if (QQmlMetaObject::canConvert(resultMo, propertyMo)) {
             return pd->writeProperty(targetObject(), &resultObject, flags);
-        } else if (!resultObject && QQmlMetaObject::canConvert(targetMetaObject, resultMo)) {
+        } else if (!resultObject && QQmlMetaObject::canConvert(propertyMo, resultMo)) {
             // In the case of a null QObject, we assign the null if there is
             // any change that the null variant type could be up or down cast to
             // the property type.

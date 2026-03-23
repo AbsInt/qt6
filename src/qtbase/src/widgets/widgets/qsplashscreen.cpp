@@ -66,8 +66,6 @@ public:
    main window is shown:
 
    \snippet qsplashscreen/main.cpp 0
-   \dots
-   \snippet qsplashscreen/main.cpp 1
 
    The user can hide the splash screen by clicking on it with the
    mouse. For mouse handling to work, call QApplication::processEvents()

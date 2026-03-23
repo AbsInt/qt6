@@ -42,7 +42,6 @@
 #include <QtCore/private/qandroiditemmodelproxy_p.h>
 #include <QtCore/private/qandroidmodelindexproxy_p.h>
 #include <QtGui/private/qguiapplication_p.h>
-#include <QtGui/private/qhighdpiscaling_p.h>
 
 #include <qpa/qwindowsysteminterface.h>
 
@@ -72,9 +71,7 @@ static jmethodID m_bitmapDrawableConstructorMethodID = nullptr;
 
 extern "C" typedef int (*Main)(int, char **); //use the standard main method to start the application
 static Main m_main = nullptr;
-static void *m_mainLibraryHnd = nullptr;
-static QList<QByteArray> m_applicationParams;
-static sem_t m_exitSemaphore, m_terminateSemaphore;
+static sem_t m_exitSemaphore, m_stopQtSemaphore;
 
 static QAndroidPlatformIntegration *m_androidPlatformIntegration = nullptr;
 
@@ -96,6 +93,8 @@ Q_CONSTINIT static QBasicAtomicInt startQtAndroidPluginCalled = Q_BASIC_ATOMIC_I
 #if QT_CONFIG(accessibility)
 Q_DECLARE_JNI_CLASS(QtAccessibilityInterface, "org/qtproject/qt/android/QtAccessibilityInterface");
 #endif
+
+Q_DECLARE_JNI_CLASS(QtThread, "org/qtproject/qt/android/QtThread");
 
 namespace QtAndroid
 {
@@ -366,9 +365,11 @@ namespace QtAndroid
 
 static bool initJavaReferences(QJniEnvironment &env);
 
-static jboolean startQtAndroidPlugin(JNIEnv *env, jobject /*object*/, jstring paramsString)
+static bool initAndroidQpaPlugin(JNIEnv *jenv, jobject object)
 {
-    Q_UNUSED(env)
+    Q_UNUSED(jenv)
+    Q_UNUSED(object)
+
     // Init all the Java refs, if they haven't already been initialized. They get initialized
     // when the library is loaded, but in case Qt is terminated, they are cleared, and in case
     // Qt is then started again JNI_OnLoad will not be called again, since the library is already
@@ -377,69 +378,35 @@ static jboolean startQtAndroidPlugin(JNIEnv *env, jobject /*object*/, jstring pa
     // want to reset those, too.
     QJniEnvironment qEnv;
     if (!qEnv.isValid()) {
-        __android_log_print(ANDROID_LOG_FATAL, "Qt", "Failed to initialize the JNI Environment");
-        return JNI_ERR;
+        qCritical() << "Failed to initialize the JNI Environment";
+        return false;
     }
+
     if (!initJavaReferences(qEnv))
         return false;
 
     m_androidPlatformIntegration = nullptr;
+
     // File engine handler instantiation registers the handler
     m_androidAssetsFileEngineHandler = new AndroidAssetsFileEngineHandler();
     m_androidContentFileEngineHandler = new AndroidContentFileEngineHandler();
     m_androidApkFileEngineHandler = new QAndroidApkFileEngineHandler();
-    m_mainLibraryHnd = nullptr;
+
     m_backendRegister = new AndroidBackendRegister();
 
-    const QStringList argsList = QProcess::splitCommand(QJniObject(paramsString).toString());
-
-    for (const QString &arg : argsList)
-        m_applicationParams.append(arg.toUtf8());
-
-    // Go home
-    QDir::setCurrent(QDir::homePath());
-
-    //look for main()
-    if (m_applicationParams.length()) {
-        // Obtain a handle to the main library (the library that contains the main() function).
-        // This library should already be loaded, and calling dlopen() will just return a reference to it.
-        m_mainLibraryHnd = dlopen(m_applicationParams.constFirst().data(), 0);
-        if (Q_UNLIKELY(!m_mainLibraryHnd)) {
-            qCritical() << "dlopen failed:" << dlerror();
-            return false;
-        }
-        m_main = (Main)dlsym(m_mainLibraryHnd, "main");
-    } else {
-        qWarning("No main library was specified; searching entire process (this is slow!)");
-        m_main = (Main)dlsym(RTLD_DEFAULT, "main");
-    }
-
-    if (Q_UNLIKELY(!m_main)) {
-        qCritical() << "dlsym failed:" << dlerror() << Qt::endl
-                    << "Could not find main method";
+    if (sem_init(&m_exitSemaphore, 0, 0) == -1 && sem_init(&m_stopQtSemaphore, 0, 0) == -1) {
+        qCritical() << "Failed to init Qt application cleanup semaphores";
         return false;
     }
-
-    if (sem_init(&m_exitSemaphore, 0, 0) == -1)
-        return false;
-
-    if (sem_init(&m_terminateSemaphore, 0, 0) == -1)
-        return false;
 
     return true;
 }
 
-static void waitForServiceSetup(JNIEnv *env, jclass /*clazz*/)
+static void startQtNativeApplication(JNIEnv *jenv, jobject object, jstring paramsString)
 {
-    Q_UNUSED(env);
-    // The service must wait until the QCoreApplication starts otherwise onBind will be
-    // called too early
-    if (QtAndroidPrivate::service().isValid() && QtAndroid::isQtApplication())
-        QtAndroidPrivate::waitForServiceSetup();
-}
+    Q_UNUSED(jenv)
+    Q_UNUSED(object)
 
-static void startQtApplication(JNIEnv */*env*/, jclass /*clazz*/)
-{
     {
         JNIEnv* env = nullptr;
         JavaVMAttachArgs args;
@@ -451,6 +418,42 @@ static void startQtApplication(JNIEnv */*env*/, jclass /*clazz*/)
             vm->AttachCurrentThread(&env, &args);
     }
 
+    const QStringList argsList = QProcess::splitCommand(QJniObject(paramsString).toString());
+    const int argc = argsList.size();
+    QVarLengthArray<char *> argv(argc + 1);
+    QList<QByteArray> argvData;
+    argvData.reserve(argc);
+    for (int i = 0; i < argc; ++i) {
+        argvData.append(argsList.at(i).toUtf8());
+        argv[i] = argvData.back().data();
+    }
+    argv[argc] = nullptr;
+
+    // Go home
+    QDir::setCurrent(QDir::homePath());
+
+    // look for main()
+    void *mainLibraryHnd = nullptr;
+    if (argc) {
+        // Obtain a handle to the main library (the library that contains the main() function).
+        // This library should already be loaded, and calling dlopen() will just return a reference to it.
+        mainLibraryHnd = dlopen(argv.first(), 0);
+        if (Q_UNLIKELY(!mainLibraryHnd)) {
+            qCritical() << "dlopen failed:" << dlerror();
+            return;
+        }
+        m_main = (Main)dlsym(mainLibraryHnd, "main");
+    } else {
+        qWarning("No main library was specified; searching entire process (this is slow!)");
+        m_main = (Main)dlsym(RTLD_DEFAULT, "main");
+    }
+
+    if (Q_UNLIKELY(!m_main)) {
+        qCritical() << "dlsym failed:" << dlerror() << Qt::endl
+                    << "Could not find main method";
+        return;
+    }
+
     // Register type for invokeMethod() calls.
     qRegisterMetaType<Qt::ScreenOrientation>("Qt::ScreenOrientation");
 
@@ -458,52 +461,41 @@ static void startQtApplication(JNIEnv */*env*/, jclass /*clazz*/)
     if (QFile{QStringLiteral("assets:/android_rcc_bundle.rcc")}.exists())
         QResource::registerResource(QStringLiteral("assets:/android_rcc_bundle.rcc"));
 
-    const int argc = m_applicationParams.size();
-    QVarLengthArray<char *> argv(argc + 1);
-    for (int i = 0; i < argc; i++)
-        argv[i] = m_applicationParams[i].data();
-    argv[argc] = nullptr;
-
     startQtAndroidPluginCalled.fetchAndAddRelease(1);
+
     const int ret = m_main(argc, argv.data());
     qInfo() << "main() returned" << ret;
 
-    if (m_mainLibraryHnd) {
-        int res = dlclose(m_mainLibraryHnd);
+    if (mainLibraryHnd) {
+        int res = dlclose(mainLibraryHnd);
         if (res < 0)
             qWarning() << "dlclose failed:" << dlerror();
     }
 
-    if (m_applicationClass) {
-        const auto quitMethodName = QtAndroid::isQtApplication() ? "quitApp" : "quitQt";
-        QJniObject::callStaticMethod<void>(m_applicationClass, quitMethodName);
-    }
+    QNativeInterface::QAndroidApplication::runOnAndroidMainThread([]() {
+        QtNative::callStaticMethod("setStarted", false);
 
-    sem_post(&m_terminateSemaphore);
+        if (QtAndroid::isQtApplication()) {
+            // Now, that the Qt application has exited, tear down the Activity and Service
+            auto activity = QtAndroidPrivate::activity();
+            if (activity.isValid())
+                activity.callMethod("finish");
+            auto service = QtAndroidPrivate::service();
+            if (service.isValid())
+                service.callMethod("stopSelf");
+        } else {
+            // For the embedded case, we only need to terminate Qt
+            QtNative::callStaticMethod("terminateQtNativeApplication");
+        }
+    });
+
+    sem_post(&m_stopQtSemaphore);
     sem_wait(&m_exitSemaphore);
     sem_destroy(&m_exitSemaphore);
 
     // We must call exit() to ensure that all global objects will be destructed
     if (!qEnvironmentVariableIsSet("QT_ANDROID_NO_EXIT_CALL"))
         exit(ret);
-}
-
-static void quitQtCoreApplication(JNIEnv *env, jclass /*clazz*/)
-{
-    Q_UNUSED(env);
-    QCoreApplication::quit();
-}
-
-static void quitQtAndroidPlugin(JNIEnv *env, jclass /*clazz*/)
-{
-    Q_UNUSED(env);
-    m_androidPlatformIntegration = nullptr;
-    delete m_androidAssetsFileEngineHandler;
-    m_androidAssetsFileEngineHandler = nullptr;
-    delete m_androidContentFileEngineHandler;
-    m_androidContentFileEngineHandler = nullptr;
-    delete m_androidApkFileEngineHandler;
-    m_androidApkFileEngineHandler = nullptr;
 }
 
 static void clearJavaReferences(JNIEnv *env)
@@ -546,19 +538,30 @@ static void clearJavaReferences(JNIEnv *env)
     }
 }
 
-static void terminateQt(JNIEnv *env, jclass /*clazz*/)
+static void waitForServiceSetup(JNIEnv *env, jclass /*clazz*/)
 {
-    // QAndroidEventDispatcherStopper is stopped when the user uses the task manager to kill the application
-    if (QAndroidEventDispatcherStopper::instance()->stopped()) {
+    Q_UNUSED(env);
+    // The service must wait until the QCoreApplication starts otherwise onBind will be
+    // called too early
+    if (QtAndroidPrivate::service().isValid() && QtAndroid::isQtApplication())
+        QtAndroidPrivate::waitForServiceSetup();
+}
+
+static void terminateQtNativeApplication(JNIEnv *env, jclass /*clazz*/)
+{
+    // QAndroidEventDispatcherStopper is stopped when the user uses the task manager
+    // to kill the application. Also, in case of a service ensure to call quit().
+    if (QAndroidEventDispatcherStopper::instance()->stopped()
+        || QtAndroidPrivate::service().isValid()) {
         QAndroidEventDispatcherStopper::instance()->startAll();
         QCoreApplication::quit();
         QAndroidEventDispatcherStopper::instance()->goingToStop(false);
     }
 
     if (startQtAndroidPluginCalled.loadAcquire())
-        sem_wait(&m_terminateSemaphore);
+        sem_wait(&m_stopQtSemaphore);
 
-    sem_destroy(&m_terminateSemaphore);
+    sem_destroy(&m_stopQtSemaphore);
 
     clearJavaReferences(env);
 
@@ -572,6 +575,9 @@ static void terminateQt(JNIEnv *env, jclass /*clazz*/)
     delete m_backendRegister;
     m_backendRegister = nullptr;
     sem_post(&m_exitSemaphore);
+
+    // Terminate the QtThread
+    QtNative::callStaticMethod<QtThread>("getQtThread").callMethod("exit");
 }
 
 static void handleLayoutSizeChanged(JNIEnv * /*env*/, jclass /*clazz*/,
@@ -731,11 +737,9 @@ static jobject onBind(JNIEnv */*env*/, jclass /*cls*/, jobject intent)
 }
 
 static JNINativeMethod methods[] = {
-    { "startQtAndroidPlugin", "(Ljava/lang/String;)Z", (void *)startQtAndroidPlugin },
-    { "startQtApplication", "()V", (void *)startQtApplication },
-    { "quitQtAndroidPlugin", "()V", (void *)quitQtAndroidPlugin },
-    { "quitQtCoreApplication", "()V", (void *)quitQtCoreApplication },
-    { "terminateQt", "()V", (void *)terminateQt },
+    { "initAndroidQpaPlugin", "()Z", (void *)initAndroidQpaPlugin },
+    { "startQtNativeApplication", "(Ljava/lang/String;)V", (void *)startQtNativeApplication },
+    { "terminateQtNativeApplication", "()V", (void *)terminateQtNativeApplication },
     { "waitForServiceSetup", "()V", (void *)waitForServiceSetup },
     { "updateApplicationState", "(I)V", (void *)updateApplicationState },
     { "onActivityResult", "(IILandroid/content/Intent;)V", (void *)onActivityResult },
@@ -884,7 +888,7 @@ static bool initJavaReferences(QJniEnvironment &env)
 
 QT_END_NAMESPACE
 
-Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM */*vm*/, void */*reserved*/)
+extern "C" Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM */*vm*/, void */*reserved*/)
 {
     static bool initialized = false;
     if (initialized)

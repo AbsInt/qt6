@@ -72,7 +72,7 @@ QT_BEGIN_NAMESPACE
     \value SO_GraphicsItem \l QStyleOptionGraphicsItem
     \value SO_GroupBox \l QStyleOptionGroupBox
     \value SO_Header \l QStyleOptionHeader
-    \value SO_MenuItem \l QStyleOptionMenuItem
+    \value SO_MenuItem \l QStyleOptionMenuItemV2
     \value SO_ProgressBar \l QStyleOptionProgressBar
     \value SO_RubberBand \l QStyleOptionRubberBand
     \value SO_SizeGrip \l QStyleOptionSizeGrip
@@ -1598,6 +1598,47 @@ QStyleOptionProgressBar::QStyleOptionProgressBar(int version)
 */
 
 /*!
+    \class QStyleOptionMenuItemV2
+    \since 6.11
+    \brief The QStyleOptionMenuItemV2 class enhances
+    QStyleOptionMenuItem with new members.
+
+    \inmodule QtWidgets
+*/
+
+/*!
+    \fn QStyleOptionMenuItemV2::QStyleOptionMenuItemV2()
+
+    Constructs a QStyleOptionMenuItemV2, initializing the members
+    variables to their default values.
+*/
+
+/*!
+    \fn QStyleOptionMenuItemV2::QStyleOptionMenuItemV2(const QStyleOptionMenuItemV2 &other)
+
+    Constructs a copy of the \a other style option.
+*/
+
+/*!
+    \internal
+*/
+QStyleOptionMenuItemV2::QStyleOptionMenuItemV2(int version)
+    : QStyleOptionMenuItem(version),
+      mouseDown{false},
+      unused{0}
+{}
+
+/*!
+    \variable QStyleOptionMenuItemV2::mouseDown
+    \brief true when the mouse is pressed down.
+
+    This is needed because there is no differentation between
+    a pressed and a sunken state when QStyle::State_Sunken is set.
+    QStyle::State_Sunken is also set when the menu is open
+    (i.e. showing the popup menu)
+*/
+
+/*!
     \class QStyleOptionMenuItem
     \brief The QStyleOptionMenuItem class is used to describe the
     parameter necessary for drawing a menu item.
@@ -1685,7 +1726,7 @@ QStyleOptionMenuItem::QStyleOptionMenuItem(int version)
     \value SubMenu Indicates the menu item points to a sub-menu.
     \value Scroller A popup menu scroller (currently only used on \macos).
     \value TearOff A tear-off handle for the menu.
-    \value Margin The margin of the menu.
+    \value Margin Deprecated and not used. The margin of the menu.
     \value EmptyArea The empty area of the menu.
 
     \sa menuItemType

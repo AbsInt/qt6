@@ -59,6 +59,10 @@ function(qt_feature_module_begin)
     set(__QtFeature_define_definitions "" PARENT_SCOPE)
 endfunction()
 
+# Define a Qt feature.
+#
+# The vcpkg-related arguments are relevant for configure only and are documented
+# at the top of the qt_feature implementation in QtProcessConfigureArgs.cmake.
 function(qt_feature feature)
     set(original_name "${feature}")
     qt_feature_normalize_name("${feature}" feature)
@@ -68,11 +72,14 @@ function(qt_feature feature)
         PRIVATE
         PUBLIC
         SYSTEM_LIBRARY
+        VCPKG_DEFAULT
+        VCPKG_OPTIONAL
     )
     set(single_value_options
         LABEL
         PURPOSE
         SECTION
+        VCPKG_DESCRIPTION
     )
     set(multi_value_options
         AUTODETECT
@@ -80,6 +87,7 @@ function(qt_feature feature)
         ENABLE
         DISABLE
         EMIT_IF
+        VCPKG_DEPENDENT_FEATURES
     )
     cmake_parse_arguments(PARSE_ARGV 1 arg
         "${no_value_options}" "${single_value_options}" "${multi_value_options}"
@@ -387,6 +395,10 @@ function(qt_feature_deprecated feature)
         list(APPEND __QtFeature_internal_features "${feature}")
         set(__QtFeature_internal_features ${__QtFeature_internal_features} PARENT_SCOPE)
     endif()
+endfunction()
+
+function(qt_feature_vcpkg_scope name)
+    # This is just a stub. The real implementation is called at configure script time.
 endfunction()
 
 function(qt_evaluate_to_boolean expressionVar)
@@ -832,9 +844,9 @@ endmacro()
 
 macro(_qt_internal_parse_feature_definition feature)
     cmake_parse_arguments(arg
-        "PRIVATE;PUBLIC;ALIAS_NEGATE"
-        "LABEL;PURPOSE;SECTION;ALIAS_OF_FEATURE;ALIAS_OF_CACHE"
-        "AUTODETECT;CONDITION;ENABLE;DISABLE;EMIT_IF"
+        "PRIVATE;PUBLIC;ALIAS_NEGATE;VCPKG_DEFAULT;VCPKG_OPTIONAL"
+        "LABEL;PURPOSE;SECTION;ALIAS_OF_FEATURE;ALIAS_OF_CACHE;VCPKG_DESCRIPTION"
+        "AUTODETECT;CONDITION;ENABLE;DISABLE;EMIT_IF;VCPKG_DEPENDENT_FEATURES"
         ${_QT_FEATURE_DEFINITION_${feature}})
 endmacro()
 

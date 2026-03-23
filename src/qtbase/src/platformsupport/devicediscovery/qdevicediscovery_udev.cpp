@@ -175,6 +175,9 @@ void QDeviceDiscoveryUDev::handleUDevNotification()
     if (qstrcmp(action, "remove") == 0)
         emit deviceRemoved(devNode);
 
+    if (qstrcmp(action, "change") == 0)
+        emit deviceChanged(devNode);
+
 cleanup:
     udev_device_unref(dev);
 }

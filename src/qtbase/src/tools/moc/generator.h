@@ -12,11 +12,11 @@ class Generator
 {
     Moc *parser = nullptr;
     FILE *out;
-    ClassDef *cdef;
+    const ClassDef *cdef;
     QList<uint> meta_data;
 
 public:
-    Generator(Moc *moc, ClassDef *classDef, const QList<QByteArray> &metaTypes,
+    Generator(Moc *moc, const ClassDef *classDef, const QList<QByteArray> &metaTypes,
               const QHash<QByteArray, QByteArray> &knownQObjectClasses,
               const QHash<QByteArray, QByteArray> &knownGadgets, FILE *outfile = nullptr,
               bool requireCompleteTypes = false);

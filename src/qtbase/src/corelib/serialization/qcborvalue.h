@@ -435,13 +435,13 @@ protected:
     Q_DECLARE_STRONGLY_ORDERED(QCborValueConstRef, QCborValue)
 
     static Q_CORE_EXPORT QCborValue concrete(QCborValueConstRef that) noexcept;
-    static Q_CORE_EXPORT QCborValue::Type concreteType(QCborValueConstRef that) noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION static Q_CORE_EXPORT QCborValue::Type concreteType(QCborValueConstRef that) noexcept;
     static Q_CORE_EXPORT bool
-    concreteBoolean(QCborValueConstRef that, bool defaultValue) noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION concreteBoolean(QCborValueConstRef that, bool defaultValue) noexcept;
     static Q_CORE_EXPORT double
-    concreteDouble(QCborValueConstRef that, double defaultValue) noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION concreteDouble(QCborValueConstRef that, double defaultValue) noexcept;
     static Q_CORE_EXPORT qint64
-    concreteIntegral(QCborValueConstRef that, qint64 defaultValue) noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION concreteIntegral(QCborValueConstRef that, qint64 defaultValue) noexcept;
     static Q_CORE_EXPORT QByteArray
     concreteByteArray(QCborValueConstRef that, const QByteArray &defaultValue);
     static Q_CORE_EXPORT QString
@@ -582,7 +582,7 @@ private:
     static QCborValue concrete(QCborValueRef that) noexcept;
     QCborValue concrete() const noexcept  { return concrete(*this); }
 
-    static QCborValue::Type concreteType(QCborValueRef self) noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION static QCborValue::Type concreteType(QCborValueRef self) noexcept;
     QCborValue::Type concreteType() const noexcept { return concreteType(*this); }
 
     // this will actually be invalid...

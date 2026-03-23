@@ -8,7 +8,9 @@
 #### Libraries
 
 qt_find_package(WrapSystemZLIB 1.0.8 MODULE
-    PROVIDED_TARGETS WrapSystemZLIB::WrapSystemZLIB MODULE_NAME global QMAKE_LIB zlib)
+    PROVIDED_TARGETS WrapSystemZLIB::WrapSystemZLIB MODULE_NAME global QMAKE_LIB zlib
+    VCPKG_PORT zlib
+)
 # Work around global target promotion failure when WrapZLIB is used on APPLE platforms.
 # What ends up happening is that the ZLIB::ZLIB target is not promoted to global by qt_find_package,
 # then qt_find_package(WrapSystemPNG) tries to find its dependency ZLIB::ZLIB, sees it's not global
@@ -24,7 +26,10 @@ endif()
 # directory scope.
 qt_find_package(Threads MODULE PROVIDED_TARGETS Threads::Threads)
 qt_find_package(WrapOpenSSLHeaders MODULE
-    PROVIDED_TARGETS WrapOpenSSLHeaders::WrapOpenSSLHeaders MODULE_NAME core)
+    PROVIDED_TARGETS WrapOpenSSLHeaders::WrapOpenSSLHeaders MODULE_NAME core
+    VCPKG_PORT openssl
+    VCPKG_ADD_TO_FEATURE openssl
+)
 # openssl_headers
 # OPENSSL_VERSION_MAJOR is not defined for OpenSSL 1.1.1
 qt_config_compile_test(opensslv11_headers
@@ -616,7 +621,7 @@ qt_feature("private_tests" PRIVATE
 )
 qt_feature("doc_snippets" PRIVATE
     LABEL "Developer build: doc_snippets"
-    AUTODETECT QT_FEATURE_developer_build
+    AUTODETECT QT_BUILD_DOC_SNIPPETS
     CONDITION QT_FEATURE_shared
 )
 qt_feature_definition("developer-build" "QT_BUILD_INTERNAL")
@@ -831,8 +836,11 @@ qt_feature("signaling_nan" PUBLIC
 )
 qt_feature("x86intrin" PRIVATE
     LABEL "Basic"
-    CONDITION (((TEST_architecture_arch STREQUAL i386) OR (TEST_architecture_arch STREQUAL x86_64))
-        AND (QT_FORCE_FEATURE_x86intrin OR TEST_x86intrin))
+    CONDITION
+        (    (TEST_architecture_arch STREQUAL i386)
+          OR (TEST_architecture_arch STREQUAL x86_64)
+          OR (QT_IS_MACOS_UNIVERSAL AND x86_64 IN_LIST CMAKE_OSX_ARCHITECTURES))
+        AND (QT_FORCE_FEATURE_x86intrin OR TEST_x86intrin)
     AUTODETECT NOT WASM
 )
 qt_feature("sse2" PRIVATE
@@ -1122,6 +1130,7 @@ elseif(QT_COORD_TYPE STREQUAL "float")
 endif()
 qt_feature("gui" PRIVATE
     LABEL "Qt Gui"
+    VCPKG_DEFAULT
 )
 qt_feature_config("gui" QMAKE_PUBLIC_QT_CONFIG
     NEGATE)
@@ -1129,6 +1138,7 @@ qt_feature("network" PRIVATE
     LABEL "Qt Network"
     SECTION "Module"
     PURPOSE "Provides the Qt Network module."
+    VCPKG_DEFAULT
 )
 qt_feature("printsupport" PRIVATE
     LABEL "Qt PrintSupport"
@@ -1140,6 +1150,7 @@ qt_feature("sql" PRIVATE
     LABEL "Qt Sql"
     SECTION "Module"
     PURPOSE "Provides the Sql module."
+    VCPKG_OPTIONAL
 )
 qt_feature("testlib" PRIVATE
     LABEL "Qt Testlib"
@@ -1167,6 +1178,7 @@ qt_feature("openssl" PRIVATE
     LABEL "OpenSSL"
     CONDITION QT_FEATURE_openssl_runtime OR QT_FEATURE_openssl_linked
     ENABLE false
+    VCPKG_DEFAULT
 )
 qt_feature_definition("openssl" "QT_NO_OPENSSL" NEGATE)
 qt_feature_config("openssl" QMAKE_PUBLIC_QT_CONFIG)
@@ -1294,12 +1306,17 @@ qt_feature("coverage"
     CONDITION QT_FEATURE_coverage_gcov
 )
 
-qt_feature("android_16kb_pages"
+# Mark the feature as PRIVATE because we want it to be exported, but we don't want modifications
+# in the public qconfig.h header in a patch release.
+qt_feature("android_16kb_pages" PRIVATE
     LABEL "Using 16KB page sizes in Android"
     CONDITION ANDROID AND (((CMAKE_ANDROID_NDK_VERSION VERSION_GREATER_EQUAL "25.0.0"))
                           AND ((CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a") OR
                               (CMAKE_ANDROID_ARCH_ABI STREQUAL "x86_64")))
 )
+# The feature is saved into the public QT_CONFIG var in the qt_lib_core.pri file, to ensure it's
+# available automatically for testing with qtConfig() in all user projects.
+qt_feature_config("android_16kb_pages" QMAKE_PUBLIC_QT_CONFIG)
 
 qt_configure_add_summary_build_type_and_config()
 qt_configure_add_summary_section(NAME "Build options")
@@ -1441,6 +1458,7 @@ endif()
 qt_configure_add_summary_entry(ARGS "Using vcpkg" TYPE "message" MESSAGE "${_vcpkg_entry_message}")
 
 qt_configure_add_summary_entry(ARGS "libudev")
+qt_configure_add_summary_entry(ARGS "liburing")
 qt_configure_add_summary_entry(ARGS "openssl")
 qt_configure_add_summary_entry(ARGS "openssl-linked")
 qt_configure_add_summary_entry(ARGS "opensslv11")
@@ -1569,6 +1587,12 @@ See https://bugreports.qt.io/browse/QTBUG-59769."
 qt_feature_definition("test_gui" "QT_GUI_TEST" VALUE "1")
 qt_feature("test_gui" PUBLIC
     LABEL "Build QtGuiTest namespace"
+)
+
+# Run squish based tests
+qt_feature_definition("test_squish" "QT_SQUISH_TEST" VALUE "0")
+qt_feature("test_squish" PUBLIC
+    LABEL "Run Squish based tests"
 )
 
 qt_configure_add_report_entry(

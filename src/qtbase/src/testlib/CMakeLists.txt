@@ -71,6 +71,7 @@ qt_internal_add_module(Test
         QT_NO_CONTEXTLESS_CONNECT
         QT_NO_DATASTREAM
         QT_NO_FOREACH
+        QT_NO_URL_CAST_FROM_STRING
         QT_USE_NODISCARD_FILE_OPEN
         # Ensure uniform location info between release and debug builds
         QT_NO_MESSAGELOGCONTEXT
@@ -100,6 +101,11 @@ endif()
 
 ## Scopes:
 #####################################################################
+
+qt_internal_extend_target(Test CONDITION QT_FEATURE_gui
+    SOURCES
+        qtestaccessible.cpp
+)
 
 qt_internal_extend_target(Test CONDITION QT_FEATURE_itemmodeltester
     SOURCES
@@ -180,7 +186,7 @@ qt_internal_add_docs(Test
 
 qt_internal_apply_testlib_coverage_options(Test)
 
-if(QT_FEATURE_doc_snippets)
+if(QT_BUILD_DOC_SNIPPETS)
     add_subdirectory(doc/snippets/code)
 endif()
 

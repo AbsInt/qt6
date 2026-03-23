@@ -31,6 +31,7 @@ class EnumNode;
 class ExampleNode;
 class FunctionNode;
 class Node;
+struct NodeContext;
 class QDocDatabase;
 class QmlTypeNode;
 class PageNode;
@@ -119,6 +120,7 @@ public:
     [[nodiscard]] bool isProxyNode() const { return m_nodeType == NodeType::Proxy; }
     [[nodiscard]] bool isPublic() const { return m_access == Access::Public; }
     [[nodiscard]] bool isProtected() const { return m_access == Access::Protected; }
+    [[nodiscard]] virtual bool isPureVirtual() const { return false; }
     [[nodiscard]] bool isQmlBasicType() const { return m_nodeType == NodeType::QmlValueType; }
     [[nodiscard]] bool isQmlModule() const { return m_nodeType == NodeType::QmlModule; }
     [[nodiscard]] bool isQmlNode() const { return genus() == Genus::QML; }
@@ -161,7 +163,7 @@ public:
     } // means PageNode but not Aggregate
     [[nodiscard]] virtual bool isWrapper() const;
 
-    [[nodiscard]] QString plainName() const;
+    [[nodiscard]] virtual QString plainName() const;
     QString plainFullName(const Node *relative = nullptr) const;
     [[nodiscard]] QString plainSignature() const;
     QString fullName() const override { return fullName(nullptr); }
@@ -205,11 +207,8 @@ public:
     virtual bool setTitle(const QString &) { return false; }
     virtual bool setSubtitle(const QString &) { return false; }
 
-    void markInternal()
-    {
-        setAccess(Access::Private);
-        setStatus(Internal);
-    }
+    void markInternal() { setStatus(Internal); }
+
     virtual void markDefault() {}
     virtual void markReadOnly(bool) {}
 
@@ -241,13 +240,10 @@ public:
         return (m_defLocation.isEmpty() ? m_declLocation : m_defLocation);
     }
     [[nodiscard]] const Doc &doc() const { return m_doc; }
-    [[nodiscard]] virtual bool isInAPI() const
-    {
-        return !isPrivate() && !isInternal() && !isDontDocument() && hasDoc();
-    }
+    [[nodiscard]] virtual bool isInAPI() const;
     [[nodiscard]] bool hasDoc() const;
     [[nodiscard]] bool hadDoc() const { return m_hadDoc; }
-    [[nodiscard]] Status status() const { return m_status; }
+    [[nodiscard]] virtual Status status() const { return m_status; }
     [[nodiscard]] ThreadSafeness threadSafeness() const;
     [[nodiscard]] ThreadSafeness inheritedThreadSafeness() const;
     [[nodiscard]] QString since() const { return m_since; }
@@ -281,6 +277,8 @@ public:
     [[nodiscard]] static bool nodeLessThan(const Node *first, const Node *second);
     [[nodiscard]] static bool nodeNameLessThan(const Node *first, const Node *second);
     [[nodiscard]] static bool nodeSortKeyOrNameLessThan(const Node *n1, const Node *n2);
+
+    [[nodiscard]] NodeContext createContext() const;
 
 protected:
     Node(NodeType type, Aggregate *parent, QString name);

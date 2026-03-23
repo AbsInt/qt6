@@ -73,6 +73,7 @@ qt_internal_add_shaders(QuickEffects "rectangularshadow_shaders1"
     FILES
         "data/shaders/rectangularshadow.vert"
         "data/shaders/rectangularshadow.frag"
+        "data/shaders/rectangularshadow4r.frag"
 )
 
 qt_internal_add_shaders(QuickEffects "multieffect_shaders1"

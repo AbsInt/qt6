@@ -19,8 +19,43 @@
 
 QT_BEGIN_NAMESPACE
 
-struct QmlPlugin {
-    std::unique_ptr<QPluginLoader> loader;
+struct QmlPlugin
+{
+    using Loader = std::unique_ptr<QPluginLoader>;
+    QPluginLoader *loader() const
+    {
+        if (auto loader = std::get_if<Loader>(&data))
+            return loader->get();
+        return nullptr;
+    }
+
+    bool hasInstanceOrLoader() const
+    {
+        if (auto instance = std::get_if<QQmlExtensionPlugin *>(&data))
+            return *instance;
+        return bool(std::get<Loader>(data));
+    }
+
+    QString unloadOrErrorMessage() const
+    {
+        if (auto instance = std::get_if<QQmlExtensionPlugin *>(&data)) {
+            if (*instance)
+                (*instance)->unregisterTypes();
+            return {};
+        }
+        const Loader &loader = std::get<Loader>(data);
+        if (!loader)
+            return {};
+
+#if QT_CONFIG(library)
+        if (auto extensionPlugin = qobject_cast<QQmlExtensionPlugin *>(loader->instance()))
+            extensionPlugin->unregisterTypes();
+        if (!loader->unload())
+            return loader->errorString();
+#endif
+        return {};
+    }
+    std::variant<Loader, QQmlExtensionPlugin *> data;
 };
 
 class PluginMap
@@ -118,9 +153,9 @@ static QJsonArray tryExtractQmlPluginURIs(const QStaticPlugin &plugin)
     return metadataUriList;
 }
 
-static QVector<StaticPluginMapping> staticQmlPlugins()
+static QList<StaticPluginMapping> staticQmlPlugins()
 {
-    QVector<StaticPluginMapping> qmlPlugins;
+    QList<StaticPluginMapping> qmlPlugins;
     const auto staticPlugins = QPluginLoader::staticPlugins();
     qmlPlugins.reserve(staticPlugins.size());
 
@@ -161,7 +196,7 @@ static QStringList versionUriList(const VersionedURI &uri)
     \a versionUris, which is a list of all possible versioned URI combinations - see
    versionUriList() above.
  */
-static QVector<StaticPluginMapping> staticQmlPluginsMatchingURI(const VersionedURI &uri)
+static QList<StaticPluginMapping> staticQmlPluginsMatchingURI(const VersionedURI &uri)
 {
     static const auto qmlPlugins = staticQmlPlugins();
 
@@ -170,7 +205,7 @@ static QVector<StaticPluginMapping> staticQmlPluginsMatchingURI(const VersionedU
     // If a module has several plugins, they must all have the same version. Start by
     // populating pluginPairs with relevant plugins to cut the list short early on:
     const QStringList versionedURIs = versionUriList(uri);
-    QVector<StaticPluginMapping> matches;
+    QList<StaticPluginMapping> matches;
     std::copy_if(qmlPlugins.begin(), qmlPlugins.end(), std::back_inserter(matches),
                  [&](const auto &pluginMapping) {
                      return versionedURIs.contains(pluginMapping.metadataURI);
@@ -180,24 +215,12 @@ static QVector<StaticPluginMapping> staticQmlPluginsMatchingURI(const VersionedU
 
 static bool unloadPlugin(const std::pair<const QString, QmlPlugin> &plugin)
 {
-    const auto &loader = plugin.second.loader;
-    if (!loader)
-        return false;
+    const QString errorMessage = plugin.second.unloadOrErrorMessage();
+    if (errorMessage.isEmpty())
+        return true;
 
-#if QT_CONFIG(library)
-    if (auto extensionPlugin = qobject_cast<QQmlExtensionPlugin *>(loader->instance()))
-        extensionPlugin->unregisterTypes();
-
-# ifndef Q_OS_MACOS
-    if (!loader->unload()) {
-        qWarning("Unloading %s failed: %s", qPrintable(plugin.first),
-                 qPrintable(loader->errorString()));
-        return false;
-    }
-# endif
-#endif
-
-    return true;
+    qWarning("Unloading %s failed: %s", qPrintable(plugin.first), qPrintable(errorMessage));
+    return false;
 }
 
 /*!
@@ -253,7 +276,7 @@ QStringList QQmlPluginImporter::plugins()
     PluginMapPtr plugins(qmlPluginsById());
     QStringList results;
     for (auto it = plugins->cbegin(), end = plugins->cend(); it != end; ++it) {
-        if (it->second.loader != nullptr)
+        if (it->second.hasInstanceOrLoader())
             results.append(it->first);
     }
     return results;
@@ -289,7 +312,8 @@ QTypeRevision QQmlPluginImporter::importStaticPlugin(QObject *instance, const QS
         bool typesRegistered = plugins->find(pluginId) != plugins->end();
 
         if (!typesRegistered) {
-            plugins->insert(std::make_pair(pluginId, QmlPlugin()));
+            plugins->insert(std::make_pair(
+                    pluginId, QmlPlugin{ qobject_cast<QQmlExtensionPlugin *>(instance) }));
             if (QQmlMetaType::registerPluginTypes(
                         instance, QFileInfo(qmldirPath).absoluteFilePath(), uri,
                         qmldir->typeNamespace(), importVersion, errors)
@@ -359,30 +383,18 @@ QTypeRevision QQmlPluginImporter::importDynamicPlugin(
                 if (filePath.isEmpty())
                     return QTypeRevision();
 
-                const QString absoluteFilePath = fileInfo.absoluteFilePath();
-                if (!QQml_isFileCaseCorrect(absoluteFilePath)) {
-                    if (errors) {
-                        QQmlError error;
-                        error.setDescription(
-                                    QQmlImports::tr("File name case mismatch for \"%1\"")
-                                    .arg(absoluteFilePath));
-                        errors->prepend(error);
-                    }
-                    return QTypeRevision();
-                }
-
                 QmlPlugin plugin;
-                plugin.loader = std::make_unique<QPluginLoader>(absoluteFilePath);
-                if (!plugin.loader->load()) {
+                plugin.data = std::make_unique<QPluginLoader>(fileInfo.absoluteFilePath());
+                if (!plugin.loader()->load()) {
                     if (errors) {
                         QQmlError error;
-                        error.setDescription(plugin.loader->errorString());
+                        error.setDescription(plugin.loader()->errorString());
                         errors->prepend(error);
                     }
                     return QTypeRevision();
                 }
 
-                instance = plugin.loader->instance();
+                instance = plugin.loader()->instance();
                 plugins->insert(std::make_pair(pluginId, std::move(plugin)));
 
                 // Continue with shared code path for dynamic and static plugins:
@@ -398,7 +410,7 @@ QTypeRevision QQmlPluginImporter::importDynamicPlugin(
                     return QTypeRevision();
             } else {
                 Q_ASSERT(plugin != plugins->end());
-                if (const auto &loader = plugin->second.loader) {
+                if (const auto &loader = plugin->second.loader()) {
                     instance = loader->instance();
                 } else if (!optional) {
                     // If the plugin is not optional, we absolutely need to have a loader.

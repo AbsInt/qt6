@@ -506,7 +506,7 @@ void QQmlJavaScriptExpression::createQmlBinding(
             ep->warning(error->error());
         return;
     }
-    setupFunction(qmlContext, script.vmFunction);
+    setupFunction(qmlContext, script.function());
 }
 
 void QQmlJavaScriptExpression::setupFunction(QV4::ExecutionContext *qmlContext, QV4::Function *f)

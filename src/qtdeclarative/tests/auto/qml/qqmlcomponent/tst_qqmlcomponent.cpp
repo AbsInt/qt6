@@ -161,6 +161,7 @@ private slots:
     void compilationUnitsWithSameUrl();
     void bindingInRequired();
     void repeatedSetDataWithInlineComponent();
+    void setInitialPropertyInteraction();
     void invalidBaseUrl();
     void uselessGroupProperty();
 
@@ -453,7 +454,7 @@ void tst_qqmlcomponent::async()
     ComponentWatcher watcher(&component);
     component.loadUrl(server.url("/TestComponent.qml"), QQmlComponent::Asynchronous);
     QCOMPARE(watcher.loading, 1);
-    QTRY_VERIFY(component.isReady());
+    QTRY_VERIFY_WITH_TIMEOUT(component.isReady(), 3s);
     QCOMPARE(watcher.ready, 1);
     QCOMPARE(watcher.error, 0);
 
@@ -1422,7 +1423,7 @@ void tst_qqmlcomponent::boundComponent()
         QVERIFY(!component.isBound());
 
         component.setData("pragma ComponentBehavior: Bound\nsyntax error", QUrl());
-        QCOMPARE(component.errorString(), ":2 Syntax error\n"_L1);
+        QCOMPARE(component.errorString(), "<Unknown File>:2:8: Syntax error\n"_L1);
         QVERIFY(!component.isBound());
     }
 }
@@ -1686,7 +1687,7 @@ void tst_qqmlcomponent::loadFromModuleRequired()
         QScopedPointer<QObject> root(component.create());
         QVERIFY(!root);
         QVERIFY(component.isError());
-        QCOMPARE(component.errorString(), qPrintable(":-1 " + error  + "\n"));
+        QCOMPARE(component.errorString(), qPrintable("<Unknown File>: " + error + "\n"));
     }
     {
         QQmlComponent component(&engine, "qqmlcomponenttest", "SingleRequiredProperty");
@@ -1700,7 +1701,7 @@ void tst_qqmlcomponent::loadFromModuleRequired()
 
         // ... produces an error.
         QVERIFY(component.isError());
-        QCOMPARE(component.errorString(), qPrintable(":-1 " + error  + "\n"));
+        QCOMPARE(component.errorString(), qPrintable("<Unknown File>: " + error + "\n"));
     }
     {
         QQmlComponent component(&engine, "qqmlcomponenttest", "SingleRequiredPropertyDynamic");
@@ -1724,7 +1725,7 @@ void tst_qqmlcomponent::loadUrlRequired()
         QScopedPointer<QObject> root(component.create());
         QVERIFY(!root);
         QVERIFY(component.isError());
-        QCOMPARE(component.errorString(), qPrintable(url.toString() + ":2 " + error  + "\n"));
+        QCOMPARE(component.errorString(), qPrintable(url.toString() + ":2:1: " + error + "\n"));
     }
     {
         QQmlComponent component(&engine);
@@ -1739,7 +1740,7 @@ void tst_qqmlcomponent::loadUrlRequired()
 
         // ... produces an error.
         QVERIFY(component.isError());
-        QCOMPARE(component.errorString(), qPrintable(url.toString() + ":2 " + error  + "\n"));
+        QCOMPARE(component.errorString(), qPrintable(url.toString() + ":2:1: " + error + "\n"));
     }
 }
 
@@ -1904,6 +1905,44 @@ void tst_qqmlcomponent::repeatedSetDataWithInlineComponent()
         QScopedPointer<QObject> secondObject(secondComp.create());
         QVERIFY2(!secondObject.isNull(), qPrintable(secondComp.errorString()));
     }
+}
+
+void tst_qqmlcomponent::setInitialPropertyInteraction()
+{
+    QQmlEngine engine;
+    {
+        QQmlComponent prequisiteTester(&engine);
+        prequisiteTester.loadFromModule("QtQuick", "Item");
+        if (!prequisiteTester.isReady())
+            QSKIP("QtQuick is not available");
+        prequisiteTester.loadFromModule("QtQuick.Layouts", "RowLayout");
+        if (!prequisiteTester.isReady())
+            QSKIP("QtQuick.Layouts is not available");
+    }
+
+    const QByteArray code = R"(
+        import QtQuick
+        import QtQuick.Layouts
+        Item {
+
+        })";
+    QQmlComponent comp(&engine);
+    auto compPriv = QQmlComponentPrivate::get(&comp);
+    comp.setData(code, QUrl{});
+    QScopedPointer<QObject> obj(comp.beginCreate(engine.rootContext()));
+    QVERIFY(obj);
+    {
+        bool couldSetProperty = compPriv->setInitialProperty(
+                obj.get(), "Layout.fillWidth"_L1, true);
+        QVERIFY(couldSetProperty);
+    }
+    {
+        bool couldSetProperty = compPriv->setInitialProperty(
+                obj.get(), "parent.doesNotExist.shouldNotCrash"_L1, true);
+        QVERIFY(!couldSetProperty);
+    }
+
+    comp.completeCreate();
 }
 
 void tst_qqmlcomponent::invalidBaseUrl()

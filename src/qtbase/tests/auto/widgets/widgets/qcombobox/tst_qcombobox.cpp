@@ -842,6 +842,20 @@ void tst_QComboBox::virtualAutocompletion()
     QApplication::sendEvent(testWidget, &kp2);
     QApplication::sendEvent(testWidget, &kr2);
     QTRY_COMPARE(testWidget->currentIndex(), 3);
+
+    QKeyEvent kp3(QEvent::KeyPress, Qt::Key_R, {}, "r");
+    QKeyEvent kr3(QEvent::KeyRelease, Qt::Key_R, {}, "r");
+    QApplication::sendEvent(testWidget, &kp3);
+    QTest::qWait(QApplication::keyboardInputInterval());
+    QApplication::sendEvent(testWidget, &kr3);
+    QTRY_COMPARE(testWidget->currentIndex(), 3);
+
+    QTest::qWait(2 * QApplication::keyboardInputInterval());
+    testWidget->view()->setKeyboardSearchFlags(Qt::MatchContains | Qt::MatchWrap);
+    QApplication::sendEvent(testWidget, &kp3);
+    QApplication::sendEvent(testWidget, &kr3);
+    QTRY_COMPARE(testWidget->currentIndex(), 1);
+
 #if defined(Q_PROCESSOR_ARM) || defined(Q_PROCESSOR_MIPS)
     QApplication::setKeyboardInputInterval(oldInterval);
 #endif

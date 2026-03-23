@@ -5,7 +5,7 @@
     \page qdoc-warnings.html
     \previouspage Categories of Documentation
 
-    \title How to Resolve QDoc Warnings
+    \title Troubleshooting QDoc Warnings
 
     QDoc may issue warnings when generating your documentation set.
     This section describes what these warnings mean and how to resolve
@@ -137,6 +137,18 @@
           fully qualified with the scope of the class that declares
           the function.
 
+    \section1 No output generated for <entity> because <parent> is undocumented
+
+    QDoc issues this warning when parsing a documentation comment for an
+    API entity such as a class member, but cannot produce any output because
+    the associated parent (class) is not documented. Ensure that the parent is
+    documented and that QDoc is configured to parse the source file containing
+    the documentation comment.
+
+    If the documented member belongs to a class that is not meant to be
+    documented, mark the class as \qdoccmd {internal} or use the
+    \qdoccmd {dontdocument} command.
+
     \section1 QML type <TypeName> documented with <ClassName> as its native type. Replacing <ClassName> with <OtherClass>
     If the \qdoccmd nativetype command is used with the same argument in
     multiple QML type documentation comments that belong to the same
@@ -256,6 +268,20 @@
       \qmlproperty int MyWidget::count
       \endcode
 
+    \section1 Undocumented property '<name>'
+
+    This warning indicates that a C++ class has a Q_PROPERTY declaration that lacks
+    documentation. Properties are part of a class's public API and require
+    documentation using the \c \property command to describe their purpose,
+    valid values, and behavior.
+
+    \note If you see both "Cannot find '<ClassName::propertyName>' specified with
+    '\\property'" and "Undocumented property '<ClassName::propertyName>'" warnings
+    together, the \c \property command exists but cannot match the property in code.
+    Dual warnings indicate mismatched property documentation: the \c \property command
+    can't find its target, and the PropertyNode has no attached documentation. Check
+    that the fully qualified name matches exactly, including namespace and class scope.
+
     \section1 QML property documented multiple times: <identifier>
 
     QDoc uses this warning when it finds two QDoc comments that document
@@ -302,6 +328,52 @@
     has a virtual method with this name and signature; which might
     arise due to a renaming, a change in signature or the base no
     longer declaring it virtual.
+
+    \section1 Multiple primary overload definitions for <function>
+
+    QDoc issues this warning when multiple functions with the same name are
+    marked with \c{\overload primary}. Only one function in an overload
+    group should be designated as the primary overload.
+
+    The warning includes the function signatures and their source locations
+    to help identify all competing primary overloads. QDoc will determine
+    the actual primary overload using lexicographic comparison (alphabetical
+    ordering of function signatures) among the functions marked as primary.
+
+    To resolve this warning, remove the \c{primary} argument from all but
+    one of the \c{\overload primary} commands in the overload group.
+
+    Example that triggers this warning:
+
+    \badcode *
+    /\1!
+        \overload primary
+        Does something with no parameters.
+    \1/
+    void doSomething();
+
+    /\1!
+        \overload primary
+        Does something with a parameter.
+    \1/
+    void doSomething(int value);
+    \endcode
+
+    Correct approach - only one primary:
+
+    \badcode *
+    /\1!
+        \overload primary
+        Does something with no parameters.
+    \1/
+    void doSomething();
+
+    /\1!
+        \overload doSomething()
+        Does something with a parameter.
+    \1/
+    void doSomething(int value);
+    \endcode
 
     \section1 <class> tries to inherit itself
 
@@ -894,5 +966,19 @@
     \section1 Unknown base <name> for QML type <type>
 
     The type name declared as the base type for a QML type was not found, or
-    it was not declared with the \l{inherits-commands}{\\inherits} command.
+    it was not declared with the \qdoccmd{inherits} command.
+
+    \section1 Unrecognized markup language
+
+    This warning occurs when a programming language is specified for a \\code
+    command that QDoc does not recognize. For example, this QML code block has
+    been given the invalid "QL" language:
+
+    \code [text] \\endcode
+        \\code [QL]
+        Item {
+            id: my_item
+        }
+        \1
+    \endcode
 */

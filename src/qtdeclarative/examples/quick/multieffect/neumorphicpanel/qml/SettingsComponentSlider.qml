@@ -17,7 +17,7 @@ Column {
     signal moved
 
     spacing: -10 * dp
-
+    opacity: enabled ? 1.0 : 0.2
     Text {
         id: textItem
         anchors.horizontalCenter: parent.horizontalCenter
@@ -79,7 +79,7 @@ Column {
                     anchors.margins: -2
                     z: -1
                     radius: width / 2
-                    blur: slider.hovered || slider.pressed ? 16 : 8
+                    blur: rootItem.enabled && (slider.hovered || slider.pressed) ? 16 : 8
                     color: Qt.lighter(mainWindow.mainColor, 1.2)
                 }
             }

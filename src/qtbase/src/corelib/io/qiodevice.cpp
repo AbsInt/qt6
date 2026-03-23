@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:network-protocol
 
 //#define QIODEVICE_DEBUG
 
@@ -2004,7 +2005,9 @@ bool QIODevice::getChar(char *c)
 
     Example:
 
-    \snippet code/src_corelib_io_qiodevice.cpp 4
+    \snippet code/src_corelib_io_qiodevice.cpp method_open
+    \snippet code/src_corelib_io_qiodevice.cpp method_body_0
+    \snippet code/src_corelib_io_qiodevice.cpp method_close
 
     \sa read()
 */
@@ -2027,7 +2030,9 @@ qint64 QIODevice::peek(char *data, qint64 maxSize)
 
     Example:
 
-    \snippet code/src_corelib_io_qiodevice.cpp 5
+    \snippet code/src_corelib_io_qiodevice.cpp method_open
+    \snippet code/src_corelib_io_qiodevice.cpp method_body_1
+    \snippet code/src_corelib_io_qiodevice.cpp method_close
 
     This function has no way of reporting errors; returning an empty
     QByteArray can mean either that no data was currently available

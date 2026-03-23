@@ -1676,6 +1676,8 @@ void tst_QDebug::threadSafety() const
 #ifdef Q_OS_WASM
     QSKIP("threadSafety does not run on wasm");
 #else
+    s_messages = {};
+
     MessageHandlerSetter mhs(threadSafeMessageHandler);
     const int numThreads = 10;
     QThreadPool::globalInstance()->setMaxThreadCount(numThreads);

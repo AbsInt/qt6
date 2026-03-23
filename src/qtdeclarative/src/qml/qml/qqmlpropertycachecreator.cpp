@@ -5,6 +5,7 @@
 #include "qqmlpropertycachecreator_p.h"
 
 #include <private/qqmlengine_p.h>
+#include <private/qqmlpropertyresolver_p.h>
 
 QT_BEGIN_NAMESPACE
 

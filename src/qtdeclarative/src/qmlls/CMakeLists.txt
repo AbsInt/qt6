@@ -17,6 +17,7 @@ qt_internal_add_module(QmlLSPrivate
         qtextsynchronization.cpp qtextsynchronization_p.h
         qqmlcompletionsupport_p.h qqmlcompletionsupport.cpp
         qqmlcodemodel_p.h qqmlcodemodel.cpp
+        qqmlcodemodelmanager_p.h qqmlcodemodelmanager.cpp
         qqmlbasemodule_p.h
         qqmlgototypedefinitionsupport_p.h qqmlgototypedefinitionsupport.cpp
         qqmlformatting_p.h qqmlformatting.cpp
@@ -36,6 +37,8 @@ qt_internal_add_module(QmlLSPrivate
         qqmllshelpplugininterface_p.h qqmllshelpplugininterface.cpp
         qqmllshelputils_p.h qqmllshelputils.cpp
         qmllsmain_p.h qmllsmain.cpp
+        qqmldiffer_p.h qqmldiffer.cpp
+        qprocessscheduler_p.h qprocessscheduler.cpp
 
         documentSymbolSupport/qqmldocumentsymbolsupport_p.h
         documentSymbolSupport/qqmldocumentsymbolsupport.cpp

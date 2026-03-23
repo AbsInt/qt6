@@ -150,11 +150,15 @@ public:
     QFontInfo fontInfo() const;
 
     void setPen(const QColor &color);
+    QT_GUI_INLINE_SINCE(6, 11)
     void setPen(const QPen &pen);
+    void setPen(QPen &&pen) { doSetPen(pen, &pen); }
     void setPen(Qt::PenStyle style);
     const QPen &pen() const;
 
+    QT_GUI_INLINE_SINCE(6, 11)
     void setBrush(const QBrush &brush);
+    void setBrush(QBrush &&brush) { doSetBrush(brush, &brush); }
     void setBrush(Qt::BrushStyle style);
     void setBrush(QColor color);
     void setBrush(Qt::GlobalColor color) { setBrush(QColor(color)); }
@@ -165,6 +169,7 @@ public:
     Qt::BGMode backgroundMode() const;
 
     QPoint brushOrigin() const;
+    QPointF brushOriginF() const;
     inline void setBrushOrigin(int x, int y);
     inline void setBrushOrigin(const QPoint &);
     void setBrushOrigin(const QPointF &);
@@ -417,6 +422,9 @@ public:
 
 private:
     Q_DISABLE_COPY(QPainter)
+
+    void doSetPen(const QPen &lvalue, QPen *rvalue);
+    void doSetBrush(const QBrush &lvalue, QBrush *rvalue);
 
     std::unique_ptr<QPainterPrivate> d_ptr;
 
@@ -698,6 +706,21 @@ inline void QPainter::fillRect(const QRectF &r, QGradient::Preset p)
 {
     fillRect(r, QGradient(p));
 }
+
+#if QT_GUI_INLINE_IMPL_SINCE(6, 11)
+
+void QPainter::setPen(const QPen &p)
+{
+    doSetPen(p, nullptr);
+}
+
+void QPainter::setBrush(const QBrush &b)
+{
+    doSetBrush(b, nullptr);
+}
+
+#endif // QT_GUI_INLINE_IMPL_SINCE(6, 11)
+
 
 inline void QPainter::setBrushOrigin(int x, int y)
 {

@@ -111,6 +111,7 @@ namespace QtGuiTest
     Q_GUI_EXPORT void setEventPointGlobalPosition(QEventPoint &p, QPointF arg);
     Q_GUI_EXPORT void setEventPointScenePosition(QEventPoint &p, QPointF arg);
     Q_GUI_EXPORT void setEventPointEllipseDiameters(QEventPoint &p, QSizeF arg);
+    Q_GUI_EXPORT bool platformSupportsMultipleWindows();
 } // namespace QtGuiTest
 
 #endif // #if QT_CONFIG(test_gui)

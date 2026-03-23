@@ -97,7 +97,6 @@ static void dumpConfiguration(QTextStream &str)
     DUMP_CAPABILITY(str, platformIntegration, SharedGraphicsCache)
     DUMP_CAPABILITY(str, platformIntegration, BufferQueueingOpenGL)
     DUMP_CAPABILITY(str, platformIntegration, WindowMasks)
-    DUMP_CAPABILITY(str, platformIntegration, RasterGLSurface)
     DUMP_CAPABILITY(str, platformIntegration, AllGLFunctionsQueryable)
     str << '\n';
 
@@ -139,9 +138,6 @@ static void dumpConfiguration(QTextStream &str)
 
 void tst_QOpenGlConfig::initTestCase()
 {
-#if !QT_CONFIG(run_opengl_tests)
-    QSKIP("Skip test as run-opengl-tests feature is off.");
-#endif
     if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::OpenGL))
         QSKIP("OpenGL is not supported on this platform.");
 }

@@ -15,8 +15,8 @@ QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(formatLog, "qt.languageserver.formatting")
 
-QQmlDocumentFormatting::QQmlDocumentFormatting(QmlLsp::QQmlCodeModel *codeModel)
-    : QQmlBaseModule(codeModel)
+QQmlDocumentFormatting::QQmlDocumentFormatting(QmlLsp::QQmlCodeModelManager *codeModelManager)
+    : QQmlBaseModule(codeModelManager)
 {
 }
 
@@ -44,13 +44,13 @@ void QQmlDocumentFormatting::process(RequestPointerArgument request)
     ResponseScopeGuard guard(result, request->m_response);
 
     using namespace QQmlJS::Dom;
-    QmlLsp::OpenDocument doc = m_codeModel->openDocumentByUrl(
-                QQmlLSUtils::lspUriToQmlUrl(request->m_parameters.textDocument.uri));
+    QmlLsp::OpenDocument doc = m_codeModelManager->openDocumentByUrl(
+            QQmlLSUtils::lspUriToQmlUrl(request->m_parameters.textDocument.uri));
 
     DomItem file = doc.snapshot.doc.fileObject(GoTo::MostLikely);
     if (!file) {
         guard.setError(QQmlLSUtils::ErrorMessage{
-                0, u"Could not find the file %1"_s.arg(doc.snapshot.doc.canonicalFilePath()) });
+                0, u"Could not find the file %1."_s.arg(doc.snapshot.doc.canonicalFilePath()) });
         return;
     }
     if (!file.field(Fields::isValid).value().toBool(false)) {
@@ -69,7 +69,7 @@ void QQmlDocumentFormatting::process(RequestPointerArgument request)
                 },
                 true);
         guard.setError(QQmlLSUtils::ErrorMessage{
-                0, u"Failed to parse %1"_s.arg(file.canonicalFilePath()) });
+                0, u"Failed to parse %1."_s.arg(file.canonicalFilePath()) });
         return;
     }
 
@@ -84,7 +84,7 @@ void QQmlDocumentFormatting::process(RequestPointerArgument request)
     QLspSpecification::TextEdit formattedText;
     LineWriter lw([&formattedText](QStringView s) { formattedText.newText += s.toUtf8(); },
                   QString(), currentFormatOptions.optionsForCode(qmlFile->code()));
-    OutWriter ow(lw);
+    OutWriter ow(qmlFile, lw);
     file.writeOutForFile(ow, WriteOutCheck::None);
     ow.flush();
     const auto &code = qmlFile->code();

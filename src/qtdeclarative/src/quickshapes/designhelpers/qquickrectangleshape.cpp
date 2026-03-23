@@ -6,76 +6,385 @@
 
 QT_BEGIN_NAMESPACE
 
-void QQuickRectangleShapePrivate::updateStrokeAdjustment()
+/*!
+    \class QQuickRectangleShape
+    \inmodule QtQuickShapes
+    \internal
+*/
+
+Q_STATIC_LOGGING_CATEGORY(lcCalculateIndependentRadii, "qt.quick.shapes.designhelpers.rectangleshape.calculateindependentradii")
+Q_STATIC_LOGGING_CATEGORY(lcUpdatePolish, "qt.quick.shapes.designhelpers.rectangleshape.updatepolish")
+Q_STATIC_LOGGING_CATEGORY(lcMaybeUpdateElements, "qt.quick.shapes.designhelpers.rectangleshape.maybeupdateelements")
+
+void QQuickRectangleShapePrivate::setTopLeftRadius(int topLeftRadius,
+    QQml::PropertyUtils::State propertyState)
 {
     Q_Q(QQuickRectangleShape);
-    switch (borderMode) {
-    case QQuickRectangleShape::Inside:
-        pathRectangle->setStrokeAdjustment(q->strokeWidth());
-        break;
-    case QQuickRectangleShape::Middle:
-        pathRectangle->setStrokeAdjustment(0);
-        break;
-    case QQuickRectangleShape::Outside:
-        pathRectangle->setStrokeAdjustment(-q->strokeWidth());
-        break;
-    }
+    const int oldEffectiveTopLeftRadius = q->topLeftRadius();
+    explicitTopLeftRadius = isExplicitlySet(propertyState);
+    this->topLeftRadius = topLeftRadius;
+
+    if (q->topLeftRadius() == oldEffectiveTopLeftRadius)
+        return;
+
     q->polish();
+    emit q->topLeftRadiusChanged();
 }
 
-QQuickRectangleShape::QQuickRectangleShape(QQuickItem *parent)
-    : QQuickShape(*(new QQuickRectangleShapePrivate), parent)
+void QQuickRectangleShapePrivate::setTopRightRadius(int topRightRadius,
+    QQml::PropertyUtils::State propertyState)
 {
-    Q_D(QQuickRectangleShape);
+    Q_Q(QQuickRectangleShape);
+    const int oldEffectiveTopRightRadius = q->topRightRadius();
+    explicitTopRightRadius = isExplicitlySet(propertyState);
+    this->topRightRadius = topRightRadius;
 
-    setPreferredRendererType(CurveRenderer);
+    if (q->topRightRadius() == oldEffectiveTopRightRadius)
+        return;
 
-    d->shapePath = new QQuickShapePath(this);
-    d->shapePath->setObjectName("rectangleShapeShapePath");
-    d->shapePath->setAsynchronous(true);
-    d->shapePath->setStrokeWidth(4);
-    d->shapePath->setStrokeColor(QColorConstants::Black);
+    q->polish();
+    emit q->topRightRadiusChanged();
+}
 
-    connect(d->shapePath, &QQuickShapePath::strokeColorChanged, this, &QQuickRectangleShape::strokeColorChanged);
-    connect(d->shapePath, &QQuickShapePath::strokeWidthChanged, this, &QQuickRectangleShape::strokeWidthChanged);
-    connect(d->shapePath, &QQuickShapePath::fillColorChanged, this, &QQuickRectangleShape::fillColorChanged);
-    connect(d->shapePath, &QQuickShapePath::joinStyleChanged, this, &QQuickRectangleShape::joinStyleChanged);
-    connect(d->shapePath, &QQuickShapePath::capStyleChanged, this, &QQuickRectangleShape::capStyleChanged);
-    connect(d->shapePath, &QQuickShapePath::strokeStyleChanged, this, &QQuickRectangleShape::strokeStyleChanged);
-    connect(d->shapePath, &QQuickShapePath::dashOffsetChanged, this, &QQuickRectangleShape::dashOffsetChanged);
-    connect(d->shapePath, &QQuickShapePath::dashPatternChanged, this, &QQuickRectangleShape::dashPatternChanged);
-    // QQuickShapePath has no change signal for fillGradient.
+void QQuickRectangleShapePrivate::setBottomLeftRadius(int bottomLeftRadius,
+    QQml::PropertyUtils::State propertyState)
+{
+    Q_Q(QQuickRectangleShape);
+    const int oldEffectiveBottomLeftRadius = q->bottomLeftRadius();
+    explicitBottomLeftRadius = isExplicitlySet(propertyState);
+    this->bottomLeftRadius = bottomLeftRadius;
 
-    // Construct and append the PathRectangle to the ShapePath.
-    d->pathRectangle = new QQuickPathRectangle(d->shapePath);
-    d->pathRectangle->setObjectName("topRightPathArc");
-    d->pathRectangle->setRadius(10);
-    connect(d->pathRectangle, &QQuickPathRectangle::radiusChanged, this, &QQuickRectangleShape::radiusChanged);
-    connect(d->pathRectangle, &QQuickPathRectangle::topLeftRadiusChanged, this, &QQuickRectangleShape::topLeftRadiusChanged);
-    connect(d->pathRectangle, &QQuickPathRectangle::topRightRadiusChanged, this, &QQuickRectangleShape::topRightRadiusChanged);
-    connect(d->pathRectangle, &QQuickPathRectangle::bottomLeftRadiusChanged, this, &QQuickRectangleShape::bottomLeftRadiusChanged);
-    connect(d->pathRectangle, &QQuickPathRectangle::bottomRightRadiusChanged, this, &QQuickRectangleShape::bottomRightRadiusChanged);
-    connect(d->pathRectangle, &QQuickPathRectangle::bevelChanged, this, &QQuickRectangleShape::bevelChanged);
-    connect(d->pathRectangle, &QQuickPathRectangle::topLeftBevelChanged, this, &QQuickRectangleShape::topLeftBevelChanged);
-    connect(d->pathRectangle, &QQuickPathRectangle::topRightBevelChanged, this, &QQuickRectangleShape::topRightBevelChanged);
-    connect(d->pathRectangle, &QQuickPathRectangle::bottomLeftBevelChanged, this, &QQuickRectangleShape::bottomLeftBevelChanged);
-    connect(d->pathRectangle, &QQuickPathRectangle::bottomRightBevelChanged, this, &QQuickRectangleShape::bottomRightBevelChanged);
+    if (q->bottomLeftRadius() == oldEffectiveBottomLeftRadius)
+        return;
 
-    // geometryChange sets PathRectangle's size to ours, so do this after we've created it.
-    setWidth(200);
-    setHeight(150);
-    d->updateStrokeAdjustment();
+    q->polish();
+    emit q->bottomLeftRadiusChanged();
+}
 
-    QQuickPathPrivate::get(d->shapePath)->appendPathElement(d->pathRectangle);
+void QQuickRectangleShapePrivate::setBottomRightRadius(int bottomRightRadius,
+    QQml::PropertyUtils::State propertyState)
+{
+    Q_Q(QQuickRectangleShape);
+    const int oldEffectiveBottomRightRadius = q->bottomRightRadius();
+    explicitBottomRightRadius = isExplicitlySet(propertyState);
+    this->bottomRightRadius = bottomRightRadius;
 
-    // Now that we've constructed the individual path elements and added them to the shape path,
-    // add that path as a child of us.
-    // Do what vpe_append in qquickshape.cpp does except without the overhead of the QQmlListProperty stuff.
-    d->sp.append(d->shapePath);
-    // Similar, but for QQuickItemPrivate::data_append...
-    d->shapePath->setParent(this);
-    // ... which calls QQuickItemPrivate::resources_append.
-    d->extra.value().resourcesList.append(d->shapePath);
+    if (q->bottomRightRadius() == oldEffectiveBottomRightRadius)
+        return;
+
+    q->polish();
+    emit q->bottomRightRadiusChanged();
+}
+
+void QQuickRectangleShapePrivate::setTopLeftBevel(bool topLeftBevel,
+    QQml::PropertyUtils::State propertyState)
+{
+    Q_Q(QQuickRectangleShape);
+    const bool oldTopLeftBevel = q->hasTopLeftBevel();
+    explicitTopLeftBevel = isExplicitlySet(propertyState);
+    this->topLeftBevel = topLeftBevel;
+
+    if (q->hasTopLeftBevel() == oldTopLeftBevel)
+        return;
+
+    q->polish();
+    emit q->topLeftBevelChanged();
+}
+
+void QQuickRectangleShapePrivate::setTopRightBevel(bool topRightBevel,
+    QQml::PropertyUtils::State propertyState)
+{
+    Q_Q(QQuickRectangleShape);
+    const bool oldTopRightBevel = q->hasTopRightBevel();
+    explicitTopRightBevel = isExplicitlySet(propertyState);
+    this->topRightBevel = topRightBevel;
+
+    if (q->hasTopRightBevel() == oldTopRightBevel)
+        return;
+
+    q->polish();
+    emit q->topRightBevelChanged();
+}
+
+void QQuickRectangleShapePrivate::setBottomLeftBevel(bool bottomLeftBevel,
+    QQml::PropertyUtils::State propertyState)
+{
+    Q_Q(QQuickRectangleShape);
+    const bool oldBottomLeftBevel = q->hasBottomLeftBevel();
+    explicitBottomLeftBevel = isExplicitlySet(propertyState);
+    this->bottomLeftBevel = bottomLeftBevel;
+
+    if (q->hasBottomLeftBevel() == oldBottomLeftBevel)
+        return;
+
+    q->polish();
+    emit q->bottomLeftBevelChanged();
+}
+
+void QQuickRectangleShapePrivate::setBottomRightBevel(bool bottomRightBevel,
+    QQml::PropertyUtils::State propertyState)
+{
+    Q_Q(QQuickRectangleShape);
+    const bool oldBottomRightBevel = q->hasBottomRightBevel();
+    explicitBottomRightBevel = isExplicitlySet(propertyState);
+    this->bottomRightBevel = bottomRightBevel;
+
+    if (q->hasBottomRightBevel() == oldBottomRightBevel)
+        return;
+
+    q->polish();
+    emit q->bottomRightBevelChanged();
+}
+
+template <typename T>
+T *createElement(QQuickShapePath *shapePath, const char *objectName)
+{
+    auto *element = new T(shapePath);
+    element->setObjectName(objectName);
+    return element;
+}
+
+/*!
+    \internal
+
+    Constructs and append the individual path elements to the ShapePath.
+*/
+void QQuickRectangleShapePrivate::maybeUpdateElements()
+{
+    if (!componentComplete)
+        return;
+
+    auto *shapePathPrivate = QQuickShapePathPrivate::get(shapePath);
+
+    // We need to delete the elements since we create them ourselves.
+    qCDebug(lcMaybeUpdateElements).nospace() << "maybeUpdateElements called on "
+        // Avoid printing the QQuickItem as it results in assertion failure in QQuickItemLayer::componentComplete.
+        << static_cast<void *>(q_func()) << "; deleting and clearing path elements";
+    shapePathPrivate->clearPathElements(QQuickPathPrivate::DeleteElementPolicy::Delete);
+
+    static const QQuickPathPrivate::ProcessPathPolicy DontProcessPath
+        = QQuickPathPrivate::ProcessPathPolicy::DontProcess;
+
+    // We avoid rendering issues (QDS-14861) by rotating the start position
+    // clockwise until the first visible edge after a hidden edge was found.
+    // Set the start position (startIndex) to that edge and continue the construction of
+    // the border item from there.
+    const std::array visibleEdges = {drawTop, drawRight, drawBottom, drawLeft };
+    int startIndex = 0;
+    for (int currentEdge = static_cast<int>(Edge::Top); currentEdge < static_cast<int>(Edge::NEdges); ++currentEdge) {
+        const int previousEdge = (currentEdge + 3) % 4;
+        if (!visibleEdges[previousEdge] && visibleEdges[currentEdge]) {
+            startIndex = currentEdge;
+            break;
+        }
+    }
+
+    firstVisibleEdge = static_cast<Edge>(startIndex);
+    qCDebug(lcMaybeUpdateElements) << "firstVisibleEdge:" << startIndex; // (Can't print the enum itself)
+
+    for (int i = 0; i < 4; i++) {
+        const int currentEdge = (startIndex + i) % 4;
+        const int nextEdge = (startIndex + i + 1) % 4;
+
+        switch (static_cast<Edge>(currentEdge)) {
+        case Edge::Top:
+            if (visibleEdges[currentEdge]) {
+                topPathLine = createElement<QQuickPathLine>(shapePath, "topPathLine");
+                shapePathPrivate->appendPathElement(topPathLine, DontProcessPath);
+                topPathMove = nullptr;
+            } else {
+                topPathLine = nullptr;
+                topPathMove = createElement<QQuickPathMove>(shapePath, "topPathMove");
+                shapePathPrivate->appendPathElement(topPathMove, DontProcessPath);
+            }
+
+            // Top right corner
+            if (visibleEdges[currentEdge] && visibleEdges[nextEdge]) {
+                topRightPathArc = createElement<QQuickPathArc>(shapePath, "topRightPathArc");
+                shapePathPrivate->appendPathElement(topRightPathArc, DontProcessPath);
+            } else {
+                topRightPathArc = nullptr;
+            }
+            break;
+        case Edge::Right:
+            if (visibleEdges[currentEdge]) {
+                rightPathLine = createElement<QQuickPathLine>(shapePath, "rightPathLine");
+                shapePathPrivate->appendPathElement(rightPathLine, DontProcessPath);
+                rightPathMove = nullptr;
+            } else {
+                rightPathLine = nullptr;
+                rightPathMove = createElement<QQuickPathMove>(shapePath, "rightPathMove");
+                shapePathPrivate->appendPathElement(rightPathMove, DontProcessPath);
+            }
+
+            // Bottom right corner
+            if (visibleEdges[currentEdge] && visibleEdges[nextEdge]) {
+                bottomRightPathArc = createElement<QQuickPathArc>(shapePath, "bottomRightPathArc");
+                shapePathPrivate->appendPathElement(bottomRightPathArc, DontProcessPath);
+            } else {
+                bottomRightPathArc = nullptr;
+            }
+            break;
+        case Edge::Bottom:
+            if (visibleEdges[currentEdge]) {
+                bottomPathLine = createElement<QQuickPathLine>(shapePath, "bottomPathLine");
+                shapePathPrivate->appendPathElement(bottomPathLine, DontProcessPath);
+                bottomPathMove = nullptr;
+            } else {
+                bottomPathLine = nullptr;
+                bottomPathMove = createElement<QQuickPathMove>(shapePath, "bottomPathMove");
+                shapePathPrivate->appendPathElement(bottomPathMove, DontProcessPath);
+            }
+
+            // Bottom left corner
+            if (visibleEdges[currentEdge] && visibleEdges[nextEdge]) {
+                bottomLeftPathArc = createElement<QQuickPathArc>(shapePath, "bottomLeftPathArc");
+                shapePathPrivate->appendPathElement(bottomLeftPathArc, DontProcessPath);
+            } else {
+                bottomLeftPathArc = nullptr;
+            }
+            break;
+        case Edge::Left:
+            if (visibleEdges[currentEdge]) {
+                leftPathLine = createElement<QQuickPathLine>(shapePath, "leftPathLine");
+                shapePathPrivate->appendPathElement(leftPathLine, DontProcessPath);
+            } else {
+                leftPathLine = nullptr;
+                // There isn't a leftPathMove because it will only be applicable for the case where
+                // there is only a top and bottom edge (the only configuration where a
+                // left-path-move could be needed), and if that is the case, it must start with the
+                // top edge, and must end at the left edge, so there is never need to move the path
+                // at the last (left in this case) edge.
+            }
+
+            // Top left corner
+            if (visibleEdges[currentEdge] && visibleEdges[nextEdge]) {
+                topLeftPathArc = createElement<QQuickPathArc>(shapePath, "topLeftPathArc");
+                shapePathPrivate->appendPathElement(topLeftPathArc, DontProcessPath);
+            } else {
+                topLeftPathArc = nullptr;
+            }
+            break;
+        case Edge::NEdges:
+            Q_UNREACHABLE();
+        }
+    }
+
+    qCDebug(lcMaybeUpdateElements) << "about to process path";
+    shapePath->processPath();
+    qCDebug(lcMaybeUpdateElements) << "about to call _q_shapePathChanged (i.e. polish and update implicit size)";
+    _q_shapePathChanged();
+}
+
+void QQuickRectangleShapePrivate::calculateIndependentRadii()
+{
+    Q_Q(const QQuickRectangleShape);
+    const qreal rectWidth = width.valueBypassingBindings();
+    const qreal rectHeight = height.valueBypassingBindings();
+    const int minDimension = qMin(rectWidth, rectHeight);
+    const int maxRadius = minDimension / 2;
+    const int topLeftRadius = q->topLeftRadius();
+    const int topRightRadius = q->topRightRadius();
+    const int bottomRightRadius = q->bottomRightRadius();
+    const int bottomLeftRadius = q->bottomLeftRadius();
+    const bool mixed = !(radius == topLeftRadius
+        && radius == topRightRadius
+        && radius == bottomLeftRadius
+        && radius == bottomRightRadius);
+
+    // Uniform radii
+    if (!mixed) {
+        effectiveTopLeftRadius = qMin(topLeftRadius, maxRadius);
+        effectiveTopRightRadius = qMin(topRightRadius, maxRadius);
+        effectiveBottomRightRadius = qMin(bottomRightRadius, maxRadius);
+        effectiveBottomLeftRadius = qMin(bottomLeftRadius, maxRadius);
+        qCDebug(lcCalculateIndependentRadii) << "calculateIndependentRadii: using uniform radii of" << radius
+            << "width" << rectWidth
+            << "height" << rectHeight
+            << "minDimension" << minDimension
+            << "tlr" << topLeftRadius
+            << "etlr" << effectiveTopLeftRadius
+            << "trr" << topRightRadius
+            << "etrr" << effectiveTopRightRadius
+            << "blr" << bottomLeftRadius
+            << "eblr" << effectiveBottomLeftRadius
+            << "brr" << bottomRightRadius
+            << "ebrr" << effectiveBottomRightRadius;
+        return;
+    }
+
+    // Mixed radii
+    qreal topLeftRadiusMin = qMin(minDimension, topLeftRadius);
+    qreal topRightRadiusMin = qMin(minDimension, topRightRadius);
+    qreal bottomLeftRadiusMin = qMin(minDimension, bottomLeftRadius);
+    qreal bottomRightRadiusMin = qMin(minDimension, bottomRightRadius);
+
+    // Top radii
+    const qreal topRadii = topLeftRadius + topRightRadius;
+
+    if (topRadii > rectWidth) {
+        const qreal topLeftRadiusFactor = topLeftRadius / topRadii;
+        const qreal tlr = qRound(rectWidth * topLeftRadiusFactor);
+
+        topLeftRadiusMin = qMin(topLeftRadiusMin, tlr);
+        topRightRadiusMin = qMin(topRightRadiusMin, rectWidth - tlr);
+    }
+
+    // Right radii
+    const qreal rightRadii = topRightRadius + bottomRightRadius;
+
+    if (rightRadii > rectHeight) {
+        const qreal topRightRadiusFactor = topRightRadius / rightRadii;
+        const qreal trr = qRound(rectHeight * topRightRadiusFactor);
+
+        topRightRadiusMin = qMin(topRightRadiusMin, trr);
+        bottomRightRadiusMin = qMin(bottomRightRadiusMin, rectHeight - trr);
+    }
+
+    // Bottom radii
+    const qreal bottomRadii = bottomRightRadius + bottomLeftRadius;
+
+    if (bottomRadii > rectWidth) {
+        const qreal bottomRightRadiusFactor = bottomRightRadius / bottomRadii;
+        const qreal brr = qRound(rectWidth * bottomRightRadiusFactor);
+
+        bottomRightRadiusMin = qMin(bottomRightRadiusMin, brr);
+        bottomLeftRadiusMin = qMin(bottomLeftRadiusMin, rectWidth - brr);
+    }
+
+    // Left radii
+    const qreal leftRadii = bottomLeftRadius + topLeftRadius;
+
+    if (leftRadii > rectHeight) {
+        const qreal bottomLeftRadiusFactor = bottomLeftRadius / leftRadii;
+        const qreal blr = qRound(rectHeight * bottomLeftRadiusFactor);
+
+        bottomLeftRadiusMin = qMin(bottomLeftRadiusMin, blr);
+        topLeftRadiusMin = qMin(topLeftRadiusMin, rectHeight - blr);
+    }
+
+    effectiveTopLeftRadius = topLeftRadiusMin;
+    effectiveTopRightRadius = topRightRadiusMin;
+    effectiveBottomLeftRadius = bottomLeftRadiusMin;
+    effectiveBottomRightRadius = bottomRightRadiusMin;
+
+    qCDebug(lcCalculateIndependentRadii) << "calculateIndependentRadii:"
+        << "width" << rectWidth
+        << "height" << rectHeight
+        << "borderMode" << borderMode
+        << "strokeWidth" << shapePath->strokeWidth()
+        << "minDimension" << minDimension
+        << "tlr" << topLeftRadius
+        << "etlr" << effectiveTopLeftRadius
+        << "trr" << topRightRadius
+        << "etrr" << effectiveTopRightRadius
+        << "blr" << bottomLeftRadius
+        << "eblr" << effectiveBottomLeftRadius
+        << "brr" << bottomRightRadius
+        << "ebrr" << effectiveBottomRightRadius
+        << "borderOffset" << borderOffset
+        << "startX" << shapePath->startX()
+        << "startY" << shapePath->startY();
 }
 
 /*!
@@ -107,11 +416,168 @@ QQuickRectangleShape::QQuickRectangleShape(QQuickItem *parent)
 
     \snippet rectangleshape-bevel.qml rectangleShape
 
-    \image pathrectangle-bevel.png
+    \image pathrectangle-bevel.png {Green rectangle with beveled corners}
 */
+
+QQuickRectangleShape::QQuickRectangleShape(QQuickItem *parent)
+    : QQuickShape(*(new QQuickRectangleShapePrivate), parent)
+{
+    Q_D(QQuickRectangleShape);
+
+    // Create the ShapePath.
+    d->shapePath = new QQuickShapePath(this);
+    d->shapePath->setObjectName("rectangleShapeShapePath");
+    d->shapePath->setStrokeWidth(1);
+    d->shapePath->setStrokeColor(QColorConstants::Black);
+    d->shapePath->setFillColor(QColorConstants::White);
+    d->shapePath->setJoinStyle(QQuickShapePath::BevelJoin);
+    // Don't make it asynchronous, as it results in brief periods of incorrect rendering.
+
+    connect(d->shapePath, &QQuickShapePath::strokeColorChanged, this, &QQuickRectangleShape::strokeColorChanged);
+    connect(d->shapePath, &QQuickShapePath::strokeWidthChanged, this, &QQuickRectangleShape::strokeWidthChanged);
+    connect(d->shapePath, &QQuickShapePath::fillColorChanged, this, &QQuickRectangleShape::fillColorChanged);
+    connect(d->shapePath, &QQuickShapePath::joinStyleChanged, this, &QQuickRectangleShape::joinStyleChanged);
+    connect(d->shapePath, &QQuickShapePath::capStyleChanged, this, &QQuickRectangleShape::capStyleChanged);
+    connect(d->shapePath, &QQuickShapePath::strokeStyleChanged, this, &QQuickRectangleShape::strokeStyleChanged);
+    connect(d->shapePath, &QQuickShapePath::dashOffsetChanged, this, &QQuickRectangleShape::dashOffsetChanged);
+    connect(d->shapePath, &QQuickShapePath::dashPatternChanged, this, &QQuickRectangleShape::dashPatternChanged);
+    connect(d->shapePath, &QQuickShapePath::fillGradientChanged, this, &QQuickRectangleShape::fillGradientChanged);
+
+    // Add the path as a child of us.
+    // The individual path elements will be added to the shape path in maybeUpdateElements().
+    // Do what vpe_append in qquickshape.cpp does except without the overhead of the QQmlListProperty stuff.
+    d->sp.append(d->shapePath);
+    // Similar, but for QQuickItemPrivate::data_append...
+    d->shapePath->setParent(this);
+    // ... which calls QQuickItemPrivate::resources_append.
+    d->extra.value().resourcesList.append(d->shapePath);
+
+    setWidth(200);
+    setHeight(200);
+    setPreferredRendererType(CurveRenderer);
+
+    // QQuickShape::componentComplete sets up the connections to each path.
+    // It also calls _q_shapePathChanged, which will call polish (for our updatePolish).
+}
 
 QQuickRectangleShape::~QQuickRectangleShape()
 {
+}
+
+/*!
+    \since 6.11
+
+    This property holds whether the top border is drawn.
+
+    The default value is \c true.
+*/
+bool QQuickRectangleShape::drawTop() const
+{
+    Q_D(const QQuickRectangleShape);
+    return d->drawTop;
+}
+
+void QQuickRectangleShape::setDrawTop(bool drawTop)
+{
+    Q_D(QQuickRectangleShape);
+    if (drawTop == d->drawTop)
+        return;
+
+    d->drawTop = drawTop;
+    d->maybeUpdateElements();
+    emit drawTopChanged();
+}
+
+void QQuickRectangleShape::resetDrawTop()
+{
+    setDrawTop(QQuickRectangleShapePrivate::defaultDrawEdge);
+}
+
+/*!
+    \since 6.11
+
+    This property holds whether the right border is drawn.
+
+    The default value is \c true.
+*/
+bool QQuickRectangleShape::drawRight() const
+{
+    Q_D(const QQuickRectangleShape);
+    return d->drawRight;
+}
+
+void QQuickRectangleShape::setDrawRight(bool drawRight)
+{
+    Q_D(QQuickRectangleShape);
+    if (drawRight == d->drawRight)
+        return;
+
+    d->drawRight = drawRight;
+    d->maybeUpdateElements();
+    emit drawRightChanged();
+}
+
+void QQuickRectangleShape::resetDrawRight()
+{
+    setDrawRight(QQuickRectangleShapePrivate::defaultDrawEdge);
+}
+
+/*!
+    \since 6.11
+
+    This property holds whether the bottom border is drawn.
+
+    The default value is \c true.
+*/
+bool QQuickRectangleShape::drawBottom() const
+{
+    Q_D(const QQuickRectangleShape);
+    return d->drawBottom;
+}
+
+void QQuickRectangleShape::setDrawBottom(bool drawBottom)
+{
+    Q_D(QQuickRectangleShape);
+    if (drawBottom == d->drawBottom)
+        return;
+
+    d->drawBottom = drawBottom;
+    d->maybeUpdateElements();
+    emit drawBottomChanged();
+}
+
+void QQuickRectangleShape::resetDrawBottom()
+{
+    setDrawBottom(QQuickRectangleShapePrivate::defaultDrawEdge);
+}
+
+/*!
+    \since 6.11
+
+    This property holds whether the left border is drawn.
+
+    The default value is \c true.
+*/
+bool QQuickRectangleShape::drawLeft() const
+{
+    Q_D(const QQuickRectangleShape);
+    return d->drawLeft;
+}
+
+void QQuickRectangleShape::setDrawLeft(bool drawLeft)
+{
+    Q_D(QQuickRectangleShape);
+    if (drawLeft == d->drawLeft)
+        return;
+
+    d->drawLeft = drawLeft;
+    d->maybeUpdateElements();
+    emit drawLeftChanged();
+}
+
+void QQuickRectangleShape::resetDrawLeft()
+{
+    setDrawLeft(QQuickRectangleShapePrivate::defaultDrawEdge);
 }
 
 /*!
@@ -124,13 +590,36 @@ QQuickRectangleShape::~QQuickRectangleShape()
 int QQuickRectangleShape::radius() const
 {
     Q_D(const QQuickRectangleShape);
-    return d->pathRectangle->radius();
+    return d->radius;
 }
 
 void QQuickRectangleShape::setRadius(int radius)
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->setRadius(radius);
+    if (radius == d->radius)
+        return;
+
+    const int oldTopLeftRadius = topLeftRadius();
+    const int oldTopRightRadius = topRightRadius();
+    const int oldBottomRightRadius = bottomRightRadius();
+    const int oldBottomLeftRadius = bottomLeftRadius();
+
+    d->radius = radius;
+    polish();
+    emit radiusChanged();
+    if (topLeftRadius() != oldTopLeftRadius)
+        emit topLeftRadiusChanged();
+    if (topRightRadius() != oldTopRightRadius)
+        emit topRightRadiusChanged();
+    if (bottomRightRadius() != oldBottomRightRadius)
+        emit bottomRightRadiusChanged();
+    if (bottomLeftRadius() != oldBottomLeftRadius)
+        emit bottomLeftRadiusChanged();
+}
+
+void QQuickRectangleShape::resetRadius()
+{
+    setRadius(QQuickRectangleShapePrivate::defaultRadius);
 }
 
 /*!
@@ -141,73 +630,77 @@ void QQuickRectangleShape::setRadius(int radius)
 int QQuickRectangleShape::topLeftRadius() const
 {
     Q_D(const QQuickRectangleShape);
-    return d->pathRectangle->topLeftRadius();
+    return d->explicitTopLeftRadius ? d->topLeftRadius : d->radius;
 }
 
 void QQuickRectangleShape::setTopLeftRadius(int topLeftRadius)
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->setTopLeftRadius(topLeftRadius);
+    d->setTopLeftRadius(topLeftRadius, QQml::PropertyUtils::State::ExplicitlySet);
 }
 
 void QQuickRectangleShape::resetTopLeftRadius()
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->resetTopLeftRadius();
+    d->setTopLeftRadius(QQuickRectangleShapePrivate::defaultRadius,
+        QQml::PropertyUtils::State::ImplicitlySet);
 }
 
 int QQuickRectangleShape::topRightRadius() const
 {
     Q_D(const QQuickRectangleShape);
-    return d->pathRectangle->topRightRadius();
+    return d->explicitTopRightRadius ? d->topRightRadius : d->radius;
 }
 
 void QQuickRectangleShape::setTopRightRadius(int topRightRadius)
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->setTopRightRadius(topRightRadius);
+    d->setTopRightRadius(topRightRadius, QQml::PropertyUtils::State::ExplicitlySet);
 }
 
 void QQuickRectangleShape::resetTopRightRadius()
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->resetTopRightRadius();
+    d->setTopRightRadius(QQuickRectangleShapePrivate::defaultRadius,
+        QQml::PropertyUtils::State::ImplicitlySet);
 }
 
 int QQuickRectangleShape::bottomLeftRadius() const
 {
     Q_D(const QQuickRectangleShape);
-    return d->pathRectangle->bottomLeftRadius();
+    return d->explicitBottomLeftRadius ? d->bottomLeftRadius : d->radius;
 }
 
 void QQuickRectangleShape::setBottomLeftRadius(int bottomLeftRadius)
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->setBottomLeftRadius(bottomLeftRadius);
+    d->setBottomLeftRadius(bottomLeftRadius, QQml::PropertyUtils::State::ExplicitlySet);
 }
 
 void QQuickRectangleShape::resetBottomLeftRadius()
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->resetBottomLeftRadius();
+    d->setBottomLeftRadius(QQuickRectangleShapePrivate::defaultRadius,
+        QQml::PropertyUtils::State::ImplicitlySet);
 }
 
 int QQuickRectangleShape::bottomRightRadius() const
 {
     Q_D(const QQuickRectangleShape);
-    return d->pathRectangle->bottomRightRadius();
+    return d->explicitBottomRightRadius ? d->bottomRightRadius : d->radius;
 }
 
 void QQuickRectangleShape::setBottomRightRadius(int bottomRightRadius)
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->setBottomRightRadius(bottomRightRadius);
+    d->setBottomRightRadius(bottomRightRadius, QQml::PropertyUtils::State::ExplicitlySet);
 }
 
 void QQuickRectangleShape::resetBottomRightRadius()
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->resetBottomRightRadius();
+    d->setBottomRightRadius(QQuickRectangleShapePrivate::defaultRadius,
+        QQml::PropertyUtils::State::ImplicitlySet);
 }
 
 /*!
@@ -219,13 +712,36 @@ void QQuickRectangleShape::resetBottomRightRadius()
 bool QQuickRectangleShape::hasBevel() const
 {
     Q_D(const QQuickRectangleShape);
-    return d->pathRectangle->hasBevel();
+    return d->bevel;
 }
 
 void QQuickRectangleShape::setBevel(bool bevel)
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->setBevel(bevel);
+    if (bevel == d->bevel)
+        return;
+
+    const bool oldTopLeftBevel = hasTopLeftBevel();
+    const bool oldTopRightBevel = hasTopRightBevel();
+    const bool oldBottomRightBevel = hasBottomRightBevel();
+    const bool oldBottomLeftBevel = hasBottomLeftBevel();
+
+    d->bevel = bevel;
+    polish();
+    emit bevelChanged();
+    if (hasTopLeftBevel() != oldTopLeftBevel)
+        emit topLeftBevelChanged();
+    if (hasTopRightBevel() != oldTopRightBevel)
+        emit topRightBevelChanged();
+    if (hasBottomRightBevel() != oldBottomRightBevel)
+        emit bottomRightBevelChanged();
+    if (hasBottomLeftBevel() != oldBottomLeftBevel)
+        emit bottomLeftBevelChanged();
+}
+
+void QQuickRectangleShape::resetBevel()
+{
+    setBevel(false);
 }
 
 /*!
@@ -237,73 +753,77 @@ void QQuickRectangleShape::setBevel(bool bevel)
 bool QQuickRectangleShape::hasTopLeftBevel() const
 {
     Q_D(const QQuickRectangleShape);
-    return d->pathRectangle->hasTopLeftBevel();
+    return d->explicitTopLeftBevel ? d->topLeftBevel : d->bevel;
 }
 
 void QQuickRectangleShape::setTopLeftBevel(bool topLeftBevel)
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->setTopLeftBevel(topLeftBevel);
+    d->setTopLeftBevel(topLeftBevel, QQml::PropertyUtils::State::ExplicitlySet);
 }
 
 void QQuickRectangleShape::resetTopLeftBevel()
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->resetTopLeftBevel();
+    d->setTopLeftBevel(QQuickRectangleShapePrivate::defaultBevel,
+        QQml::PropertyUtils::State::ImplicitlySet);
 }
 
 bool QQuickRectangleShape::hasTopRightBevel() const
 {
     Q_D(const QQuickRectangleShape);
-    return d->pathRectangle->hasTopRightBevel();
+    return d->explicitTopRightBevel ? d->topRightBevel : d->bevel;
 }
 
 void QQuickRectangleShape::setTopRightBevel(bool topRightBevel)
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->setTopRightBevel(topRightBevel);
+    d->setTopRightBevel(topRightBevel, QQml::PropertyUtils::State::ExplicitlySet);
 }
 
 void QQuickRectangleShape::resetTopRightBevel()
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->resetTopRightBevel();
+    d->setTopRightBevel(QQuickRectangleShapePrivate::defaultBevel,
+        QQml::PropertyUtils::State::ImplicitlySet);
 }
 
 bool QQuickRectangleShape::hasBottomLeftBevel() const
 {
     Q_D(const QQuickRectangleShape);
-    return d->pathRectangle->hasBottomLeftBevel();
+    return d->explicitBottomLeftBevel ? d->bottomLeftBevel : d->bevel;
 }
 
 void QQuickRectangleShape::setBottomLeftBevel(bool bottomLeftBevel)
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->setBottomLeftBevel(bottomLeftBevel);
+    d->setBottomLeftBevel(bottomLeftBevel, QQml::PropertyUtils::State::ExplicitlySet);
 }
 
 void QQuickRectangleShape::resetBottomLeftBevel()
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->resetBottomLeftBevel();
+    d->setBottomLeftBevel(QQuickRectangleShapePrivate::defaultBevel,
+        QQml::PropertyUtils::State::ImplicitlySet);
 }
 
 bool QQuickRectangleShape::hasBottomRightBevel() const
 {
     Q_D(const QQuickRectangleShape);
-    return d->pathRectangle->hasBottomRightBevel();
+    return d->explicitBottomRightBevel ? d->bottomRightBevel : d->bevel;
 }
 
 void QQuickRectangleShape::setBottomRightBevel(bool bottomRightBevel)
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->setBottomRightBevel(bottomRightBevel);
+    d->setBottomRightBevel(bottomRightBevel, QQml::PropertyUtils::State::ExplicitlySet);
 }
 
 void QQuickRectangleShape::resetBottomRightBevel()
 {
     Q_D(QQuickRectangleShape);
-    d->pathRectangle->resetBottomRightBevel();
+    d->setBottomRightBevel(QQuickRectangleShapePrivate::defaultBevel,
+        QQml::PropertyUtils::State::ImplicitlySet);
 }
 
 /*!
@@ -347,11 +867,7 @@ qreal QQuickRectangleShape::strokeWidth() const
 void QQuickRectangleShape::setStrokeWidth(qreal width)
 {
     Q_D(QQuickRectangleShape);
-    const qreal oldStrokeWidth = d->shapePath->strokeWidth();
     d->shapePath->setStrokeWidth(width);
-    // setStrokeWidth doesn't use qFuzzyCompare, so neither do we.
-    if (oldStrokeWidth != d->shapePath->strokeWidth())
-        d->updateStrokeAdjustment();
 }
 
 /*!
@@ -411,6 +927,18 @@ void QQuickRectangleShape::setJoinStyle(QQuickShapePath::JoinStyle style)
     d->shapePath->setJoinStyle(style);
 }
 
+int QQuickRectangleShape::miterLimit() const
+{
+    Q_D(const QQuickRectangleShape);
+    return d->shapePath->miterLimit();
+}
+
+void QQuickRectangleShape::setMiterLimit(int limit)
+{
+    Q_D(QQuickRectangleShape);
+    d->shapePath->setMiterLimit(limit);
+}
+
 /*!
     \include shapepath.qdocinc {capStyle-property} {QtQuick.Shapes.DesignHelpers::RectangleShape}
 */
@@ -463,13 +991,13 @@ void QQuickRectangleShape::setDashOffset(qreal offset)
     \include shapepath.qdocinc {dashPattern-property} {QtQuick.Shapes.DesignHelpers::RectangleShape}
 */
 
-QVector<qreal> QQuickRectangleShape::dashPattern() const
+QList<qreal> QQuickRectangleShape::dashPattern() const
 {
     Q_D(const QQuickRectangleShape);
     return d->shapePath->dashPattern();
 }
 
-void QQuickRectangleShape::setDashPattern(const QVector<qreal> &array)
+void QQuickRectangleShape::setDashPattern(const QList<qreal> &array)
 {
     Q_D(QQuickRectangleShape);
     d->shapePath->setDashPattern(array);
@@ -539,21 +1067,162 @@ void QQuickRectangleShape::setBorderMode(BorderMode borderMode)
         return;
 
     d->borderMode = borderMode;
-    d->updateStrokeAdjustment();
+    polish();
     emit borderModeChanged();
 }
 
 void QQuickRectangleShape::resetBorderMode()
 {
-    setBorderMode(Inside);
+    setBorderMode(BorderMode::Inside);
 }
 
-void QQuickRectangleShape::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)
+void QQuickRectangleShape::componentComplete()
 {
     Q_D(QQuickRectangleShape);
-    QQuickShape::geometryChange(newGeometry, oldGeometry);
-    d->pathRectangle->setWidth(newGeometry.width());
-    d->pathRectangle->setHeight(newGeometry.height());
+    d->componentComplete = true;
+    // Do this before componentComplete(), because we need the elements to be
+    // present in order for the connections to them to be made.
+    d->maybeUpdateElements();
+    QQuickShape::componentComplete();
+}
+
+void QQuickRectangleShape::itemChange(ItemChange change, const ItemChangeData &value)
+{
+    Q_D(QQuickRectangleShape);
+    d->maybeUpdateElements();
+
+    QQuickItem::itemChange(change, value);
+}
+
+void QQuickRectangleShape::updatePolish()
+{
+    Q_D(QQuickRectangleShape);
+    const qreal rectWidth = d->width.valueBypassingBindings();
+    const qreal rectHeight = d->height.valueBypassingBindings();
+
+    d->calculateIndependentRadii();
+
+    switch (d->borderMode) {
+    case QQuickRectangleShape::BorderMode::Inside:
+        d->borderOffset = d->shapePath->strokeWidth() * 0.5;
+        break;
+    case QQuickRectangleShape::BorderMode::Middle:
+        d->borderOffset = 0;
+        break;
+    case QQuickRectangleShape::BorderMode::Outside:
+        d->borderOffset = -d->shapePath->strokeWidth() * 0.5;
+        break;
+    }
+
+    switch (d->borderMode) {
+    case QQuickRectangleShape::BorderMode::Outside:
+        d->borderRadiusAdjustment = d->shapePath->strokeWidth() * 0.5;
+        break;
+    case QQuickRectangleShape::BorderMode::Middle:
+        d->borderRadiusAdjustment = d->shapePath->strokeWidth();
+        break;
+    default:
+        d->borderRadiusAdjustment = 0;
+        break;
+    }
+
+    switch (d->firstVisibleEdge) {
+    case QQuickRectangleShapePrivate::Edge::Top:
+        d->shapePath->setStartX(d->effectiveTopLeftRadius + d->borderOffset + d->borderRadiusAdjustment);
+        d->shapePath->setStartY(d->borderOffset);
+        break;
+    case QQuickRectangleShapePrivate::Edge::Right:
+        d->shapePath->setStartX(rectWidth - d->borderOffset);
+        d->shapePath->setStartY(d->effectiveTopRightRadius + d->borderOffset + d->borderRadiusAdjustment);
+        break;
+    case QQuickRectangleShapePrivate::Edge::Bottom:
+        d->shapePath->setStartX(rectWidth - d->effectiveBottomRightRadius - d->borderOffset - d->borderRadiusAdjustment);
+        d->shapePath->setStartY(rectHeight - d->borderOffset);
+        break;
+    case QQuickRectangleShapePrivate::Edge::Left:
+        d->shapePath->setStartX(d->borderOffset);
+        d->shapePath->setStartY(rectHeight - d->effectiveBottomLeftRadius - d->borderOffset - d->borderRadiusAdjustment);
+        break;
+    default:
+        Q_UNREACHABLE();
+    }
+
+    if (d->topPathLine) {
+        d->topPathLine->setX(rectWidth - d->effectiveTopRightRadius - d->borderOffset - d->borderRadiusAdjustment);
+        d->topPathLine->setY(d->borderOffset);
+    } else {
+        d->topPathMove->setX(rectWidth - d->borderOffset);
+        d->topPathMove->setY(d->effectiveTopRightRadius + d->borderOffset + d->borderRadiusAdjustment);
+    }
+
+    if (d->topRightPathArc) {
+        d->topRightPathArc->setX(rectWidth - d->borderOffset);
+        d->topRightPathArc->setY(d->effectiveTopRightRadius + d->borderOffset + d->borderRadiusAdjustment);
+        const bool topRightBevel = hasTopRightBevel();
+        d->topRightPathArc->setRadiusX(topRightBevel ? 50000 : d->effectiveTopRightRadius + d->borderRadiusAdjustment);
+        d->topRightPathArc->setRadiusY(topRightBevel ? 50000 : d->effectiveTopRightRadius + d->borderRadiusAdjustment);
+    }
+
+    if (d->rightPathLine) {
+        d->rightPathLine->setX(rectWidth - d->borderOffset);
+        d->rightPathLine->setY(rectHeight - d->effectiveBottomRightRadius - d->borderOffset - d->borderRadiusAdjustment);
+    } else {
+        d->rightPathMove->setX(rectWidth - d->effectiveBottomRightRadius - d->borderOffset - d->borderRadiusAdjustment);
+        d->rightPathMove->setY(rectHeight - d->borderOffset);
+    }
+
+    if (d->bottomRightPathArc) {
+        d->bottomRightPathArc->setX(rectWidth - d->effectiveBottomRightRadius - d->borderOffset - d->borderRadiusAdjustment);
+        d->bottomRightPathArc->setY(rectHeight - d->borderOffset);
+        const bool bottomRightBevel = hasBottomRightBevel();
+        d->bottomRightPathArc->setRadiusX(bottomRightBevel ? 50000 : d->effectiveBottomRightRadius + d->borderRadiusAdjustment);
+        d->bottomRightPathArc->setRadiusY(bottomRightBevel ? 50000 : d->effectiveBottomRightRadius + d->borderRadiusAdjustment);
+    }
+
+    if (d->bottomPathLine) {
+        d->bottomPathLine->setX(d->effectiveBottomLeftRadius + d->borderOffset + d->borderRadiusAdjustment);
+        d->bottomPathLine->setY(rectHeight - d->borderOffset);
+    } else {
+        d->bottomPathMove->setX(d->borderOffset);
+        d->bottomPathMove->setY(rectHeight - d->effectiveBottomLeftRadius - d->borderOffset - d->borderRadiusAdjustment);
+    }
+
+    if (d->bottomLeftPathArc) {
+        d->bottomLeftPathArc->setX(d->borderOffset);
+        d->bottomLeftPathArc->setY(rectHeight - d->effectiveBottomLeftRadius - d->borderOffset - d->borderRadiusAdjustment);
+        const bool bottomLeftBevel = hasBottomLeftBevel();
+        d->bottomLeftPathArc->setRadiusX(bottomLeftBevel ? 50000 : d->effectiveBottomLeftRadius + d->borderRadiusAdjustment);
+        d->bottomLeftPathArc->setRadiusY(bottomLeftBevel ? 50000 : d->effectiveBottomLeftRadius + d->borderRadiusAdjustment);
+    }
+
+    if (d->leftPathLine) {
+        d->leftPathLine->setX(d->borderOffset);
+        d->leftPathLine->setY(d->effectiveTopLeftRadius + d->borderOffset + d->borderRadiusAdjustment);
+    }
+
+    if (d->topLeftPathArc) {
+        d->topLeftPathArc->setX(d->effectiveTopLeftRadius + d->borderOffset + d->borderRadiusAdjustment);
+        d->topLeftPathArc->setY(d->borderOffset);
+        const bool topLeftBevel = hasTopLeftBevel();
+        d->topLeftPathArc->setRadiusX(topLeftBevel ? 50000 : d->effectiveTopLeftRadius + d->borderRadiusAdjustment);
+        d->topLeftPathArc->setRadiusY(topLeftBevel ? 50000 : d->effectiveTopLeftRadius + d->borderRadiusAdjustment);
+    }
+
+    // This does stuff with each path, so we want to call it after we've made our own changes.
+    QQuickShape::updatePolish();
+
+    qCDebug(lcUpdatePolish) << "updatePolish:"
+        << "width" << rectWidth
+        << "height" << rectHeight
+        << "borderMode" << d->borderMode
+        << "strokeWidth" << d->shapePath->strokeWidth()
+        << "etlr" << d->effectiveTopLeftRadius
+        << "etrr" << d->effectiveTopRightRadius
+        << "eblr" << d->effectiveBottomLeftRadius
+        << "ebrr" << d->effectiveBottomRightRadius
+        << "borderOffset" << d->borderOffset
+        << "startX" << d->shapePath->startX()
+        << "startY" << d->shapePath->startY();
 }
 
 QT_END_NAMESPACE

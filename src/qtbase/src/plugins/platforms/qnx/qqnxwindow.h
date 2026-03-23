@@ -41,7 +41,7 @@ public:
 
     bool isExposed() const override;
 
-    WId winId() const override { return window()->type() == Qt::Desktop ? -1 : (WId)m_window; }
+    WId winId() const override { return (WId)m_window; }
     screen_window_t nativeHandle() const { return m_window; }
 
     void setBufferSize(const QSize &size);

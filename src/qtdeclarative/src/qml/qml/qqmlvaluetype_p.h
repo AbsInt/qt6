@@ -320,51 +320,56 @@ public:
 };
 
 #if QT_CONFIG(easingcurve)
-namespace QQmlEasingEnums
+// Easing type that provides enums and convenience valueForProgress function.
+class Q_QML_EXPORT QQmlEasing : public QObject
 {
-Q_NAMESPACE_EXPORT(Q_QML_EXPORT)
-QML_NAMED_ELEMENT(Easing)
+    Q_OBJECT
+    QML_NAMED_ELEMENT(Easing)
+    QML_SINGLETON
 
-enum Type {
-    Linear = QEasingCurve::Linear,
-    InQuad = QEasingCurve::InQuad, OutQuad = QEasingCurve::OutQuad,
-    InOutQuad = QEasingCurve::InOutQuad, OutInQuad = QEasingCurve::OutInQuad,
-    InCubic = QEasingCurve::InCubic, OutCubic = QEasingCurve::OutCubic,
-    InOutCubic = QEasingCurve::InOutCubic, OutInCubic = QEasingCurve::OutInCubic,
-    InQuart = QEasingCurve::InQuart, OutQuart = QEasingCurve::OutQuart,
-    InOutQuart = QEasingCurve::InOutQuart, OutInQuart = QEasingCurve::OutInQuart,
-    InQuint = QEasingCurve::InQuint, OutQuint = QEasingCurve::OutQuint,
-    InOutQuint = QEasingCurve::InOutQuint, OutInQuint = QEasingCurve::OutInQuint,
-    InSine = QEasingCurve::InSine, OutSine = QEasingCurve::OutSine,
-    InOutSine = QEasingCurve::InOutSine, OutInSine = QEasingCurve::OutInSine,
-    InExpo = QEasingCurve::InExpo, OutExpo = QEasingCurve::OutExpo,
-    InOutExpo = QEasingCurve::InOutExpo, OutInExpo = QEasingCurve::OutInExpo,
-    InCirc = QEasingCurve::InCirc, OutCirc = QEasingCurve::OutCirc,
-    InOutCirc = QEasingCurve::InOutCirc, OutInCirc = QEasingCurve::OutInCirc,
-    InElastic = QEasingCurve::InElastic, OutElastic = QEasingCurve::OutElastic,
-    InOutElastic = QEasingCurve::InOutElastic, OutInElastic = QEasingCurve::OutInElastic,
-    InBack = QEasingCurve::InBack, OutBack = QEasingCurve::OutBack,
-    InOutBack = QEasingCurve::InOutBack, OutInBack = QEasingCurve::OutInBack,
-    InBounce = QEasingCurve::InBounce, OutBounce = QEasingCurve::OutBounce,
-    InOutBounce = QEasingCurve::InOutBounce, OutInBounce = QEasingCurve::OutInBounce,
-    InCurve = QEasingCurve::InCurve, OutCurve = QEasingCurve::OutCurve,
-    SineCurve = QEasingCurve::SineCurve, CosineCurve = QEasingCurve::CosineCurve,
-    BezierSpline = QEasingCurve::BezierSpline,
+public:
+    enum Type {
+        Linear = QEasingCurve::Linear,
+        InQuad = QEasingCurve::InQuad, OutQuad = QEasingCurve::OutQuad,
+        InOutQuad = QEasingCurve::InOutQuad, OutInQuad = QEasingCurve::OutInQuad,
+        InCubic = QEasingCurve::InCubic, OutCubic = QEasingCurve::OutCubic,
+        InOutCubic = QEasingCurve::InOutCubic, OutInCubic = QEasingCurve::OutInCubic,
+        InQuart = QEasingCurve::InQuart, OutQuart = QEasingCurve::OutQuart,
+        InOutQuart = QEasingCurve::InOutQuart, OutInQuart = QEasingCurve::OutInQuart,
+        InQuint = QEasingCurve::InQuint, OutQuint = QEasingCurve::OutQuint,
+        InOutQuint = QEasingCurve::InOutQuint, OutInQuint = QEasingCurve::OutInQuint,
+        InSine = QEasingCurve::InSine, OutSine = QEasingCurve::OutSine,
+        InOutSine = QEasingCurve::InOutSine, OutInSine = QEasingCurve::OutInSine,
+        InExpo = QEasingCurve::InExpo, OutExpo = QEasingCurve::OutExpo,
+        InOutExpo = QEasingCurve::InOutExpo, OutInExpo = QEasingCurve::OutInExpo,
+        InCirc = QEasingCurve::InCirc, OutCirc = QEasingCurve::OutCirc,
+        InOutCirc = QEasingCurve::InOutCirc, OutInCirc = QEasingCurve::OutInCirc,
+        InElastic = QEasingCurve::InElastic, OutElastic = QEasingCurve::OutElastic,
+        InOutElastic = QEasingCurve::InOutElastic, OutInElastic = QEasingCurve::OutInElastic,
+        InBack = QEasingCurve::InBack, OutBack = QEasingCurve::OutBack,
+        InOutBack = QEasingCurve::InOutBack, OutInBack = QEasingCurve::OutInBack,
+        InBounce = QEasingCurve::InBounce, OutBounce = QEasingCurve::OutBounce,
+        InOutBounce = QEasingCurve::InOutBounce, OutInBounce = QEasingCurve::OutInBounce,
+        InCurve = QEasingCurve::InCurve, OutCurve = QEasingCurve::OutCurve,
+        SineCurve = QEasingCurve::SineCurve, CosineCurve = QEasingCurve::CosineCurve,
+        BezierSpline = QEasingCurve::BezierSpline,
 
-    Bezier = BezierSpline // Evil! Don't use this!
-};
-Q_ENUM_NS(Type)
+        Bezier = BezierSpline // Evil! Don't use this!
+    };
+    Q_ENUM(Type)
+
+    Q_INVOKABLE qreal valueForProgress(QQmlEasing::Type type, qreal progress) const;
 };
 
 struct Q_QML_EXPORT QQmlEasingValueType : private QEasingCurve
 {
     Q_GADGET
-    QML_ANONYMOUS
+    QML_VALUE_TYPE(easingCurve)
     QML_FOREIGN(QEasingCurve)
     QML_EXTENDED(QQmlEasingValueType)
     QML_STRUCTURED_VALUE
 
-    Q_PROPERTY(QQmlEasingEnums::Type type READ type WRITE setType FINAL)
+    Q_PROPERTY(QQmlEasing::Type type READ type WRITE setType FINAL)
     Q_PROPERTY(qreal amplitude READ amplitude WRITE setAmplitude FINAL)
     Q_PROPERTY(qreal overshoot READ overshoot WRITE setOvershoot FINAL)
     Q_PROPERTY(qreal period READ period WRITE setPeriod FINAL)
@@ -372,13 +377,16 @@ struct Q_QML_EXPORT QQmlEasingValueType : private QEasingCurve
 
 public:
     Q_INVOKABLE QQmlEasingValueType() = default;
+    Q_INVOKABLE QQmlEasingValueType(QQmlEasing::Type type);
     Q_INVOKABLE QQmlEasingValueType(const QEasingCurve &easing) : QEasingCurve(easing) {}
 
-    QQmlEasingEnums::Type type() const;
+    Q_INVOKABLE qreal valueForProgress(qreal progress);
+
+    QQmlEasing::Type type() const;
     qreal amplitude() const;
     qreal overshoot() const;
     qreal period() const;
-    void setType(QQmlEasingEnums::Type);
+    void setType(QQmlEasing::Type);
     void setAmplitude(qreal);
     void setOvershoot(qreal);
     void setPeriod(qreal);

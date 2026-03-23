@@ -24,7 +24,6 @@
 #include <QtCore/QStack>
 #include <QtCore/QList>
 #include <QtCore/QSet>
-#include <QtCore/QVector>
 #include <QtCore/QMetaObject>
 
 QT_BEGIN_NAMESPACE
@@ -72,6 +71,7 @@ public:
         SignalMaybeArglist, // after identifier
         SignalArglistOpen, // after '('
 
+        LambdaStart, // after '=>'
         FunctionStart, // after 'function'
         FunctionArglistOpen, // after '(' starting function argument list
         FunctionArglistClosed, // after ')' in argument list, expecting '{'
@@ -172,7 +172,7 @@ public:
     {
         return FormatTextStatus {
             Scanner::State {},
-            QVector<State>({ State { quint16(baseIndent), StateType::TopmostIntro } }), baseIndent
+            QList<State>({ State { quint16(baseIndent), StateType::TopmostIntro } }), baseIndent
         };
     }
 
@@ -197,7 +197,7 @@ public:
     }
 
     Scanner::State lexerState = {};
-    QVector<State> states;
+    QList<State> states;
     int finalIndent = 0;
 };
 

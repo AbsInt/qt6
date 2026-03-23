@@ -40,6 +40,10 @@ Window {
             source: "Squircle.qml"
         }
         ListElement {
+            text: "RectangleShape"
+            source: "designhelpers_rectangleshape.qml"
+        }
+        ListElement {
             text: "Intersect"
             source: "Intersect.qml"
         }
@@ -127,6 +131,11 @@ Window {
         ListElement {
             text: "Stroke or fill"
             source: "strokeOrFill.qml"
+        }
+
+        ListElement {
+            text: "Regular and cosmetic strokes"
+            source: "regularAndCosmeticStrokes.qml"
         }
 
         ListElement {

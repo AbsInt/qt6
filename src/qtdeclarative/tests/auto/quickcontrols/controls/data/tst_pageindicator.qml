@@ -147,4 +147,29 @@ TestCase {
         touch.release(0, control).commit()
         verify(!ma.pressed)
     }
+
+    Component {
+        id: delegateComponent1
+
+        Rectangle {}
+    }
+
+    Component {
+        id: delegateComponent2
+
+        Rectangle {}
+    }
+
+    function test_dontDeleteDelegates() {
+        let control = createTemporaryObject(pageIndicator, testCase, { delegate: delegateComponent1 })
+        verify(control)
+
+        // When setting a new delegate, the old one shouldn't be destroyed.
+        control.delegate = delegateComponent2
+        verify(delegateComponent1)
+
+        // The same goes for the new delegate: it shouldn't be destroyed when setting the old one.
+        control.delegate = delegateComponent1
+        verify(delegateComponent2)
+    }
 }

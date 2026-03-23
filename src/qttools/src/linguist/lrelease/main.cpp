@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "translator.h"
+#include "releasehelper.h"
 
-#include <profileutils.h>
-#include <projectdescriptionreader.h>
-#include <runqttool.h>
+#include <linguistproject/profileutils.h>
+#include <linguistproject/projectdescriptionreader.h>
+#include <linguistproject/projsongenerator.h>
 
 #ifndef QT_BOOTSTRAPPED
 #include <QtCore/QCoreApplication>
@@ -23,18 +24,6 @@
 QT_USE_NAMESPACE
 
 using namespace Qt::StringLiterals;
-
-static void printOut(const QString & out)
-{
-    QTextStream stream(stdout);
-    stream << out;
-}
-
-static void printErr(const QString & out)
-{
-    QTextStream stream(stderr);
-    stream << out;
-}
 
 static void printUsage()
 {
@@ -61,6 +50,13 @@ Options:
            Do not include unfinished translations
     -fail-on-unfinished
             Generate an error if unfinished translations are found
+    -fail-on-invalid
+            Fail if translations failing the following checks are found:
+                validity check of accelerators
+                validity check of surrounding whitespaces
+                validity check of ending punctuation
+                validity check of place markers
+            To get more details refer to Qt Linguist help
     -removeidentical
            If the translated text is the same as
            the source text, do not include the message
@@ -69,7 +65,7 @@ Options:
            prefixed with the given string instead
     -project <filename>
            Name of a file containing the project's description in JSON format.
-           Such a file may be generated from a .pro file using the lprodump tool.
+           Such a file may be generated from a .pro file using lupdate-pro -dump-json.
     -silent
            Do not explain what is being done
     -verbose
@@ -79,108 +75,13 @@ Options:
 )"_s);
 }
 
-static bool loadTsFile(Translator &tor, const QString &tsFileName)
-{
-    ConversionData cd;
-    bool ok = tor.load(tsFileName, cd, "auto"_L1);
-    if (!ok) {
-        printErr("lrelease error: %1"_L1.arg(cd.error()));
-    } else {
-        if (!cd.errors().isEmpty())
-            printOut(cd.error());
-    }
-    cd.clearErrors();
-    return ok;
-}
-
-static bool releaseTranslator(Translator &tor, const QString &qmFileName, ConversionData &cd,
-                              bool removeIdentical, bool failOnUnfinished)
-{
-    if (failOnUnfinished && tor.unfinishedTranslationsExist()) {
-        printErr("lrelease error: cannot create '%1': existing unfinished translation(s) "
-                 "found (-fail-on-unfinished)"_L1.arg(qmFileName));
-        return false;
-    }
-
-    tor.reportDuplicates(tor.resolveDuplicates(), qmFileName, cd.isVerbose());
-
-    if (cd.isVerbose())
-        printOut("Updating '%1'...\n"_L1.arg(qmFileName));
-    if (removeIdentical) {
-        if (cd.isVerbose())
-            printOut("Removing translations equal to source text in '%1'...\n"_L1.arg(qmFileName));
-        tor.stripIdenticalSourceTranslations();
-    }
-
-    QFile file(qmFileName);
-    if (!file.open(QIODevice::WriteOnly)) {
-        printErr("lrelease error: cannot create '%1': %2\n"_L1.arg(qmFileName, file.errorString()));
-        return false;
-    }
-
-    tor.normalizeTranslations(cd);
-    bool ok = saveQM(tor, file, cd);
-    file.close();
-
-    if (!ok) {
-        printErr("lrelease error: cannot save '%1': %2"_L1.arg(qmFileName, cd.error()));
-    } else if (!cd.errors().isEmpty()) {
-        printOut(cd.error());
-    }
-    cd.clearErrors();
-    return ok;
-}
-
-static bool releaseTsFile(const QString &tsFileName, ConversionData &cd, bool removeIdentical,
-                          bool failOnUnfinished)
-{
-    Translator tor;
-    if (!loadTsFile(tor, tsFileName))
-        return false;
-
-    QString qmFileName = tsFileName;
-    for (const Translator::FileFormat &fmt : std::as_const(Translator::registeredFileFormats())) {
-        if (qmFileName.endsWith(u'.' + fmt.extension)) {
-            qmFileName.chop(fmt.extension.size() + 1);
-            break;
-        }
-    }
-    qmFileName += ".qm"_L1;
-
-    return releaseTranslator(tor, qmFileName, cd, removeIdentical, failOnUnfinished);
-}
-
-static QStringList translationsFromProjects(const Projects &projects, bool topLevel);
-
-static QStringList translationsFromProject(const Project &project, bool topLevel)
-{
-    QStringList result;
-    if (project.translations)
-        result = *project.translations;
-    result << translationsFromProjects(project.subProjects, false);
-    if (topLevel && result.isEmpty()) {
-        printErr("lrelease warning: Met no 'TRANSLATIONS' entry in project file '%1'\n"_L1.arg(
-                project.filePath));
-    }
-    return result;
-}
-
-static QStringList translationsFromProjects(const Projects &projects, bool topLevel = true)
-{
-    QStringList result;
-    for (const Project &p : projects)
-        result << translationsFromProject(p, topLevel);
-    return result;
-}
-
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
 
     ConversionData cd;
     cd.m_verbose = true; // the default is true starting with Qt 4.2
-    bool removeIdentical = false;
-    bool failOnUnfinished = false;
+    ParamFlags params;
     Translator tor;
     QStringList inputFiles;
     QString outputFile;
@@ -199,13 +100,16 @@ int main(int argc, char **argv)
             cd.m_saveMode = SaveEverything;
             continue;
         } else if (!strcmp(arg, "-removeidentical")) {
-            removeIdentical = true;
+            params.removeIdentical = true;
             continue;
         } else if (!strcmp(arg, "-nounfinished")) {
             cd.m_ignoreUnfinished = true;
             continue;
         } else if (!strcmp(arg, "-fail-on-unfinished")) {
-            failOnUnfinished = true;
+            params.failOnUnfinished = true;
+            continue;
+        } else if (!strcmp(arg, "-fail-on-invalid")) {
+            params.failOnInvalid = true;
             continue;
         } else if (!strcmp(arg, "-markuntranslated")) {
             if (i == argc - 1) {
@@ -255,18 +159,34 @@ int main(int argc, char **argv)
     }
 
     QString errorString;
-    if (!extractProFiles(&inputFiles).isEmpty()) {
-        runInternalQtTool("lrelease-pro"_L1, app.arguments().mid(1));
-        return 0;
-    }
+    Projects projectDescription;
+    const QStringList proFiles = extractProFiles(&inputFiles);
 
-    if (!projectDescriptionFile.isEmpty()) {
+    if (!proFiles.isEmpty()) {
+        QStringList translationsVariables = { u"TRANSLATIONS"_s, u"EXTRA_TRANSLATIONS"_s };
+        QHash<QString, QString> outDirMap;
+        QString outDir = QDir::currentPath();
+        for (const QString &proFile : std::as_const(proFiles))
+            outDirMap[proFile] = outDir;
+
+        projectDescription =
+                generateProjects(proFiles, translationsVariables, outDirMap, 0, true, &errorString);
+        if (!errorString.isEmpty()) {
+            printErr("lrelease error: %1\n"_L1.arg(errorString));
+            return 1;
+        }
+        if (projectDescription.empty()) {
+            printErr(u"lrelease error: No projects found in .pro files\n"_s);
+            return 1;
+        }
+        inputFiles = translationsFromProjects(projectDescription);
+    } else if (!projectDescriptionFile.isEmpty()) {
         if (!inputFiles.isEmpty()) {
             printErr(QLatin1String(
                     "lrelease error: Do not specify TS files if -project is given.\n"));
             return 1;
         }
-        Projects projectDescription = readProjectDescription(projectDescriptionFile, &errorString);
+        projectDescription = projectDescriptionFromFile(projectDescriptionFile, &errorString);
         if (!errorString.isEmpty()) {
             printErr("lrelease error: %1\n"_L1.arg(errorString));
             return 1;
@@ -276,7 +196,7 @@ int main(int argc, char **argv)
 
     for (const QString &inputFile : std::as_const(inputFiles)) {
         if (outputFile.isEmpty()) {
-            if (!releaseTsFile(inputFile, cd, removeIdentical, failOnUnfinished))
+            if (!releaseTsFile(inputFile, cd, params))
                 return 1;
         } else {
             if (!loadTsFile(tor, inputFile))
@@ -285,7 +205,7 @@ int main(int argc, char **argv)
     }
 
     if (!outputFile.isEmpty())
-        return releaseTranslator(tor, outputFile, cd, removeIdentical, failOnUnfinished) ? 0 : 1;
+        return releaseTranslator(tor, outputFile, cd, params) ? 0 : 1;
 
     return 0;
 }

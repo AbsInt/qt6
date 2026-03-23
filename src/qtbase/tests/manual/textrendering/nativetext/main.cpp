@@ -9,6 +9,7 @@
 #include <Foundation/Foundation.h>
 #include <private/qfont_p.h>
 #include <private/qfontengine_p.h>
+#include <AppKit/AppKit.h>
 #endif
 
 static int s_mode;
@@ -228,7 +229,7 @@ public:
         controls->addWidget(fontButton);
 
         auto *aaButton = new QCheckBox("NoAntialias");
-        connect(aaButton, &QCheckBox::stateChanged, [&] {
+        connect(aaButton, &QCheckBox::checkStateChanged, [&] {
             for (TextRenderer *renderer : m_previews->findChildren<TextRenderer *>()) {
                 QFont font = renderer->font();
                 font.setStyleStrategy(QFont::StyleStrategy(font.styleStrategy() ^ QFont::NoAntialias));
@@ -238,7 +239,7 @@ public:
         controls->addWidget(aaButton);
 
         auto *subpixelAAButton = new QCheckBox("NoSubpixelAntialias");
-        connect(subpixelAAButton, &QCheckBox::stateChanged, [&] {
+        connect(subpixelAAButton, &QCheckBox::checkStateChanged, [&] {
             for (TextRenderer *renderer : m_previews->findChildren<TextRenderer *>()) {
                 QFont font = renderer->font();
                 font.setStyleStrategy(QFont::StyleStrategy(font.styleStrategy() ^ QFont::NoSubpixelAntialias));

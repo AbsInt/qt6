@@ -36,7 +36,6 @@ GridLayout {
             objectName: "familyEdit"
             readOnly: true
             Layout.fillWidth: true
-            focus: true
             Accessible.name: qsTr("Font family")
         }
         Frame {

@@ -99,8 +99,11 @@ public:
         TableRowRight,
         TableItemLeft,
         TableItemRight,
-        TableOfContents,
+        TableOfContentsLeft,
+        TableOfContentsRight,
         Target,
+        TitleLeft,
+        TitleRight,
         UnhandledFormat,
         WarningLeft,
         WarningRight,
@@ -142,7 +145,7 @@ public:
     Atom *next() { return m_next; }
     void setNext(Atom *newNext) { m_next = newNext; }
 
-    [[nodiscard]] const Atom *find(AtomType t) const;
+    [[nodiscard]] const Atom *find(AtomType t, qsizetype *offset = nullptr) const;
     [[nodiscard]] const Atom *find(AtomType t, const QString &s) const;
     [[nodiscard]] const Atom *next() const { return m_next; }
     [[nodiscard]] const Atom *next(AtomType t) const;
@@ -158,7 +161,8 @@ public:
     [[nodiscard]] virtual bool isLinkAtom() const { return false; }
     virtual Genus genus() { return Genus::DontCare; }
     virtual Tree *domain() { return nullptr; }
-    virtual void resolveSquareBracketParams() {}
+    virtual void resolveSquareBracketParams(const QString &) {}
+    virtual int flags() const { return 0; }
 
 protected:
     Atom *m_next = nullptr;
@@ -177,24 +181,22 @@ public:
     [[nodiscard]] bool isLinkAtom() const override { return true; }
     Genus genus() override
     {
-        resolveSquareBracketParams();
         return m_genus;
     }
     Tree *domain() override
     {
-        resolveSquareBracketParams();
         return m_domain;
     }
-    void resolveSquareBracketParams() override;
+    void resolveSquareBracketParams(const QString &text) override;
+    virtual int flags() const override;
 
 public:
     Location location;
 
 protected:
-    bool m_resolved {};
     Genus m_genus {};
     Tree *m_domain {};
-    QString m_squareBracketParams {};
+    QStringList m_squareBracketParams {};
 };
 
 #define ATOM_FORMATTING_BOLD "bold"

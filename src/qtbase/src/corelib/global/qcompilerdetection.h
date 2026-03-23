@@ -1002,7 +1002,11 @@
 #  define Q_NORETURN [[noreturn]]
 #endif
 
-#if (defined(__cplusplus) && __has_cpp_attribute(deprecated)) || \
+#if defined(Q_CC_GNU_ONLY) && Q_CC_GNU < 1300
+// Leave Q_DECL_DEPRECATED defined with __attribute__ because
+// GCC 12 and earlier has issues combining __attribute__ and [[]] syntax.
+// We phrase the deprecation macros as __attribute__ so that they can be combined with visibility.
+#elif (defined(__cplusplus) && __has_cpp_attribute(deprecated)) || \
     (!defined(__cplusplus) && __has_c_attribute(deprecated))
 #  ifdef Q_DECL_DEPRECATED
 #    undef Q_DECL_DEPRECATED
@@ -1192,7 +1196,8 @@
 #  define QT_WARNING_DISABLE_INTEL(number)
 #  define QT_WARNING_DISABLE_CLANG(text)
 #  define QT_WARNING_DISABLE_GCC(text)
-#  define QT_WARNING_DISABLE_DEPRECATED         QT_WARNING_DISABLE_MSVC(4996)
+#  define QT_WARNING_DISABLE_DEPRECATED         QT_WARNING_DISABLE_MSVC(4996) \
+                                                QT_WARNING_DISABLE_MSVC(4995)
 #  define QT_WARNING_DISABLE_FLOAT_COMPARE
 #  define QT_WARNING_DISABLE_INVALID_OFFSETOF
 #elif defined(Q_CC_CLANG)
@@ -1202,7 +1207,13 @@
 #  define QT_WARNING_DISABLE_GCC(text)
 #  define QT_WARNING_DISABLE_INTEL(number)
 #  define QT_WARNING_DISABLE_MSVC(number)
-#  define QT_WARNING_DISABLE_DEPRECATED         QT_WARNING_DISABLE_CLANG("-Wdeprecated-declarations")
+# if defined(__has_warning) && __has_warning("-Wdeprecated-pragma")
+#  define QT_WARNING_DISABLE_DEPRECATED_MACRO  QT_WARNING_DISABLE_CLANG("-Wdeprecated-pragma")
+# else
+#  define QT_WARNING_DISABLE_DEPRECATED_MACRO
+# endif
+#  define QT_WARNING_DISABLE_DEPRECATED         QT_WARNING_DISABLE_CLANG("-Wdeprecated-declarations") \
+                                                QT_WARNING_DISABLE_DEPRECATED_MACRO
 #  define QT_WARNING_DISABLE_FLOAT_COMPARE      QT_WARNING_DISABLE_CLANG("-Wfloat-equal")
 #  define QT_WARNING_DISABLE_INVALID_OFFSETOF   QT_WARNING_DISABLE_CLANG("-Winvalid-offsetof")
 #elif defined(Q_CC_GNU) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 406)
@@ -1324,9 +1335,8 @@
 #endif // __cplusplus
 
 #if defined(__cplusplus) && defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
-#  if Q_CC_MSVC < 1927
-     // Check below only works with 16.7 or newer
-#    error "Qt requires at least Visual Studio 2019 version 16.7 (VC++ version 14.27). Please upgrade."
+#  if Q_CC_MSVC < 1930
+#    error "Qt requires at least Visual Studio 2022 (MSVC version 19.30 or newer). Please upgrade."
 #  endif
 
 // On MSVC we require /permissive- set by user code. Check that we are
@@ -1405,7 +1415,7 @@ static_assert(!std::is_convertible_v<std::nullptr_t, bool>,
 #if defined(__cplusplus)
 
 #ifdef __cpp_constinit
-# if defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
+# if defined(Q_CC_MSVC) && _MSC_VER < 1940 && !defined(Q_CC_CLANG)
    // https://developercommunity.visualstudio.com/t/C:-constinit-for-an-optional-fails-if-/1406069
 #  define Q_CONSTINIT
 # else

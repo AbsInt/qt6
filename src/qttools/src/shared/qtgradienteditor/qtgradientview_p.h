@@ -15,8 +15,8 @@
 #ifndef GRADIENTVIEW_H
 #define GRADIENTVIEW_H
 
-#include <QtWidgets/QWidget>
-#include <QtCore/QHash>
+#include <QtWidgets/qwidget.h>
+#include <QtCore/qhash.h>
 #include "ui_qtgradientview.h"
 
 QT_BEGIN_NAMESPACE
@@ -29,7 +29,7 @@ class QtGradientView : public QWidget
 {
     Q_OBJECT
 public:
-    QtGradientView(QWidget *parent = 0);
+    explicit QtGradientView(QWidget *parent = nullptr);
 
     void setGradientManager(QtGradientManager *manager);
     QtGradientManager *gradientManager() const;

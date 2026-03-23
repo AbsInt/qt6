@@ -15,7 +15,7 @@
 #ifndef QTGRADIENTWIDGET_H
 #define QTGRADIENTWIDGET_H
 
-#include <QtWidgets/QWidget>
+#include <QtWidgets/qwidget.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -24,8 +24,8 @@ class QtGradientWidget : public QWidget
     Q_OBJECT
     Q_PROPERTY(bool backgroundCheckered READ isBackgroundCheckered WRITE setBackgroundCheckered)
 public:
-    QtGradientWidget(QWidget *parent = 0);
-    ~QtGradientWidget();
+    explicit QtGradientWidget(QWidget *parent = nullptr);
+    ~QtGradientWidget() override;
 
     QSize minimumSizeHint() const override;
     QSize sizeHint() const override;

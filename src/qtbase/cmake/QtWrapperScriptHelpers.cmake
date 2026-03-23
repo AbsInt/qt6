@@ -98,6 +98,19 @@ export CMAKE_GENERATOR=Xcode
     endif()
     file(TO_NATIVE_PATH "${__relative_path_to_cmake_scripts_dir}"
         __relative_path_to_cmake_scripts_dir)
+
+    # Store arguments we want to forward from configure to qt-configure-module arguments in a
+    # side-car file. If there's nothing to forward, create an empty file.
+    set(initial_configure_args "")
+    if(QT_USE_VCPKG)
+        list(APPEND initial_configure_args -vcpkg)
+    endif()
+    set(side_car_file_name "qt-configure-module-flags.txt")
+    set(side_car_file_path "${__GlobalConfig_build_dir}/${side_car_file_name}")
+    string(JOIN "\n" side_car_file_content "${initial_configure_args}")
+    file(CONFIGURE OUTPUT "${side_car_file_path}" CONTENT "${side_car_file_content}\n")
+    qt_copy_or_install(FILES "${side_car_file_path}" DESTINATION "${__GlobalConfig_install_dir}")
+
     if(generate_unix)
         configure_file("${CMAKE_CURRENT_SOURCE_DIR}/bin/qt-configure-module.in"
             "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-configure-module" @ONLY

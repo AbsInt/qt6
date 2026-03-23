@@ -1,5 +1,7 @@
 // Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QSVGANIMATE_P_H
 #define  QSVGANIMATE_P_H
@@ -16,9 +18,20 @@
 //
 
 #include "qsvgnode_p.h"
-#include "private/qsvgabstractanimation_p.h"
+#include <QtSvg/private/qsvgabstractanimation_p.h>
+#include <QtSvg/private/qsvgeasinginterface_p.h>
+#include <QtCore/qminmax.h>
 
 QT_BEGIN_NAMESPACE
+
+class Q_SVG_EXPORT QSvgLinearEasing : public QSvgEasingInterface
+{
+public:
+    virtual qreal progress(qreal t) override
+    {
+        return qBound(0., t, 1.);
+    }
+};
 
 class Q_SVG_EXPORT QSvgAnimateNode : public QSvgNode, public QSvgAbstractAnimation
 {

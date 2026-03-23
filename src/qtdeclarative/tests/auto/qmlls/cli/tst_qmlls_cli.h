@@ -27,6 +27,7 @@ private slots:
     void initTestCase() final;
     void warnings_data();
     void warnings();
+    void inputFile();
     void dontShutdownOnStartup();
 
 public:

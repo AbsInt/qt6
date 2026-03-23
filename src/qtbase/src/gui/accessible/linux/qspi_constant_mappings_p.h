@@ -65,6 +65,7 @@ inline void unsetSpiStateBit(quint64* state, AtspiStateType spiState)
 
 quint64 spiStatesFromQState(QAccessible::State state);
 QSpiUIntList spiStateSetFromSpiStates(quint64 states);
+quint64 spiStatesFromSpiStateSet(QSpiUIntList stateSet);
 
 AtspiRelationType qAccessibleRelationToAtSpiRelation(QAccessible::Relation relation);
 

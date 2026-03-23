@@ -7,5 +7,4 @@ interface QtWindowInterface {
     default void removeTopLevelWindow(final int id) { }
     default void bringChildToFront(final int id) { }
     default void bringChildToBack(int id) { }
-    default void setSystemUiVisibility(boolean isFullScreen, boolean expandedToCutout) { }
 }

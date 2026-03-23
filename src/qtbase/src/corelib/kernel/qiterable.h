@@ -9,10 +9,6 @@
 #include <QtCore/qtypeinfo.h>
 #include <QtCore/qtaggedpointer.h>
 
-#if !defined(QT_LEAN_HEADERS) || QT_LEAN_HEADERS < 1
-#   include <QtCore/qmetacontainer.h>
-#endif
-
 QT_BEGIN_NAMESPACE
 
 namespace QtPrivate {
@@ -65,6 +61,14 @@ namespace QtPrivate {
             return m_pointer.tag() == Mutable ? reinterpret_cast<Type *>(m_pointer.data()) : nullptr;
         }
     };
+
+    enum class SynthesizedAccessFunction: quint8
+    {
+        IterableSize,
+        SequenceAt
+    };
+
+    Q_CORE_EXPORT void warnSynthesizedIterableAccess(SynthesizedAccessFunction function);
 }
 
 template<class Iterator, typename IteratorCategory>
@@ -74,7 +78,7 @@ public:
     using iterator_category = IteratorCategory;
     QTaggedIterator(Iterator &&it) : Iterator(std::move(it))
     {
-        const auto metaContainer = this->metaContainer();
+        [[maybe_unused]] const auto metaContainer = this->metaContainer();
         if constexpr (std::is_base_of_v<std::random_access_iterator_tag, IteratorCategory>) {
             if (!metaContainer.hasRandomAccessIterator()) {
                 qFatal("You cannot use this iterator as a random access iterator");
@@ -102,8 +106,6 @@ public:
                 this->clearIterator();
             }
         }
-
-        Q_UNUSED(metaContainer); // in case none of the above apply
     }
 
     bool operator==(const QTaggedIterator &o) const { return Iterator::operator==(o); }
@@ -500,6 +502,14 @@ public:
         const void *container = constIterable();
         if (m_metaContainer.hasSize())
             return m_metaContainer.size(container);
+
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
+        // We shouldn't second-guess the underlying container, so we're not synthesizing a size.
+        return -1;
+#else
+        QtPrivate::warnSynthesizedIterableAccess(
+                QtPrivate::SynthesizedAccessFunction::IterableSize);
+
         if (!m_metaContainer.hasConstIterator())
             return -1;
 
@@ -509,6 +519,12 @@ public:
         m_metaContainer.destroyConstIterator(begin);
         m_metaContainer.destroyConstIterator(end);
         return size;
+#endif
+    }
+
+    void clear()
+    {
+        m_metaContainer.clear(mutableIterable());
     }
 
     Container metaContainer() const

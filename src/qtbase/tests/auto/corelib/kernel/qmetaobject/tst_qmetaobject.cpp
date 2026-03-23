@@ -291,6 +291,8 @@ class tst_QMetaObject : public QObject
     Q_PROPERTY(int value8 READ value8)
     Q_PROPERTY(int value9 READ value9 CONSTANT)
     Q_PROPERTY(int value10 READ value10 FINAL)
+    Q_PROPERTY(int value11 READ value10 VIRTUAL)
+    Q_PROPERTY(int value12 READ value10 OVERRIDE)
 
 public:
     enum EnumType { EnumType1 };
@@ -358,6 +360,8 @@ private slots:
     void propertyNotify();
     void propertyConstant();
     void propertyFinal();
+    void propertyVirtual();
+    void propertyOverride();
 
     void metaType();
 
@@ -2727,6 +2731,32 @@ void tst_QMetaObject::propertyFinal()
     QVERIFY(!prop.isFinal());
 }
 
+void tst_QMetaObject::propertyVirtual()
+{
+    const QMetaObject *mo = metaObject();
+
+    QMetaProperty prop = mo->property(mo->indexOfProperty("value11"));
+    QVERIFY(prop.isValid());
+    QVERIFY(prop.isVirtual());
+
+    prop = mo->property(mo->indexOfProperty("value9"));
+    QVERIFY(prop.isValid());
+    QVERIFY(!prop.isVirtual());
+}
+
+void tst_QMetaObject::propertyOverride()
+{
+    const QMetaObject *mo = metaObject();
+
+    QMetaProperty prop = mo->property(mo->indexOfProperty("value12"));
+    QVERIFY(prop.isValid());
+    QVERIFY(prop.isOverride());
+
+    prop = mo->property(mo->indexOfProperty("value9"));
+    QVERIFY(prop.isValid());
+    QVERIFY(!prop.isOverride());
+}
+
 void tst_QMetaObject::metaType()
 {
     QCOMPARE(QObject::staticMetaObject.metaType(), QMetaType::fromType<QObject>());
@@ -3141,7 +3171,7 @@ void tst_QMetaObject::enumDebugStream_data()
     QTest::newRow("verbosity=0") << 0
         << "hello MyEnum2 world"
         << "hello MyScopedEnum::Enum3 scoped world"
-        << "WindowTitleHint Window Desktop WindowSystemMenuHint"
+        << "WindowTitleHint Window SubWindow WindowSystemMenuHint"
         << "hello MyFlag1 world"
         << "MyFlag1 MyFlag2|MyFlag3"
         << "MyScopedFlag(MyFlag2)"
@@ -3151,7 +3181,7 @@ void tst_QMetaObject::enumDebugStream_data()
     QTest::newRow("verbosity=1") << 1
         << "hello MyEnum::MyEnum2 world"
         << "hello MyScopedEnum::Enum3 scoped world"
-        << "WindowType(WindowTitleHint) WindowType(Window) WindowType(Desktop) WindowType(WindowSystemMenuHint)"
+        << "WindowType(WindowTitleHint) WindowType(Window) WindowType(SubWindow) WindowType(WindowSystemMenuHint)"
         << "hello MyFlag(MyFlag1) world"
         << "MyFlag(MyFlag1) MyFlag(MyFlag2|MyFlag3)"
         << "MyScopedFlag(MyFlag2)"
@@ -3162,7 +3192,7 @@ void tst_QMetaObject::enumDebugStream_data()
         << "hello MyNamespace::MyClass::MyEnum2 world"
         << "hello MyNamespace::MyClass::MyScopedEnum::Enum3 scoped world"
         << "QFlags<Qt::WindowType>(WindowTitleHint) QFlags<Qt::WindowType>(Window) "
-           "QFlags<Qt::WindowType>(Desktop) QFlags<Qt::WindowType>(WindowSystemMenuHint)"
+           "QFlags<Qt::WindowType>(SubWindow) QFlags<Qt::WindowType>(WindowSystemMenuHint)"
         << "hello QFlags<MyNamespace::MyClass::MyFlag>(MyFlag1) world"
         << "QFlags<MyNamespace::MyClass::MyFlag>(MyFlag1) QFlags<MyNamespace::MyClass::MyFlag>(MyFlag2|MyFlag3)"
         << "QFlags<MyNamespace::MyClass::MyScopedFlag>(MyFlag2)"
@@ -3173,7 +3203,7 @@ void tst_QMetaObject::enumDebugStream_data()
         << "hello MyNamespace::MyClass::MyEnum::MyEnum2 world"
         << "hello MyNamespace::MyClass::MyScopedEnum::Enum3 scoped world"
         << "QFlags<Qt::WindowType>(WindowTitleHint) QFlags<Qt::WindowType>(Window) "
-           "QFlags<Qt::WindowType>(Desktop) QFlags<Qt::WindowType>(WindowSystemMenuHint)"
+           "QFlags<Qt::WindowType>(SubWindow) QFlags<Qt::WindowType>(WindowSystemMenuHint)"
         << "hello QFlags<MyNamespace::MyClass::MyFlag>(MyFlag1) world"
         << "QFlags<MyNamespace::MyClass::MyFlag>(MyFlag1) QFlags<MyNamespace::MyClass::MyFlag>(MyFlag2|MyFlag3)"
         << "QFlags<MyNamespace::MyClass::MyScopedFlag>(MyFlag2)"
@@ -3203,7 +3233,7 @@ void tst_QMetaObject::enumDebugStream()
     qDebug().verbosity(verbosity) << "hello" << MyNamespace::MyClass::MyScopedEnum::Enum3 << "scoped world";
 
     QTest::ignoreMessage(QtDebugMsg, qPrintable(globalEnumMsg));
-    qDebug().verbosity(verbosity) << Qt::WindowTitleHint << Qt::Window << Qt::Desktop << Qt::WindowSystemMenuHint;
+    qDebug().verbosity(verbosity) << Qt::WindowTitleHint << Qt::Window << Qt::SubWindow << Qt::WindowSystemMenuHint;
 
     // Flags
     QTest::ignoreMessage(QtDebugMsg, qPrintable(normalFlagMsg));

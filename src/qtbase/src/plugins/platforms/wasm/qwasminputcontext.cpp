@@ -4,6 +4,7 @@
 
 #include "qwasminputcontext.h"
 #include "qwasmwindow.h"
+#include "qwasmaccessibility.h"
 
 #include <QRectF>
 #include <QLoggingCategory>
@@ -238,6 +239,9 @@ void QWasmInputContext::showInputPanel()
 
 void QWasmInputContext::updateGeometry()
 {
+    if (QWasmAccessibility::isEnabled())
+        return;
+
     if (m_inputElement.isNull())
         return;
 
@@ -262,6 +266,9 @@ void QWasmInputContext::updateGeometry()
 void QWasmInputContext::updateInputElement()
 {
     m_inputMethodAccepted = inputMethodAccepted();
+
+    if (QWasmAccessibility::isEnabled())
+        return;
 
     // Mobile devices can dismiss keyboard/IME and focus is still on input.
     // Successive clicks on the same input should open the keyboard/IME.

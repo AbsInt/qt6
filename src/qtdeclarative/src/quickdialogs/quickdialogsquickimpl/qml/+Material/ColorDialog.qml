@@ -77,7 +77,7 @@ ColorDialogImpl {
             Layout.alignment: Qt.AlignRight
             Layout.rightMargin: 24
 
-            Accessible.name: qsTr("Eye dropper")
+            Accessible.name: qsTr("Eyedropper")
         }
     }
 
@@ -239,6 +239,7 @@ ColorDialogImpl {
         DialogButtonBox {
             id: buttonBox
             standardButtons: control.standardButtons
+            defaultStandardButton: T.Dialog.Ok
             spacing: 12
             horizontalPadding: 0
 

@@ -136,6 +136,8 @@ public:
     int getCount() const { return 42; }
     void setCount(int) { }
 
+    Q_INVOKABLE int myInvokable() const { return 42; }
+
     QObject *p() const { return m_p; }
 
     enum ExtensionEnum {

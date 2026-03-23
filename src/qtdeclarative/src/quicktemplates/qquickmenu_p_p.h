@@ -57,6 +57,8 @@ public:
     void syncWithUseNativeMenu();
     void setNativeMenuVisible(bool visible);
 
+    void makeEditMenu();
+
     QQuickItem *itemAt(int index) const;
     void insertItem(int index, QQuickItem *item);
     void maybeCreateAndInsertNativeItem(int index, QQuickItem *item);

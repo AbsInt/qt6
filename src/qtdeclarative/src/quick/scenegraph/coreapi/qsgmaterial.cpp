@@ -12,7 +12,7 @@ QT_BEGIN_NAMESPACE
     \brief classes used to define materials in the Qt Quick Scene Graph.
 
     This page lists the material classes in \l {Qt Quick}'s
-    \l {scene graph}{Qt Quick Scene Graph}.
+    \l{Qt Quick Scene Graph}{scene graph}.
  */
 
 #ifndef QT_NO_DEBUG

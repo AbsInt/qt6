@@ -22,6 +22,7 @@
 #include <QLoggingCategory>
 #include <QtCore/qset.h>
 #include <QtCore/qvarlengtharray.h>
+#include <QtCore/private/qflatmap_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -729,9 +730,7 @@ public:
         UsageState stateAtPassBegin;
     };
 
-    using BufferIterator = QHash<QRhiBuffer *, Buffer>::const_iterator;
-    BufferIterator cbeginBuffers() const { return m_buffers.cbegin(); }
-    BufferIterator cendBuffers() const { return m_buffers.cend(); }
+    const QVarLengthFlatMap<QRhiBuffer *, Buffer, 12> &buffers() const { return m_buffers; }
 
     struct Texture {
         TextureAccess access;
@@ -739,16 +738,14 @@ public:
         UsageState stateAtPassBegin;
     };
 
-    using TextureIterator = QHash<QRhiTexture *, Texture>::const_iterator;
-    TextureIterator cbeginTextures() const { return m_textures.cbegin(); }
-    TextureIterator cendTextures() const { return m_textures.cend(); }
+    const QVarLengthFlatMap<QRhiTexture *, Texture, 12> &textures() const { return m_textures; }
 
     static BufferStage toPassTrackerBufferStage(QRhiShaderResourceBinding::StageFlags stages);
     static TextureStage toPassTrackerTextureStage(QRhiShaderResourceBinding::StageFlags stages);
 
 private:
-    QHash<QRhiBuffer *, Buffer> m_buffers;
-    QHash<QRhiTexture *, Texture> m_textures;
+    QVarLengthFlatMap<QRhiBuffer *, Buffer, 12> m_buffers;
+    QVarLengthFlatMap<QRhiTexture *, Texture, 12> m_textures;
 };
 
 Q_DECLARE_TYPEINFO(QRhiPassResourceTracker::Buffer, Q_RELOCATABLE_TYPE);

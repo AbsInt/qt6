@@ -51,13 +51,18 @@ qt_internal_add_tool(${target_name}
         src/qdoc/headernode.cpp
         src/qdoc/helpprojectwriter.cpp
         src/qdoc/htmlgenerator.cpp
+        src/qdoc/inclusionfilter.h
+        src/qdoc/inclusionflags.h
+        src/qdoc/inclusionpolicy.h
         src/qdoc/location.cpp
         src/qdoc/main.cpp
         src/qdoc/manifestwriter.cpp
         src/qdoc/namespacenode.cpp
         src/qdoc/nativeenum.cpp
         src/qdoc/node.cpp
+        src/qdoc/nodecontext.h
         src/qdoc/openedlist.cpp
+        src/qdoc/outputdirectory.cpp
         src/qdoc/pagenode.cpp
         src/qdoc/parameters.cpp
         src/qdoc/parsererror.cpp
@@ -80,6 +85,7 @@ qt_internal_add_tool(${target_name}
         src/qdoc/sharedcommentnode.cpp
         src/qdoc/tagfilewriter.cpp
         src/qdoc/text.cpp
+        src/qdoc/tocwriter.cpp
         src/qdoc/tokenizer.cpp
         src/qdoc/tree.cpp
         src/qdoc/typedefnode.cpp
@@ -118,3 +124,6 @@ qt_internal_add_docs(${target_name}
 if(QT_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
+
+# Test coverage support
+include(${CMAKE_CURRENT_LIST_DIR}/../cmake/QDocCoverage.cmake)

@@ -11,6 +11,7 @@
 #include "qobject_p.h"
 
 #include <qcoreapplication.h>
+#include <QtCore/qspan.h>
 #include <qvariant.h>
 
 // qthread(_p).h uses QT_CONFIG(thread) internally and has a dummy
@@ -18,7 +19,7 @@
 #include <qthread.h>
 #include "private/qthread_p.h"
 #if QT_CONFIG(thread)
-#include <qsemaphore.h>
+#include "private/qlatch_p.h"
 #endif
 
 // for normalizeTypeInternal
@@ -648,9 +649,10 @@ int QMetaObject::classInfoCount() const
 // matches the given name, argument count and argument types, otherwise
 // returns \c false.
 bool QMetaObjectPrivate::methodMatch(const QMetaObject *m, const QMetaMethod &method,
-                        QByteArrayView name, int argc,
-                        const QArgumentType *types)
+                        QByteArrayView name,
+                        QSpan<const QArgumentType> types)
 {
+    const qsizetype argc = types.size();
     const QMetaMethod::Data &data = method.data;
     auto priv = QMetaMethodPrivate::get(&method);
     if (priv->parameterCount() != argc)
@@ -665,7 +667,7 @@ bool QMetaObjectPrivate::methodMatch(const QMetaObject *m, const QMetaMethod &me
 
     const QtPrivate::QMetaTypeInterface * const *ifaces = priv->parameterMetaTypeInterfaces();
     int paramsIndex = data.parameters() + 1;
-    for (int i = 0; i < argc; ++i) {
+    for (qsizetype i = 0; i < argc; ++i) {
         uint typeInfo = m->d.data[paramsIndex + i];
         QMetaType mt = types[i].metaType();
         if (mt.isValid()) {
@@ -703,26 +705,45 @@ QMetaMethod QMetaObjectPrivate::firstMethod(const QMetaObject *baseObject, QByte
 }
 
 /**
-* \internal
-* helper function for indexOf{Method,Slot,Signal}, returns the relative index of the method within
-* the baseObject
-* \a MethodType might be MethodSignal or MethodSlot, or \nullptr to match everything.
+    \internal
+    Helper function for indexOf{Method,Slot,Signal}, returns the relative index
+    of the method within \a baseObject.
+
+    If \a what is QMetaMethod::Method it will search all functions registered for
+    \a baseobject.
 */
-template<int MethodType>
 inline int QMetaObjectPrivate::indexOfMethodRelative(const QMetaObject **baseObject,
-                                        QByteArrayView name, int argc,
-                                        const QArgumentType *types)
+                                        QByteArrayView name,
+                                        QSpan<const QArgumentType> types,
+                                        QMetaMethod::MethodType what)
 {
     for (const QMetaObject *m = *baseObject; m; m = m->d.superdata) {
         Q_ASSERT(priv(m->d.data)->revision >= 7);
-        int i = (MethodType == MethodSignal)
-                 ? (priv(m->d.data)->signalCount - 1) : (priv(m->d.data)->methodCount - 1);
-        const int end = (MethodType == MethodSlot)
-                        ? (priv(m->d.data)->signalCount) : 0;
+        int i = 0;
+        int end = 0;
+        switch (what) {
+        case QMetaMethod::Signal:
+            i = priv(m->d.data)->signalCount - 1;
+            break;
+        case QMetaMethod::Slot:
+            i = priv(m->d.data)->methodCount - 1;
+            end = priv(m->d.data)->signalCount;
+            break;
+        case QMetaMethod::Method:
+            i = priv(m->d.data)->methodCount - 1;
+            break;
+        case QMetaMethod::Constructor:
+            Q_UNREACHABLE_RETURN(-1);
+        }
 
+        // Is iterating backwards here significant?
         for (; i >= end; --i) {
             auto data = QMetaMethod::fromRelativeMethodIndex(m, i);
-            if (methodMatch(m, data, name, argc, types)) {
+            if (methodMatch(m, data, name, types)) {
+                if (QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
+                    && what == QMetaMethod::Slot && data.methodType() != QMetaMethod::Slot) {
+                    return -1;
+                }
                 *baseObject = m;
                 return i;
             }
@@ -773,7 +794,7 @@ static int indexOfConstructor_helper(const QMetaObject *mo, const char *construc
 {
     QArgumentTypeArray types;
     QByteArrayView name = QMetaObjectPrivate::decodeMethodSignature(constructor, types);
-    return QMetaObjectPrivate::indexOfConstructor(mo, name, types.size(), types.constData());
+    return QMetaObjectPrivate::indexOfConstructor(mo, name, types);
 }
 
 int QMetaObject::indexOfConstructor(const char *constructor) const
@@ -797,14 +818,10 @@ int QMetaObject::indexOfConstructor(const char *constructor) const
 
 static int indexOfMethod_helper(const QMetaObject *m, const char *method)
 {
-    int i;
     Q_ASSERT(priv(m->d.data)->revision >= 7);
     QArgumentTypeArray types;
     QByteArrayView name = QMetaObjectPrivate::decodeMethodSignature(method, types);
-    i = QMetaObjectPrivate::indexOfMethodRelative<0>(&m, name, types.size(), types.constData());
-    if (i >= 0)
-        i += m->methodOffset();
-    return i;
+    return QMetaObjectPrivate::indexOfMethod(m, name, types);
 }
 
 int QMetaObject::indexOfMethod(const char *method) const
@@ -814,43 +831,22 @@ int QMetaObject::indexOfMethod(const char *method) const
     return i;
 }
 
-// Parses a string of comma-separated types into QArgumentTypes.
-// No normalization of the type names is performed.
-static void argumentTypesFromString(const char *str, const char *end,
-                                    QArgumentTypeArray &types)
-{
-    Q_ASSERT(str <= end);
-    while (str != end) {
-        if (!types.isEmpty())
-            ++str; // Skip comma
-        const char *begin = str;
-        int level = 0;
-        while (str != end && (level > 0 || *str != ',')) {
-            if (*str == '<')
-                ++level;
-            else if (*str == '>')
-                --level;
-            ++str;
-        }
-        types.emplace_back(QByteArrayView{begin, str - begin});
-    }
-}
+/*!
+    \internal
+    Given a method \a signature (e.g. foo(int,double)), this function populates
+    the \a types array and returns the method name.
 
-// Given a method \a signature (e.g. "foo(int,double)"), this function
-// populates the argument \a types array and returns the method name.
+    No normalization of the type names is performed.
+*/
 QByteArrayView QMetaObjectPrivate::decodeMethodSignature(
-        const char *signature, QArgumentTypeArray &types)
+        QByteArrayView signature, QArgumentTypeArray &types)
 {
-    Q_ASSERT(signature != nullptr);
-    const char *lparens = strchr(signature, '(');
-    if (!lparens)
-        return QByteArrayView();
-    const char *rparens = strrchr(lparens + 1, ')');
-    if (!rparens || *(rparens+1))
-        return QByteArrayView();
-    int nameLength = lparens - signature;
-    argumentTypesFromString(lparens + 1, rparens, types);
-    return QByteArrayView(signature, nameLength);
+    Q_ASSERT(types.isEmpty());
+    QVarLengthArray<QByteArrayView, 10> typeNames;
+    QByteArrayView name = parameterTypeNamesFromSignature(signature, typeNames);
+    for (auto type : typeNames)
+        types.emplace_back(type);
+    return name;
 }
 
 /*!
@@ -869,14 +865,10 @@ QByteArrayView QMetaObjectPrivate::decodeMethodSignature(
 
 static int indexOfSignal_helper(const QMetaObject *m, const char *signal)
 {
-    int i;
     Q_ASSERT(priv(m->d.data)->revision >= 7);
     QArgumentTypeArray types;
     QByteArrayView name = QMetaObjectPrivate::decodeMethodSignature(signal, types);
-    i = QMetaObjectPrivate::indexOfSignalRelative(&m, name, types.size(), types.constData());
-    if (i >= 0)
-        i += m->methodOffset();
-    return i;
+    return QMetaObjectPrivate::indexOfSignal(m, name, types);
 }
 
 int QMetaObject::indexOfSignal(const char *signal) const
@@ -893,14 +885,14 @@ int QMetaObject::indexOfSignal(const char *signal) const
     \a baseObject will be adjusted to the enclosing QMetaObject, or \nullptr if the signal is not found
 */
 int QMetaObjectPrivate::indexOfSignalRelative(const QMetaObject **baseObject,
-                                              QByteArrayView name, int argc,
-                                              const QArgumentType *types)
+                                              QByteArrayView name,
+                                              QSpan<const QArgumentType> types)
 {
-    int i = indexOfMethodRelative<MethodSignal>(baseObject, name, argc, types);
+    int i = indexOfMethodRelative(baseObject, name, types, QMetaMethod::Signal);
 #ifndef QT_NO_DEBUG
     const QMetaObject *m = *baseObject;
     if (i >= 0 && m && m->d.superdata) {
-        int conflict = indexOfMethod(m->d.superdata, name, argc, types);
+        int conflict = indexOfMethod(m->d.superdata, name, types);
         if (conflict >= 0) {
             QMetaMethod conflictMethod = m->d.superdata->method(conflict);
             qWarning("QMetaObject::indexOfSignal: signal %s from %s redefined in %s",
@@ -925,14 +917,10 @@ int QMetaObjectPrivate::indexOfSignalRelative(const QMetaObject **baseObject,
 
 static int indexOfSlot_helper(const QMetaObject *m, const char *slot)
 {
-    int i;
     Q_ASSERT(priv(m->d.data)->revision >= 7);
     QArgumentTypeArray types;
     QByteArrayView name = QMetaObjectPrivate::decodeMethodSignature(slot, types);
-    i = QMetaObjectPrivate::indexOfSlotRelative(&m, name, types.size(), types.constData());
-    if (i >= 0)
-        i += m->methodOffset();
-    return i;
+    return QMetaObjectPrivate::indexOfSlot(m, name, types);
 }
 
 int QMetaObject::indexOfSlot(const char *slot) const
@@ -946,45 +934,45 @@ int QMetaObject::indexOfSlot(const char *slot) const
 
 // same as indexOfSignalRelative but for slots.
 int QMetaObjectPrivate::indexOfSlotRelative(const QMetaObject **m,
-                                            QByteArrayView name, int argc,
-                                            const QArgumentType *types)
+                                            QByteArrayView name,
+                                            QSpan<const QArgumentType> types)
 {
-    return indexOfMethodRelative<MethodSlot>(m, name, argc, types);
+    return indexOfMethodRelative(m, name, types, QMetaMethod::Slot);
 }
 
 int QMetaObjectPrivate::indexOfSignal(const QMetaObject *m, QByteArrayView name,
-                                      int argc, const QArgumentType *types)
+                                      QSpan<const QArgumentType> types)
 {
-    int i = indexOfSignalRelative(&m, name, argc, types);
+    int i = indexOfSignalRelative(&m, name, types);
     if (i >= 0)
         i += m->methodOffset();
     return i;
 }
 
 int QMetaObjectPrivate::indexOfSlot(const QMetaObject *m, QByteArrayView name,
-                                    int argc, const QArgumentType *types)
+                                    QSpan<const QArgumentType> types)
 {
-    int i = indexOfSlotRelative(&m, name, argc, types);
+    int i = indexOfSlotRelative(&m, name, types);
     if (i >= 0)
         i += m->methodOffset();
     return i;
 }
 
 int QMetaObjectPrivate::indexOfMethod(const QMetaObject *m, QByteArrayView name,
-                                      int argc, const QArgumentType *types)
+                                      QSpan<const QArgumentType> types)
 {
-    int i = indexOfMethodRelative<0>(&m, name, argc, types);
+    int i = indexOfMethodRelative(&m, name, types, QMetaMethod::Method);
     if (i >= 0)
         i += m->methodOffset();
     return i;
 }
 
 int QMetaObjectPrivate::indexOfConstructor(const QMetaObject *m, QByteArrayView name,
-                                           int argc, const QArgumentType *types)
+                                           QSpan<const QArgumentType> types)
 {
     for (int i = priv(m->d.data)->constructorCount-1; i >= 0; --i) {
         const QMetaMethod method = QMetaMethod::fromRelativeConstructorIndex(m, i);
-        if (methodMatch(m, method, name, argc, types))
+        if (methodMatch(m, method, name, types))
             return i;
     }
     return -1;
@@ -1069,16 +1057,16 @@ QMetaMethod QMetaObjectPrivate::signal(const QMetaObject *m, int signal_index)
     Returns \c true if the \a signalTypes and \a methodTypes are
     compatible; otherwise returns \c false.
 */
-bool QMetaObjectPrivate::checkConnectArgs(int signalArgc, const QArgumentType *signalTypes,
-                                          int methodArgc, const QArgumentType *methodTypes)
+bool QMetaObjectPrivate::checkConnectArgs(QSpan<const QArgumentType> signalTypes,
+                                          QSpan<const QArgumentType> methodTypes)
 {
-    if (signalArgc < methodArgc)
-        return false;
-    for (int i = 0; i < methodArgc; ++i) {
-        if (signalTypes[i] != methodTypes[i])
-            return false;
+    const qsizetype methodArgc = methodTypes.size();
+    if (signalTypes.size() >= methodArgc) {
+        signalTypes = signalTypes.first(methodArgc);
+        return std::equal(signalTypes.begin(), signalTypes.end(),
+                          methodTypes.begin(), methodTypes.end());
     }
-    return true;
+    return false;
 }
 
 /*!
@@ -1414,7 +1402,7 @@ static const char *qNormalizeType(QByteArrayView in, int &templdepth, QByteArray
             return next;
     }
 
-    result += normalizeTypeInternal(t, d);
+    normalizeTypeInternal(QByteArrayView{t, d}, result);
 
     return d;
 }
@@ -1452,9 +1440,9 @@ QByteArray QMetaObject::normalizedType(const char *type)
 
     \sa checkConnectArgs(), normalizedType()
  */
-QByteArray QMetaObject::normalizedSignature(const char *_method)
+QByteArray QMetaObjectPrivate::normalizedSignature(QByteArrayView method)
 {
-    QByteArrayView method = trimSpacesFromRight(_method);
+    method = trimSpacesFromRight(method);
     if (method.isEmpty())
         return {};
 
@@ -1495,6 +1483,11 @@ QByteArray QMetaObject::normalizedSignature(const char *_method)
     }
 
     return result;
+}
+
+QByteArray QMetaObject::normalizedSignature(const char *method)
+{
+    return QMetaObjectPrivate::normalizedSignature(method);
 }
 
 Q_DECL_COLD_FUNCTION static inline bool
@@ -1749,24 +1742,16 @@ bool QMetaObject::invokeMethodImpl(QObject *object, QtPrivate::QSlotObjectBase *
                      "queued connections");
             return false;
         }
-        auto event = std::make_unique<QMetaCallEvent>(std::move(slot), nullptr, -1, parameterCount);
-        void **args = event->args();
-        QMetaType *types = event->types();
-
-        for (int i = 1; i < parameterCount; ++i) {
-            types[i] = QMetaType(metaTypes[i]);
-            args[i] = types[i].create(argv[i]);
-        }
-
-        QCoreApplication::postEvent(object, event.release());
+        QCoreApplication::postEvent(object, new QQueuedMetaCallEvent(std::move(slot), nullptr, -1,
+                                                                     parameterCount, metaTypes, params));
     } else if (type == Qt::BlockingQueuedConnection) {
 #if QT_CONFIG(thread)
         if (receiverInSameThread)
             qWarning("QMetaObject::invokeMethod: Dead lock detected");
 
-        QSemaphore semaphore;
-        QCoreApplication::postEvent(object, new QMetaCallEvent(std::move(slot), nullptr, -1, argv, &semaphore));
-        semaphore.acquire();
+        QLatch latch(1);
+        QCoreApplication::postEvent(object, new QMetaCallEvent(std::move(slot), nullptr, -1, argv, &latch));
+        latch.wait();
 #endif // QT_CONFIG(thread)
     } else {
         qWarning("QMetaObject::invokeMethod: Unknown connection type");
@@ -1918,7 +1903,7 @@ bool QMetaObject::invokeMethodImpl(QObject *object, QtPrivate::QSlotObjectBase *
     \internal
 
     \value Compatibility
-    \value Cloned
+    \value Cloned       // See QMetaObjectPrivate::originalClone()
     \value Scriptable
 */
 
@@ -2512,9 +2497,13 @@ bool QMetaMethod::isConst() const
 */
 QMetaMethod::Access QMetaMethod::access() const
 {
+    constexpr int AccessShift = qCountTrailingZeroBits(AccessMask);
+    static_assert(AccessPrivate >> AccessShift == Private);
+    static_assert(AccessProtected >> AccessShift == Protected);
+    static_assert(AccessPublic >> AccessShift == Public);
     if (!mobj)
         return Private;
-    return (QMetaMethod::Access)(data.flags() & AccessMask);
+    return Access((data.flags() & AccessMask) >> AccessShift);
 }
 
 /*!
@@ -2524,9 +2513,14 @@ QMetaMethod::Access QMetaMethod::access() const
 */
 QMetaMethod::MethodType QMetaMethod::methodType() const
 {
+    constexpr int MethodShift = qCountTrailingZeroBits(MethodTypeMask);
+    static_assert(MethodMethod >> MethodShift == Method);
+    static_assert(MethodSignal >> MethodShift == Signal);
+    static_assert(MethodSlot >> MethodShift == Slot);
+    static_assert(MethodConstructor >> MethodShift == Constructor);
     if (!mobj)
         return QMetaMethod::Method;
-    return (QMetaMethod::MethodType)((data.flags() & MethodTypeMask)>>2);
+    return MethodType((data.flags() & MethodTypeMask) >> MethodShift);
 }
 
 /*!
@@ -2905,31 +2899,28 @@ auto QMetaMethodInvoker::invokeImpl(QMetaMethod self, void *target,
             return InvokeFailReason::CouldNotQueueParameter;
         }
 
-        auto event = std::make_unique<QMetaCallEvent>(idx_offset, idx_relative, callFunction, nullptr, -1, paramCount);
-        QMetaType *types = event->types();
-        void **args = event->args();
-
+        QVarLengthArray<const QtPrivate::QMetaTypeInterface *, 16> argTypes;
+        argTypes.reserve(paramCount);
+        argTypes.emplace_back(nullptr); // return type
         // fill in the meta types first
         for (int i = 1; i < paramCount; ++i) {
-            types[i] = QMetaType(methodMetaTypes[i - 1]);
-            if (!types[i].iface() && (!MetaTypesAreOptional || metaTypes))
-                types[i] = QMetaType(metaTypes[i]);
-            if (!types[i].iface())
-                types[i] = priv->parameterMetaType(i - 1);
-            if (!types[i].iface() && typeNames[i])
-                types[i] = QMetaType::fromName(typeNames[i]);
-            if (!types[i].iface()) {
+            QMetaType type = QMetaType(methodMetaTypes[i - 1]);
+            if (!type.iface() && (!MetaTypesAreOptional || metaTypes))
+                type = QMetaType(metaTypes[i]);
+            if (!type.iface())
+                type = priv->parameterMetaType(i - 1);
+            if (!type.iface() && typeNames[i])
+                type = QMetaType::fromName(typeNames[i]);
+            if (!type.iface()) {
                 qWarning("QMetaMethod::invoke: Unable to handle unregistered datatype '%s'",
                          typeNames[i]);
                 return InvokeFailReason(int(InvokeFailReason::CouldNotQueueParameter) - i);
             }
+            argTypes.emplace_back(type.iface());
         }
 
-        // now create copies of our parameters using those meta types
-        for (int i = 1; i < paramCount; ++i)
-            args[i] = types[i].create(parameters[i]);
-
-        QCoreApplication::postEvent(object, event.release());
+        QCoreApplication::postEvent(object, new QQueuedMetaCallEvent(idx_offset, idx_relative, callFunction, nullptr,
+                                                                     -1, paramCount, argTypes.data(), parameters));
     } else { // blocking queued connection
 #if QT_CONFIG(thread)
         if (receiverInSameThread()) {
@@ -2938,10 +2929,10 @@ auto QMetaMethodInvoker::invokeImpl(QMetaMethod self, void *target,
             return InvokeFailReason::DeadLockDetected;
         }
 
-        QSemaphore semaphore;
+        QLatch latch(1);
         QCoreApplication::postEvent(object, new QMetaCallEvent(idx_offset, idx_relative, callFunction,
-                                                        nullptr, -1, param, &semaphore));
-        semaphore.acquire();
+                                                               nullptr, -1, param, &latch));
+        latch.wait();
 #endif // QT_CONFIG(thread)
     }
     return {};
@@ -4287,12 +4278,12 @@ int QMetaProperty::notifySignalIndex() const
     const QByteArrayView signalName = stringDataView(mobj, methodIndex);
     const QMetaObject *m = mobj;
     // try 0-arg signal
-    int idx = QMetaObjectPrivate::indexOfMethodRelative<MethodSignal>(&m, signalName, 0, nullptr);
+    int idx = QMetaObjectPrivate::indexOfMethodRelative(&m, signalName, {}, QMetaMethod::Signal);
     if (idx >= 0)
         return idx + m->methodOffset();
     // try 1-arg signal
-    QArgumentType argType(metaType());
-    idx = QMetaObjectPrivate::indexOfMethodRelative<MethodSignal>(&m, signalName, 1, &argType);
+    QArgumentType argType[] = {metaType()};
+    idx = QMetaObjectPrivate::indexOfMethodRelative(&m, signalName, argType, QMetaMethod::Signal);
     if (idx >= 0)
         return idx + m->methodOffset();
     qWarning("QMetaProperty::notifySignal: cannot find the NOTIFY signal %s in class %s for property '%s'",
@@ -4415,6 +4406,34 @@ bool QMetaProperty::isFinal() const
 }
 
 /*!
+    \since 6.11
+    Returns \c true if the property is virtual; otherwise returns \c false.
+
+    A property is virtual if the \c{Q_PROPERTY()}'s \c VIRTUAL attribute
+    is set.
+*/
+bool QMetaProperty::isVirtual() const
+{
+    if (!mobj)
+        return false;
+    return data.flags() & Virtual;
+}
+
+/*!
+    \since 6.11
+    Returns \c true if the property does override; otherwise returns \c false.
+
+    A property does override if the \c{Q_PROPERTY()}'s \c OVERRIDE attribute
+    is set.
+*/
+bool QMetaProperty::isOverride() const
+{
+    if (!mobj)
+        return false;
+    return data.flags() & Override;
+}
+
+/*!
   \since 5.15
   Returns \c true if the property is required; otherwise returns \c false.
 
@@ -4457,7 +4476,7 @@ bool QMetaProperty::isBindable() const
     are specified using Q_CLASSINFO() in the source code. The
     information can be retrieved using name() and value(). For example:
 
-    \snippet code/src_corelib_kernel_qmetaobject.cpp 5
+    \snippet code/src_corelib_kernel_qmetaobject.cpp 0
 
     This mechanism is free for you to use in your Qt applications.
 
@@ -4592,9 +4611,15 @@ const char *QMetaClassInfo::value() const
 
 /*!
     \internal
-    If the local_method_index is a cloned method, return the index of the original.
+    If the \a local_method_index is a cloned method, return the index of the original.
 
-    Example: if the index of "destroyed()" is passed, the index of "destroyed(QObject*)" is returned
+    A "cloned" method is a function with a default argument, this is handled by
+    pretending there is an overload without the argument, and the original function
+    is the overload with all arguments present.
+
+    Example: for a function \c {QObject::destroyed(QObject *o = nullptr}, if the
+    index of \c {destroyed()} is passed, the index of \c {destroyed(QObject*)}
+    is returned.
  */
 int QMetaObjectPrivate::originalClone(const QMetaObject *mobj, int local_method_index)
 {
@@ -4609,14 +4634,20 @@ int QMetaObjectPrivate::originalClone(const QMetaObject *mobj, int local_method_
 /*!
     \internal
 
-    Returns the parameter type names extracted from the given \a signature.
+    Given a method \a signature (e.g. foo(int,double)), this function populates
+    the \a types array with the parameter type names, and returns the method name.
+
+    No normalization of the type names is performed.
+
 */
-QList<QByteArray> QMetaObjectPrivate::parameterTypeNamesFromSignature(QByteArrayView sig)
+QByteArrayView
+QMetaObjectPrivate::parameterTypeNamesFromSignature(QByteArrayView sig,
+                                                    QVarLengthArray<QByteArrayView, 10> &typeNames)
 {
-    QList<QByteArray> list;
     const char *signature = static_cast<const char *>(memchr(sig.begin(), '(', sig.size()));
     if (!signature)
         return {};
+    auto name = QByteArrayView{sig.begin(), signature};
     ++signature; // skip '('
     if (!sig.endsWith(')'))
         return {};
@@ -4633,9 +4664,9 @@ QList<QByteArray> QMetaObjectPrivate::parameterTypeNamesFromSignature(QByteArray
                 --level;
             ++signature;
         }
-        list += QByteArray(begin, signature - begin);
+        typeNames.append(QByteArrayView{begin, signature - begin});
     }
-    return list;
+    return name;
 }
 
 QT_END_NAMESPACE

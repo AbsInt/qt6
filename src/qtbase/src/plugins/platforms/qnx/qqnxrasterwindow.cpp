@@ -21,10 +21,6 @@ QQnxRasterWindow::QQnxRasterWindow(QWindow *window, screen_context_t context, bo
 {
     initWindow();
 
-    // Set window usage
-    if (window->type() == Qt::Desktop)
-        return;
-
     const int val = SCREEN_USAGE_NATIVE | SCREEN_USAGE_READ | SCREEN_USAGE_WRITE;
     const int result = screen_set_window_property_iv(nativeHandle(), SCREEN_PROPERTY_USAGE, &val);
     if (Q_UNLIKELY(result != 0))

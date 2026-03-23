@@ -26,14 +26,23 @@ bool QSGCurveStrokeMaterialShader::updateUniformData(RenderState &state, QSGMate
             m.scale(localScale);
             memcpy(buf->data() + viewIndex * 64, m.constData(), 64);
         }
+        // determinant is xscale * yscale, as long as Item.transform does not include shearing or rotation
         float matrixScale = qSqrt(qAbs(state.determinant())) * state.devicePixelRatio() * localScale;
         memcpy(buf->data() + matrixCount * 64, &matrixScale, 4);
+        float dpr = state.devicePixelRatio();
+        memcpy(buf->data() + matrixCount * 64 + 8, &dpr, 4);
         changed = true;
     }
 
     if (state.isOpacityDirty()) {
         const float opacity = state.opacity();
         memcpy(buf->data() + matrixCount * 64 + 4, &opacity, 4);
+        changed = true;
+    }
+
+    if (oldNode == nullptr || newNode->strokeWidth() != oldNode->strokeWidth()) {
+        float w = newNode->strokeWidth();
+        memcpy(buf->data() + matrixCount * 64 + 12, &w, 4);
         changed = true;
     }
 
@@ -58,18 +67,11 @@ bool QSGCurveStrokeMaterialShader::updateUniformData(RenderState &state, QSGMate
     }
     offset += 16;
 
-    if (oldNode == nullptr || newNode->strokeWidth() != oldNode->strokeWidth()) {
-        float w = newNode->strokeWidth();
-        memcpy(buf->data() + offset, &w, 4);
-        changed = true;
-    }
-    offset += 4;
     if (oldNode == nullptr || newNode->debug() != oldNode->debug()) {
         float w = newNode->debug();
         memcpy(buf->data() + offset, &w, 4);
         changed = true;
     }
-//    offset += 4;
 
     return changed;
 }
@@ -85,6 +87,17 @@ int QSGCurveStrokeMaterial::compare(const QSGMaterial *other) const
             return node()->strokeWidth() < othernode->strokeWidth() ? -1 : 1;
     }
     return typeDif;
+}
+
+QSGMaterialShader *QSGCurveStrokeMaterial::createShader(QSGRendererInterface::RenderMode renderMode) const
+{
+    Q_UNUSED(renderMode);
+    int variant = int(QSGCurveStrokeMaterialShader::Variant::Default);
+    if (m_strokeExpanding)
+        variant |= int(QSGCurveStrokeMaterialShader::Variant::Expanding);
+    if (node()->useStandardDerivatives())
+        variant |= int(QSGCurveStrokeMaterialShader::Variant::Derivatives);
+    return new QSGCurveStrokeMaterialShader(variant, viewCount());
 }
 
 QT_END_NAMESPACE

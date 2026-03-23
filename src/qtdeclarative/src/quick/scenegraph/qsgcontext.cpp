@@ -73,7 +73,7 @@ DEFINE_BOOL_CONFIG_OPTION(useElapsedTimerBasedAnimationDriver, QSG_USE_SIMPLE_AN
 
 bool qsg_useConsistentTiming()
 {
-    int use = -1;
+    static int use = -1;
     if (use < 0) {
         use = !qEnvironmentVariableIsEmpty("QSG_FIXED_ANIMATION_STEP") && qgetenv("QSG_FIXED_ANIMATION_STEP") != "no"
             ? 1 : 0;
@@ -431,6 +431,11 @@ QSGRendererInterface *QSGContext::rendererInterface(QSGRenderContext *renderCont
     return nullptr;
 }
 
+/*!
+    \class QSGRenderContext
+    \inmodule QtQuick
+    \internal
+*/
 QSGRenderContext::QSGRenderContext(QSGContext *context)
     : m_sg(context)
 {

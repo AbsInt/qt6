@@ -7,6 +7,11 @@
 
 set(qml_files
     "OpacityMask.qml"
+    "TextEditingContextMenu.qml"
+)
+
+set_source_files_properties(TextEditingContextMenu.qml PROPERTIES
+    QT_QML_SOURCE_VERSIONS "6.11"
 )
 
 qt_internal_add_qml_module(QuickControls2ImagineStyleImpl

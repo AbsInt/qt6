@@ -40,7 +40,7 @@ void tst_v4misc::tdzOptimizations()
     script.parse();
     QVERIFY(!v4.hasException);
 
-    const auto function = script.compilationUnit->unitData()->functionAt(0);
+    const auto function = script.compilationUnit()->unitData()->functionAt(0);
     const auto *code = function->code();
     const auto len = function->codeSize;
     const char *end = code + len;

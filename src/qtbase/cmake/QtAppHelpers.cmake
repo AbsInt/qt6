@@ -86,7 +86,6 @@ function(qt_internal_add_app target)
             ${arg_INCLUDE_DIRECTORIES}
         DEFINES
             ${arg_DEFINES}
-            ${deprecation_define}
         LIBRARIES
             ${arg_LIBRARIES}
             ${arg_PUBLIC_LIBRARIES}

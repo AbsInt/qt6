@@ -12,6 +12,16 @@
 
     This page gives a brief overview of C++20 features available in Qt.
 
+    \section1 WebEngine and Module-Specific Requirements
+
+    While Qt 6 only requires a C++17-compatible compiler in general,
+    the \l{Qt WebEngine} module requires a C++20-compatible compiler
+    due to its dependencies (such as Chromium).
+
+    If you are building Qt WebEngine, ensure that your compiler fully supports C++20.
+
+    See \l{qtwebengine-platform-notes.html}{Qt WebEngine Platform Notes} for detailed requirements.
+
     \section1 Support for \c{std::chrono}
 
     Various classes related to date and time have support for \l

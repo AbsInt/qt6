@@ -70,7 +70,8 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName("qmllint");
     QCoreApplication::setApplicationVersion(QT_VERSION_STR);
     QCommandLineParser parser;
-    QQmlToolingSettings defaultSettings(QLatin1String("qmllint"));
+    QQmlToolingSettings defaultSettings(QLatin1String("qmllint"),
+                                        { QLatin1String("General"), QLatin1String("Warnings") });
     parser.setApplicationDescription(QLatin1String(R"(QML syntax verifier and analyzer
 
 All warnings can be set to three levels:
@@ -165,7 +166,8 @@ All warnings can be set to three levels:
 
     QCommandLineOption dryRun(QStringList() << "dry-run",
                               QLatin1String("Only print out the contents of the file after fix "
-                                            "suggestions without applying them"));
+                                            "suggestions without applying them. Also prints the "
+                                            "settings file that would be used for this instance."));
     parser.addOption(dryRun);
 
     QCommandLineOption listPluginsOption(QStringList() << "list-plugins",
@@ -221,7 +223,7 @@ All warnings can be set to three levels:
                                   QQmlJS::LoggingUtils::levelToString(category));
     };
 
-    for (const auto &category : QQmlJSLogger::defaultCategories()) {
+    for (const auto &category : QQmlJSLogger::builtinCategories()) {
         addCategory(category);
     }
 
@@ -306,13 +308,10 @@ All warnings can be set to three levels:
     if (!parser.unknownOptionNames().isEmpty())
         parser.process(app);
 
-    QQmlJS::LoggingUtils::updateLogLevels(defaultCategories, defaultSettings, &parser);
-
     if (parser.isSet(listPluginsOption)) {
         const std::vector<QQmlJSLinter::Plugin> &plugins = linter.plugins();
         if (!plugins.empty()) {
             int nameWidth = "Plugin"_L1.size();
-            int builtinWidth = "Built-in?"_L1.size();
             int versionWidth = "Version"_L1.size();
             int authorWidth = "Author"_L1.size();
             for (const auto &p : plugins) {
@@ -323,22 +322,19 @@ All warnings can be set to three levels:
 
             // At least 4 spaces between columns
             nameWidth += 4;
-            builtinWidth += 4;
             versionWidth += 4;
             authorWidth += 4;
 
             qInfo().nospace().noquote() << u"Plugin"_s.leftJustified(nameWidth, u' ')
-                                        << u"Built-in?"_s.leftJustified(builtinWidth, u' ')
                                         << u"Version"_s.leftJustified(versionWidth, u' ')
                                         << u"Author"_s.leftJustified(authorWidth, u' ')
                                         << u"Description"_s;
             for (const QQmlJSLinter::Plugin &plugin : plugins) {
                 qInfo().nospace().noquote()
-                << plugin.name().leftJustified(nameWidth, u' ')
-                << (plugin.isBuiltin() ? u"Yes"_s : u"No"_s).leftJustified(builtinWidth, u' ')
-                << plugin.version().leftJustified(versionWidth, u' ')
-                << plugin.author().leftJustified(authorWidth, u' ')
-                << plugin.description();
+                        << plugin.name().leftJustified(nameWidth, u' ')
+                        << plugin.version().leftJustified(versionWidth, u' ')
+                        << plugin.author().leftJustified(authorWidth, u' ')
+                        << plugin.description();
             }
         } else {
             qWarning() << "No plugins installed.";
@@ -351,14 +347,22 @@ All warnings can be set to three levels:
         parser.showHelp(-1);
     }
 
+    if (parser.isSet(dryRun))
+        defaultSettings.reportConfigForFiles(positionalArguments);
+
     QJsonArray jsonFiles;
 
     for (const QString &filename : positionalArguments) {
-        QQmlToolingSettings settings(QLatin1String("qmllint"));
+        QQmlToolingSettings settings(QLatin1String("qmllint"),
+                                     { QLatin1String("General"), QLatin1String("Warnings") });
+
         QList<QQmlJS::LoggerCategory> categories = defaultCategories;
 
-        if (!parser.isSet(ignoreSettings))
-            settings.search(filename);
+        if (!parser.isSet(ignoreSettings)) {
+            QQmlToolingSettings::SearchOptions options;
+            options.isQmllintSilent = silent;
+            settings.search(filename, options);
+        }
         QQmlJS::LoggingUtils::updateLogLevels(categories, settings, &parser);
 
         resourceFiles = defaultResourceFiles;
@@ -441,11 +445,9 @@ All warnings can be set to three levels:
             lintResult = linter.lintModule(filename, silent, useJson ? &jsonFiles : nullptr,
                                            qmlImportPaths, resourceFiles);
         } else {
-            // TODO: collect root urls here
-            const QQmlJS::ContextProperties contextProperties;
             lintResult = linter.lintFile(filename, nullptr, silent || isFixing,
                                          useJson ? &jsonFiles : nullptr, qmlImportPaths,
-                                         qmldirFiles, resourceFiles, categories, contextProperties);
+                                         qmldirFiles, resourceFiles, categories);
         }
         success &= (lintResult == QQmlJSLinter::LintSuccess || lintResult == QQmlJSLinter::HasWarnings);
         if (success) {

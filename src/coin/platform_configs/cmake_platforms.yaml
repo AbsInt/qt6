@@ -1,7 +1,7 @@
 Version: 2
 Include: [
     cmake_platforms_qemu.yaml,
-    cmake_platforms_qemu_qnx710.yaml,
+    cmake_platforms_qemu_qnx.yaml,
     cmake_platforms_target_android.yaml,
     cmake_platforms_wasm.yaml,
     macos.yaml
@@ -23,7 +23,9 @@ Configurations:
     Configure arguments: '-nomake examples -release -force-debug-info -separate-debug-info -headersclean -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -qt-doubleconversion -no-libudev -bundled-xcb-xinput'
     Environment variables: [
         'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DINPUT_headersclean=ON -DQT_DEPLOY_FFMPEG=TRUE'
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DINPUT_headersclean=ON -DQT_DEPLOY_FFMPEG=TRUE',
+        'VCPKG_HOST_TRIPLET=x64-linux-qt',
+        'VCPKG_TARGET_TRIPLET=x64-linux-qt',
     ]
 # Test on Ubuntu 22.04 X11
 -
@@ -47,7 +49,9 @@ Configurations:
     Configure arguments: '-make examples -developer-build -c++std c++20 -linker lld -qtlibinfix TestInfix -qtnamespace TestNamespace -qpa offscreen\;xcb'
     Environment variables: [
         'COMMON_TEST_CMAKE_ARGS=-DQT_SKIP_DOCKER_COMPOSE=ON',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE'
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE',
+        'VCPKG_HOST_TRIPLET=arm64-linux-qt',
+        'VCPKG_TARGET_TRIPLET=arm64-linux-qt',
     ]
 -
     Id: 'ubuntu-24.04-arm64'
@@ -58,7 +62,9 @@ Configurations:
     Environment variables: [
         'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY',
         'COMMON_TEST_CMAKE_ARGS=-DQT_SKIP_DOCKER_COMPOSE=ON',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE -DINPUT_headersclean=ON'
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE -DINPUT_headersclean=ON',
+        'VCPKG_HOST_TRIPLET=arm64-linux-qt',
+        'VCPKG_TARGET_TRIPLET=arm64-linux-qt',
     ]
 # Test on Ubuntu 24.04 ARM64 Wayland
 -
@@ -94,7 +100,9 @@ Configurations:
     Configure arguments: '-make examples -developer-build -c++std c++20 -linker gold -qtlibinfix TestInfix -qtnamespace TestNamespace'
     Environment variables: [
         'COMMON_TEST_CMAKE_ARGS=-DQT_SKIP_DOCKER_COMPOSE=ON',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE'
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE',
+        'VCPKG_HOST_TRIPLET=x64-linux-qt',
+        'VCPKG_TARGET_TRIPLET=x64-linux-qt',
     ]
 -
     Id: 'ubuntu-24.04-x64'
@@ -105,7 +113,9 @@ Configurations:
     Environment variables: [
         'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY',
         'COMMON_TEST_CMAKE_ARGS=-DQT_SKIP_DOCKER_COMPOSE=ON',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE -DINPUT_headersclean=ON'
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE -DINPUT_headersclean=ON',
+        'VCPKG_HOST_TRIPLET=x64-linux-qt',
+        'VCPKG_TARGET_TRIPLET=x64-linux-qt',
     ]
 # Test on Ubuntu 24.04 x64 X11
 -
@@ -129,7 +139,22 @@ Configurations:
     Environment variables: [
         'PATH={{.Env.CMAKE_MIN_SUPPORTED_BIN_PATH}}:{{.Env.PATH}}',
         'CMAKE_ARGS=-DOPENSSL_ROOT_DIR={{.Env.OPENSSL_HOME}}',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE'
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE',
+        'VCPKG_HOST_TRIPLET=x64-linux-qt',
+        'VCPKG_TARGET_TRIPLET=x64-linux-qt',
+    ]
+-
+    Id: 'opensuse-16.0-developer-build'
+    Template: 'qtci-linux-openSUSE-16.0-x86_64-51'
+    Compiler: 'GCC'
+    Features: ['Sccache', 'WarningsAreErrors', 'UseConfigure', 'InsignificantTests', 'DoNotAbortTestingOnFirstFailure']
+    Configure arguments: '-nomake examples -developer-build'
+    Environment variables: [
+        'PATH={{.Env.CMAKE_MIN_SUPPORTED_BIN_PATH}}:{{.Env.PATH}}',
+        'CMAKE_ARGS=-DOPENSSL_ROOT_DIR={{.Env.OPENSSL_HOME}}',
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE',
+        'VCPKG_HOST_TRIPLET=x64-linux-qt',
+        'VCPKG_TARGET_TRIPLET=x64-linux-qt',
     ]
 -
     Id: 'sles-15_sp6-static'
@@ -139,7 +164,9 @@ Configurations:
     Configure arguments: '-nomake examples -static -no-sql-db2 -no-sql-ibase -no-sql-mysql -no-sql-oci -no-sql-psql -no-sql-mimer'
     Environment variables: [
         'CMAKE_ARGS=-DOPENSSL_ROOT_DIR={{.Env.OPENSSL_HOME}}',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}'
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}',
+        'VCPKG_HOST_TRIPLET=x64-linux-qt',
+        'VCPKG_TARGET_TRIPLET=x64-linux-qt',
     ]
 -
     Id: 'windows-10_22h2-msvc2022'
@@ -151,6 +178,8 @@ Configurations:
         'CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_INCLUDE_x64}}\.. -DPostgreSQL_ROOT={{.Env.POSTGRESQL_LIB_x64}}\.. -DMySQL_ROOT={{.Env.ENV_MySQL_ROOT}} -DMySQL_LIBRARY_DIR={{.Env.ENV_MySQL_LIBRARY_DIR}}',
         'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR_MSVC}} -DQT_DEPLOY_FFMPEG=TRUE -DFEATURE_clangcpp=OFF -DINPUT_headersclean=ON',
         'LLVM_INSTALL_DIR={{.Env.LLVM_INSTALL_DIR_msvc}}',
+        'VCPKG_HOST_TRIPLET=x64-windows-qt',
+        'VCPKG_TARGET_TRIPLET=x64-windows-qt',
         'Protobuf_ROOT={{.Env.Protobuf_ROOT_msvc}}',
         'WEBVIEW2_SDK_ROOT={{.Env.WEBVIEW2_SDK_ROOT_PATH}}',
     ]
@@ -164,6 +193,8 @@ Configurations:
         'CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_INCLUDE_x64}}\.. -DPostgreSQL_ROOT={{.Env.POSTGRESQL_LIB_x64}}\..',
         'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR_MSVC}} -DQT_DEPLOY_FFMPEG=TRUE -DFEATURE_clangcpp=OFF -DINPUT_headersclean=ON',
         'LLVM_INSTALL_DIR={{.Env.LLVM_INSTALL_DIR_msvc}}',
+        'VCPKG_HOST_TRIPLET=x64-windows-qt',
+        'VCPKG_TARGET_TRIPLET=x64-windows-qt',
         'Protobuf_ROOT={{.Env.Protobuf_ROOT_msvc}}',
         'WEBVIEW2_SDK_ROOT={{.Env.WEBVIEW2_SDK_ROOT_PATH}}',
     ]
@@ -176,6 +207,8 @@ Configurations:
     Environment variables: [
         'CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_INCLUDE_arm64}}\..',
         'NON_QTBASE_CMAKE_ARGS= -DFEATURE_clangcpp=OFF -DFFMPEG_DIR={{.Env.FFMPEG_DIR_MSVC_ARM64}} -DQT_DEPLOY_FFMPEG=TRUE',
+        'VCPKG_HOST_TRIPLET=arm64-windows-qt',
+        'VCPKG_TARGET_TRIPLET=arm64-windows-qt',
         'Protobuf_ROOT={{.Env.Protobuf_ROOT_msvc}}',
         'WEBVIEW2_SDK_ROOT={{.Env.WEBVIEW2_SDK_ROOT_PATH}}',
     ]
@@ -195,6 +228,8 @@ Configurations:
         'OPENSSL_INCLUDE_x64={{.Env.OPENSSL_INCLUDE_x64_arm64}}',
         'OPENSSL_LIB_x64={{.Env.OPENSSL_LIB_x64_arm64}}',
         'LLVM_INSTALL_DIR={{.Env.LLVM_INSTALL_DIR_msvc_arm64}}',
+        'VCPKG_HOST_TRIPLET=x64-windows-qt',
+        'VCPKG_TARGET_TRIPLET=arm64-windows-qt',
         'Protobuf_ROOT={{.Env.Protobuf_ROOT_msvc}}',
         'WEBVIEW2_SDK_ROOT={{.Env.WEBVIEW2_SDK_ROOT_PATH}}',
     ]
@@ -215,37 +250,33 @@ Configurations:
         'CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_INCLUDE_x64}}\.. -DMySQL_ROOT={{.Env.ENV_MySQL_ROOT}} -DMySQL_LIBRARY_DIR={{.Env.ENV_MySQL_LIBRARY_DIR}}',
         'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR_MSVC}} -DQT_DEPLOY_FFMPEG=TRUE',
         'Protobuf_ROOT={{.Env.Protobuf_ROOT_msvc}}',
+        'VCPKG_HOST_TRIPLET=x64-windows-qt',
+        'VCPKG_TARGET_TRIPLET=x64-windows-qt',
         'gRPC_ROOT={{.Env.gRPC_ROOT_msvc}}',
-    ]
--
-    Id: 'rhel-8.10'
-    Template: 'qtci-linux-RHEL-8.10-x86_64-51'
-    Compiler: 'GCC'
-    Features: ['Packaging', 'Sccache', 'UseConfigure', 'InstallQt5Dependencies', 'GenerateSBOM', 'VerifySBOM']
-    Configure arguments: '-nomake examples -release -force-debug-info -headersclean -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -qt-doubleconversion -no-libudev -bundled-xcb-xinput'
-    Environment variables: [
-        'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_HOME}}',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE -DINPUT_headersclean=ON'
-    ]
--
-    Id: 'rhel-9.4'
-    Template: 'qtci-linux-RHEL-9.4-x86_64-50'
-    Compiler: 'GCC'
-    Features: ['Packaging','Sccache', 'UseConfigure', 'InstallQt5Dependencies', 'GenerateSBOM', 'VerifySBOM']
-    Configure arguments: '-nomake examples -release -force-debug-info -headersclean -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -qt-doubleconversion -no-libudev -bundled-xcb-xinput'
-    Environment variables: [
-        'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE -DINPUT_headersclean=ON'
     ]
 -
     Id: 'rhel-9.6'
     Template: 'qtci-linux-RHEL-9.6-x86_64-51'
     Compiler: 'GCC'
+    Features: ['Packaging', 'Sccache', 'UseConfigure', 'InstallQt5Dependencies', 'GenerateSBOM', 'VerifySBOM']
+    Configure arguments: '-nomake examples -release -force-debug-info -headersclean -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -qt-doubleconversion -no-libudev -bundled-xcb-xinput'
+    Environment variables: [
+        'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY',
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE -DINPUT_headersclean=ON',
+        'VCPKG_HOST_TRIPLET=x64-linux-qt',
+        'VCPKG_TARGET_TRIPLET=x64-linux-qt',
+    ]
+-
+    Id: 'rhel-10.0'
+    Template: 'qtci-linux-RHEL-10.0-x86_64-51'
+    Compiler: 'GCC'
     Features: ['Sccache', 'UseConfigure', 'InstallQt5Dependencies', 'GenerateSBOM', 'VerifySBOM', 'InsignificantTests', 'DoNotAbortTestingOnFirstFailure']
     Configure arguments: '-nomake examples -release -force-debug-info -headersclean -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -qt-doubleconversion -no-libudev -bundled-xcb-xinput'
     Environment variables: [
         'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE -DINPUT_headersclean=ON'
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE -DINPUT_headersclean=ON',
+        'VCPKG_HOST_TRIPLET=x64-linux-qt',
+        'VCPKG_TARGET_TRIPLET=x64-linux-qt',
     ]
 -
     Id: 'ios-universal'
@@ -317,7 +348,7 @@ Configurations:
     Compiler: 'GCC'
     Features: ['Packaging','DebianPackaging','DisableTests', 'Insignificant']
     Environment variables: [
-        'DEBIAN_RULES_REF=6.10_dev',
+        'DEBIAN_RULES_REF=6.11_dev',
         'COIN_TARGET_DIST=tqtc-jammy',
         'COIN_EXTRA_DEBIAN_PACKAGES={{.Env.HOME}}/debian_packages/',
         'COIN_SBUILD_CHROOT=jammy-arm64-sbuild',
@@ -330,7 +361,7 @@ Configurations:
     Compiler: 'GCC'
     Features: ['Packaging','DebianPackaging','DisableTests', 'Insignificant']
     Environment variables: [
-        'DEBIAN_RULES_REF=6.10_dev',
+        'DEBIAN_RULES_REF=6.11_dev',
         'COIN_TARGET_DIST=tqtc-jammy',
         'COIN_EXTRA_DEBIAN_PACKAGES={{.Env.HOME}}/debian_packages/',
         'COIN_SBUILD_CHROOT=jammy-amd64-sbuild',
@@ -343,7 +374,7 @@ Configurations:
     Compiler: 'GCC'
     Features: ['Packaging','DebianPackaging','DisableTests', 'Insignificant']
     Environment variables: [
-        'DEBIAN_RULES_REF=6.10_gles',
+        'DEBIAN_RULES_REF=6.11_gles',
         'COIN_TARGET_DIST=tqtc-bookworm',
         'COIN_EXTRA_DEBIAN_PACKAGES={{.Env.HOME}}/debian_packages/',
         'COIN_SBUILD_CHROOT=bookworm-arm64-sbuild',

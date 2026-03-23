@@ -231,8 +231,6 @@ static int unpackControlTypes(QSizePolicy::ControlTypes controls, QSizePolicy::C
     them differently:
 
     \snippet customstyle/customstyle.cpp 2
-    \snippet customstyle/customstyle.cpp 3
-    \snippet customstyle/customstyle.cpp 4
 
     Notice that we don't use the \c widget argument, except to pass it
     on to the QWindowStyle::drawPrimitive() function. As mentioned
@@ -245,8 +243,6 @@ static int unpackControlTypes(QSizePolicy::ControlTypes controls, QSizePolicy::C
     of the correct type before using it. For example:
 
     \snippet customstyle/customstyle.cpp 0
-    \dots
-    \snippet customstyle/customstyle.cpp 1
 
     When implementing a custom style, you cannot assume that the
     widget is a QSpinBox just because the enum value is called
@@ -726,7 +722,7 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
     \value State_AutoRaise Used to indicate if auto-raise appearance should be used on a tool button.
     \value State_Children Used to indicate if an item view branch has children.
     \value State_DownArrow Used to indicate if a down arrow should be visible on the widget.
-    \value State_Editing Used to indicate if an editor is opened on the widget.
+    \value State_Editing Deprecated. No longer used as the editor is drawn over the itemview cell.
     \value State_Enabled Used to indicate if the widget is enabled.
     \value State_HasEditFocus Used to indicate if the widget currently has edit focus.
     \value State_HasFocus Used to indicate if the widget has focus.
@@ -1738,8 +1734,16 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
         by pressing Alt, followed by using the arrow keys to select
         the desired item.
 
-    \value SH_ComboBox_ListMouseTracking  Mouse tracking in combobox
-        drop-down lists.
+    \value SH_ComboBox_ListMouseTracking_Current  Mouse tracking in
+        combobox drop-down lists, the item under the cursor is made
+        the current item (QStyle::State_Selected).
+
+    \value SH_ComboBox_ListMouseTracking  Deprecated. Use
+        \l{SH_ComboBox_ListMouseTracking_Current} instead.
+
+    \value SH_ComboBox_ListMouseTracking_Active  Mouse tracking in
+        combobox drop-down lists, the item under the cursor is not
+        made the current item, only active (QStyle::State_MouseOver).
 
     \value SH_Menu_MouseTracking  Mouse tracking in popup menus.
 

@@ -72,6 +72,7 @@ public:
     QColor color() const;
     void setColor(const QColor &color);
     void resetColor();
+    void resolveColor();
 
     bool cache() const;
     void setCache(bool cache);
@@ -80,6 +81,8 @@ public:
     QQuickIcon resolve(const QQuickIcon &other) const;
 
 private:
+    friend QQuickIconPrivate;
+
     QExplicitlySharedDataPointer<QQuickIconPrivate> d;
 };
 

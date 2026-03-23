@@ -67,6 +67,7 @@
 #include "qnetworkdatagram.h"
 #include "qnetworkinterface.h"
 #include "qabstractsocket_p.h"
+#include "qabstractsocketengine_p.h"
 
 QT_BEGIN_NAMESPACE
 

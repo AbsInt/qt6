@@ -158,7 +158,7 @@ Q_SIGNALS:
     Q_REVISION(6, 10) void modelChanged();
 
 private Q_SLOTS:
-    void _q_itemsChanged(int index, int count, const QVector<int> &roles);
+    void _q_itemsChanged(int index, int count, const QList<int> &roles);
     void _q_itemsInserted(int index, int count);
     void _q_itemsRemoved(int index, int count);
     void _q_itemsMoved(int from, int to, int count);
@@ -170,7 +170,7 @@ private Q_SLOTS:
     void _q_rowsAboutToBeRemoved(const QModelIndex &parent, int begin, int end);
     void _q_rowsRemoved(const QModelIndex &,int,int);
     void _q_rowsMoved(const QModelIndex &, int, int, const QModelIndex &, int);
-    void _q_dataChanged(const QModelIndex&,const QModelIndex&,const QVector<int> &);
+    void _q_dataChanged(const QModelIndex&,const QModelIndex&,const QList<int> &);
     void _q_layoutChanged(const QList<QPersistentModelIndex>&, QAbstractItemModel::LayoutChangeHint);
 
 private:
@@ -231,10 +231,10 @@ class QQmlDelegateModelAttached : public QObject
     Q_PROPERTY(QQmlDelegateModel *model READ model CONSTANT FINAL)
     Q_PROPERTY(QStringList groups READ groups WRITE setGroups NOTIFY groupsChanged FINAL)
     Q_PROPERTY(bool isUnresolved READ isUnresolved NOTIFY unresolvedChanged FINAL)
-    Q_PROPERTY(bool inPersistedItems READ inPersistedItems WRITE setInPersistedItems NOTIFY groupsChanged)
-    Q_PROPERTY(bool inItems READ inItems WRITE setInItems NOTIFY groupsChanged)
-    Q_PROPERTY(int persistedItemsIndex READ persistedItemsIndex NOTIFY groupsChanged)
-    Q_PROPERTY(int itemsIndex READ itemsIndex NOTIFY groupsChanged)
+    Q_PROPERTY(bool inPersistedItems READ inPersistedItems WRITE setInPersistedItems NOTIFY groupsChanged VIRTUAL)
+    Q_PROPERTY(bool inItems READ inItems WRITE setInItems NOTIFY groupsChanged VIRTUAL)
+    Q_PROPERTY(int persistedItemsIndex READ persistedItemsIndex NOTIFY groupsChanged VIRTUAL)
+    Q_PROPERTY(int itemsIndex READ itemsIndex NOTIFY groupsChanged VIRTUAL)
 
 public:
     QQmlDelegateModelAttached(QObject *parent);

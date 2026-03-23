@@ -96,7 +96,7 @@ QUntypedPropertyBinding QQmlPropertyBinding::createFromScriptString(const QQmlPr
     Q_ASSERT(js->asBinding() == binding);
     js->setContext(QQmlContextData::get(ctxt ? ctxt : scriptPrivate->context));
 
-    QV4::ExecutionEngine *v4 = engine->v4engine();
+    QV4::ExecutionEngine *v4 = engine->v4Engine.get();
     QV4::Scope scope(v4);
     QV4::Scoped<QV4::QmlContext> qmlContext(scope, QV4::QmlContext::create(v4->rootContext(), ctxtdata, scopeObject));
     js->setupFunction(qmlContext, runtimeFunction);

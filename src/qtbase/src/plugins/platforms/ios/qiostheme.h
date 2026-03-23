@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QIOSTHEME_H
 #define QIOSTHEME_H
@@ -37,6 +38,7 @@ public:
 
     const QFont *font(Font type = SystemFont) const override;
     QIconEngine *createIconEngine(const QString &iconName) const override;
+    QIcon fileIcon(const QFileInfo &fileInfo, QPlatformTheme::IconOptions options = {}) const override;
 
     static const char *name;
 

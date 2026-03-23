@@ -48,14 +48,21 @@ public:
     PropertyNode *findPropertyNode(const QString &name);
     FunctionNode *findOverriddenFunction(const FunctionNode *fn);
     PropertyNode *findOverriddenProperty(const FunctionNode *fn);
-    [[nodiscard]] bool docMustBeGenerated() const override;
+    [[nodiscard]] bool docMustBeGenerated() const override { return isInAPI(); }
 
     void insertQmlNativeType(QmlTypeNode *qmlTypeNode) { m_nativeTypeForQml << qmlTypeNode; }
     bool isQmlNativeType() { return !m_nativeTypeForQml.empty(); }
     const QSet<QmlTypeNode *> &qmlNativeTypes() { return m_nativeTypeForQml; }
 
+    [[nodiscard]] bool isQmlSingleton() const { return m_isQmlSingleton; }
+    void setQmlSingleton(bool singleton = true) { m_isQmlSingleton = singleton; }
+
+    [[nodiscard]] bool isAnonymous() const { return m_anonymous; }
+    void setAnonymous(bool anonymous = true) { m_anonymous = anonymous; }
+
     enum class HierarchyDirection { Base, Derived };
 
+    [[nodiscard]] QString plainName() const override;
     [[nodiscard]] bool hasCircularInheritance(QStringList *cyclePath = nullptr) const;
     [[nodiscard]] bool hasCircularDerivedClasses(QStringList *cyclePath = nullptr) const;
 
@@ -79,6 +86,8 @@ private:
     QList<RelatedClass> m_ignoredBases {};
     bool m_abstract { false };
     bool m_wrapper { false };
+    bool m_isQmlSingleton { false };
+    bool m_anonymous { false };
     QSet<QmlTypeNode *> m_nativeTypeForQml;
 };
 

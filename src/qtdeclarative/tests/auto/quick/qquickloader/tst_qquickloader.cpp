@@ -490,7 +490,7 @@ void tst_QQuickLoader::networkComponent()
                         "Item {\n"
                         " Component { id: comp; NW.Rect120x60 {} }\n"
                         " Loader { sourceComponent: comp } }";
-    component.setData(qml.toUtf8(), dataDirectory());
+    component.setData(qml.toUtf8(), dataDirectoryUrl());
     // The component may be loaded synchronously or asynchronously, so we cannot test for
     // status == Loading here. Also, it makes no sense to instruct the server to send here
     // because in the synchronous case we're already done loading.

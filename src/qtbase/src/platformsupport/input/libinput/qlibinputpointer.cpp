@@ -13,6 +13,8 @@
 
 QT_BEGIN_NAMESPACE
 
+Q_STATIC_LOGGING_CATEGORY(qLcLibInputMouse, "qt.qpa.input.mouse")
+
 QLibInputPointer::QLibInputPointer()
     : m_buttons(Qt::NoButton)
 {
@@ -48,6 +50,7 @@ void QLibInputPointer::processButton(libinput_event_pointer *e)
     QEvent::Type type = pressed ? QEvent::MouseButtonPress : QEvent::MouseButtonRelease;
     Qt::KeyboardModifiers mods = QGuiApplicationPrivate::inputDeviceManager()->keyboardModifiers();
 
+    qCDebug(qLcLibInputMouse) << "processButton" << type << button << m_buttons << m_pos << mods;
     QWindowSystemInterface::handleMouseEvent(nullptr, m_pos, m_pos, m_buttons, button, type, mods);
 }
 
@@ -63,6 +66,7 @@ void QLibInputPointer::processMotion(libinput_event_pointer *e)
 
     Qt::KeyboardModifiers mods = QGuiApplicationPrivate::inputDeviceManager()->keyboardModifiers();
 
+    qCDebug(qLcLibInputMouse) << "processMotion" << m_pos << mods;
     QWindowSystemInterface::handleMouseEvent(nullptr, m_pos, m_pos, m_buttons,
                                              Qt::NoButton, QEvent::MouseMove, mods);
 }
@@ -80,6 +84,7 @@ void QLibInputPointer::processAbsMotion(libinput_event_pointer *e)
 
     Qt::KeyboardModifiers mods = QGuiApplicationPrivate::inputDeviceManager()->keyboardModifiers();
 
+    qCDebug(qLcLibInputMouse) << "processAbsMotion" << m_pos << mods;
     QWindowSystemInterface::handleMouseEvent(nullptr, m_pos, m_pos, m_buttons,
                                              Qt::NoButton, QEvent::MouseMove, mods);
 
@@ -120,6 +125,7 @@ void QLibInputPointer::processAxis(libinput_event_pointer *e)
 #endif
     angleDelta *= factor;
     Qt::KeyboardModifiers mods = QGuiApplicationPrivate::inputDeviceManager()->keyboardModifiers();
+    qCDebug(qLcLibInputMouse) << "processAxis" << angleDelta << m_pos << mods;
     QWindowSystemInterface::handleWheelEvent(nullptr, m_pos, m_pos, QPoint(), angleDelta, mods);
 }
 
@@ -130,6 +136,7 @@ void QLibInputPointer::setPos(const QPoint &pos)
 
     m_pos.setX(qBound(g.left(), pos.x(), g.right()));
     m_pos.setY(qBound(g.top(), pos.y(), g.bottom()));
+    qCDebug(qLcLibInputMouse) << "setPos" << pos << "bounded:" << m_pos;
 }
 
 QT_END_NAMESPACE

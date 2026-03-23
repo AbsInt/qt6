@@ -66,7 +66,7 @@ QT_BEGIN_NAMESPACE
 
 Q_DECLARE_TYPEINFO(pollfd, Q_PRIMITIVE_TYPE);
 
-static inline constexpr clockid_t SteadyClockClockId =
+static inline constexpr clockid_t QSteadyClockClockId =
 #if !defined(CLOCK_MONOTONIC)
         // we don't know how to set the monotonic clock
         CLOCK_REALTIME
@@ -100,7 +100,7 @@ static inline constexpr clockid_t QWaitConditionClockId =
         // unknown why use of the monotonic clock causes failures
         CLOCK_REALTIME
 #else
-        SteadyClockClockId;
+        QSteadyClockClockId;
 #endif
         ;
 
@@ -124,11 +124,6 @@ inline Duration timespecToChrono(timespec ts) noexcept
     return duration_cast<Duration>(seconds{ts.tv_sec} + nanoseconds{ts.tv_nsec});
 }
 
-inline std::chrono::milliseconds timespecToChronoMs(timespec ts) noexcept
-{
-    return timespecToChrono<std::chrono::milliseconds>(ts);
-}
-
 // Internal operator functions for timespecs
 constexpr inline timespec &normalizedTimespec(timespec &t)
 {
@@ -142,39 +137,7 @@ constexpr inline timespec &normalizedTimespec(timespec &t)
     }
     return t;
 }
-constexpr inline bool operator<(const timespec &t1, const timespec &t2)
-{ return t1.tv_sec < t2.tv_sec || (t1.tv_sec == t2.tv_sec && t1.tv_nsec < t2.tv_nsec); }
-constexpr inline bool operator==(const timespec &t1, const timespec &t2)
-{ return t1.tv_sec == t2.tv_sec && t1.tv_nsec == t2.tv_nsec; }
-constexpr inline bool operator!=(const timespec &t1, const timespec &t2)
-{ return !(t1 == t2); }
-constexpr inline timespec &operator+=(timespec &t1, const timespec &t2)
-{
-    t1.tv_sec += t2.tv_sec;
-    t1.tv_nsec += t2.tv_nsec;
-    return normalizedTimespec(t1);
-}
-constexpr inline timespec operator+(const timespec &t1, const timespec &t2)
-{
-    timespec tmp = {};
-    tmp.tv_sec = t1.tv_sec + t2.tv_sec;
-    tmp.tv_nsec = t1.tv_nsec + t2.tv_nsec;
-    return normalizedTimespec(tmp);
-}
-constexpr inline timespec operator-(const timespec &t1, const timespec &t2)
-{
-    timespec tmp = {};
-    tmp.tv_sec = t1.tv_sec - (t2.tv_sec - 1);
-    tmp.tv_nsec = t1.tv_nsec - (t2.tv_nsec + OneSecAsNsecs);
-    return normalizedTimespec(tmp);
-}
-constexpr inline timespec operator*(const timespec &t1, int mul)
-{
-    timespec tmp = {};
-    tmp.tv_sec = t1.tv_sec * mul;
-    tmp.tv_nsec = t1.tv_nsec * mul;
-    return normalizedTimespec(tmp);
-}
+
 inline timeval timespecToTimeval(timespec ts)
 {
     timeval tv;
@@ -183,43 +146,7 @@ inline timeval timespecToTimeval(timespec ts)
     return tv;
 }
 
-inline timespec &operator+=(timespec &t1, std::chrono::milliseconds msecs)
-{
-    t1 += durationToTimespec(msecs);
-    return t1;
-}
-
-inline timespec &operator+=(timespec &t1, int ms)
-{
-    t1 += std::chrono::milliseconds{ms};
-    return t1;
-}
-
-inline timespec operator+(const timespec &t1, std::chrono::milliseconds msecs)
-{
-    timespec tmp = t1;
-    tmp += msecs;
-    return tmp;
-}
-
-inline timespec operator+(const timespec &t1, int ms)
-{
-    return t1 + std::chrono::milliseconds{ms};
-}
-
-inline timespec qAbsTimespec(timespec ts)
-{
-    if (ts.tv_sec < 0) {
-        ts.tv_sec = -ts.tv_sec - 1;
-        ts.tv_nsec -= OneSecAsNsecs;
-    }
-    if (ts.tv_sec == 0 && ts.tv_nsec < 0) {
-        ts.tv_nsec = -ts.tv_nsec;
-    }
-    return normalizedTimespec(ts);
-}
-
-template <clockid_t ClockId = SteadyClockClockId>
+template <clockid_t ClockId = QSteadyClockClockId>
 inline timespec deadlineToAbstime(QDeadlineTimer deadline)
 {
     using namespace std::chrono;

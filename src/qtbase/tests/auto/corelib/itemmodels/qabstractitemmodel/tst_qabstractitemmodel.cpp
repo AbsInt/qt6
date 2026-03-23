@@ -1990,13 +1990,13 @@ void tst_QAbstractItemModel::testReset()
 class CustomRoleModel : public QStringListModel
 {
     Q_OBJECT
-    Q_ENUMS(Roles)
 public:
     enum Roles {
         Custom1 = Qt::UserRole + 1,
         Custom2,
         UserRole
     };
+    Q_ENUM(Roles)
 
     CustomRoleModel(QObject *parent = nullptr)
       : QStringListModel(QStringList() << "a" << "b" << "c", parent)

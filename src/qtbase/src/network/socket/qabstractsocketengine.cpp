@@ -11,6 +11,8 @@
 
 QT_BEGIN_NAMESPACE
 
+QAbstractSocketEngineReceiver::~QAbstractSocketEngineReceiver() = default;
+
 class QSocketEngineHandlerList : public QList<QSocketEngineHandler*>
 {
 public:

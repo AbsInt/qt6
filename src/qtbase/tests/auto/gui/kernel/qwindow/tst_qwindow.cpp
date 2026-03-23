@@ -11,6 +11,7 @@
 #include <QtGui/QPainter>
 
 #include <QTest>
+#include <QtTest/private/qtesthelpers_p.h>
 #include <QSignalSpy>
 #include <QEvent>
 #include <QStyleHints>
@@ -424,8 +425,13 @@ void tst_QWindow::eventOrderOnShow()
     window.show();
     QCoreApplication::processEvents();
 
+    int safeMarginsEventCount = 0;
+    connect(&window, &QWindow::safeAreaMarginsChanged, this, [&]() {
+        ++safeMarginsEventCount;
+    });
+
     QTRY_COMPARE(window.received(QEvent::Show), 1);
-    QTRY_COMPARE(window.received(QEvent::Resize), 1);
+    QTRY_COMPARE(window.received(QEvent::Resize) - safeMarginsEventCount, 1);
     QTRY_VERIFY(window.isExposed());
 
     QVERIFY(window.eventIndex(QEvent::Show) < window.eventIndex(QEvent::Resize));
@@ -1238,6 +1244,7 @@ void tst_QWindow::testInputEvents()
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
     window.showNormal();
     QTRY_VERIFY(window.isActive());
+    QVERIFY(QTestPrivate::ensurePositionTopLeft(&window));
 
     QTest::keyClick(&window, Qt::Key_A, Qt::NoModifier);
     QCoreApplication::processEvents();
@@ -3270,12 +3277,14 @@ void tst_QWindow::windowExposedAfterReparent()
     QVERIFY(QTest::qWaitForWindowExposed(&parent));
     QVERIFY(QTest::qWaitForWindowExposed(&child));
 
+    // Close the child before reparenting it to ensure it is correctly converted
+    // to a toplevel window by the window manager.
+    child.close();
     child.setParent(nullptr);
-    QCoreApplication::processEvents();
+    child.show();
     QVERIFY(QTest::qWaitForWindowExposed(&child));
 
     child.setParent(&parent);
-    QCoreApplication::processEvents();
     QVERIFY(QTest::qWaitForWindowExposed(&child));
 }
 
@@ -3497,4 +3506,3 @@ void tst_QWindow::parentEvents()
 
 #include <tst_qwindow.moc>
 QTEST_MAIN(tst_QWindow)
-

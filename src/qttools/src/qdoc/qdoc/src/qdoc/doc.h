@@ -19,6 +19,7 @@
 QT_BEGIN_NAMESPACE
 
 class Atom;
+class CodeMarker;
 class DocPrivate;
 class Quoter;
 class Text;
@@ -52,6 +53,7 @@ public:
     [[nodiscard]] bool isEmpty() const;
     [[nodiscard]] const QString &source() const;
     [[nodiscard]] const Text &body() const;
+    [[nodiscard]] const Text &title() const;
     [[nodiscard]] Text briefText(bool inclusive = false) const;
     [[nodiscard]] Text trimmedBriefText(const QString &className) const;
     [[nodiscard]] Text legaleseText() const;
@@ -81,7 +83,8 @@ public:
     static void terminate();
     static void trimCStyleComment(Location &location, QString &str);
     static void quoteFromFile(const Location &location, Quoter &quoter,
-                                     ResolvedFile resolved_file);
+                                     ResolvedFile resolved_file,
+                                     CodeMarker *marker = nullptr);
 
 private:
     DocPrivate *m_priv { nullptr };

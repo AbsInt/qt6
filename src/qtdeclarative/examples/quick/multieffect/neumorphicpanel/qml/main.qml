@@ -72,6 +72,10 @@ Rectangle {
             width: settings.itemSize * 2
             height: settings.itemSize
             radius: settings.radius
+            topRightRadius: settings.individualRadius ? settings.radiustr : undefined
+            bottomRightRadius: settings.individualRadius ? settings.radiusbr : undefined
+            bottomLeftRadius: settings.individualRadius ? settings.radiusbl : undefined
+            topLeftRadius: settings.individualRadius ? settings.radiustl : undefined
             gradient: Gradient {
                 id: gradient
                 property real lightLevelUp: 1.05 - settings.offsetY * 0.004 * settings.opacity
@@ -95,10 +99,15 @@ Rectangle {
         }
 
         RectangularShadow {
+            id: rectangularShadow1
             anchors.fill: sourceItem
             offset.x: settings.offsetX
             offset.y: settings.offsetY
             radius: settings.radius
+            topRightRadius: settings.individualRadius ? settings.radiustr : undefined
+            bottomRightRadius: settings.individualRadius ? settings.radiusbr : undefined
+            bottomLeftRadius: settings.individualRadius ? settings.radiusbl : undefined
+            topLeftRadius: settings.individualRadius ? settings.radiustl : undefined
             blur: settings.blur
             spread: settings.spread
             opacity: settings.opacity
@@ -119,10 +128,15 @@ Rectangle {
         }
 
         RectangularShadow {
+            id: rectangularShadow2
             anchors.fill: sourceItem
             offset.x: -settings.offsetX
             offset.y: -settings.offsetY
             radius: settings.radius
+            topRightRadius: settings.individualRadius ? settings.radiustr : undefined
+            bottomRightRadius: settings.individualRadius ? settings.radiusbr : undefined
+            bottomLeftRadius: settings.individualRadius ? settings.radiusbl : undefined
+            topLeftRadius: settings.individualRadius ? settings.radiustl : undefined
             blur: settings.blur
             spread: settings.spread
             opacity: settings.opacity
@@ -139,6 +153,62 @@ Rectangle {
                 border.width: 1
                 border.color: "#000000"
                 visible: settings.showDebug
+            }
+        }
+        Text {
+            anchors.horizontalCenter: lightArea.horizontalCenter
+            anchors.bottom: lightArea.top
+            color: "#202020"
+            font.pixelSize: 16 * dp
+            text: "Offset (" + settings.offsetX.toFixed(0) + ", " +
+                  settings.offsetY.toFixed(0) + ")"
+        }
+        Rectangle {
+            id: lightArea
+            anchors.left: parent.left
+            anchors.leftMargin: 20
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 10
+            width: settings.settingsViewWidth * 0.4
+            height: width
+            radius: 5
+            color: Qt.lighter(mainWindow.mainColor, 0.7)
+            border.width: 1
+            border.color: Qt.lighter(mainWindow.mainColor, 0.5)
+            Item {
+                id: lightItem
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 10
+                    height: width
+                    radius: width / 2
+                    color: "#e0e0e0"
+                    RectangularShadow {
+                        anchors.centerIn: parent
+                        width: parent.width * 3.0
+                        height: width
+                        radius: width / 2
+                        blur: width
+                        color: "#fff9f0"
+                        opacity: settings.opacity
+                    }
+                }
+            }
+            MouseArea {
+                id: lightMouseArea
+                anchors.fill: parent
+                preventStealing: true
+                Component.onCompleted: {
+                    settingsView.resetPosition();
+                }
+                onPositionChanged:
+                    (mouse)=> {
+                        settingsView.updatePosition(mouse.x, mouse.y);
+                    }
+                onPressed:
+                    (mouse)=> {
+                        settingsView.updatePosition(mouse.x, mouse.y);
+                    }
             }
         }
     }

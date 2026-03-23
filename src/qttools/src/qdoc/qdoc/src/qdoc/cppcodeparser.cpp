@@ -16,6 +16,8 @@
 #include "generator.h"
 #include "genustypes.h"
 #include "headernode.h"
+#include "inclusionfilter.h"
+#include "inclusionpolicy.h"
 #include "namespacenode.h"
 #include "qdocdatabase.h"
 #include "qmltypenode.h"
@@ -173,9 +175,10 @@ Node *CppCodeParser::processTopicCommand(const Doc &doc, const QString &command,
         pn->setLocation(doc.startLocation());
         return pn;
     } else if (command == COMMAND_QMLTYPE ||
+               command == COMMAND_QMLSINGLETONTYPE ||
                command == COMMAND_QMLVALUETYPE ||
                command == COMMAND_QMLBASICTYPE) {
-        auto nodeType = (command == COMMAND_QMLTYPE) ? NodeType::QmlType : NodeType::QmlValueType;
+        auto nodeType = (command == COMMAND_QMLTYPE || command == COMMAND_QMLSINGLETONTYPE) ? NodeType::QmlType : NodeType::QmlValueType;
         QString qmid;
         if (auto args = doc.metaCommandArgs(COMMAND_INQMLMODULE); !args.isEmpty())
             qmid = args.first().first;
@@ -192,6 +195,13 @@ Node *CppCodeParser::processTopicCommand(const Doc &doc, const QString &command,
         if (!qmid.isEmpty())
             database->addToQmlModule(qmid, qcn);
         qcn->setLocation(doc.startLocation());
+        if (command == COMMAND_QMLSINGLETONTYPE)
+            qcn->setSingleton(true);
+        if (command == COMMAND_QMLTYPE && !qcn->isSingleton()) {
+            auto classNode = database->findClassNode(arg.first.split(u"::"_s));
+            if (classNode && classNode->isQmlSingleton())
+                qcn->setSingleton(true);
+        }
         return qcn;
     } else if (command == COMMAND_QMLENUM) {
         return processQmlEnumTopic(doc.enumItemNames(), doc.location(), arg.first);
@@ -350,12 +360,7 @@ void CppCodeParser::processMetaCommand(const Doc &doc, const QString &command,
           flags and overload numbers will be resolved later
           in Aggregate::normalizeOverloads().
          */
-        if (node->isFunction())
-            static_cast<FunctionNode *>(node)->setOverloadFlag();
-        else if (node->isSharedCommentNode())
-            static_cast<SharedCommentNode *>(node)->setOverloadFlags();
-        else
-            doc.location().warning(QStringLiteral("Ignored '\\%1'").arg(COMMAND_OVERLOAD));
+        processOverloadCommand(node, doc);
     } else if (command == COMMAND_REIMP) {
         if (node->parent() && !node->parent()->isInternal()) {
             if (node->isFunction()) {
@@ -459,8 +464,7 @@ void CppCodeParser::processMetaCommand(const Doc &doc, const QString &command,
         if (!node->isInternal())
             node->setStatus(Node::Preliminary);
     } else if (command == COMMAND_INTERNAL) {
-        if (!Config::instance().showInternal())
-            node->markInternal();
+        node->markInternal();
     } else if (command == COMMAND_REENTRANT) {
         node->setThreadSafeness(Node::Reentrant);
     } else if (command == COMMAND_SINCE) {
@@ -469,11 +473,6 @@ void CppCodeParser::processMetaCommand(const Doc &doc, const QString &command,
         node->setWrapper();
     } else if (command == COMMAND_THREADSAFE) {
         node->setThreadSafeness(Node::ThreadSafe);
-    } else if (command == COMMAND_TITLE) {
-        if (!node->setTitle(arg))
-            doc.location().warning(QStringLiteral("Ignored '\\%1'").arg(COMMAND_TITLE));
-        else if (node->isExample())
-            database->addExampleNode(static_cast<ExampleNode *>(node));
     } else if (command == COMMAND_SUBTITLE) {
         if (!node->setSubtitle(arg))
             doc.location().warning(QStringLiteral("Ignored '\\%1'").arg(COMMAND_SUBTITLE));
@@ -587,6 +586,44 @@ void CppCodeParser::processComparesCommand(Node *node, const QString &arg, const
 }
 
 /*!
+    Processes the \\overload command for the given \a node and \a doc.
+    Handles both regular overloads and primary overloads (\\overload primary).
+    Issues warnings for multiple primary overloads with location references.
+*/
+void CppCodeParser::processOverloadCommand(Node *node, const Doc &doc)
+{
+    if (node->isFunction()) {
+        auto *fn = static_cast<FunctionNode *>(node);
+
+        // If this function is part of a SharedCommentNode, skip processing here.
+        // The SharedCommentNode will handle \overload primary position-dependently.
+        if (fn->sharedCommentNode())
+            return;
+
+        // Check if this is "\overload primary"
+        const auto &overloadArgs = doc.overloadList();
+        if (!overloadArgs.isEmpty()
+            && overloadArgs.first().first == "__qdoc_primary_overload__"_L1) {
+
+            // Note: We don't check for duplicate primary overloads here because
+            // Doc locations may not be fully initialized yet, especially for
+            // shared comment nodes with multiple \fn commands.
+            // The check is done later in Aggregate::normalizeOverloads().
+
+            fn->setPrimaryOverloadFlag();
+            // Primary overloads are still overloads, so set both flags
+            fn->setOverloadFlag();
+        } else {
+            fn->setOverloadFlag();
+        }
+    } else if (node->isSharedCommentNode()) {
+        static_cast<SharedCommentNode *>(node)->setOverloadFlags();
+    } else {
+        doc.location().warning("Ignored '\\%1'"_L1.arg(COMMAND_OVERLOAD));
+    }
+}
+
+/*!
   The topic command has been processed, and now \a doc and
   \a node are passed to this function to get the metacommands
   from \a doc and process them one at a time. \a node is the
@@ -622,6 +659,14 @@ void CppCodeParser::processMetaCommands(const Doc &doc, Node *node)
                 processMetaCommand(doc, command, arg, node);
             });
         }
+    }
+
+    // Apply a title (stripped of formatting) to the Node if set
+    if (!doc.title().isEmpty()) {
+        if (!node->setTitle(doc.title().toString()))
+            doc.location().warning(QStringLiteral("Ignored '\\title'"));
+        if (node->isExample())
+            QDocDatabase::qdocDB()->addExampleNode(static_cast<ExampleNode *>(node));
     }
 }
 
@@ -873,7 +918,8 @@ CppCodeParser::processTopicArgs(const UntiedDocumentation &untied)
         Node *node = nullptr;
         if (args.size() == 1) {
             if (topic == COMMAND_FN) {
-                if (Config::instance().showInternal() || !doc.isInternal()) {
+                const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+                if (InclusionFilter::processInternalDocs(policy) || !doc.isInternal()) {
                     auto result = fn_parser(doc.location(), args[0].first, args[0].second, untied.context);
                     if (auto *error = std::get_if<FnMatchError>(&result))
                         errors.emplace_back(*error);
@@ -897,7 +943,8 @@ CppCodeParser::processTopicArgs(const UntiedDocumentation &untied)
             for (const auto &arg : std::as_const(args)) {
                 node = nullptr;
                 if (topic == COMMAND_FN) {
-                    if (Config::instance().showInternal() || !doc.isInternal()) {
+                    const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+                    if (InclusionFilter::processInternalDocs(policy) || !doc.isInternal()) {
                         auto result = fn_parser(doc.location(), arg.first, arg.second, untied.context);
                         if (auto *error = std::get_if<FnMatchError>(&result))
                             errors.emplace_back(*error);
@@ -927,8 +974,12 @@ CppCodeParser::processTopicArgs(const UntiedDocumentation &untied)
                     }
                 }
             }
-            for (auto *scn : sharedCommentNodes)
-                scn->sort();
+            for (auto *scn : sharedCommentNodes) {
+                // Don't sort function nodes - preserve the order from \fn commands
+                // for position-dependent \overload primary behavior
+                if (!scn->collective().isEmpty() && !scn->collective().first()->isFunction())
+                    scn->sort();
+            }
         }
     }
     return std::make_pair(tied, errors);
@@ -966,8 +1017,8 @@ static void checkModuleInclusion(Node *n)
 void CppCodeParser::processMetaCommands(const std::vector<TiedDocumentation> &tied)
 {
     for (auto [doc, node] : tied) {
-        processMetaCommands(doc, node);
         node->setDoc(doc);
+        processMetaCommands(doc, node);
         checkModuleInclusion(node);
         if (node->isAggregate()) {
             auto *aggregate = static_cast<Aggregate *>(node);
@@ -1030,6 +1081,9 @@ void CppCodeParser::processQmlNativeTypeCommand(Node *node, const QString &cmd, 
 
     qmlNode->setClassNode(classNode);
     classNode->insertQmlNativeType(qmlNode);
+
+    if (classNode->isQmlSingleton())
+        qmlNode->setSingleton(true);
 }
 
 QT_END_NAMESPACE

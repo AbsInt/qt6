@@ -38,7 +38,7 @@ class QQmlEngine;
 
 class QQmlComponentAttached;
 class Q_QML_EXPORT QQmlComponentPrivate
-    : public QObjectPrivate, public QQmlTypeData::TypeDataCallback
+    : public QObjectPrivate, public QQmlNotifyingBlob::Callback
 {
     Q_DECLARE_PUBLIC(QQmlComponent)
 
@@ -145,8 +145,8 @@ public:
             const QQmlRefPointer<QQmlContextData> &context,
             const QQmlRefPointer<QQmlContextData> &forContext);
 
-    void typeDataReady(QQmlTypeData *) override;
-    void typeDataProgress(QQmlTypeData *, qreal) override;
+    void ready(QQmlNotifyingBlob *) final;
+    void progress(QQmlNotifyingBlob *, qreal) final;
 
     void fromTypeData(const QQmlRefPointer<QQmlTypeData> &data);
 

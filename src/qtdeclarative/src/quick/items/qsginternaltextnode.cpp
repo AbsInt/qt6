@@ -27,7 +27,11 @@
 QT_BEGIN_NAMESPACE
 
 /*!
-  Creates an empty QSGInternalTextNode
+    \class QSGInternalTextNode
+    \inmodule QtQuick
+    \internal
+
+    Creates an empty QSGInternalTextNode
 */
 QSGInternalTextNode::QSGInternalTextNode(QSGRenderContext *renderContext)
     : m_renderContext(renderContext)

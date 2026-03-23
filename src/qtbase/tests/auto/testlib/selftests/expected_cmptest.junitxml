@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<testsuite name="tst_Cmptest" timestamp="@TEST_START_TIME@" hostname="@HOSTNAME@" tests="74" failures="51" errors="0" skipped="0" time="@TEST_DURATION@">
+<testsuite name="tst_Cmptest" timestamp="@TEST_START_TIME@" hostname="@HOSTNAME@" tests="78" failures="51" errors="0" skipped="0" time="@TEST_DURATION@">
   <properties>
     <property name="QTestVersion" value="@INSERT_QT_VERSION_HERE@"/>
     <property name="QtVersion" value="@INSERT_QT_VERSION_HERE@"/>
@@ -321,5 +321,17 @@
     <failure type="fail" message="&apos;!c&apos; returned FALSE. (Should time out and fail)"/>
   </testcase>
   <testcase name="verifyExplicitOperatorBool" classname="tst_Cmptest" time="@TEST_DURATION@"/>
+  <testcase name="defaultTryVerifyTimeout(times&#x002D;out)" classname="tst_Cmptest" time="@TEST_DURATION@">
+    <system-out>
+      <![CDATA[The timeout (std::chrono::milliseconds) is deliberately too short]]>
+    </system-out>
+  </testcase>
+  <testcase name="defaultTryVerifyTimeout(ample&#x002D;time)" classname="tst_Cmptest" time="@TEST_DURATION@"/>
+  <testcase name="defaultTryCompareTimeout(times&#x002D;out)" classname="tst_Cmptest" time="@TEST_DURATION@">
+    <system-out>
+      <![CDATA[The timeout (std::chrono::milliseconds) is deliberately too short]]>
+    </system-out>
+  </testcase>
+  <testcase name="defaultTryCompareTimeout(ample&#x002D;time)" classname="tst_Cmptest" time="@TEST_DURATION@"/>
   <testcase name="cleanupTestCase" classname="tst_Cmptest" time="@TEST_DURATION@"/>
 </testsuite>

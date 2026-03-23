@@ -75,6 +75,8 @@ private:
     static void initSslContext(QSslContext* sslContext, QSslSocket::SslMode mode, const QSslConfiguration &configuration,
                                bool allowRootCertOnDemandLoading);
     static void applyBackendConfig(QSslContext *sslContext);
+    static void setGenericPrivateKey(QSslContext *sslContext,
+                                     const QSslConfiguration &configuration);
 
 private:
     SSL_CTX* ctx;

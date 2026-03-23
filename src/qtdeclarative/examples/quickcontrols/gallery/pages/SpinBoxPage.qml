@@ -26,5 +26,21 @@ ScrollablePage {
             editable: true
             Accessible.name: qsTr("Demo spinbox")
         }
+
+        Label {
+            width: parent.width
+            wrapMode: Label.Wrap
+            horizontalAlignment: Qt.AlignHCenter
+            text: qsTr("DoubleSpinBox allows the user to choose a floating-point value.")
+        }
+
+        DoubleSpinBox {
+            enabled: !GalleryConfig.disabled
+            value: 12.3
+            stepSize: 0.1
+            anchors.horizontalCenter: parent.horizontalCenter
+            editable: true
+            Accessible.name: qsTr("Demo spinbox for floating point numbers")
+        }
     }
 }

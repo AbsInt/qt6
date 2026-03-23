@@ -1,6 +1,8 @@
 // Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
+#define QTEST_THROW_ON_FAIL
+
 #include <QtNetwork/qtnetworkglobal.h>
 
 #include <QtTest/qtest.h>
@@ -55,13 +57,18 @@ static std::unique_ptr<MiniHttpServerV2> getServerForCurrentScheme()
         QLocalServer *localServer = new QLocalServer(server.get());
         const size_t hash = qHashMulti(0, QByteArrayView(QTest::currentTestFunction()),
                                        QCoreApplication::applicationPid());
-        localServer->listen(u"qt_networkreply_test_"_s
-                            % QString::number(hash, 16));
+        bool listening = localServer->listen(u"qt_networkreply_test_"_s
+                                             % QString::number(hash, 16));
+        if (!listening) {
+            QFAIL(qPrintable(
+                    u"Failed to listen on local server: %1"_s.arg(localServer->errorString())));
+        }
         server->bind(localServer);
 #endif
     } else if (scheme == "http") {
         QTcpServer *tcpServer = new QTcpServer(server.get());
-        tcpServer->listen(QHostAddress::LocalHost, 0);
+        if (!tcpServer->listen(QHostAddress::LocalHost, 0))
+            QFAIL(qPrintable(u"Failed to listen on TCP port: %1"_s.arg(tcpServer->errorString())));
         server->bind(tcpServer);
     }
     return server;

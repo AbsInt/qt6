@@ -32,6 +32,7 @@ public:
 
     QDBusMessage();
     QDBusMessage(const QDBusMessage &other);
+    QDBusMessage(QDBusMessage &&other) noexcept : d_ptr(std::exchange(other.d_ptr, nullptr)) {}
     QDBusMessage &operator=(QDBusMessage &&other) noexcept { swap(other); return *this; }
     QDBusMessage &operator=(const QDBusMessage &other);
     ~QDBusMessage();

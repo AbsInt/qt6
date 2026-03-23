@@ -149,7 +149,7 @@ void tst_xdgdecorationv1::clientSidePreferredByCompositor()
     QVERIFY(window.frameMargins().isNull());
 
     QCOMPOSITOR_TRY_VERIFY(xdgToplevel());
-    QCOMPOSITOR_TRY_VERIFY(toplevelDecoration()->m_unsetModeRequested);
+    QCOMPOSITOR_TRY_VERIFY(toplevelDecoration()->m_requestedMode == XdgToplevelDecorationV1::mode_server_side);
     QVERIFY(window.frameMargins().isNull()); // We're still waiting for a configure
     exec([&] {
         toplevelDecoration()->sendConfigure(XdgToplevelDecorationV1::mode_client_side);

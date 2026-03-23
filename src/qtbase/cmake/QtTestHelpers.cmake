@@ -45,10 +45,6 @@ function(qt_internal_add_benchmark target)
         OUTPUT_DIRECTORY "${arg_OUTPUT_DIRECTORY}" # avoid polluting bin directory
         ${exec_args}
     )
-    qt_internal_extend_target(${target}
-        DEFINES
-            ${deprecation_define}
-    )
 
     # Benchmarks on iOS must be app bundles.
     if(IOS)
@@ -274,7 +270,7 @@ function(qt_internal_add_test_to_batch batch_name name)
             ${is_manual}
             OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/build_dir"
             SOURCES "${QT_CMAKE_DIR}/qbatchedtestrunner.in.cpp"
-            DEFINES QTEST_BATCH_TESTS ${deprecation_define}
+            DEFINES QTEST_BATCH_TESTS
             INCLUDE_DIRECTORIES ${private_includes}
             LIBRARIES ${QT_CMAKE_EXPORT_NAMESPACE}::Core
                     ${QT_CMAKE_EXPORT_NAMESPACE}::Test
@@ -555,7 +551,6 @@ function(qt_internal_add_test name)
                 ${private_includes}
             DEFINES
                 ${arg_DEFINES}
-                ${deprecation_define}
             LIBRARIES
                 ${arg_LIBRARIES}
                 ${arg_PUBLIC_LIBRARIES}
@@ -726,26 +721,39 @@ function(qt_internal_add_test name)
         list(APPEND extra_test_args "quseemrun")
         list(APPEND extra_test_args "qtestname=${testname}")
         list(APPEND extra_test_args "--silence_timeout=60")
+
+
         # TODO: Add functionality to specify browser
-        if(DEFINED ENV{BROWSER_FOR_WASM})
-            set(browser $ENV{BROWSER_FOR_WASM})
+        set(browser "")
+        set(browser_args "")
+        if(DEFINED ENV{WASM_BROWSER_JSPI})
+            set(browser "$ENV{WASM_BROWSER_JSPI}")
+            set(browser_args "$ENV{WASM_BROWSER_JSPI_ARGS}")
         else()
-            set(browser "chrome")
+            if(DEFINED ENV{BROWSER_FOR_WASM})
+                set(browser "$ENV{BROWSER_FOR_WASM}")
+            else()
+                set(browser "chrome")
+            endif()
+
+            if(DEFINED ENV{HEADLESS_CHROME_FOR_TESTING})
+                set(browser_args "${browser_args} --headless")
+            endif()
+            set(browser_args "${browser_args} --password-store=basic")
         endif()
+
         list(APPEND extra_test_args "--browser=${browser}")
-        if(DEFINED ENV{HEADLESS_CHROME_FOR_TESTING})
-            list(APPEND extra_test_args "--browser_args=\"--password-store=basic --headless\"")
-        else()
-            list(APPEND extra_test_args "--browser_args=\"--password-store=basic\"")
-        endif()
+        list(APPEND extra_test_args "--browser_args=\"${browser_args}\"")
         list(APPEND extra_test_args "--kill_exit")
 
-        # Tests may require asyncify if they use exec(). Enable asyncify for
-        # batched tests since this is the configuration used on the CI system.
-        # Optimize for size (-Os), since asyncify tends to make the resulting
-        # binary very large
-        if(batch_current_test)
-            target_link_options("${name}" PRIVATE "SHELL:-s ASYNCIFY" "-Os")
+        if (NOT QT_FEATURE_wasm_jspi)
+            # Tests may require asyncify if they use exec(). Enable asyncify for
+            # batched tests since this is the configuration used on the CI system.
+            # Optimize for size (-Os), since asyncify tends to make the resulting
+            # binary very large
+            if(batch_current_test)
+                target_link_options("${name}" PRIVATE "SHELL:-s ASYNCIFY" "-Os")
+            endif()
         endif()
 
         # This tells cmake to run the tests with this script, since wasm files can't be
@@ -1200,6 +1208,13 @@ function(qt_internal_collect_command_environment out_path out_plugin_path)
         set(test_env_path "${test_env_path}${QT_PATH_SEPARATOR}${install_prefix}")
     endforeach()
     set(test_env_path "${test_env_path}${QT_PATH_SEPARATOR}$ENV{PATH}")
+    if(ANDROID)
+        # Add android platform tools to path. Required for the correct androidtestrunner work.
+        _qt_internal_android_get_platform_tools_path(platform_tools)
+        string(PREPEND test_env_path
+            "${platform_tools}" "${QT_PATH_SEPARATOR}")
+    endif()
+
     string(REPLACE ";" "\;" test_env_path "${test_env_path}")
     set(${out_path} "${test_env_path}" PARENT_SCOPE)
 
@@ -1236,5 +1251,24 @@ function(qt_internal_add_test_finalizers target)
     # should already be built and available.
     if(IOS)
         qt_add_list_file_finalizer(_qt_internal_finalize_executable "${target}")
+    endif()
+endfunction()
+
+# Collection of tests and targets added to all repos
+function(qt_internal_add_default_tests)
+    # Check the installed json module files satisfy the schemas
+    # This is not made as a test to avoid downstream using it and carrying the python test
+    # dependencies
+    if(NOT TARGET check_qt_module_json_schemas)
+        qt_path_join(__check_qt_module_json_schemas_py
+            "${QT_STAGING_PREFIX}"
+            "${INSTALL_LIBEXECDIR}"
+            "check_qt_module_json_schemas.py"
+        )
+        add_custom_target(check_qt_module_json_schemas
+            COMMAND python3 ${__check_qt_module_json_schemas_py}
+                "--install-prefix=${QT_STAGING_PREFIX}"
+                "--qt-sharedir=${INSTALL_QT_SHAREDIR}"
+        )
     endif()
 endfunction()

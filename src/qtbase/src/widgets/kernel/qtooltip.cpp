@@ -17,6 +17,8 @@
 #if QT_CONFIG(style_stylesheet)
 #include <private/qstylesheetstyle_p.h>
 #endif
+#include <qpa/qplatformwindow.h>
+#include <qpa/qplatformwindow_p.h>
 
 #include <QtWidgets/private/qlabel_p.h>
 #include <QtGui/private/qhighdpiscaling_p.h>
@@ -329,6 +331,20 @@ void QTipLabel::placeTip(const QPoint &pos, QWidget *w)
             offset = QPoint(cursorSize.width() / 2, 0);
 
         p += offset;
+
+#if QT_CONFIG(wayland)
+        if (w) {
+            create();
+            if (auto waylandWindow = dynamic_cast<QNativeInterface::Private::QWaylandWindow*>(windowHandle()->handle())) {
+                // based on the existing code below, by default position at 'p' stored at the bottom right of our rect
+                // then  flip to the other arbitrary 4x24 space if constrained
+                const QRect controlGeometry = QRect(p.x() - 4, p.y() - 24, 4, 24)
+                    .translated(-w->window()->mapToGlobal(QPoint(0, 0)));
+                waylandWindow->setParentControlGeometry(controlGeometry);
+                waylandWindow->setExtendedWindowType(QNativeInterface::Private::QWaylandWindow::ToolTip);
+            }
+        }
+#endif
 
         QRect screenRect = screen->geometry();
         if (p.x() + this->width() > screenRect.x() + screenRect.width())

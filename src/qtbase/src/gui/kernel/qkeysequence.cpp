@@ -1298,7 +1298,10 @@ QString QKeySequencePrivate::keyName(Qt::Key key, QKeySequence::SequenceFormat f
     bool nativeText = (format == QKeySequence::NativeText);
     QString p;
 
-    if (key && key < Qt::Key_Escape && key != Qt::Key_Space) {
+    if (nativeText && (key > 0x00 && key <= 0x1f)) {
+        // Map C0 control codes to the corresponding Control Pictures
+        p = QChar::fromUcs2(0x2400 + key);
+    } else if (key && key < Qt::Key_Escape && key != Qt::Key_Space) {
         if (!QChar::requiresSurrogates(key)) {
             p = QChar::fromUcs2(key).toUpper();
         } else {

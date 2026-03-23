@@ -62,8 +62,6 @@
 #include "qhttpmultipart_p.h"
 #endif
 
-#include "qnetconmonitor_p.h"
-
 #include <mutex>
 #include <utility>
 
@@ -217,6 +215,19 @@ static void ensureInitialized()
     A more involved example, assuming the manager is already existent,
     can be:
     \snippet code/src_network_access_qnetworkaccessmanager.cpp 1
+
+    Since Qt 6.11 the defaults of the TCP Keepalive parameters used by
+    QNetworkAccessManager have been changed. With the current settings
+    the connection will be terminated after 2 minutes of inactivity.
+
+    These settings can be changed the individual requests, to make
+    them more lenient, or even more aggressive via the QNetworkRequest API.
+    \snippet http/httpwindow.cpp qnam-tcpkeepalive
+
+    In the above snippet we are picking a more aggressive strategy, to
+    terminate the connection after thirty seconds of inactivity. This can
+    be useful, for example, in early detection of network hangs caused
+    by network changes on Linux.
 
     \sa QNetworkRequest, QNetworkReply, QNetworkProxy
 */
@@ -695,7 +706,7 @@ void QNetworkAccessManager::enableStrictTransportSecurityStore(bool enabled, con
 #if QT_CONFIG(settings)
     Q_D(QNetworkAccessManager);
     d->stsStore.reset(enabled ? new QHstsStore(storeDir) : nullptr);
-    d->stsCache.setStore(d->stsStore.data());
+    d->stsCache.setStore(d->stsStore.get());
 #else
     Q_UNUSED(enabled);
     Q_UNUSED(storeDir);
@@ -716,7 +727,7 @@ bool QNetworkAccessManager::isStrictTransportSecurityStoreEnabled() const
 {
 #if QT_CONFIG(settings)
     Q_D(const QNetworkAccessManager);
-    return bool(d->stsStore.data());
+    return bool(d->stsStore);
 #else
     return false;
 #endif // QT_CONFIG(settings)

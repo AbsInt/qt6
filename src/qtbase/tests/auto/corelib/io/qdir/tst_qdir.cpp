@@ -209,6 +209,7 @@ private slots:
 private:
     QSharedPointer<QTemporaryDir> m_dataDir;
     QString m_dataPath;
+    bool uncServerAvailable = false;
 
     constexpr static const std::array m_testDirs = {
         "entrylist"_L1,
@@ -285,6 +286,12 @@ void tst_QDir::initTestCase()
 #endif
 
     QVERIFY2(!m_dataPath.isEmpty(), "test data not found");
+
+#ifdef Q_OS_WIN
+    // "When used with directories, _access determines only whether the specified directory exists"
+    if (_waccess(qUtf16Printable("//" + QTest::uncServerName() + "/testshare"), 0) == 0)
+        uncServerAvailable = true;
+#endif
 }
 
 void tst_QDir::cleanupTestCase()
@@ -423,7 +430,7 @@ void tst_QDir::mkdirRmdir()
 
 void tst_QDir::mkdirOnSymlink()
 {
-#if !defined(Q_OS_UNIX) || defined(Q_NO_SYMLINKS) || defined(Q_OS_INTEGRITY) || defined(Q_OS_WASM)
+#if !defined(Q_OS_UNIX) || defined(Q_NO_SYMLINKS) || defined(Q_OS_INTEGRITY)
     QSKIP("Test only valid on an OS that supports symlinks");
 #else
     // Create the structure:
@@ -469,9 +476,6 @@ void tst_QDir::mkdirOnSymlink()
     fi.setFile(path);
 #if defined(Q_OS_QNX)
     QSKIP("Fails on QNX QTBUG-98561");
-#endif
-#if defined (Q_OS_WASM)
-    QEXPECT_FAIL("", "fails on wasm, see bug: QTBUG-127766", Continue);
 #endif
     QVERIFY2(fi.exists() && fi.isDir(), msgDoesNotExist(path).constData());
 #endif
@@ -686,10 +690,10 @@ void tst_QDir::exists_data()
     const QString uncRoot = QStringLiteral("//") + QTest::uncServerName();
     QTest::newRow("unc 1") << uncRoot << true;
     QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
-    QTest::newRow("unc 3") << uncRoot + "/testshare" << true;
-    QTest::newRow("unc 4") << uncRoot + "/testshare/" << true;
-    QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << true;
-    QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << true;
+    QTest::newRow("unc 3") << uncRoot + "/testshare" << uncServerAvailable;
+    QTest::newRow("unc 4") << uncRoot + "/testshare/" << uncServerAvailable;
+    QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << uncServerAvailable;
+    QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << uncServerAvailable;
     QTest::newRow("unc 7") << uncRoot + "/testshare/adirthatshouldnotexist" << false;
     QTest::newRow("unc 8") << uncRoot + "/asharethatshouldnotexist" << false;
     QTest::newRow("unc 9") << "//ahostthatshouldnotexist" << false;
@@ -1080,12 +1084,14 @@ void tst_QDir::entryListSimple_data()
 
 #if defined(Q_OS_WIN)
     const QString uncRoot = QStringLiteral("//") + QTest::uncServerName();
-    QTest::newRow("unc 1") << uncRoot << 2;
-    QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << 2;
-    QTest::newRow("unc 3") << uncRoot + "/testshare" << 2;
-    QTest::newRow("unc 4") << uncRoot + "/testshare/" << 2;
-    QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << 2;
-    QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << 2;
+    if (uncServerAvailable) {
+        QTest::newRow("unc 1") << uncRoot << 2;
+        QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << 2;
+        QTest::newRow("unc 3") << uncRoot + "/testshare" << 2;
+        QTest::newRow("unc 4") << uncRoot + "/testshare/" << 2;
+        QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << 2;
+        QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << 2;
+    }
     QTest::newRow("unc 7") << uncRoot + "/testshare/adirthatshouldnotexist" << 0;
     QTest::newRow("unc 8") << uncRoot + "/asharethatshouldnotexist" << 0;
     QTest::newRow("unc 9") << "//ahostthatshouldnotexist" << 0;
@@ -2471,8 +2477,9 @@ void tst_QDir::cdBelowRoot_data()
         << systemDrive << systemRoot.mid(3) << QDir::cleanPath(systemRoot);
     const QString uncRoot = QStringLiteral("//") + QTest::uncServerName();
     const QString testDirectory = QStringLiteral("testshare");
-    QTest::newRow("windows-share")
-        << uncRoot << testDirectory << QDir::cleanPath(uncRoot + QLatin1Char('/') + testDirectory);
+    if (uncServerAvailable)
+        QTest::newRow("windows-share")
+                << uncRoot << testDirectory << QDir::cleanPath(uncRoot + QLatin1Char('/') + testDirectory);
 #endif // Windows
 }
 

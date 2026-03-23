@@ -1,6 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2024 Jie Liu <liujie01@kylinos.cn>
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qwaylanddisplay_p.h"
 
@@ -53,6 +54,7 @@
 #include <QtWaylandClient/private/qwayland-fractional-scale-v1.h>
 #include <QtWaylandClient/private/qwayland-viewporter.h>
 #include <QtWaylandClient/private/qwayland-cursor-shape-v1.h>
+#include <QtWaylandClient/private/qwayland-xx-session-management-v1.h>
 #include <QtWaylandClient/private/qwayland-xdg-system-bell-v1.h>
 #include <QtWaylandClient/private/qwayland-xdg-toplevel-drag-v1.h>
 #include <QtWaylandClient/private/qwayland-wlr-data-control-unstable-v1.h>
@@ -805,6 +807,14 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
         mGlobals.pointerWarp.reset(new WithDestructor<QtWayland::wp_pointer_warp_v1, wp_pointer_warp_v1_destroy>(
                 registry, id, 1));
     }
+#ifndef QT_NO_SESSIONMANAGER
+       else if (interface == QLatin1String(QtWayland::xx_session_manager_v1::interface()->name)
+               && qEnvironmentVariableIntValue("QT_WAYLAND_ENABLE_XX_SESSION_MANAGER") > 0) {
+        mGlobals.xxSessionManager.reset(
+                new WithDestructor<QtWayland::xx_session_manager_v1, xx_session_manager_v1_destroy>(
+                        registry, id, 1));
+    }
+#endif
 
 
     mRegistryGlobals.append(RegistryGlobal(id, interface, version, registry));

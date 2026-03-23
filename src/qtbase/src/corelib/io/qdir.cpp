@@ -353,20 +353,119 @@ inline void QDirPrivate::sortFileList(QDir::SortFlags sort, const QFileInfoList 
     }
 }
 
+#ifndef QT_BOOTSTRAPPED
+/*! \internal
+
+    Returns \c true if the permissions flags set in \a filters match the
+    permissions of \a fileInfo; otherwise returns \c false.
+
+    If there are no permissions set in \a filters this method returns \c true.
+*/
+static bool checkPermissions(const QDirListing::DirEntry &dirEntry, QDir::Filters filters)
+{
+    const auto perms = filters & QDir::PermissionMask;
+    const bool filterByPermissions = perms != 0 && perms != QDir::PermissionMask;
+    if (filterByPermissions) {
+        const QFileInfo fileInfo = dirEntry.fileInfo();
+        if (filters.testFlags(QDir::Readable) && !fileInfo.isReadable())
+            return false;
+        if (filters.testFlags(QDir::Writable) && !fileInfo.isWritable())
+            return false;
+        if (filters.testFlags(QDir::Executable) && !fileInfo.isExecutable())
+            return false;
+    }
+    return true;
+}
+
+static bool checkDotOrDotDot(const QDirListing::DirEntry &dirEntry, QDir::Filters filters)
+{
+    const QString fileName = dirEntry.fileName();
+    if ((filters & QDir::NoDot) && fileName == u".")
+        return false;
+    if ((filters & QDir::NoDotDot) && fileName == u"..")
+        return false;
+    return true;
+}
+
+/*! \internal
+
+    Returns \c true if \a dirEntry matches the flags set in \a filters, otherwise
+    returns \c false. Note that this method only checks the flags in \a filters
+    that can't be represented by QDirListing::IteratorFlags, see toDirListingFlags().
+*/
+bool QDirPrivate::checkNonDirListingFlags(const QDirListing::DirEntry &dirEntry,
+                                          QDir::Filters filters)
+{
+    return checkPermissions(dirEntry, filters) && checkDotOrDotDot(dirEntry, filters);
+}
+
+static void appendIfMatchesNonDirListingFlags(const QDirListing::DirEntry &dirEntry,
+                                              QDir::Filters filters, QFileInfoList &l)
+{
+    if (QDirPrivate::checkNonDirListingFlags(dirEntry, filters))
+        l.emplace_back(dirEntry.fileInfo());
+}
+
+/*! \internal
+
+    Returns a set of QDirListing::IteratorFlags representing the flags in \a filters
+    that can be represented by QDirListing::IteratorFlags.
+
+    Note that not all QDir::Filter values are supported, some flags have to be checked
+    separately (see checkNonDirListingFlags()).
+*/
+QDirListing::IteratorFlags QDirPrivate::toDirListingFlags(QDir::Filters filters)
+{
+    if (filters == QDir::NoFilter)
+        filters = QDir::AllEntries;
+
+    using F = QDirListing::IteratorFlag;
+    QDirListing::IteratorFlags flags;
+    if (!(filters & QDir::Dirs) && !(filters & QDir::AllDirs))
+        flags |= F::ExcludeDirs;
+    if (!(filters & QDir::Files))
+        flags |= F::ExcludeFiles;
+    if (!(filters & QDir::NoSymLinks))
+        flags |= F::ResolveSymlinks;
+    if (filters & QDir::Hidden)
+        flags |= F::IncludeHidden;
+
+    if (!(filters & QDir::System))
+        flags |= F::ExcludeOther;
+    else
+        flags |= F::IncludeBrokenSymlinks; // QDir::System lists broken symlinks...
+
+
+    if (filters & QDir::AllDirs)
+        flags |= F::NoNameFiltersForDirs;
+    if (filters & QDir::CaseSensitive)
+        flags |= F::CaseSensitive;
+
+    // QDir::Filter has NoDot and NoDotDot; QDirListing has only one,
+    // F::IncludeDotAndDotDot. If either of the QDir::Filter values are
+    // not set, list both and use checkDotOrDotDot() to filter it later.
+    if (!(filters & QDir::NoDot) || !(filters & QDir::NoDotDot)) {
+        if (!(flags & F::ExcludeDirs)) // treat '.' and '..' as dirs
+            flags |= F::IncludeDotAndDotDot;
+    }
+
+    return flags;
+}
+
 inline void QDirPrivate::initFileLists(const QDir &dir) const
 {
     QMutexLocker locker(&fileCache.mutex);
     if (!fileCache.fileListsInitialized) {
         QFileInfoList l;
-        for (const auto &dirEntry : QDirListing(dir.path(), dir.nameFilters(),
-                                                dir.filter().toInt())) {
-            l.emplace_back(dirEntry.fileInfo());
-        }
+        QDirListing::IteratorFlags flags = toDirListingFlags(dir.filter());
+        for (const auto &dirEntry : QDirListing(dir.path(), dir.nameFilters(), flags))
+            appendIfMatchesNonDirListingFlags(dirEntry, dir.filter(), l);
 
         sortFileList(sort, l, &fileCache.files, &fileCache.fileInfos);
         fileCache.fileListsInitialized = true;
     }
 }
+#endif // !QT_BOOTSTRAPPED
 
 inline void QDirPrivate::clearCache(MetaDataClearing mode)
 {
@@ -1215,8 +1314,6 @@ QDir::Filters QDir::filter() const
     \value Executable  List files for which the application has
                        execute access. The Executable value needs to be
                        combined with Dirs or Files.
-    \value Modified  Only list files that have been modified (ignored
-                     on Unix).
     \value Hidden  List hidden files (on Unix, files starting with a ".").
     \value System  List system files (on Unix, FIFOs, sockets and
                    device files are included; on Windows, \c {.lnk}
@@ -1226,6 +1323,7 @@ QDir::Filters QDir::filter() const
     \omitvalue TypeMask
     \omitvalue AccessMask
     \omitvalue PermissionMask
+    \omitvalue Modified
     \omitvalue NoFilter
 
     Functions that use Filter enum values to filter lists of files
@@ -1439,12 +1537,13 @@ QStringList QDir::entryList(const QStringList &nameFilters, Filters filters,
         }
     }
 
-    QDirListing dirList(d->dirEntry.filePath(), nameFilters, filters.toInt());
+    QDirListing::IteratorFlags flags = QDirPrivate::toDirListingFlags(filters);
+    QDirListing dirList(d->dirEntry.filePath(), nameFilters, flags);
     QStringList ret;
     if (needsSorting) {
         QFileInfoList l;
         for (const auto &dirEntry : dirList)
-            l.emplace_back(dirEntry.fileInfo());
+            appendIfMatchesNonDirListingFlags(dirEntry, filters, l);
         d->sortFileList(sort, l, &ret, nullptr);
     } else {
         for (const auto &dirEntry : dirList)
@@ -1485,8 +1584,9 @@ QFileInfoList QDir::entryInfoList(const QStringList &nameFilters, Filters filter
     }
 
     QFileInfoList l;
-    for (const auto &dirEntry : QDirListing(d->dirEntry.filePath(), nameFilters, filters.toInt()))
-        l.emplace_back(dirEntry.fileInfo());
+    const QDirListing::IteratorFlags flags = QDirPrivate::toDirListingFlags(filters);
+    for (const auto &dirEntry : QDirListing(d->dirEntry.filePath(), nameFilters, flags))
+        appendIfMatchesNonDirListingFlags(dirEntry, filters, l);
     QFileInfoList ret;
     d->sortFileList(sort, l, nullptr, &ret);
     return ret;
@@ -1989,8 +2089,13 @@ bool QDir::exists(const QString &name) const
 bool QDir::isEmpty(Filters filters) const
 {
     Q_D(const QDir);
-    QDirListing dirList(d->dirEntry.filePath(), d->nameFilters, filters.toInt());
-    return dirList.cbegin() == dirList.cend();
+
+    QDirListing::IteratorFlags flags = QDirPrivate::toDirListingFlags(filters);
+    for (const auto &dirEntry : QDirListing(d->dirEntry.filePath(), d->nameFilters, flags)) {
+        if (QDirPrivate::checkNonDirListingFlags(dirEntry, filters))
+            return false;
+    }
+    return true;
 }
 #endif // !QT_BOOTSTRAPPED
 
@@ -2493,7 +2598,6 @@ QDebug operator<<(QDebug debug, QDir::Filters filters)
         if (filters & QDir::Readable) flags << "Readable"_L1;
         if (filters & QDir::Writable) flags << "Writable"_L1;
         if (filters & QDir::Executable) flags << "Executable"_L1;
-        if (filters & QDir::Modified) flags << "Modified"_L1;
         if (filters & QDir::Hidden) flags << "Hidden"_L1;
         if (filters & QDir::System) flags << "System"_L1;
         if (filters & QDir::CaseSensitive) flags << "CaseSensitive"_L1;

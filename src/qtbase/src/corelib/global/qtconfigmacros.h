@@ -175,7 +175,10 @@ namespace QT_NAMESPACE {}
 #endif
 
 /*
-    Strict mode
+    Strict mode.
+
+    If you add a macro to the list, make sure to update the table at
+    https://doc.qt.io/qt-6/qtglobal.html#QT_ENABLE_STRICT_MODE_UP_TO
 */
 #ifdef QT_ENABLE_STRICT_MODE_UP_TO
 #ifndef QT_DISABLE_DEPRECATED_UP_TO
@@ -229,6 +232,12 @@ namespace QT_NAMESPACE {}
 #  define QT_NO_QSNPRINTF
 # endif
 #endif // 6.9.0
+
+#if QT_ENABLE_STRICT_MODE_UP_TO >= QT_VERSION_CHECK(6, 11, 0)
+# ifndef QT_NO_SINGLE_ARGUMENT_QHASH_OVERLOAD
+#  define QT_NO_SINGLE_ARGUMENT_QHASH_OVERLOAD
+# endif
+#endif // 6.11.0
 #endif // QT_ENABLE_STRICT_MODE_UP_TO
 
 #endif /* QTCONFIGMACROS_H */

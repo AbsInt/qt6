@@ -78,4 +78,9 @@ class QtThread {
             e.printStackTrace();
         }
     }
+
+    boolean isAlive()
+    {
+        return m_qtThread.isAlive();
+    }
 }

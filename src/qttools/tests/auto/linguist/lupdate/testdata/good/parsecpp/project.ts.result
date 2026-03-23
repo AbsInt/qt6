@@ -45,6 +45,120 @@ backslashed \ stuff.</source>
         <label>label4</label>
         <translation type="unfinished"></translation>
     </message>
+    <message id="autolabel.context">
+        <location filename="main.cpp" line="791"/>
+        <source>Open file</source>
+        <label>FileOps::FileManager</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="autolabel.class">
+        <location filename="main.cpp" line="795"/>
+        <source>Save file</source>
+        <label>FileManager</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="autolabel.file">
+        <location filename="main.cpp" line="799"/>
+        <source>Export</source>
+        <label>main.cpp</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="autolabel.literal">
+        <location filename="main.cpp" line="803"/>
+        <source>Close file</source>
+        <label>FileOperations</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="autolabel.nested">
+        <location filename="main.cpp" line="818"/>
+        <source>Show dialog</source>
+        <label>App::UI::DialogManager</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="autolabel.nested.class">
+        <location filename="main.cpp" line="822"/>
+        <source>Hide dialog</source>
+        <label>DialogManager</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="autolabel.global">
+        <location filename="main.cpp" line="831"/>
+        <source>Global message</source>
+        <label>&lt;unnamed&gt;</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="autolabel.global.class">
+        <location filename="main.cpp" line="835"/>
+        <source>Global class label</source>
+        <label>&lt;unnamed&gt;</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="autolabel.global.file">
+        <location filename="main.cpp" line="839"/>
+        <source>Global file label</source>
+        <label>main.cpp</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="file_class">
+        <location filename="main.cpp" line="861"/>
+        <source>Test file:class combination</source>
+        <label>main.cpp:Combiner</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="complex">
+        <location filename="main.cpp" line="865"/>
+        <source>Test complex pattern</source>
+        <label>module_main.cpp_Combiner_v1</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="file_context">
+        <location filename="main.cpp" line="869"/>
+        <source>Test file:context combination</source>
+        <label>main.cpp_FlexLabels::Combiner-label</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="deep.nested.context">
+        <location filename="main.cpp" line="885"/>
+        <source>Deep nested context</source>
+        <label>Level1::Level2::Level3::Level4::DeepClass</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="deep.nested.class">
+        <location filename="main.cpp" line="889"/>
+        <source>Deep class only</source>
+        <label>DeepClass</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="static.namespace.context">
+        <location filename="main.cpp" line="901"/>
+        <source>Static at namespace level</source>
+        <label>StaticTests</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="static.namespace.combo">
+        <location filename="main.cpp" line="905"/>
+        <source>Static with file:context combo</source>
+        <label>main.cpp:StaticTests</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="static.noclass">
+        <location filename="main.cpp" line="909"/>
+        <source>Static with file:class combo</source>
+        <label>main.cpp:&lt;unnamed&gt;</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="alias.context">
+        <location filename="main.cpp" line="926"/>
+        <source>Namespace alias</source>
+        <label>VeryLongNamespaceName::AliasedClass</label>
+        <translation type="unfinished"></translation>
+    </message>
+    <message id="lambda.capture">
+        <location filename="main.cpp" line="939"/>
+        <source>Lambda with capture</source>
+        <label>Lambdas::LambdaTest-lambda</label>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>Abc::NamespacedFinalClass</name>
@@ -78,6 +192,14 @@ backslashed \ stuff.</source>
     <message>
         <location filename="main.cpp" line="381"/>
         <source>eyo</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>Core</name>
+    <message>
+        <location filename="main.cpp" line="775"/>
+        <source>Save Selected</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -596,13 +718,12 @@ backslashed \ stuff.</source>
     <name>TestMetaStrings</name>
     <message id="id1">
         <location filename="main.cpp" line="739"/>
-        <source>msg with id1</source>
-        <label>label1</label>
+        <source>msg with id1, invalid usage of label in text-based</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="main.cpp" line="742"/>
-        <source>invalid usage of label because of missing id</source>
+        <source>invalid usage of label in text-based</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -652,6 +773,14 @@ backslashed \ stuff.</source>
     <message>
         <location filename="main.cpp" line="639"/>
         <source>Must be in context TranslatedAfterPrivate</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>WarningTest</name>
+    <message>
+        <location filename="main.cpp" line="848"/>
+        <source>This should warn</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

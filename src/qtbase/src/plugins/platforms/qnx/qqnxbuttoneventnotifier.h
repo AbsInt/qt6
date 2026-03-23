@@ -16,7 +16,6 @@ class QSocketNotifier;
 class QQnxButtonEventNotifier : public QObject
 {
     Q_OBJECT
-    Q_ENUMS(ButtonId)
 public:
     enum ButtonId {
         bid_minus = 0,
@@ -25,6 +24,7 @@ public:
         bid_power,
         ButtonCount
     };
+    Q_ENUM(ButtonId)
 
     enum ButtonState {
         ButtonUp,

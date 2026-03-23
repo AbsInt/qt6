@@ -72,14 +72,12 @@ struct Q_QML_EXPORT CppStackFrame : protected CppStackFrameBase
     // We want to have those public but we can't declare them as public without making the struct
     // non-standard layout. So we have this other struct with "using" in between.
     using CppStackFrameBase::instructionPointer;
-    using CppStackFrameBase::locals;
     using CppStackFrameBase::v4Function;
 
     void init(Function *v4Function, int argc, Kind kind) {
         this->v4Function = v4Function;
         originalArgumentsCount = argc;
         instructionPointer = 0;
-        locals = nullptr;
         this->kind = kind;
     }
 

@@ -118,6 +118,12 @@ const Text &Doc::body() const
     return m_priv == nullptr ? dummy : m_priv->m_text;
 }
 
+const Text &Doc::title() const
+{
+    static const Text dummy;
+    return m_priv == nullptr ? dummy : m_priv->m_title;
+}
+
 Text Doc::briefText(bool inclusive) const
 {
     return body().subText(Atom::BriefLeft, Atom::BriefRight, nullptr, inclusive);
@@ -275,24 +281,40 @@ bool Doc::hasTargets() const
 
 const QList<Atom *> &Doc::tableOfContents() const
 {
+    if (m_priv == nullptr) {
+        static const QList<Atom *> empty;
+        return empty;
+    }
     m_priv->constructExtra();
     return m_priv->extra->m_tableOfContents;
 }
 
 const QList<int> &Doc::tableOfContentsLevels() const
 {
+    if (m_priv == nullptr) {
+        static const QList<int> empty;
+        return empty;
+    }
     m_priv->constructExtra();
     return m_priv->extra->m_tableOfContentsLevels;
 }
 
 const QList<Atom *> &Doc::keywords() const
 {
+    if (m_priv == nullptr) {
+        static const QList<Atom *> empty;
+        return empty;
+    }
     m_priv->constructExtra();
     return m_priv->extra->m_keywords;
 }
 
 const QList<Atom *> &Doc::targets() const
 {
+    if (m_priv == nullptr) {
+        static const QList<Atom *> empty;
+        return empty;
+    }
     m_priv->constructExtra();
     return m_priv->extra->m_targets;
 }
@@ -418,7 +440,7 @@ void Doc::trimCStyleComment(Location &location, QString &str)
     str = str.mid(3, str.size() - 5);
 }
 
-void Doc::quoteFromFile(const Location &location, Quoter &quoter, ResolvedFile resolved_file)
+void Doc::quoteFromFile(const Location &location, Quoter &quoter, ResolvedFile resolved_file, CodeMarker *marker)
 {
     // TODO: quoteFromFile should not care about modifying a stateful
     // quoter from the outside, instead, it should produce a quoter
@@ -437,7 +459,8 @@ void Doc::quoteFromFile(const Location &location, Quoter &quoter, ResolvedFile r
         code = DocParser::untabifyEtc(QTextStream{&input_file}.readAll());
     }
 
-    CodeMarker *marker = CodeMarker::markerForFileName(resolved_file.get_path());
+    if (!marker)
+        marker = CodeMarker::markerForFileName(resolved_file.get_path());
     quoter.quoteFromFile(resolved_file.get_path(), code, marker->markedUpCode(code, nullptr, location));
 }
 

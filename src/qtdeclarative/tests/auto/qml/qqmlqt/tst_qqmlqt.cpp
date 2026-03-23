@@ -30,6 +30,8 @@
 #include <private/qtenvironmentvariables_p.h> // for qTzSet()
 #include <private/qqmlengine_p.h>
 
+using namespace Qt::StringLiterals;
+
 class tst_qqmlqt : public QQmlDataTest
 {
     Q_OBJECT
@@ -1161,28 +1163,104 @@ void tst_qqmlqt::isQtObject()
 
 void tst_qqmlqt::btoa()
 {
-    QQmlComponent component(&engine, testFileUrl("btoa.qml"));
+    const QUrl url = testFileUrl("btoa.qml");
+    QQmlComponent component(&engine, url);
 
-    QString warning1 = component.url().toString() + ":4: Error: Insufficient arguments";
-    QTest::ignoreMessage(QtWarningMsg, qPrintable(warning1));
+    QTest::ignoreMessage(
+            QtWarningMsg,
+            "Qt.btoa(string): This method is deprecated. "
+            "Its output differs from the common Web API. "
+            "Use the overloads that take array-likes.");
+    QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression("btoa.qml:4: Error: Unable to determine callable overload."));
 
     QScopedPointer<QObject> object(component.create());
     QVERIFY(object != nullptr);
 
     QCOMPARE(object->property("test2").toString(), QString("SGVsbG8gd29ybGQh"));
+    QCOMPARE(object->property("test3").toString(), QString("SGVsbG8gd29ybGQh"));
+
+    QCOMPARE(
+            object->property("better"),
+            QByteArray("R0lGODdhAQABAPAAAP8AAAAAACwAAAAAAQABAAACAkQBADs="));
+
+    QCOMPARE(
+            object->property("better2"),
+            QByteArray("R0lGODdhAQABAPAAAP8AAAAAACwAAAAAAQABAAACAkQBADs="));
+
+    QVariant result;
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(url.toString() + ":25: Error: Invalid character"));
+    QMetaObject::invokeMethod(object.data(), "bad1", Q_RETURN_ARG(QVariant, result));
+    QVERIFY(!result.isValid());
+
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(url.toString() + ":29: Error: Invalid character"));
+    QMetaObject::invokeMethod(object.data(), "bad2", Q_RETURN_ARG(QVariant, result));
+    QVERIFY(!result.isValid());
+
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(url.toString() + ":33: Error: Invalid character"));
+    QMetaObject::invokeMethod(object.data(), "bad3", Q_RETURN_ARG(QVariant, result));
+    QVERIFY(!result.isValid());
 }
 
 void tst_qqmlqt::atob()
 {
-    QQmlComponent component(&engine, testFileUrl("atob.qml"));
+    const QUrl url = testFileUrl("atob.qml");
+    QQmlComponent component(&engine, url);
 
-    QString warning1 = component.url().toString() + ":4: Error: Insufficient arguments";
-    QTest::ignoreMessage(QtWarningMsg, qPrintable(warning1));
+    QTest::ignoreMessage(
+            QtWarningMsg,
+            "Qt.atob(string): This method is deprecated. "
+            "Its output differs from the common Web API. "
+            "Use the overloads that take array-likes.");
+    QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression("atob.qml:4: Error: Unable to determine callable overload."));
 
     QScopedPointer<QObject> object(component.create());
     QVERIFY(object != nullptr);
 
+    const quint8 bytes[] = {
+        0x47, 0x49, 0x46, 0x38, 0x37, 0x61, 0x01,
+        0x00, 0x01, 0x00, 0xF0, 0x00, 0x00, 0xFF,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x2C, 0x00,
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+        0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3B
+    };
+
     QCOMPARE(object->property("test2").toString(), QString("Hello world!"));
+    QCOMPARE(object->property("test3").toString(), QString("Hello world!"));
+
+    QCOMPARE(
+            object->property("better"),
+            QByteArray(reinterpret_cast<const char *>(bytes), sizeof(bytes)));
+    QCOMPARE(
+            object->property("better2"),
+            QByteArray(reinterpret_cast<const char *>(bytes), sizeof(bytes)));
+
+    QVariant result;
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(url.toString() + ":29: Error: Invalid character"));
+    QMetaObject::invokeMethod(object.data(), "bad1", Q_RETURN_ARG(QVariant, result));
+    QVERIFY(!result.isValid());
+
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(url.toString() + ":33: Error: Invalid character"));
+    QMetaObject::invokeMethod(object.data(), "bad2", Q_RETURN_ARG(QVariant, result));
+    QVERIFY(!result.isValid());
+
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(url.toString() + ":37: Error: Invalid character"));
+    QMetaObject::invokeMethod(object.data(), "bad3", Q_RETURN_ARG(QVariant, result));
+    QVERIFY(!result.isValid());
+
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(url.toString() + ":41: Error: Invalid character"));
+    QMetaObject::invokeMethod(object.data(), "bad4", Q_RETURN_ARG(QVariant, result));
+    QVERIFY(!result.isValid());
 }
 
 void tst_qqmlqt::fontFamilies()
@@ -1234,9 +1312,9 @@ void tst_qqmlqt::resolvedUrl()
     QCOMPARE(object->property("isObject").toBool(), true);
 
     QCOMPARE(qvariant_cast<QUrl>(object->property("resolvedHere")),
-             dataDirectoryUrl().resolved(QStringLiteral("somewhere.qml")));
+             dataDirectoryUrl().resolved(QUrl{u"somewhere.qml"_s}));
     QCOMPARE(qvariant_cast<QUrl>(object->property("resolvedThere")),
-             dataDirectoryUrl().resolved(QStringLiteral("Other/somewhere.qml")));
+             dataDirectoryUrl().resolved(QUrl{u"Other/somewhere.qml"_s}));
 
     QVariant unresolved = object->property("unresolvedUrl");
     QCOMPARE(unresolved.metaType(), QMetaType::fromType<QUrl>());

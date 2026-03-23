@@ -17,7 +17,7 @@
 //
 
 #include "qlanguageserver_p.h"
-#include "qqmlcodemodel_p.h"
+#include "qqmlcodemodelmanager_p.h"
 #include "qqmllsutils_p.h"
 #include <QtQmlDom/private/qqmldom_utils_p.h>
 
@@ -119,7 +119,7 @@ struct QQmlBaseModule : public QLanguageServerModule
     using RequestPointerArgument = RequestPointer &&;
     using BaseT = QQmlBaseModule<RequestType>;
 
-    QQmlBaseModule(QmlLsp::QQmlCodeModel *codeModel);
+    QQmlBaseModule(QmlLsp::QQmlCodeModelManager *codeModel);
     ~QQmlBaseModule();
 
     void requestHandler(const RequestParameters &parameters, RequestResponse &&response);
@@ -135,7 +135,7 @@ public Q_SLOTS:
 protected:
     QMutex m_pending_mutex;
     std::unordered_multimap<QString, RequestPointer> m_pending;
-    QmlLsp::QQmlCodeModel *m_codeModel;
+    QmlLsp::QQmlCodeModelManager *m_codeModelManager;
 };
 
 template<typename Parameters, typename Response>
@@ -159,11 +159,11 @@ bool BaseRequest<Parameters, Response>::fillFrom(QmlLsp::OpenDocument doc, const
     return true;
 }
 
-template<typename RequestType>
-QQmlBaseModule<RequestType>::QQmlBaseModule(QmlLsp::QQmlCodeModel *codeModel)
-    : m_codeModel(codeModel)
+template <typename RequestType>
+QQmlBaseModule<RequestType>::QQmlBaseModule(QmlLsp::QQmlCodeModelManager *codeModelManager)
+    : m_codeModelManager(codeModelManager)
 {
-    QObject::connect(m_codeModel, &QmlLsp::QQmlCodeModel::updatedSnapshot, this,
+    QObject::connect(m_codeModelManager, &QmlLsp::QQmlCodeModelManager::updatedSnapshot, this,
                      &QQmlBaseModule<RequestType>::updatedSnapshot);
 }
 
@@ -189,11 +189,11 @@ void QQmlBaseModule<RequestType>::requestHandler(const RequestParameters &parame
                                                  RequestResponse &&response)
 {
     auto req = std::make_unique<RequestType>();
-    QmlLsp::OpenDocument doc = m_codeModel->openDocumentByUrl(
+    QmlLsp::OpenDocument doc = m_codeModelManager->openDocumentByUrl(
             QQmlLSUtils::lspUriToQmlUrl(parameters.textDocument.uri));
 
     if (!req->fillFrom(doc, parameters, std::move(response))) {
-        req->m_response.sendErrorResponse(0, "Received invalid request", parameters);
+        req->m_response.sendErrorResponse(0, "Received invalid request.", parameters);
         return;
     }
     const int minVersion = req->m_minVersion;
@@ -209,7 +209,7 @@ void QQmlBaseModule<RequestType>::requestHandler(const RequestParameters &parame
 template<typename RequestType>
 void QQmlBaseModule<RequestType>::updatedSnapshot(const QByteArray &url)
 {
-    QmlLsp::OpenDocumentSnapshot doc = m_codeModel->snapshotByUrl(url);
+    QmlLsp::OpenDocumentSnapshot doc = m_codeModelManager->snapshotByUrl(url);
     std::vector<RequestPointer> toCompl;
     {
         QMutexLocker l(&m_pending_mutex);
@@ -233,7 +233,7 @@ std::variant<QList<QQmlLSUtils::ItemLocation>, QQmlLSUtils::ErrorMessage>
 QQmlBaseModule<RequestType>::itemsForRequest(const RequestPointer &request)
 {
 
-    QmlLsp::OpenDocument doc = m_codeModel->openDocumentByUrl(
+    QmlLsp::OpenDocument doc = m_codeModelManager->openDocumentByUrl(
             QQmlLSUtils::lspUriToQmlUrl(request->m_parameters.textDocument.uri));
 
     if (!doc.snapshot.validDocVersion || doc.snapshot.validDocVersion != doc.snapshot.docVersion) {

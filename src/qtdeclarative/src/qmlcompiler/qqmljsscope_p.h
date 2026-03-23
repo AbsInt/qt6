@@ -82,10 +82,6 @@ class Q_QMLCOMPILER_EXPORT QQmlJSScope
     friend QQmlSA::Element;
 
 public:
-    explicit QQmlJSScope(const QString &internalName);
-    QQmlJSScope(QQmlJSScope &&) = default;
-    QQmlJSScope &operator=(QQmlJSScope &&) = default;
-
     using Ptr = QDeferredSharedPointer<QQmlJSScope>;
     using WeakPtr = QDeferredWeakPointer<QQmlJSScope>;
     using ConstPtr = QDeferredSharedPointer<const QQmlJSScope>;
@@ -156,8 +152,20 @@ public:
                                   typename QMultiHash<Key, Value>::iterator>;
 
     static QQmlJSScope::Ptr create() { return QSharedPointer<QQmlJSScope>(new QQmlJSScope); }
-    static QQmlJSScope::Ptr create(const QString &internalName);
     static QQmlJSScope::Ptr clone(const QQmlJSScope::ConstPtr &origin);
+
+    static void cloneInto(QQmlJSScope::Ptr &origin,
+                          const QQmlJSScope::Ptr &target)
+    {
+        *target = std::move(*clone(origin));
+    }
+
+    //! \internal This should probably restricted, only needed in prepareTargetForVisit
+    void resetForReparse() {
+        const QString moduleName = this->moduleName();
+        *this = QQmlJSScope { this->internalName() };
+        setOwnModuleName(moduleName);
+    }
 
     static QQmlJSScope::ConstPtr findCurrentQMLScope(const QQmlJSScope::ConstPtr &scope);
 
@@ -202,6 +210,9 @@ public:
 
     QString filePath() const { return m_filePath; }
     void setFilePath(const QString &file) { m_filePath = file; }
+
+    quint32 lineNumber() const { return m_sourceLocation.startLine; }
+    void setLineNumber(quint32 lineNumber);
 
     // The name the type uses to refer to itself. Either C++ class name or base name of
     // QML file. isComposite tells us if this is a C++ or a QML name.
@@ -275,6 +286,7 @@ public:
 
     struct AnnotatedScope; // defined later
     static AnnotatedScope ownerOfProperty(const QQmlJSScope::ConstPtr &self, const QString &name);
+    static AnnotatedScope ownerOfMethod(const QQmlJSScope::ConstPtr &self, const QString &name);
 
     bool isResolved() const;
     bool isFullyResolved() const;
@@ -309,9 +321,9 @@ public:
     };
     AnnotatedScope extensionType() const;
 
-    QString valueTypeName() const { return m_valueTypeName; }
-    void setValueTypeName(const QString &name) { m_valueTypeName = name; }
-    QQmlJSScope::ConstPtr valueType() const { return m_valueType; }
+    QString elementTypeName() const { return m_elementTypeName; }
+    void setElementTypeName(const QString &name) { m_elementTypeName = name; }
+    QQmlJSScope::ConstPtr elementType() const { return m_elementType; }
     QQmlJSScope::ConstPtr listType() const { return m_listType; }
     QQmlJSScope::Ptr listType() { return m_listType; }
 
@@ -441,6 +453,10 @@ public:
     static constexpr qsizetype sizeofQQmlSAElement() { return QQmlSA::Element::sizeofElement; }
 
 private:
+    // the way to construct a QQmlJSScope is via create
+    explicit QQmlJSScope(const QString &internalName);
+    QQmlJSScope(QQmlJSScope &&) = default;
+    QQmlJSScope &operator=(QQmlJSScope &&) = default;
     /*! \internal
 
          Minimal information about a QQmlJSMetaPropertyBinding that allows it to
@@ -519,11 +535,11 @@ private:
     QQmlJSScope::WeakConstPtr m_attachedType;
 
     /*! \internal
-     *  The Value type name.
+     *  The type name of the list element in case this is a sequence type.
      *  This is an internal name, from a c++ type or a synthetic jsrootgen.
      */
-    QString m_valueTypeName;
-    QQmlJSScope::WeakConstPtr m_valueType;
+    QString m_elementTypeName;
+    QQmlJSScope::WeakConstPtr m_elementType;
     QQmlJSScope::Ptr m_listType;
 
     /*!
@@ -680,6 +696,21 @@ private:
 
 using QQmlJSExportedScope = QQmlJSScope::ExportedScope<QQmlJSScope::Ptr>;
 using QQmlJSImportedScope = QQmlJSScope::ImportedScope<QQmlJSScope::ConstPtr>;
+
+namespace QQmlSA {
+constexpr inline bool isFunctionScope(ScopeType type)
+{
+    switch (type) {
+    case ScopeType::JSFunctionScope:
+    case ScopeType::BindingFunctionScope:
+    case ScopeType::SignalHandlerFunctionScope:
+        return true;
+    default:
+        return false;
+    }
+}
+
+}
 
 QT_END_NAMESPACE
 

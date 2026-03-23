@@ -6,7 +6,6 @@
 #include "qdnslookup_p.h"
 
 #include <qendian.h>
-#include <qscopedpointer.h>
 #include <qspan.h>
 #include <qurl.h>
 #include <qvarlengtharray.h>

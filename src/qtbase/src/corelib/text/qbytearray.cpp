@@ -21,6 +21,7 @@
 #if defined(Q_OS_WASM)
 #include "private/qstdweb_p.h"
 #endif
+#include <QtCore/private/qtclasshelper_p.h>
 
 #ifndef QT_NO_COMPRESS
 #include <zconf.h>
@@ -1870,6 +1871,11 @@ QByteArray::QByteArray(qsizetype size, char ch)
 
 /*!
     Constructs a byte array of size \a size with uninitialized contents.
+
+    For example:
+    \code
+    QByteArray buffer(123, Qt::Uninitialized);
+    \endcode
 */
 
 QByteArray::QByteArray(qsizetype size, Qt::Initialization)
@@ -3275,8 +3281,7 @@ QByteArray QByteArray::sliced_helper(QByteArray &a, qsizetype pos, qsizetype n)
     \sa isLower(), toUpper(), {Character Case}
 */
 
-template <typename T>
-static QByteArray toCase_template(T &input, uchar (*lookup)(uchar))
+static QByteArray toCase(const QByteArray &input, QByteArray *rvalue, uchar (*lookup)(uchar))
 {
     // find the first bad character in input
     const char *orig_begin = input.constBegin();
@@ -3290,10 +3295,10 @@ static QByteArray toCase_template(T &input, uchar (*lookup)(uchar))
     }
 
     if (firstBad == e)
-        return std::move(input);
+        return q_choose_copy_move(input, rvalue);
 
     // transform the rest
-    QByteArray s = std::move(input);    // will copy if T is const QByteArray
+    QByteArray s = q_choose_copy_move(input, rvalue);
     char *b = s.begin();            // will detach if necessary
     char *p = b + (firstBad - orig_begin);
     e = b + s.size();
@@ -3304,12 +3309,12 @@ static QByteArray toCase_template(T &input, uchar (*lookup)(uchar))
 
 QByteArray QByteArray::toLower_helper(const QByteArray &a)
 {
-    return toCase_template(a, asciiLower);
+    return toCase(a, nullptr, asciiLower);
 }
 
 QByteArray QByteArray::toLower_helper(QByteArray &a)
 {
-    return toCase_template(a, asciiLower);
+    return toCase(a, &a, asciiLower);
 }
 
 /*!
@@ -3326,12 +3331,12 @@ QByteArray QByteArray::toLower_helper(QByteArray &a)
 
 QByteArray QByteArray::toUpper_helper(const QByteArray &a)
 {
-    return toCase_template(a, asciiUpper);
+    return toCase(a, nullptr, asciiUpper);
 }
 
 QByteArray QByteArray::toUpper_helper(QByteArray &a)
 {
-    return toCase_template(a, asciiUpper);
+    return toCase(a, &a, asciiUpper);
 }
 
 /*! \fn void QByteArray::clear()
@@ -4400,7 +4405,7 @@ QByteArray QByteArray::number(qulonglong n, int base)
 
     Returns a byte array containing a string representing \a n, with a given \a
     format and \a precision, with the same meanings as for \l
-    {QString::number(double, char, int)}. For example:
+    {QLocale::toString(double, char, int)}. For example:
 
     \snippet code/src_corelib_text_qbytearray.cpp 42
 
@@ -4720,47 +4725,32 @@ QByteArray QByteArray::toHex(char separator) const
     return hex;
 }
 
-static void q_fromPercentEncoding(QByteArray *ba, char percent)
+static qsizetype q_fromPercentEncoding(QByteArrayView src, char percent, QSpan<char> buffer)
 {
-    if (ba->isEmpty())
-        return;
-
-    char *data = ba->data();
-    const char *inputPtr = data;
+    char *data = buffer.begin();
+    const char *inputPtr = src.begin();
 
     qsizetype i = 0;
-    qsizetype len = ba->size();
-    qsizetype outlen = 0;
-    int a, b;
-    char c;
+    const qsizetype len = src.size();
     while (i < len) {
-        c = inputPtr[i];
+        char c = inputPtr[i];
         if (c == percent && i + 2 < len) {
-            a = inputPtr[++i];
-            b = inputPtr[++i];
-
-            if (a >= '0' && a <= '9') a -= '0';
-            else if (a >= 'a' && a <= 'f') a = a - 'a' + 10;
-            else if (a >= 'A' && a <= 'F') a = a - 'A' + 10;
-
-            if (b >= '0' && b <= '9') b -= '0';
-            else if (b >= 'a' && b <= 'f') b  = b - 'a' + 10;
-            else if (b >= 'A' && b <= 'F') b  = b - 'A' + 10;
-
-            *data++ = (char)((a << 4) | b);
+            if (int a = QtMiscUtils::fromHex(uchar(inputPtr[++i])); a != -1)
+                *data = a << 4;
+            if (int b = QtMiscUtils::fromHex(uchar(inputPtr[++i])); b != -1)
+                *data |= b;
         } else {
-            *data++ = c;
+            *data = c;
         }
-
+        ++data;
         ++i;
-        ++outlen;
     }
 
-    if (outlen != len)
-        ba->truncate(outlen);
+    return data - buffer.begin();
 }
 
 /*!
+    \fn QByteArray QByteArray::percentDecoded(char percent) const &
     \since 6.4
 
     Decodes URI/URL-style percent-encoding.
@@ -4778,15 +4768,12 @@ static void q_fromPercentEncoding(QByteArray *ba, char percent)
 
     \sa toPercentEncoding(), QUrl::fromPercentEncoding()
 */
-QByteArray QByteArray::percentDecoded(char percent) const
-{
-    if (isEmpty())
-        return *this; // Preserves isNull().
 
-    QByteArray tmp = *this;
-    q_fromPercentEncoding(&tmp, percent);
-    return tmp;
-}
+/*!
+    \fn QByteArray QByteArray::percentDecoded(char percent) &&
+    \since 6.11
+    \overload
+*/
 
 /*!
     \since 4.4
@@ -4804,7 +4791,30 @@ QByteArray QByteArray::percentDecoded(char percent) const
 */
 QByteArray QByteArray::fromPercentEncoding(const QByteArray &input, char percent)
 {
-    return input.percentDecoded(percent);
+    if (input.isEmpty())
+        return input; // Preserves isNull().
+
+    QByteArray out{input.size(), Qt::Uninitialized};
+    qsizetype len = q_fromPercentEncoding(input, percent, out);
+    out.truncate(len);
+    return out;
+}
+
+/*!
+    \overload
+    \since 6.11
+*/
+QByteArray QByteArray::fromPercentEncoding(QByteArray &&input, char percent)
+{
+    if (input.d->needsDetach())
+        return fromPercentEncoding(input, percent); // lvalue overload
+
+    if (input.isEmpty())
+        return std::move(input); // Preserves isNull().
+
+    qsizetype len = q_fromPercentEncoding(input, percent, input);
+    input.truncate(len);
+    return std::move(input);
 }
 
 /*! \fn QByteArray QByteArray::fromStdString(const std::string &str)
@@ -4838,6 +4848,7 @@ std::string QByteArray::toStdString() const
 
 /*!
     \fn QByteArray::operator std::string_view() const noexcept
+    \target qbytearray-operator-std-string_view
     \since 6.10
 
     Converts this QByteArray object to a \c{std::string_view} object.
@@ -5164,7 +5175,9 @@ emscripten::val QByteArray::toEcmaUint8Array()
 */
 
 /*!
-    \fn QByteArray &QByteArray::FromBase64Result::operator*() const
+    \fn const QByteArray &QByteArray::FromBase64Result::operator*() const &
+    \fn QByteArray &QByteArray::FromBase64Result::operator*() &
+    \fn QByteArray &&QByteArray::FromBase64Result::operator*() &&
 
     Returns the decoded byte array.
 */

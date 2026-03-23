@@ -235,6 +235,7 @@ private slots:
     void transformChanged();
 
     void grabImage();
+    void invisibleItemCursorShape();
 
     void focusItemDestroyed();
 
@@ -1523,7 +1524,7 @@ struct PolishItemSpan {
  * For instance, two consecutive spans {99,0} and {1,2000} } instructs to
  * construct 99 items with no repolish, and 1 item with 2000 repolishes (in that sibling order)
  */
-typedef QVector<PolishItemSpan> PolishItemSpans;
+typedef QList<PolishItemSpan> PolishItemSpans;
 
 Q_DECLARE_METATYPE(PolishItemSpan)
 Q_DECLARE_METATYPE(PolishItemSpans)
@@ -2696,6 +2697,17 @@ void tst_qquickitem::grabImage()
     QTRY_VERIFY(window->property("finishedSuccessfuly").toBool());
     QQuickItemGrabResult *result = window->property("itemGrabResult").value<QQuickItemGrabResult*>();
     QVERIFY(result);
+}
+
+void tst_qquickitem::invisibleItemCursorShape()
+{
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("invisibleItemCursorShape.qml")));
+    QQuickItem *root = qobject_cast<QQuickItem *>(window.rootObject());
+    QVERIFY(root);
+
+    QTest::mouseMove(&window, QPoint(100, 100));
+    QCOMPARE(window.cursor().shape(), Qt::ArrowCursor);
 }
 
 void tst_qquickitem::focusItemDestroyed()

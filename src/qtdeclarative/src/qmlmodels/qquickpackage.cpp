@@ -36,8 +36,9 @@ QT_BEGIN_NAMESPACE
 
     \snippet package/view.qml 0
 
-    \note Package is part of QtQml.Models since version 2.14 and part of QtQuick since version 2.0.
-    Importing Package via QtQuick is deprecated since Qt 5.14.
+    \note Package is part of \l{QtQml.Models} since version 2.14 and
+    part of \l[QML]{QtQuick} since version 2.0.
+    Importing Package via \l[QML]{QtQuick} is deprecated since Qt 5.14.
 
     \sa {Qt Quick Examples - Views}, {Qt Qml}
 */

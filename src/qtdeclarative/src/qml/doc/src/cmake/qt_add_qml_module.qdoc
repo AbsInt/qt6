@@ -322,6 +322,20 @@ target will be the \c target followed by \c{_qmllint}. An \c{all_qmllint}
 target which depends on all the individual \c{*_qmllint} targets is also
 provided as a convenience.
 
+A \c dump_qml_context_properties global build target is automatically created
+that runs \l qmlcontextpropertydump when no qml context property dump file
+already exists. \l qmlcontextpropertydump creates a qml context property dump file
+that is read by \l qmllint to warn about usages of context properties in QML.
+
+A \c clean_qml_context_properties global build target allows to delete an already
+existing qml context property dump file, and can be used to recompute the qml context
+property dump file on a future build of the \c dump_qml_context_properties global build
+target.
+
+Linting targets depend on the \c dump_qml_context_properties build target when
+the \l QT_QMLLINT_CONTEXT_PROPERTY_DUMP variable is enabled.
+
+
 \target qml-naming-js-files
 \section2 Naming conventions for \c{.js} files
 

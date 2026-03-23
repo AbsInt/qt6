@@ -46,7 +46,9 @@ abstract class QtActivityDelegateBase
         m_activity = activity;
         QtNative.setActivity(m_activity);
         m_displayManager = new QtDisplayManager(m_activity);
-        m_inputDelegate = new QtInputDelegate(m_displayManager::reinstateFullScreen);
+        m_inputDelegate = new QtInputDelegate(() -> {
+            QtWindowInsetsController.restoreFullScreenVisibility(m_activity);
+        });
         m_accessibilityDelegate = new QtAccessibilityDelegate();
     }
 
@@ -105,20 +107,20 @@ abstract class QtActivityDelegateBase
         Configuration config = resources.getConfiguration();
         int uiMode = config.uiMode & Configuration.UI_MODE_NIGHT_MASK;
 
-        if (m_displayManager.decorFitsSystemWindows()) {
+        if (QtWindowInsetsController.decorFitsSystemWindows(m_activity)) {
             Window window = m_activity.getWindow();
-            QtDisplayManager.enableSystemBarsBackgroundDrawing(window);
-            int status = QtDisplayManager.getThemeDefaultStatusBarColor(m_activity);
-            QtDisplayManager.setStatusBarColor(window, status);
-            int nav = QtDisplayManager.getThemeDefaultNavigationBarColor(m_activity);
-            QtDisplayManager.setNavigationBarColor(window, nav);
+            QtWindowInsetsController.enableSystemBarsBackgroundDrawing(window);
+            int status = QtWindowInsetsController.getThemeDefaultStatusBarColor(m_activity);
+            QtWindowInsetsController.setStatusBarColor(window, status);
+            int nav = QtWindowInsetsController.getThemeDefaultNavigationBarColor(m_activity);
+            QtWindowInsetsController.setNavigationBarColor(window, nav);
         }
 
         // Don't override color scheme if the app has it set explicitly.
         if (canOverrideColorSchemeHint()) {
             boolean isLight = uiMode == Configuration.UI_MODE_NIGHT_NO;
-            QtDisplayManager.setStatusBarColorHint(m_activity, isLight);
-            QtDisplayManager.setNavigationBarColorHint(m_activity, isLight);
+            QtWindowInsetsController.setStatusBarColorHint(m_activity, isLight);
+            QtWindowInsetsController.setNavigationBarColorHint(m_activity, isLight);
         }
 
         switch (uiMode) {

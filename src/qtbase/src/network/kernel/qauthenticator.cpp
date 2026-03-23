@@ -358,6 +358,19 @@ bool QAuthenticator::isNull() const
     return !d;
 }
 
+/*!
+    \since 6.11
+
+    Clears all credentials and resets the object to its default uninitialized
+    state.
+*/
+
+void QAuthenticator::clear()
+{
+    *d = QAuthenticatorPrivate();
+    d->phase = QAuthenticatorPrivate::Done;
+}
+
 #if QT_CONFIG(sspi) // SSPI
 class QSSPIWindowsHandles
 {

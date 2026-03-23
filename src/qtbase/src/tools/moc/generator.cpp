@@ -78,7 +78,7 @@ QT_FOR_EACH_STATIC_TYPE(RETURN_METATYPENAME_STRING)
     return nullptr;
  }
 
- Generator::Generator(Moc *moc, ClassDef *classDef, const QList<QByteArray> &metaTypes,
+ Generator::Generator(Moc *moc, const ClassDef *classDef, const QList<QByteArray> &metaTypes,
                       const QHash<QByteArray, QByteArray> &knownQObjectClasses,
                       const QHash<QByteArray, QByteArray> &knownGadgets, FILE *outfile,
                       bool requireCompleteTypes)
@@ -227,24 +227,6 @@ void Generator::generateCode()
 {
     bool isQObject = (cdef->classname == "QObject");
     bool isConstructible = !cdef->constructorList.isEmpty();
-
-    // filter out undeclared enumerators and sets
-    {
-        QList<EnumDef> enumList;
-        for (EnumDef def : std::as_const(cdef->enumList)) {
-            if (cdef->enumDeclarations.contains(def.name)) {
-                enumList += def;
-            }
-            def.enumName = def.name;
-            QByteArray alias = cdef->flagAliases.value(def.name);
-            if (cdef->enumDeclarations.contains(alias)) {
-                def.name = alias;
-                def.flags |= cdef->enumDeclarations[alias];
-                enumList += def;
-            }
-        }
-        cdef->enumList = enumList;
-    }
 
 //
 // Register all strings used in data section
@@ -695,14 +677,12 @@ void Generator::addFunctions(const QList<FunctionDef> &list, const char *functyp
 void Generator::generateTypeInfo(const QByteArray &typeName, bool allowEmptyName)
 {
     Q_UNUSED(allowEmptyName);
-    if (isBuiltinType(typeName)) {
-        int type;
+    if (int type = nameToBuiltinType(typeName); type != QMetaType::UnknownType) {
         const char *valueString;
         if (typeName == "qreal") {
             type = QMetaType::UnknownType;
             valueString = "QReal";
         } else {
-            type = nameToBuiltinType(typeName);
             valueString = metaTypeEnumValueString(type);
         }
         if (valueString) {
@@ -772,6 +752,10 @@ void Generator::addProperties()
             addFlag("Constant");
         if (p.final)
             addFlag("Final");
+        if (p.virtual_)
+            addFlag("Virtual");
+        if (p.override)
+            addFlag("Override");
         if (p.user != "false")
             addFlag("User");
         if (p.required)

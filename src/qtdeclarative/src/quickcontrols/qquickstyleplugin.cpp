@@ -133,6 +133,11 @@ void QQuickStylePlugin::unregisterTypes()
 
     themeChangeObserver.reset();
 
+    const bool isPrimaryFallback = name() == QQuickStylePrivate::fallbackStyle();
+    const QString styleName = QQuickStylePrivate::style();
+    if (!isPrimaryFallback && !styleName.isEmpty())
+        QFileSelectorPrivate::removeStatics(QStringList() << styleName);
+
     // Not every style has a plugin - some styles are QML-only. So, we clean this
     // stuff up when the first style plugin is unregistered rather than when the
     // plugin for the current style is unregistered.

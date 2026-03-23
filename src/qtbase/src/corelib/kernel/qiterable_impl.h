@@ -10,7 +10,7 @@
 
 QT_BEGIN_NAMESPACE
 
-namespace QIterablePrivate {
+namespace QtIterablePrivate {
 
 template<typename Callback>
 static QVariant retrieveElement(QMetaType type, Callback callback)
@@ -25,7 +25,7 @@ static QVariant retrieveElement(QMetaType type, Callback callback)
     return v;
 }
 
-} // namespace QIterablePrivate
+} // namespace QtIterablePrivate
 
 QT_END_NAMESPACE
 

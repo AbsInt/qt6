@@ -5,6 +5,7 @@
 #define CLANGCODEPARSER_H
 
 #include "codeparser.h"
+#include "inclusionpolicy.h"
 #include "parsererror.h"
 #include "config.h"
 
@@ -34,7 +35,8 @@ std::optional<PCHFile> buildPCH(
     QString module_header,
     const std::set<Config::HeaderFilePath>& all_headers,
     const std::vector<QByteArray>& include_paths,
-    const QList<QByteArray>& defines
+    const QList<QByteArray>& defines,
+    const InclusionPolicy& policy
 );
 
 struct FnCommandParser {
@@ -87,6 +89,7 @@ private:
     QStringList m_namespaceScope {};
     QByteArray s_fn;
     std::optional<std::reference_wrapper<const PCHFile>> m_pch;
+    Config::InternalFilePatterns m_internalFilePatterns{};
 };
 
 QT_END_NAMESPACE

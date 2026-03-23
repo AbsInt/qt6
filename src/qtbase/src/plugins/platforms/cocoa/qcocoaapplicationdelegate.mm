@@ -1,6 +1,7 @@
 // Copyright (C) 2018 The Qt Company Ltd.
 // Copyright (c) 2007-2008, Apple, Inc.
 // SPDX-License-Identifier: BSD-3-Clause
+// Qt-Security score:significant reason:default
 
 #include <AppKit/AppKit.h>
 
@@ -23,6 +24,8 @@
 #include <qguiapplication.h>
 #include <qpa/qwindowsysteminterface.h>
 #include <qwindowdefs.h>
+
+#include <QtCore/private/qdarwinsecurityscopedfileengine_p.h>
 
 QT_USE_NAMESPACE
 
@@ -225,7 +228,8 @@ QT_USE_NAMESPACE
             if (qApp->arguments().contains(qtFileName))
                 continue;
         }
-        QWindowSystemInterface::handleFileOpenEvent(qtFileName);
+        QUrl url = qt_apple_urlFromPossiblySecurityScopedURL([NSURL fileURLWithPath:fileName]);
+        QWindowSystemInterface::handleFileOpenEvent(url);
         // FIXME: We're supposed to call [NSApp replyToOpenOrPrint:] here, but we
         //  don't know if the open operation succeeded, failed, or was cancelled.
     }

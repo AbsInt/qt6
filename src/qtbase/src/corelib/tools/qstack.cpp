@@ -57,6 +57,17 @@
 */
 
 /*!
+    \fn template<class T> void QStack<T>::push(T&& t)
+    \since 6.11
+
+    Adds element \a t to the top of the stack.
+
+    This is the same as QList::append().
+
+    \sa pop(), top()
+*/
+
+/*!
     \fn template<class T> T& QStack<T>::top()
 
     Returns a reference to the stack's top item. This function

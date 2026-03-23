@@ -310,6 +310,16 @@ QString QSslContext::errorString() const
     return errorStr;
 }
 
+void QSslContext::setGenericPrivateKey(QSslContext *sslContext,
+                                       const QSslConfiguration &configuration)
+{
+    auto qtKey = QTlsBackend::backend<QTlsPrivate::TlsKeyOpenSSL>(configuration.d->privateKey);
+    Q_ASSERT(qtKey);
+    sslContext->pkey = qtKey->genericKey;
+    Q_ASSERT(sslContext->pkey);
+    q_EVP_PKEY_up_ref(sslContext->pkey);
+}
+
 void QSslContext::initSslContext(QSslContext *sslContext, QSslSocket::SslMode mode,
                                  const QSslConfiguration &configuration,
                                  bool allowRootCertOnDemandLoading)
@@ -587,33 +597,45 @@ QT_WARNING_POP
             return;
         }
 
-        if (configuration.d->privateKey.algorithm() == QSsl::Opaque) {
+        const auto algorithm = configuration.d->privateKey.algorithm();
+        bool useOpaqueHandle = false;
+
+        if (algorithm == QSsl::Opaque)
+            useOpaqueHandle = true;
+#if OPENSSL_VERSION_NUMBER < 0x3050000fL
+        // ML-DSA is only supported in OpenSSL 3.5+, therefore treat it as Qssl::Opaque so it still
+        // works and loads correctly.
+        if (algorithm == QSsl::MlDsa)
+            useOpaqueHandle = true;
+#endif
+
+        if (useOpaqueHandle) {
             sslContext->pkey = reinterpret_cast<EVP_PKEY *>(configuration.d->privateKey.handle());
+#if OPENSSL_VERSION_NUMBER >= 0x3050000fL
+        } else if (algorithm == QSsl::MlDsa) {
+            setGenericPrivateKey(sslContext, configuration);
+#endif
         } else {
 #ifdef OPENSSL_NO_DEPRECATED_3_0
-            auto qtKey = QTlsBackend::backend<QTlsPrivate::TlsKeyOpenSSL>(configuration.d->privateKey);
-            Q_ASSERT(qtKey);
-            sslContext->pkey = qtKey->genericKey;
-            Q_ASSERT(sslContext->pkey);
-            q_EVP_PKEY_up_ref(sslContext->pkey);
+            setGenericPrivateKey(sslContext, configuration);
 #else
             // Load private key
             sslContext->pkey = q_EVP_PKEY_new();
             // before we were using EVP_PKEY_assign_R* functions and did not use EVP_PKEY_free.
             // this lead to a memory leak. Now we use the *_set1_* functions which do not
             // take ownership of the RSA/DSA key instance because the QSslKey already has ownership.
-            if (configuration.d->privateKey.algorithm() == QSsl::Rsa)
+            if (algorithm == QSsl::Rsa)
                 q_EVP_PKEY_set1_RSA(sslContext->pkey, reinterpret_cast<RSA *>(configuration.d->privateKey.handle()));
-            else if (configuration.d->privateKey.algorithm() == QSsl::Dsa)
+            else if (algorithm == QSsl::Dsa)
                 q_EVP_PKEY_set1_DSA(sslContext->pkey, reinterpret_cast<DSA *>(configuration.d->privateKey.handle()));
 #ifndef OPENSSL_NO_EC
-            else if (configuration.d->privateKey.algorithm() == QSsl::Ec)
+            else if (algorithm == QSsl::Ec)
                 q_EVP_PKEY_set1_EC_KEY(sslContext->pkey, reinterpret_cast<EC_KEY *>(configuration.d->privateKey.handle()));
 #endif // OPENSSL_NO_EC
 #endif // OPENSSL_NO_DEPRECATED_3_0
         }
         auto pkey = sslContext->pkey;
-        if (configuration.d->privateKey.algorithm() == QSsl::Opaque)
+        if (useOpaqueHandle)
             sslContext->pkey = nullptr; // Don't free the private key, it belongs to QSslKey
 
         if (!q_SSL_CTX_use_PrivateKey(sslContext->ctx, pkey)) {

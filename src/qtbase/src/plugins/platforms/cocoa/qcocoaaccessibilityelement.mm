@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include <AppKit/AppKit.h>
 
@@ -711,6 +712,25 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 - (void)setAccessibilityLabel:(NSString*)label{
     if (QAccessibleInterface *iface = self.qtInterface)
         iface->setText(QAccessible::Description, QString::fromNSString(label));
+}
+
+- (NSAccessibilityOrientation)accessibilityOrientation {
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
+        return NSAccessibilityOrientationUnknown;
+
+    NSAccessibilityOrientation nsOrientation = NSAccessibilityOrientationUnknown;
+    if (QAccessibleAttributesInterface *attributesIface = iface->attributesInterface()) {
+        const QVariant orientationVariant =
+                attributesIface->attributeValue(QAccessible::Attribute::Orientation);
+        if (orientationVariant.isValid()) {
+            Q_ASSERT(orientationVariant.canConvert<Qt::Orientation>());
+            const Qt::Orientation orientation = orientationVariant.value<Qt::Orientation>();
+            nsOrientation = orientation == Qt::Horizontal ? NSAccessibilityOrientationHorizontal
+                                                          : NSAccessibilityOrientationVertical;
+        }
+    }
+    return nsOrientation;
 }
 
 - (id) accessibilityValue {

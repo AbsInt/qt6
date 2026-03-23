@@ -7,8 +7,8 @@
 #include <private/qqmlprofilerclient_p.h>
 #include <private/qqmlprofilerclientdefinitions_p.h>
 #include <private/qqmlprofilereventlocation_p.h>
+#include <private/qqmlprofilereventreceiver_p.h>
 
-class QmlProfilerData;
 class QmlProfilerClientPrivate;
 class QmlProfilerClient : public QQmlProfilerClient
 {
@@ -16,7 +16,7 @@ class QmlProfilerClient : public QQmlProfilerClient
     Q_DECLARE_PRIVATE(QmlProfilerClient)
 
 public:
-    QmlProfilerClient(QQmlDebugConnection *connection, QmlProfilerData *data);
+    QmlProfilerClient(QQmlDebugConnection *connection, QQmlProfilerEventReceiver *data);
 
 Q_SIGNALS:
     void enabledChanged(bool enabled);

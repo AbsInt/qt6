@@ -57,8 +57,8 @@ void tst_qqmltranslation::translation()
 
     if (verifyCompiledData) {
         QQmlContext *context = qmlContext(object.get());
-        QQmlEnginePrivate *engine = QQmlEnginePrivate::get(context->engine());
-        QQmlRefPointer<QQmlTypeData> typeData = engine->typeLoader.getType(context->baseUrl());
+        QQmlRefPointer<QQmlTypeData> typeData
+                = QQmlTypeLoader::get(context->engine())->getType(context->baseUrl());
         QVERIFY(!typeData->backupSourceCode().isValid());
         QV4::CompiledData::CompilationUnit *compilationUnit = typeData->compilationUnit();
         QVERIFY(compilationUnit);
@@ -122,8 +122,8 @@ void tst_qqmltranslation::idTranslation()
 
     {
         QQmlContext *context = qmlContext(object.get());
-        QQmlEnginePrivate *engine = QQmlEnginePrivate::get(context->engine());
-        QQmlRefPointer<QQmlTypeData> typeData = engine->typeLoader.getType(context->baseUrl());
+        QQmlRefPointer<QQmlTypeData> typeData
+                = QQmlTypeLoader::get(context->engine())->getType(context->baseUrl());
         QVERIFY(!typeData->backupSourceCode().isValid());
         QV4::CompiledData::CompilationUnit *compilationUnit = typeData->compilationUnit();
         QVERIFY(compilationUnit);

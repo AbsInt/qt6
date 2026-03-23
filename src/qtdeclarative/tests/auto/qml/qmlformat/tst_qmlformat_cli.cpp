@@ -4,6 +4,9 @@
 #include <QtTest/QTest>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLibraryInfo>
 #include <QProcess>
 #include <QString>
@@ -65,6 +68,10 @@ private Q_SLOTS:
     void commandLineOptions();
 
     void writeDefaults();
+
+    void outputOptions();
+
+    void settingsKeysStayStable();
 
     void settingsFromFileOrCommandLine_data();
     void settingsFromFileOrCommandLine();
@@ -195,6 +202,11 @@ void TestQmlformatCli::testFormat_data()
             << "normalizedFunctionsSpacing.qml"
             << "normalizedFunctionsSpacing.formatted.qml" << QStringList { "-n", "--functions-spacing" } << RunOption::OnCopy;
 
+    QTest::newRow("normalize + keep attributes order")
+            << "normalizedGroupAttributesTogether.qml"
+            << "normalizedGroupAttributesTogether.formatted.qml"
+            << QStringList{ "-n", "--group-attributes-together" } << RunOption::OnCopy;
+
     QTest::newRow("indentEquals2")
             << "threeFunctionsOneLine.js"
             << "threeFunctions.formattedW2.js" << QStringList{"-w=2"} << RunOption::OnCopy;
@@ -211,6 +223,11 @@ void TestQmlformatCli::testFormat_data()
     QTest::newRow("esm_tabIndents")
             << "mini_esm.mjs"
             << "mini_esm.formattedTabs.mjs" << QStringList{ "-t" } << RunOption::OnCopy;
+
+    QTest::newRow("singeLineEmptyObjects")
+            << "singleLineEmptyObjects.qml"
+            << "singleLineEmptyObjects.formatted.qml"
+            << QStringList{ "--single-line-empty-objects" } << RunOption::OnCopy;
 }
 
 void TestQmlformatCli::testFormat()
@@ -377,30 +394,167 @@ void TestQmlformatCli::commandLineOptions()
 
 void TestQmlformatCli::writeDefaults()
 {
-    auto verify = [&]() {
-        QTemporaryDir tempDir;
-        const QString qmlformatIni = tempDir.path() + QDir::separator() + ".qmlformat.ini";
+    QTemporaryDir tempDir;
+    const QString qmlformatIni = tempDir.path() + QDir::separator() + ".qmlformat.ini";
 
-        QProcess process;
-        process.setWorkingDirectory(tempDir.path());
-        process.start(m_qmlformatPath, QStringList{ "--write-defaults" });
-        QVERIFY(process.waitForFinished());
-        QCOMPARE(process.exitStatus(), QProcess::NormalExit);
+    QProcess process;
+    process.setWorkingDirectory(tempDir.path());
+    process.start(m_qmlformatPath, QStringList{ "--write-defaults" });
+    QVERIFY(process.waitForFinished());
+    QCOMPARE(process.exitStatus(), QProcess::NormalExit);
 
-        QQmlToolingSettings settings("qmlformat");
-        QVERIFY(settings.search(qmlformatIni));
+    QQmlToolingSettings settings("qmlformat");
+    QVERIFY(settings.search(qmlformatIni).isValid());
 
-        QCOMPARE(settings.value("UseTabs").toBool(), false);
-        QCOMPARE(settings.value("IndentWidth").toInt(), 4);
-        QCOMPARE(settings.value("MaxColumnWidth").toInt(), -1);
-        QCOMPARE(settings.value("NormalizeOrder").toBool(), false);
-        QCOMPARE(settings.value("NewlineType").toString(), "native");
-        QCOMPARE(settings.value("ObjectSpacing").toBool(), false);
-        QCOMPARE(settings.value("FunctionsSpacing").toBool(), false);
-        QCOMPARE(settings.value("SortImports").toBool(), false);
+    QVERIFY(settings.isSet(QQmlFormatSettings::s_useTabsSetting));
+    QCOMPARE(settings.value(QQmlFormatSettings::s_useTabsSetting).toBool(), false);
+
+    QVERIFY(settings.isSet(QQmlFormatSettings::s_indentWidthSetting));
+    QCOMPARE(settings.value(QQmlFormatSettings::s_indentWidthSetting).toInt(), 4);
+
+    QVERIFY(settings.isSet(QQmlFormatSettings::s_maxColumnWidthSetting));
+    QCOMPARE(settings.value(QQmlFormatSettings::s_maxColumnWidthSetting).toInt(), -1);
+
+    QVERIFY(settings.isSet(QQmlFormatSettings::s_normalizeSetting));
+    QCOMPARE(settings.value(QQmlFormatSettings::s_normalizeSetting).toBool(), false);
+
+    QVERIFY(settings.isSet(QQmlFormatSettings::s_newlineSetting));
+    QCOMPARE(settings.value(QQmlFormatSettings::s_newlineSetting).toString(), "native");
+
+    QVERIFY(settings.isSet(QQmlFormatSettings::s_objectsSpacingSetting));
+    QCOMPARE(settings.value(QQmlFormatSettings::s_objectsSpacingSetting).toBool(), false);
+
+    QVERIFY(settings.isSet(QQmlFormatSettings::s_functionsSpacingSetting));
+    QCOMPARE(settings.value(QQmlFormatSettings::s_functionsSpacingSetting).toBool(), false);
+
+    QVERIFY(settings.isSet(QQmlFormatSettings::s_groupAttributesTogetherSetting));
+    QCOMPARE(settings.value(QQmlFormatSettings::s_groupAttributesTogetherSetting).toBool(), false);
+
+    QVERIFY(settings.isSet(QQmlFormatSettings::s_sortImportsSetting));
+    QCOMPARE(settings.value(QQmlFormatSettings::s_sortImportsSetting).toBool(), false);
+
+    QVERIFY(settings.isSet(QQmlFormatSettings::s_singleLineEmptyObjectsSetting));
+    QCOMPARE(settings.value(QQmlFormatSettings::s_singleLineEmptyObjectsSetting).toBool(), false);
+
+    QVERIFY(settings.isSet(QQmlFormatSettings::s_semiColonRuleSetting));
+    QCOMPARE(settings.value(QQmlFormatSettings::s_semiColonRuleSetting).toString(), "always"_L1);
+}
+
+void TestQmlformatCli::outputOptions()
+{
+    QProcess process;
+    process.start(m_qmlformatPath, QStringList{ "--output-options" });
+    QVERIFY(process.waitForFinished());
+    QCOMPARE(process.exitStatus(), QProcess::NormalExit);
+
+    QJsonDocument doc = QJsonDocument::fromJson(process.readAllStandardOutput());
+
+    auto findJsonObject = [doc](const QString &name){
+        QJsonObject rootObj = doc.object();
+        QJsonArray optionsArray = rootObj["options"].toArray();
+
+        for (const QJsonValue &optionValue : optionsArray) {
+            if (!optionValue.isObject())
+                continue;
+
+            QJsonObject optionObj = optionValue.toObject();
+            if (optionObj["name"].toString() == name)
+                return optionObj;
+        }
+
+        return QJsonObject();
     };
 
-    verify();
+    {
+        QJsonObject obj = findJsonObject(QQmlFormatSettings::s_useTabsSetting);
+        QVERIFY(!obj.isEmpty());
+        QCOMPARE(obj["value"], false);
+        QCOMPARE(obj["hint"], QMetaType::fromType<bool>().name());
+    }
+
+    {
+        QJsonObject obj = findJsonObject(QQmlFormatSettings::s_indentWidthSetting);
+        QVERIFY(!obj.isEmpty());
+        QCOMPARE(obj["value"], 4);
+        QCOMPARE(obj["hint"], QMetaType::fromType<int>().name());
+    }
+
+    {
+        QJsonObject obj = findJsonObject(QQmlFormatSettings::s_maxColumnWidthSetting);
+        QVERIFY(!obj.isEmpty());
+        QCOMPARE(obj["value"], -1);
+        QCOMPARE(obj["hint"], QMetaType::fromType<int>().name());
+    }
+
+    {
+        QJsonObject obj = findJsonObject(QQmlFormatSettings::s_normalizeSetting);
+        QVERIFY(!obj.isEmpty());
+        QCOMPARE(obj["value"], false);
+        QCOMPARE(obj["hint"], QMetaType::fromType<bool>().name());
+    }
+
+    {
+        QJsonObject obj = findJsonObject(QQmlFormatSettings::s_newlineSetting);
+        QVERIFY(!obj.isEmpty());
+        QCOMPARE(obj["value"], "native"_L1);
+        QCOMPARE(obj["hint"], QStringList({ "unix", "windows", "macos", "native" }).join(','));
+    }
+
+    {
+        QJsonObject obj = findJsonObject(QQmlFormatSettings::s_objectsSpacingSetting);
+        QVERIFY(!obj.isEmpty());
+        QCOMPARE(obj["value"], false);
+        QCOMPARE(obj["hint"], QMetaType::fromType<bool>().name());
+    }
+
+    {
+        QJsonObject obj = findJsonObject(QQmlFormatSettings::s_functionsSpacingSetting);
+        QVERIFY(!obj.isEmpty());
+        QCOMPARE(obj["value"], false);
+        QCOMPARE(obj["hint"], QMetaType::fromType<bool>().name());
+    }
+
+    {
+        QJsonObject obj = findJsonObject(QQmlFormatSettings::s_groupAttributesTogetherSetting);
+        QVERIFY(!obj.isEmpty());
+        QCOMPARE(obj["value"], false);
+        QCOMPARE(obj["hint"], QMetaType::fromType<bool>().name());
+    }
+
+    {
+        QJsonObject obj = findJsonObject(QQmlFormatSettings::s_sortImportsSetting);
+        QVERIFY(!obj.isEmpty());
+        QCOMPARE(obj["value"], false);
+        QCOMPARE(obj["hint"], QMetaType::fromType<bool>().name());
+    }
+
+    {
+        QJsonObject obj = findJsonObject(QQmlFormatSettings::s_singleLineEmptyObjectsSetting);
+        QVERIFY(!obj.isEmpty());
+        QCOMPARE(obj["value"], false);
+        QCOMPARE(obj["hint"], QMetaType::fromType<bool>().name());
+    }
+
+    {
+        QJsonObject obj = findJsonObject(QQmlFormatSettings::s_semiColonRuleSetting);
+        QVERIFY(!obj.isEmpty());
+        QCOMPARE(obj["value"], "always"_L1);
+        QCOMPARE(obj["hint"], QStringList({ "always", "essential" }).join(','));
+    }
+}
+
+void TestQmlformatCli::settingsKeysStayStable()
+{
+    QCOMPARE(QQmlFormatSettings::s_useTabsSetting, "UseTabs"_L1);
+    QCOMPARE(QQmlFormatSettings::s_indentWidthSetting, "IndentWidth"_L1);
+    QCOMPARE(QQmlFormatSettings::s_maxColumnWidthSetting, "MaxColumnWidth"_L1);
+    QCOMPARE(QQmlFormatSettings::s_normalizeSetting, "NormalizeOrder"_L1);
+    QCOMPARE(QQmlFormatSettings::s_newlineSetting, "NewlineType"_L1);
+    QCOMPARE(QQmlFormatSettings::s_objectsSpacingSetting, "ObjectsSpacing"_L1);
+    QCOMPARE(QQmlFormatSettings::s_functionsSpacingSetting, "FunctionsSpacing"_L1);
+    QCOMPARE(QQmlFormatSettings::s_groupAttributesTogetherSetting, "GroupAttributesTogether"_L1);
+    QCOMPARE(QQmlFormatSettings::s_sortImportsSetting, "SortImports"_L1);
+    QCOMPARE(QQmlFormatSettings::s_semiColonRuleSetting, "SemicolonRule"_L1);
 }
 
 void TestQmlformatCli::settingsFromFileOrCommandLine_data()

@@ -949,7 +949,7 @@ Qt::MouseEventFlags QMouseEvent::flags() const
     Mouse events occur when a mouse cursor is moved into, out of, or within a
     widget, and if the widget has the Qt::WA_Hover attribute.
 
-    The function pos() gives the current cursor position, while oldPos() gives
+    The function position() gives the current cursor position, while oldPos() gives
     the old mouse position.
 
     There are a few similarities between the events QEvent::HoverEnter
@@ -1006,12 +1006,12 @@ Qt::MouseEventFlags QMouseEvent::flags() const
 
     Returns the previous position of the mouse cursor, relative to the widget
     that received the event. If there is no previous position, oldPos() will
-    return the same position as pos().
+    return the same position as position().
 
     On QEvent::HoverEnter events, this position will always be
     QPoint(-1, -1).
 
-    \sa pos()
+    \sa position()
 */
 
 /*!
@@ -1032,12 +1032,12 @@ Qt::MouseEventFlags QMouseEvent::flags() const
 
     Returns the previous position of the mouse cursor, relative to the widget
     that received the event. If there is no previous position, oldPosF() will
-    return the same position as posF().
+    return the same position as position().
 
     On QEvent::HoverEnter events, this position will always be
     QPointF(-1, -1).
 
-    \sa posF()
+    \sa position()
 */
 
 /*!
@@ -1143,6 +1143,33 @@ Q_IMPL_POINTER_EVENT(QHoverEvent)
 */
 
 /*!
+    \property QWheelEvent::device
+    \brief the device from which the wheel event originated
+
+    \sa pointingDevice()
+*/
+
+/*!
+    \property QWheelEvent::inverted
+    \since 5.7
+    \brief whether the delta values delivered with the event are inverted
+
+    Normally, a vertical wheel will produce a QWheelEvent with positive delta
+    values if the top of the wheel is rotating away from the hand operating it.
+    Similarly, a horizontal wheel movement will produce a QWheelEvent with
+    positive delta values if the top of the wheel is moved to the left.
+
+    However, on some platforms this is configurable, so that the same
+    operations described above will produce negative delta values (but with the
+    same magnitude). With the inverted property a wheel event consumer can
+    choose to always follow the direction of the wheel, regardless of the
+    system settings, but only for specific widgets.
+
+    \note Many platforms provide no such information. On such platforms
+    \l inverted always returns false.
+*/
+
+/*!
     \fn bool QWheelEvent::inverted() const
     \since 5.7
 
@@ -1233,6 +1260,24 @@ bool QWheelEvent::isEndEvent() const
 #endif // QT_CONFIG(wheelevent)
 
 /*!
+    \property QWheelEvent::pixelDelta
+    \brief the scrolling distance in pixels on screen
+
+    This value is provided on platforms that support high-resolution
+    pixel-based delta values, such as \macos. The value should be used
+    directly to scroll content on screen.
+
+    \note On platforms that support scrolling \l{phase()}{phases}, the delta
+    may be null when scrolling is about to begin (Qt::ScrollBegin) or has
+    ended (Qt::ScrollEnd).
+
+    \note On X11 this value is driver-specific and unreliable, use
+    angleDelta() instead.
+
+    \sa angleDelta()
+*/
+
+/*!
     \fn QPoint QWheelEvent::pixelDelta() const
 
     Returns the scrolling distance in pixels on screen. This value is
@@ -1250,6 +1295,27 @@ bool QWheelEvent::isEndEvent() const
     \li or scrolling has ended and the distance did not change anymore (Qt::ScrollEnd).
     \endlist
     \note On X11 this value is driver-specific and unreliable, use angleDelta() instead.
+*/
+
+/*!
+    \property QWheelEvent::angleDelta
+    \brief the relative amount that the wheel was rotated, in eighths of a degree
+
+    A positive value indicates that the wheel was rotated forwards away from the
+    user; a negative value indicates that the wheel was rotated backwards toward
+    the user. \c angleDelta().y() provides the angle through which the common
+    vertical mouse wheel was rotated since the previous event. \c angleDelta().x()
+    provides the angle through which the horizontal mouse wheel was rotated, if
+    the mouse has a horizontal wheel; otherwise it stays at zero.
+
+    Most mouse types work in steps of 15 degrees, in which case the delta value
+    is a multiple of 120; i.e., 120 units * 1/8 = 15 degrees.
+
+    \note On platforms that support scrolling \l{phase()}{phases}, the delta
+    may be null when scrolling is about to begin (Qt::ScrollBegin) or has
+    ended (Qt::ScrollEnd).
+
+    \sa pixelDelta()
 */
 
 /*!
@@ -1288,6 +1354,15 @@ bool QWheelEvent::isEndEvent() const
     \endlist
 
     \sa pixelDelta()
+*/
+
+/*!
+    \property QWheelEvent::phase
+    \since 5.2
+    \brief the scrolling phase of this wheel event
+
+    \note The Qt::ScrollBegin and Qt::ScrollEnd phases are currently
+    supported only on \macos.
 */
 
 /*!
@@ -3633,23 +3708,27 @@ Q_IMPL_EVENT_COMMON(QShowEvent)
     File open events will be sent to the QApplication::instance()
     when the operating system requests that a file or URL should be opened.
     This is a high-level event that can be caused by different user actions
-    depending on the user's desktop environment; for example, double
-    clicking on an file icon in the Finder on \macos.
+    depending on the platform; for example, double clicking on an file in the
+    Finder or dragging a file to the application's Dock icon on \macos,
+    or sharing a file from another application on iOS.
 
     This event is only used to notify the application of a request.
-    It may be safely ignored.
+    It may be safely ignored if the file should not be opened.
 
-    \note This class is currently supported for \macos only.
+    \section1 Apple platforms
 
-    \section1 \macos Example
-
-    In order to trigger the event on \macos, the application must be configured
-    to let the OS know what kind of file(s) it should react on.
+    In order to trigger the event on Apple platforms, the application must be
+    configured to let the OS know what kind of file(s) it should react on.
 
     For example, the following \c Info.plist file declares that the application
-    can act as a viewer for files with a PNG extension:
+    can act as a viewer for PNG files:
 
     \snippet qfileopenevent/Info.plist Custom Info.plist
+
+    The following key is also necessary on iOS for the application to
+    show up as an "Open With" action in e.g. the Files application:
+
+    \snippet qfileopenevent/Info.plist iOS
 
     The following implementation of a QApplication subclass shows how to handle
     QFileOpenEvent to open the file that was, for example, dropped on the Dock
@@ -4133,7 +4212,8 @@ QDebug operator<<(QDebug dbg, const QEvent *e)
         const Qt::MouseButtons buttons = spe->buttons();
         dbg << eventClassName(type) << '(';
         QtDebugUtils::formatQEnum(dbg, type);
-        dbg << " ts=" << spe->timestamp();
+        if (dbg.verbosity() > QDebug::DefaultVerbosity)
+            dbg << " ts=" << spe->timestamp();
         if (isMouse) {
             if (type != QEvent::MouseMove && type != QEvent::NonClientAreaMouseMove) {
                 dbg << ' ';
@@ -4260,6 +4340,8 @@ QDebug operator<<(QDebug dbg, const QEvent *e)
         const QNativeGestureEvent *ne = static_cast<const QNativeGestureEvent *>(e);
         dbg << "QNativeGestureEvent(";
         QtDebugUtils::formatQEnum(dbg, ne->gestureType());
+        if (dbg.verbosity() > QDebug::DefaultVerbosity)
+            dbg << ", ts=" << ne->timestamp();
         dbg << ", fingerCount=" << ne->fingerCount() << ", localPos=";
         QtDebugUtils::formatQPoint(dbg, ne->position());
         if (!qIsNull(ne->value()))

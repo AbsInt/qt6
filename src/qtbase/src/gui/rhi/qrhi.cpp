@@ -565,6 +565,12 @@ Q_LOGGING_CATEGORY(QRHI_LOG_RUB, "qt.rhi.rub")
     Profiler} can be used to gain deeper insights into the application's
     rendering and its performance.
 
+    \li Overlays showing live performance information can be highly useful as well, and
+    are often preferable to implementing simple frames-per-second counters within the
+    application itself, since they are more reliable and show more information. An example
+    is \l{https://game.intel.com/us/intel-presentmon/}{PresentMon}, which supports
+    graphics hardware from multiple vendors.
+
     \li As QRhi supports Direct 3D 12, using
     \l{https://devblogs.microsoft.com/pix/download/}{PIX}, a performance tuning
     and debugging tool for DirectX 12 games on Windows is an option as well.
@@ -834,7 +840,8 @@ Q_LOGGING_CATEGORY(QRHI_LOG_RUB, "qt.rhi.rub")
     supporting draw calls with a base instance at all. Currently QRhi's OpenGL
     backend does not implement the functionality for OpenGL (non-ES) either,
     because portable applications cannot rely on a non-zero base instance in
-    practice due to GLES.
+    practice due to GLES. If the application still chooses to do so, it should
+    be aware of the InstanceIndexIncludesBaseInstance feature as well.
 
     \value TriangleFanTopology Indicates that QRhiGraphicsPipeline::setTopology()
     supports QRhiGraphicsPipeline::TriangleFan. In practice this feature will be
@@ -940,16 +947,17 @@ Q_LOGGING_CATEGORY(QRHI_LOG_RUB, "qt.rhi.rub")
     avoided as it will not be supported by all backends. The maximum patch
     control point count portable between backends is 32.
 
-    \value GeometryShader Indicates that the geometry shader stage is
-    supported. When supported, a geometry shader can be specified in the
-    QRhiShaderStage list. Geometry Shaders are considered an experimental
-    feature in QRhi and can only be expected to be supported with Vulkan,
-    Direct 3D, OpenGL (3.2+) and OpenGL ES (3.2+), assuming the implementation
-    reports it as supported at run time. Geometry shaders have portability
-    issues between APIs, and therefore no guarantees can be given for a
-    universal solution. They will never be supported with Metal. Whereas with
-    Direct 3D a handwritten HLSL geometry shader must be injected into each
-    QShader for the geometry stage since qsb cannot generate this from SPIR-V.
+    \value GeometryShader Indicates that the geometry shader stage is supported.
+    When supported, a geometry shader can be specified in the QRhiShaderStage
+    list. Geometry Shaders are considered an experimental feature in QRhi and
+    can only be expected to be supported with Vulkan, Direct 3D 11 and 12,
+    OpenGL (3.2+) and OpenGL ES (3.2+), assuming the implementation reports it
+    as supported at run time. Starting with Qt 6.11 geometry shaders are
+    automatically translated to HLSL, and therefore no injection of handwritten
+    HLSL geometry shaders is necessary anymore (but note that gl_in and
+    expressions such as gl_in[0].gl_Position are not supported; rather, pass the
+    position as an output variable from the vertex shader). Geometry shaders are
+    not supported with Metal.
 
     \value TextureArrayRange Indicates that for
     \l{QRhi::newTextureArray()}{texture arrays} it is possible to specify a
@@ -1101,6 +1109,20 @@ Q_LOGGING_CATEGORY(QRHI_LOG_RUB, "qt.rhi.rub")
     In practice this can be expected to be supported everywhere except OpenGL ES,
     where it is only available with GLES 3.2 implementations.
     This enum value has been introduced in Qt 6.9.
+
+    \value InstanceIndexIncludesBaseInstance Indicates that \c gl_InstanceIndex
+    includes the base instance (the \c firstInstance argument in draw calls) in
+    its value. When this feature is unsupported, but BaseInstance is, it
+    indicates that \c gl_InstanceIndex always starts at 0, not the base value.
+    In practice this will be the case for Direct 3D 11 and 12 at the moment.
+    With Vulkan and Metal this feature is expected to be reported as supported
+    always. This enum value has been introduced in Qt 6.11.
+
+    \value DepthClamp Indicates that enabling depth clamping is supported. When
+    reported as unsupported, which will be the case with OpenGL ES, OpenGL
+    versions before 3.2 without the relevant extension present, and Metal on the
+    iOS Simulator, calling \l{QRhiCommandBuffer::}{setDepthClamp()} with an argument
+    of \c true has no effect. This enum value has been introduced in Qt 6.11.
  */
 
 /*!
@@ -7187,6 +7209,27 @@ QRhiResource::Type QRhiGraphicsPipeline::resourceType() const
  */
 
 /*!
+    \fn bool QRhiGraphicsPipeline::hasDepthClamp() const
+    \return true if depth clamp is enabled.
+
+    \since 6.11
+ */
+
+/*!
+    \fn void QRhiGraphicsPipeline::setDepthClamp(bool enable)
+
+    Enables depth clamping when \a enable is true. When depth clamping is
+    enabled, primitives that would otherwise be clipped by the near or far
+    clip plane are rasterized and their depth values are clamped to the
+    depth range. When disabled (the default), such primitives are clipped.
+
+    \note This setting is ignored when the QRhi::DepthClamp feature is
+    reported as unsupported.
+
+    \since 6.11
+ */
+
+/*!
     \fn QRhiGraphicsPipeline::CompareOp QRhiGraphicsPipeline::depthOp() const
     \return the depth comparison function.
  */
@@ -10364,6 +10407,13 @@ void QRhiCommandBuffer::setShadingRate(const QSize &coarsePixelSize)
     Vulkan-compatible built-in variables, instead of \c gl_VertexID and \c
     gl_InstanceID.
 
+    \note When \a firstInstance is non-zero, \c gl_InstanceIndex will not
+    include the base value with some of the underlying 3D APIs. This is
+    indicated by the QRhi::InstanceIndexIncludesBaseInstance feature. If relying
+    on a base instance value cannot be avoided, applications are advised to pass
+    in the value as a uniform conditionally based on what that feature reports,
+    and add it to \c gl_InstanceIndex in the shader.
+
     \note This function can only be called inside a render pass, meaning
     between a beginPass() and endPass() call.
  */
@@ -10407,6 +10457,13 @@ void QRhiCommandBuffer::draw(quint32 vertexCount,
     instance must use \c gl_VertexIndex and \c gl_InstanceIndex, i.e., the
     Vulkan-compatible built-in variables, instead of \c gl_VertexID and \c
     gl_InstanceID.
+
+    \note When \a firstInstance is non-zero, \c gl_InstanceIndex will not
+    include the base value with some of the underlying 3D APIs. This is
+    indicated by the QRhi::InstanceIndexIncludesBaseInstance feature. If relying
+    on a base instance value cannot be avoided, applications are advised to pass
+    in the value as a uniform conditionally based on what that feature reports,
+    and add it to \c gl_InstanceIndex in the shader.
 
     \note This function can only be called inside a render pass, meaning
     between a beginPass() and endPass() call.
@@ -11746,15 +11803,16 @@ void QRhiPassResourceTracker::registerBuffer(QRhiBuffer *buf, int slot, BufferAc
 {
     auto it = m_buffers.find(buf);
     if (it != m_buffers.end()) {
-        if (it->access != *access) {
+        Buffer &b = it->second;
+        if (Q_UNLIKELY(b.access != *access)) {
             const QByteArray name = buf->name();
             qWarning("Buffer %p (%s) used with different accesses within the same pass, this is not allowed.",
                      buf, name.constData());
             return;
         }
-        if (it->stage != *stage) {
-            it->stage = earlierStage(it->stage, *stage);
-            *stage = it->stage;
+        if (b.stage != *stage) {
+            b.stage = earlierStage(b.stage, *stage);
+            *stage = b.stage;
         }
         return;
     }
@@ -11785,23 +11843,24 @@ void QRhiPassResourceTracker::registerTexture(QRhiTexture *tex, TextureAccess *a
 {
     auto it = m_textures.find(tex);
     if (it != m_textures.end()) {
-        if (it->access != *access) {
+        Texture &t = it->second;
+        if (t.access != *access) {
             // Different subresources of a texture may be used for both load
             // and store in the same pass. (think reading from one mip level
             // and writing to another one in a compute shader) This we can
             // handle by treating the entire resource as read-write.
-            if (isImageLoadStore(it->access) && isImageLoadStore(*access)) {
-                it->access = QRhiPassResourceTracker::TexStorageLoadStore;
-                *access = it->access;
+            if (Q_LIKELY(isImageLoadStore(t.access) && isImageLoadStore(*access))) {
+                t.access = QRhiPassResourceTracker::TexStorageLoadStore;
+                *access = t.access;
             } else {
                 const QByteArray name = tex->name();
                 qWarning("Texture %p (%s) used with different accesses within the same pass, this is not allowed.",
                          tex, name.constData());
             }
         }
-        if (it->stage != *stage) {
-            it->stage = earlierStage(it->stage, *stage);
-            *stage = it->stage;
+        if (t.stage != *stage) {
+            t.stage = earlierStage(t.stage, *stage);
+            *stage = t.stage;
         }
         return;
     }

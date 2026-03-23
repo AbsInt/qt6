@@ -12,6 +12,8 @@ file(GLOB_RECURSE test_data_glob
     data)
 list(APPEND test_data ${test_data_glob})
 
+add_subdirectory(testprocess)
+
 qt_internal_add_test(tst_qmlls_qqmlcodemodel
     SOURCES
         tst_qmlls_qqmlcodemodel.cpp tst_qmlls_qqmlcodemodel.h
@@ -25,7 +27,11 @@ qt_internal_add_test(tst_qmlls_qqmlcodemodel
     TESTDATA ${test_data}
     DEFINES
         QT_QQMLCODEMODEL_DATADIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+        QT_QQMLCODEMODEL_BUILDDIR="${CMAKE_CURRENT_BINARY_DIR}"
+
 )
+
+add_dependencies(tst_qmlls_qqmlcodemodel tst_qqmlcodemodel_testprocess)
 
 qt_internal_extend_target(tst_qmlls_qqmlcodemodel CONDITION ANDROID OR IOS
     DEFINES

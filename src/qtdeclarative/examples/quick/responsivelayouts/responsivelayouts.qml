@@ -9,7 +9,7 @@ Window {
     id: appWindow
 
     visible: true
-    title: qsTr(`Responsive layouts with LayoutItemProxy: ${grid.columns} columns`)
+    title: qsTr("Responsive layouts with LayoutItemProxy: %n columns", "", grid.columns)
 
     minimumHeight: 320
     minimumWidth: 240

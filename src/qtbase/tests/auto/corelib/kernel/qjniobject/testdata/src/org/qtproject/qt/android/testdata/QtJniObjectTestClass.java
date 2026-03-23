@@ -137,6 +137,10 @@ public class QtJniObjectTestClass
     public Throwable throwableMethod() { return staticThrowableMethod(); }
 
     // --------------------------------------------------------------------------------------------
+    public static void staticThrowingMethod() throws Throwable { throw new Throwable(A_STRING_OBJECT); }
+    public void throwingMethod() throws Throwable { throw new Throwable(A_STRING_OBJECT); }
+
+    // --------------------------------------------------------------------------------------------
     public static Object[] staticObjectArrayMethod()
     { Object[] array = { new Object(), new Object(), new Object() }; return array; }
     public Object[] objectArrayMethod() { return staticObjectArrayMethod(); }

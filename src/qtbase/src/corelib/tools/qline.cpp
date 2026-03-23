@@ -509,7 +509,8 @@ QDataStream &operator>>(QDataStream &stream, QLine &line)
     Returns a line that is perpendicular to this line with the same starting
     point and length.
 
-    \image qlinef-normalvector.png
+    \image qlinef-normalvector.png {Diagram showing two vectors with the same
+           starting point: (v_x, v_y) and (vy, -vx).}
 
     \sa unitVector()
 */

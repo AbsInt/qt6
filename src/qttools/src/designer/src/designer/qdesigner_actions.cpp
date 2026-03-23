@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qdesigner_actions.h"
+#include "helpclient.h"
 #include "designer_enums.h"
 #include <qdesigner_utils_p.h>
 #include "qdesigner.h"
@@ -16,7 +17,6 @@
 
 #include <pluginmanager_p.h>
 #include <qdesigner_formbuilder_p.h>
-#include <qdesigner_utils_p.h>
 #include <iconloader_p.h>
 #include <previewmanager_p.h>
 #include <codedialog_p.h>
@@ -74,11 +74,10 @@
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qsavefile.h>
-#include <QtCore/qscopedpointer.h>
 #include <QtXml/qdom.h>
 
 #include <algorithm>
-
+#include <memory>
 #include <optional>
 
 QT_BEGIN_NAMESPACE
@@ -91,14 +90,16 @@ const char *QDesignerActions::defaultToolbarPropertyName = "__qt_defaultToolBarA
 #  define NONMODAL_PREVIEW
 //#endif
 
-static QAction *createSeparator(QObject *parent) {
-    QAction * rc = new QAction(parent);
+static QAction *createSeparator(QObject *parent)
+{
+    auto *rc = new QAction(parent);
     rc->setSeparator(true);
     return rc;
 }
 
-static QActionGroup *createActionGroup(QObject *parent, bool exclusive = false) {
-    QActionGroup * rc = new QActionGroup(parent);
+static QActionGroup *createActionGroup(QObject *parent, bool exclusive = false)
+{
+    auto *rc = new QActionGroup(parent);
     rc->setExclusive(exclusive);
     return rc;
 }
@@ -127,7 +128,7 @@ static QByteArray formWindowContents(const QDesignerFormWindowInterface *fw,
 {
     QString contents = alternativeDir.has_value()
         ? fixResourceFileBackupPath(fw, alternativeDir.value()) : fw->contents();
-    if (auto *fwb = qobject_cast<const qdesigner_internal::FormWindowBase *>(fw)) {
+    if (const auto *fwb = qobject_cast<const qdesigner_internal::FormWindowBase *>(fw)) {
         if (fwb->lineTerminatorMode() == qdesigner_internal::FormWindowBase::CRLFLineTerminator)
             contents.replace(u'\n', "\r\n"_L1);
     }
@@ -136,18 +137,19 @@ static QByteArray formWindowContents(const QDesignerFormWindowInterface *fw,
 
 QFileDialog *createSaveAsDialog(QWidget *parent, const QString &dir, const QString &extension)
 {
-    auto result = new QFileDialog(parent, QDesignerActions::tr("Save Form As"),
-                                  dir, fileDialogFilters(extension));
+    auto *result = new QFileDialog(parent, QDesignerActions::tr("Save Form As"),
+                                   dir, fileDialogFilters(extension));
     result->setAcceptMode(QFileDialog::AcceptSave);
     result->setDefaultSuffix(extension);
     return result;
 }
 
-QDesignerActions::QDesignerActions(QDesignerWorkbench *workbench)
+QDesignerActions::QDesignerActions(const Options &options, QDesignerWorkbench *workbench)
     : QObject(workbench),
       m_workbench(workbench),
       m_core(workbench->core()),
       m_settings(workbench->core()),
+      m_helpClient(HelpClient::create(options.helpMode)),
       m_backupTimer(new QTimer(this)),
       m_fileActions(createActionGroup(this)),
       m_recentFilesActions(createActionGroup(this)),
@@ -187,7 +189,7 @@ QDesignerActions::QDesignerActions(QDesignerWorkbench *workbench)
       m_appFontAction(new QAction(tr("Additional Fonts..."), this))
 {
     Q_ASSERT(m_core != nullptr);
-    qdesigner_internal::QDesignerFormWindowManager *ifwm = qobject_cast<qdesigner_internal::QDesignerFormWindowManager *>(m_core->formWindowManager());
+    auto *ifwm = qobject_cast<qdesigner_internal::QDesignerFormWindowManager *>(m_core->formWindowManager());
     Q_ASSERT(ifwm);
     m_previewManager = ifwm->previewManager();
     m_previewFormAction = ifwm->action(QDesignerFormWindowManagerInterface::DefaultPreviewAction);
@@ -436,14 +438,14 @@ QActionGroup *QDesignerActions::createHelpActions()
     QActionGroup *helpActions = createActionGroup(this);
 
 #ifndef QT_JAMBI_BUILD
-    QAction *mainHelpAction = new QAction(tr("Qt Widgets Designer &Help"), this);
+    auto *mainHelpAction = new QAction(tr("Qt Widgets Designer &Help"), this);
     mainHelpAction->setObjectName(u"__qt_designer_help_action"_s);
     connect(mainHelpAction, &QAction::triggered, this, &QDesignerActions::showDesignerHelp);
     mainHelpAction->setShortcut(Qt::CTRL | Qt::Key_Question);
     helpActions->addAction(mainHelpAction);
 
     helpActions->addAction(createSeparator(this));
-    QAction *widgetHelp = new QAction(tr("Current Widget Help"), this);
+    auto *widgetHelp = new QAction(tr("Current Widget Help"), this);
     widgetHelp->setObjectName(u"__qt_current_widget_help_action"_s);
     widgetHelp->setShortcut(Qt::Key_F1);
     connect(widgetHelp, &QAction::triggered, this, &QDesignerActions::showWidgetSpecificHelp);
@@ -452,20 +454,20 @@ QActionGroup *QDesignerActions::createHelpActions()
 #endif
 
     helpActions->addAction(createSeparator(this));
-    QAction *aboutPluginsAction = new QAction(tr("About Plugins"), this);
+    auto *aboutPluginsAction = new QAction(tr("About Plugins"), this);
     aboutPluginsAction->setObjectName(u"__qt_about_plugins_action"_s);
     aboutPluginsAction->setMenuRole(QAction::ApplicationSpecificRole);
     connect(aboutPluginsAction, &QAction::triggered,
             m_core->formWindowManager(), &QDesignerFormWindowManagerInterface::showPluginDialog);
     helpActions->addAction(aboutPluginsAction);
 
-    QAction *aboutDesignerAction = new QAction(tr("About Qt Widgets Designer"), this);
+    auto *aboutDesignerAction = new QAction(tr("About Qt Widgets Designer"), this);
     aboutDesignerAction->setMenuRole(QAction::AboutRole);
     aboutDesignerAction->setObjectName(u"__qt_about_designer_action"_s);
     connect(aboutDesignerAction, &QAction::triggered, this, &QDesignerActions::aboutDesigner);
     helpActions->addAction(aboutDesignerAction);
 
-    QAction *aboutQtAction = new QAction(tr("About Qt"), this);
+    auto *aboutQtAction = new QAction(tr("About Qt"), this);
     aboutQtAction->setMenuRole(QAction::AboutQtRole);
     aboutQtAction->setObjectName(u"__qt_about_qt_action"_s);
     connect(aboutQtAction, &QAction::triggered, qApp, &QApplication::aboutQt);
@@ -491,20 +493,20 @@ QString QDesignerActions::uiExtension() const
 
 QAction *QDesignerActions::createRecentFilesMenu()
 {
-    m_recentMenu.reset(new QMenu);
-    QAction *act;
+    m_recentMenu = std::make_unique<QMenu>();
+
     // Need to insert this into the QAction.
     for (int i = 0; i < MaxRecentFiles; ++i) {
-        act = new QAction(this);
-        act->setVisible(false);
-        connect(act, &QAction::triggered, this, &QDesignerActions::openRecentForm);
-        m_recentFilesActions->addAction(act);
-        m_recentMenu->addAction(act);
+        auto *recentAct = new QAction(this);
+        recentAct->setVisible(false);
+        connect(recentAct, &QAction::triggered, this, &QDesignerActions::openRecentForm);
+        m_recentFilesActions->addAction(recentAct);
+        m_recentMenu->addAction(recentAct);
     }
     updateRecentFileActions();
     m_recentMenu->addSeparator();
-    act = new QAction(QIcon::fromTheme(QIcon::ThemeIcon::EditClear),
-                      tr("Clear &Menu"), this);
+    auto *act = new QAction(QIcon::fromTheme(QIcon::ThemeIcon::EditClear),
+                            tr("Clear &Menu"), this);
     act->setObjectName(u"__qt_action_clear_menu_"_s);
     connect(act, &QAction::triggered, this, &QDesignerActions::clearRecentFiles);
     m_recentFilesActions->addAction(act);
@@ -570,7 +572,7 @@ void QDesignerActions::createForm()
 void QDesignerActions::showNewFormDialog(const QString &fileName)
 {
     closePreview();
-    NewForm *dlg = new NewForm(workbench(), workbench()->core()->topLevel(), fileName);
+    auto *dlg = new NewForm(workbench(), workbench()->core()->topLevel(), fileName);
 
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     dlg->setAttribute(Qt::WA_ShowModal);
@@ -626,7 +628,7 @@ bool QDesignerActions::saveFormAs(QDesignerFormWindowInterface *fw)
         dir += extension;
     }
 
-    QScopedPointer<QFileDialog> saveAsDialog(createSaveAsDialog(fw, dir, extension));
+    std::unique_ptr<QFileDialog> saveAsDialog(createSaveAsDialog(fw, dir, extension));
     if (saveAsDialog->exec() != QDialog::Accepted)
         return false;
 
@@ -673,12 +675,7 @@ void QDesignerActions::saveAllForms()
 
 bool QDesignerActions::saveForm(QDesignerFormWindowInterface *fw)
 {
-    bool ret;
-    if (fw->fileName().isEmpty())
-        ret = saveFormAs(fw);
-    else
-        ret =  writeOutForm(fw, fw->fileName());
-    return ret;
+    return fw->fileName().isEmpty() ? saveFormAs(fw) : writeOutForm(fw, fw->fileName());
 }
 
 void QDesignerActions::closeForm()
@@ -690,7 +687,7 @@ void QDesignerActions::closeForm()
 
     if (QDesignerFormWindowInterface *fw = core()->formWindowManager()->activeFormWindow())
         if (QWidget *parent = fw->parentWidget()) {
-            if (QMdiSubWindow *mdiSubWindow = qobject_cast<QMdiSubWindow *>(parent->parentWidget())) {
+            if (auto *mdiSubWindow = qobject_cast<QMdiSubWindow *>(parent->parentWidget())) {
                 mdiSubWindow->close();
             } else {
                 parent->close();
@@ -758,40 +755,39 @@ bool QDesignerActions::readInForm(const QString &fileName)
             addRecentFile(fn);
             m_openDirectory = QFileInfo(fn).absolutePath();
             return true;
-        } else {
-            // prompt to reload
-            QMessageBox box(QMessageBox::Warning, tr("Read error"),
-                            tr("%1\nDo you want to update the file location or generate a new form?").arg(errorMessage),
-                            QMessageBox::Cancel, core()->topLevel());
+        }
 
-            QPushButton *updateButton = box.addButton(tr("&Update"), QMessageBox::ActionRole);
-            QPushButton *newButton    = box.addButton(tr("&New Form"), QMessageBox::ActionRole);
-            box.exec();
-            if (box.clickedButton() == box.button(QMessageBox::Cancel))
+        // prompt to reload
+        QMessageBox box(QMessageBox::Warning, tr("Read error"),
+                        tr("%1\nDo you want to update the file location or generate a new form?").arg(errorMessage),
+                        QMessageBox::Cancel, core()->topLevel());
+
+        QPushButton *updateButton = box.addButton(tr("&Update"), QMessageBox::ActionRole);
+        QPushButton *newButton    = box.addButton(tr("&New Form"), QMessageBox::ActionRole);
+        box.exec();
+        if (box.clickedButton() == box.button(QMessageBox::Cancel))
+            return false;
+
+        if (box.clickedButton() == updateButton) {
+            fn = QFileDialog::getOpenFileName(core()->topLevel(),
+                                              tr("Open Form"), m_openDirectory,
+                                              fileDialogFilters(uiExtension()), nullptr);
+
+            if (fn.isEmpty())
                 return false;
-
-            if (box.clickedButton() == updateButton) {
-                const QString extension = uiExtension();
-                fn = QFileDialog::getOpenFileName(core()->topLevel(),
-                                                  tr("Open Form"), m_openDirectory,
-                                                  fileDialogFilters(extension), nullptr);
-
-                if (fn.isEmpty())
-                    return false;
-            } else if (box.clickedButton() == newButton) {
-                // If the file does not exist, but its directory, is valid, open the template with the editor file name set to it.
-                // (called from command line).
-                QString newFormFileName;
-                const  QFileInfo fInfo(fn);
-                if (!fInfo.exists()) {
-                    // Normalize file name
-                    const QString directory = fInfo.absolutePath();
-                    if (QDir(directory).exists())
-                        newFormFileName = directory + u'/' + fInfo.fileName();
-                }
-                showNewFormDialog(newFormFileName);
-                return false;
+        } else if (box.clickedButton() == newButton) {
+            // If the file does not exist, but its directory, is valid, open the template with the editor file name set to it.
+            // (called from command line).
+            QString newFormFileName;
+            const  QFileInfo fInfo(fn);
+            if (!fInfo.exists()) {
+                // Normalize file name
+                const QString directory = fInfo.absolutePath();
+                if (QDir(directory).exists())
+                    newFormFileName = directory + u'/' + fInfo.fileName();
             }
+            showNewFormDialog(newFormFileName);
+            return false;
         }
     } while (true);
     return true;
@@ -830,7 +826,8 @@ bool QDesignerActions::writeOutForm(QDesignerFormWindowInterface *fw, const QStr
         if (box.clickedButton() == cancelButton)
             return false;
         if (box.clickedButton() == switchButton) {
-            QScopedPointer<QFileDialog> saveAsDialog(createSaveAsDialog(fw, QDir::currentPath(), uiExtension()));
+            std::unique_ptr<QFileDialog> saveAsDialog(
+                createSaveAsDialog(fw, QDir::currentPath(), uiExtension()));
             if (saveAsDialog->exec() != QDialog::Accepted)
                 return false;
 
@@ -922,7 +919,7 @@ void QDesignerActions::updateRecentFileActions()
 
 void QDesignerActions::openRecentForm()
 {
-    if (const QAction *action = qobject_cast<const QAction *>(sender())) {
+    if (const auto *action = qobject_cast<const QAction *>(sender())) {
         if (!readInForm(action->iconText()))
             updateRecentFileActions(); // File doesn't exist, remove it from settings
     }
@@ -968,22 +965,18 @@ QAction *QDesignerActions::minimizeAction() const
 
 void QDesignerActions::showDesignerHelp()
 {
-    QString url = AssistantClient::designerManualUrl();
-    url += "qtdesigner-manual.html"_L1;
-    showHelp(url);
+    showHelp(m_helpClient->designerManualUrl() +  "qtdesigner-manual.html"_L1);
 }
 
 void QDesignerActions::helpRequested(const QString &manual, const QString &document)
 {
-    QString url = AssistantClient::documentUrl(manual);
-    url += document;
-    showHelp(url);
+    showHelp(m_helpClient->documentUrl(manual) + document);
 }
 
 void QDesignerActions::showHelp(const QString &url)
 {
     QString errorMessage;
-    if (!m_assistantClient.showPage(url, &errorMessage))
+    if (!m_helpClient->showPage(url, &errorMessage))
         QMessageBox::warning(core()->topLevel(), tr("Assistant"), errorMessage);
 }
 
@@ -1014,7 +1007,7 @@ void QDesignerActions::showWidgetSpecificHelp()
     }
 
     QString errorMessage;
-    const bool rc = m_assistantClient.activateIdentifier(helpId, &errorMessage);
+    const bool rc = m_helpClient->activateIdentifier(helpId, &errorMessage);
     if (!rc)
         QMessageBox::warning(core()->topLevel(), tr("Assistant"), errorMessage);
 }

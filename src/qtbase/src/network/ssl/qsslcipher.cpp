@@ -33,9 +33,6 @@
 
 QT_BEGIN_NAMESPACE
 
-static_assert(QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
-           && sizeof(QScopedPointer<QSslCipherPrivate>) == sizeof(std::unique_ptr<QSslCipherPrivate>));
-
 /*!
     Constructs an empty QSslCipher object.
 */

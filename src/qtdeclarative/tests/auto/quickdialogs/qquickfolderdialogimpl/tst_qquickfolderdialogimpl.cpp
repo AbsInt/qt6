@@ -367,6 +367,7 @@ void tst_QQuickFolderDialogImpl::changeFolderViaTextEdit()
     auto breadcrumbBar = dialogHelper.quickDialog->findChild<QQuickFolderBreadcrumbBar*>();
     QVERIFY(breadcrumbBar);
     QVERIFY(breadcrumbBar->textField()->isVisible());
+    QTRY_VERIFY(breadcrumbBar->textField()->hasActiveFocus());
     QCOMPARE(breadcrumbBar->textField()->text(), dialogHelper.dialog->currentFolder().toLocalFile());
     QCOMPARE(breadcrumbBar->textField()->selectedText(), breadcrumbBar->textField()->text());
 
@@ -407,7 +408,7 @@ void tst_QQuickFolderDialogImpl::changeFolderViaEnter()
     QQuickFileDialogDelegate *subDir1Delegate = nullptr;
     QTRY_VERIFY(findViewDelegateItem(folderDialogListView, 0, subDir1Delegate));
     COMPARE_URL(subDir1Delegate->file(), QUrl::fromLocalFile(tempSubDir1CanonicalPath));
-    QVERIFY_ACTIVE_FOCUS(subDir1Delegate);
+    QTRY_VERIFY_ACTIVE_FOCUS(subDir1Delegate);
 
     // Select the delegate by pressing enter.
     const FolderDialogSignalHelper signalHelper(dialogHelper);
@@ -525,11 +526,12 @@ void tst_QQuickFolderDialogImpl::goUpWhileTextEditHasFocus()
     QVERIFY(clickButton(breadcrumbBar->upButton()));
     // The path should have changed to the parent directory.
     COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempDirCanonicalPath));
+
     // The text edit should be hidden when it loses focus.
     QVERIFY(!breadcrumbBar->textField()->hasActiveFocus());
     QVERIFY(!breadcrumbBar->textField()->isVisible());
     // The focus should be given to the first delegate.
-    QVERIFY(dialogHelper.popupWindow()->activeFocusItem());
+    QTRY_VERIFY(dialogHelper.popupWindow()->activeFocusItem());
     auto folderDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("folderDialogListView");
     QVERIFY(folderDialogListView);
     QQuickFileDialogDelegate *firstDelegate = nullptr;
@@ -643,6 +645,7 @@ void tst_QQuickFolderDialogImpl::keyAndShortcutHandling()
 #endif
     auto breadcrumbBar = dialogHelper.quickDialog->findChild<QQuickFolderBreadcrumbBar*>();
     QVERIFY(breadcrumbBar);
+    QTRY_VERIFY_ACTIVE_FOCUS(breadcrumbBar->textField());
     QVERIFY(breadcrumbBar->textField()->isVisible());
     QCOMPARE(breadcrumbBar->textField()->text(), dialogHelper.dialog->currentFolder().toLocalFile());
     QCOMPARE(breadcrumbBar->textField()->selectedText(), breadcrumbBar->textField()->text());

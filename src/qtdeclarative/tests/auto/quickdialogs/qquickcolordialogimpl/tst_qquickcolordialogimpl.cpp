@@ -289,6 +289,10 @@ void tst_QQuickColorDialogImpl::moveColorPickerHandle()
                 qPrintable(colorComparisonErrorString.arg("red")
                 .arg(QColorConstants::Cyan.red())
                 .arg(colorPicker->color().red())));
+
+    if (QSysInfo::productType() == "opensuse-leap" && QSysInfo::productVersion() == QLatin1String("16.0"))
+        QEXPECT_FAIL("", "QTBUG-142386: opensuse-leap 16.0 fails", Continue);
+
     FUZZYCOMPARE(colorPicker->color().green(), QColorConstants::Cyan.green(), 3,
                 qPrintable(colorComparisonErrorString.arg("green")
                 .arg(QColorConstants::Cyan.green())
@@ -463,7 +467,7 @@ void tst_QQuickColorDialogImpl::changeHex()
     // Modify the value in the TextField to something else.
     colorTextField->forceActiveFocus();
     colorTextField->select(1, colorTextField->text().size());
-    QVERIFY_ACTIVE_FOCUS(colorTextField);
+    QTRY_VERIFY_ACTIVE_FOCUS(colorTextField);
     QTest::keyClick(dialogHelper.popupWindow(), Qt::Key_Backspace);
     QTest::keyClick(dialogHelper.popupWindow(), '0');
     QTest::keyClick(dialogHelper.popupWindow(), '0');
@@ -629,11 +633,6 @@ void tst_QQuickColorDialogImpl::workingInsideQQuickViewer() // QTBUG-106598
 
 void tst_QQuickColorDialogImpl::dialogCanMoveBetweenWindows()
 {
-#ifdef Q_OS_WINDOWS
-    // QTBUG-141162
-    QSKIP("Crashes on windows");
-#endif
-
     DialogTestHelper<QQuickColorDialog, QQuickColorDialogImpl> dialogHelper(this, "windowSwapping.qml");
     QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
     QVERIFY(dialogHelper.waitForWindowActive());

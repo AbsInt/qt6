@@ -69,6 +69,7 @@ how to accomplish this.
 \li \l{cmake-target-property-QT_ANDROID_APP_ICON}{QT_ANDROID_APP_ICON}
 \li \l{cmake-target-property-QT_ANDROID_VERSION_NAME}{QT_ANDROID_VERSION_NAME}
 \li \l{cmake-target-property-QT_ANDROID_VERSION_CODE}{QT_ANDROID_VERSION_CODE}
+\li \l{cmake-target-property-QT_ANDROID_LEGACY_PACKAGING}{QT_ANDROID_LEGACY_PACKAGING}
 \li \l{cmake-target-property-QT_QML_IMPORT_PATH}{QT_QML_IMPORT_PATH}
 \li \l{cmake-target-property-QT_QML_ROOT_PATH}{QT_QML_ROOT_PATH}
 \li \l{cmake-target-property-qt_no_entrypoint}{qt_no_entrypoint}

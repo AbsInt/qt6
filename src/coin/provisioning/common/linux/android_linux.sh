@@ -6,7 +6,7 @@
 
 # It also runs update for SDK API, latest SDK tools, latest platform-tools and build-tools version
 
-set -e
+set -ex
 
 # shellcheck source=../unix/DownloadURL.sh
 source "${BASH_SOURCE%/*}/../unix/DownloadURL.sh"
@@ -22,19 +22,24 @@ sudo mkdir -p "$sdkTargetFolder"
 
 basePath="http://ci-files01-hki.ci.qt.io/input/android"
 
-toolsVersion="2.1"
-toolsFile="commandlinetools-linux-6609375_latest.zip"
+toolsVersion="19.0"
+toolsFile="commandlinetools-linux-13114758_latest.zip"
+toolsBackupUrl="https://dl.google.com/android/repository/$toolsFile"
 sdkBuildToolsVersion="36.0.0"
 sdkApiLevel="android-36"
-toolsSha1="9172381ff070ee2a416723c1989770cf4b0d1076"
+toolsSha1="5fdcc763663eefb86a5b8879697aa6088b041e70"
 
 ndkVersionLatest="r27c"
 ndkSha1Latest="090e8083a715fdb1a3e402d0763c388abb03fb4e"
 
+# Preview NDK that is in alpha/beta/RC state
+ndkVersionPreview="r29-beta2"
+ndkSha1Preview="06c29d6764526fb51407d08fcead41247ddd3b70"
+
 # Non-latest (but still supported by the qt/qt5 branch) NDKs are installed for nightly targets in:
 # coin/platform_configs/nightly_android.yaml
 
-ndkVersionNightly1=$ndkVersionLatest  # Same version = skip NDK install for nightly
+ndkVersionNightly1=$ndkVersionLatest  # Set as same version as latest = skip NDK install in provisioning
 ndkSha1Nightly1=$ndkSha1Latest
 
 ndkVersionNightly2=$ndkVersionLatest
@@ -53,10 +58,16 @@ toolsTargetFile="/tmp/$toolsFile"
 toolsSourceFile="$basePath/$toolsFile"
 
 echo "Download and unzip Android SDK"
-DownloadURL "$toolsSourceFile" "$toolsSourceFile" "$toolsSha1" "$toolsTargetFile"
+DownloadURL "$toolsSourceFile" "$toolsBackupUrl" "$toolsSha1" "$toolsTargetFile"
 echo "Unzipping Android Tools to '$sdkTargetFolder'"
 sudo unzip -q "$toolsTargetFile" -d "$sdkTargetFolder"
 rm "$toolsTargetFile"
+
+# Android Command-Line Tools unpacks a directory 'cmdline-tools'. Due
+# to existing code, we need to move it into 'cmdline-tools/tools'
+sudo mv "$sdkTargetFolder/cmdline-tools" "$sdkTargetFolder/tools"
+sudo mkdir "$sdkTargetFolder/cmdline-tools"
+sudo mv "$sdkTargetFolder/tools" "$sdkTargetFolder/cmdline-tools"
 
 function InstallNdk() {
 
@@ -78,6 +89,11 @@ function InstallNdk() {
 
 InstallNdk $ndkVersionLatest $ndkSha1Latest
 SetEnvVar "ANDROID_NDK_ROOT_LATEST" "$androidNdkRoot"
+
+if [ "$ndkVersionPreview" != "$ndkVersionLatest" ]; then
+    InstallNdk $ndkVersionPreview $ndkSha1Preview
+    SetEnvVar "ANDROID_NDK_ROOT_PREVIEW" "$androidNdkRoot"
+fi
 
 if [ "$ndkVersionNightly1" != "$ndkVersionLatest" ]; then
     InstallNdk $ndkVersionNightly1 $ndkSha1Nightly1
@@ -106,9 +122,6 @@ sdkmanager_no_progress_bar_cmd="tr '\r' '\n'  |  grep -v '^\[[ =]*\]'"
 # But don't let the pipeline hide sdkmanager failures.
 set -o pipefail
 
-sudo mkdir "$sdkTargetFolder/cmdline-tools"
-sudo mv "$sdkTargetFolder/tools" "$sdkTargetFolder/cmdline-tools"
-
 echo "Running SDK manager for platforms;$sdkApiLevel, platform-tools and build-tools;$sdkBuildToolsVersion."
 # shellcheck disable=SC2031
 if [ "$http_proxy" != "" ]; then
@@ -136,7 +149,9 @@ cat >>~/versions.txt <<EOB
 Android SDK tools = $toolsVersion
 Android SDK Build Tools = $sdkBuildToolsVersion
 Android SDK API level = $sdkApiLevel
-Android NDK = $ndkVersion
+Android NDK latest = $ndkVersionLatest
+Android NDK nightly1 = $ndkVersionNightly1
+Android NDK nightly2 = $ndkVersionNightly2
 EOB
 
 cd "$sdkTargetFolder/cmdline-tools/tools/bin"
@@ -213,7 +228,7 @@ echo "no" | ./avdmanager create avd -n automotive_emulator_x86_64_api_29 -c 2048
 # To be used by the VMs to start the emulator for tests
 emulator_script_filename="android_emulator_launcher.sh"
 scripts_dir_name="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
-cp "${scripts_dir_name}/${emulator_script_filename}" "${HOME}"
+cp "${scripts_dir_name}/../unix/${emulator_script_filename}" "${HOME}"
 ANDROID_EMULATOR_RUNNER="${HOME}/${emulator_script_filename}"
 SetEnvVar "ANDROID_EMULATOR_RUNNER" "$ANDROID_EMULATOR_RUNNER"
 
@@ -226,7 +241,7 @@ cp -r "${scripts_dir_name}/android/gradle_project" /tmp/gradle_project
 cd /tmp/gradle_project
 # Get Gradle files from qtbase
 qtbaseGradleUrl="https://code.qt.io/cgit/qt/qtbase.git/plain/src/3rdparty/gradle"
-commit_sha="5bc160bc8385f6a2e590ffb964d1d390c1ab4ce6"
+commit_sha="269a75dbd1262a714eb238c42e5159a0a8979818"
 curl "$qtbaseGradleUrl/gradle.properties?h=$commit_sha" > gradle.properties
 curl "$qtbaseGradleUrl/gradlew?h=$commit_sha" > gradlew
 curl "$qtbaseGradleUrl/gradlew.bat?h=$commit_sha" > gradlew.bat

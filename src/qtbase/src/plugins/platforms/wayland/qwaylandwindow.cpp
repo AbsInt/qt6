@@ -1,6 +1,8 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
+#include "qwaylandsessionmanager_p.h"
 #include "qwaylandwindow_p.h"
 
 #include "qwaylandbuffer_p.h"
@@ -33,7 +35,6 @@
 
 #include <QtCore/QDebug>
 #include <QtCore/QThread>
-#include <QtCore/private/qthread_p.h>
 
 #include <QtWaylandClient/private/qwayland-fractional-scale-v1.h>
 
@@ -48,6 +49,10 @@ Q_LOGGING_CATEGORY(lcWaylandBackingstore, "qt.qpa.wayland.backingstore")
 QWaylandWindow *QWaylandWindow::mMouseGrab = nullptr;
 QWaylandWindow *QWaylandWindow::mTopPopup = nullptr;
 
+/*!
+    \class QtWaylandClient::QWaylandWindow
+    \internal
+*/
 QWaylandWindow::QWaylandWindow(QWindow *window, QWaylandDisplay *display)
     : QPlatformWindow(window)
     , mDisplay(display)
@@ -102,9 +107,6 @@ void QWaylandWindow::ensureSize()
 void QWaylandWindow::initWindow()
 {
     resetFrameCallback();
-
-    if (window()->type() == Qt::Desktop)
-        return;
 
     if (shouldCreateSubSurface()) {
         Q_ASSERT(!mSubSurfaceWindow);
@@ -490,14 +492,13 @@ void QWaylandWindow::setGeometry(const QRect &r)
     }
     setGeometry_helper(rect);
 
-    if (mShellSurface) {
-        if (!mInResizeFromApplyConfigure) {
-            const QRect frameGeometry = r.marginsAdded(clientSideMargins()).marginsRemoved(windowContentMargins());
-            if (qt_window_private(window())->positionAutomatic)
-                mShellSurface->setWindowSize(frameGeometry.size());
-            else
-                mShellSurface->setWindowGeometry(frameGeometry);
-        }
+    if (mShellSurface && !mInResizeFromApplyConfigure) {
+        const QRect frameGeometry = r.marginsAdded(clientSideMargins()).marginsRemoved(windowContentMargins());
+        if (qt_window_private(window())->positionAutomatic || m_popupInfo.parentControlGeometry.isValid())
+            mShellSurface->setWindowSize(frameGeometry.size());
+
+        else
+            mShellSurface->setWindowGeometry(frameGeometry);
     }
 
     if (mShellSurface)
@@ -513,7 +514,6 @@ void QWaylandWindow::setGeometry(const QRect &r)
             mWindowDecoration->update();
 
         QWindowSystemInterface::handleGeometryChange<QWindowSystemInterface::SynchronousDelivery>(window(), geometry());
-        mSentInitialResize = true;
     }
 
     // Wayland has no concept of areas being exposed or not, only the entire window, when our geometry changes, we need to flag the new area as exposed
@@ -713,7 +713,7 @@ void QWaylandWindow::applyConfigureWhenPossible()
 {
     if (!mWaitingToApplyConfigure) {
         mWaitingToApplyConfigure = true;
-        QMetaObject::invokeMethod(this, "applyConfigure", Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, &QWaylandWindow::applyConfigure, Qt::QueuedConnection);
     }
 }
 
@@ -722,7 +722,7 @@ void QWaylandWindow::applyConfigure()
     if (!mWaitingToApplyConfigure)
         return;
 
-    Q_ASSERT_X(QThread::currentThreadId() == QThreadData::get2(thread())->threadId.loadRelaxed(),
+    Q_ASSERT_X(QThread::isMainThread(),
                "QWaylandWindow::applyConfigure", "not called from main thread");
 
     // If we're mid paint, use an exposeEvent to flush the current frame.
@@ -893,7 +893,6 @@ bool QWaylandWindow::waitForFrameSync(int timeout)
     if (mWaitingForFrameCallback) {
         qCDebug(lcWaylandBackingstore) << "Didn't receive frame callback in time, window should now be inexposed";
         mFrameCallbackTimedOut = true;
-        mWaitingForUpdate = false;
         QMetaObject::invokeMethod(this, &QWaylandWindow::updateExposure, Qt::QueuedConnection);
     }
 
@@ -1091,7 +1090,7 @@ Qt::WindowFlags QWaylandWindow::windowFlags() const
 
 bool QWaylandWindow::createDecoration()
 {
-    Q_ASSERT_X(QThread::currentThreadId() == QThreadData::get2(thread())->threadId.loadRelaxed(),
+    Q_ASSERT_X(QThread::isMainThread(),
                "QWaylandWindow::createDecoration", "not called from main thread");
     // TODO: client side decorations do not work with Vulkan backend.
     if (window()->surfaceType() == QSurface::VulkanSurface)
@@ -1755,7 +1754,6 @@ void QWaylandWindow::timerEvent(QTimerEvent *event)
 
     qCDebug(lcWaylandBackingstore) << "Didn't receive frame callback in time, window should now be inexposed";
     mFrameCallbackTimedOut = true;
-    mWaitingForUpdate = false;
     updateExposure();
 }
 
@@ -1770,13 +1768,6 @@ void QWaylandWindow::requestUpdate()
         if (mWaitingForFrameCallback)
             return;
     }
-
-    // If we've already called deliverUpdateRequest(), but haven't seen any attach+commit/swap yet
-    // This is a somewhat redundant behavior and might indicate a bug in the calling code, so log
-    // here so we can get this information when debugging update/frame callback issues.
-    // Continue as nothing happened, though.
-    if (mWaitingForUpdate)
-        qCDebug(lcWaylandBackingstore) << "requestUpdate called twice without committing anything";
 
     // Some applications (such as Qt Quick) depend on updates being delivered asynchronously,
     // so use invokeMethod to delay the delivery a bit.
@@ -1815,7 +1806,6 @@ void QWaylandWindow::handleUpdate()
     wl_proxy_wrapper_destroy(wrappedSurface);
     wl_callback_add_listener(mFrameCallback, &QWaylandWindow::callbackListener, this);
     mWaitingForFrameCallback = true;
-    mWaitingForUpdate = false;
 
     // Start a timer for handling the case when the compositor stops sending frame callbacks.
     if (mFrameCallbackTimeout > 0) {
@@ -1834,7 +1824,6 @@ void QWaylandWindow::handleUpdate()
 void QWaylandWindow::deliverUpdateRequest()
 {
     qCDebug(lcWaylandBackingstore) << "deliverUpdateRequest";
-    mWaitingForUpdate = true;
     QPlatformWindow::deliverUpdateRequest();
 }
 
@@ -1957,6 +1946,37 @@ bool QWaylandWindow::windowEvent(QEvent *event)
 QSurfaceFormat QWaylandWindow::format() const
 {
     return mSurfaceFormat;
+}
+
+void QWaylandWindow::setSessionRestoreId(const QString &role)
+{
+    mSessionRestoreId = role;
+}
+
+QString QWaylandWindow::sessionRestoreId() const
+{
+    return mSessionRestoreId;
+}
+
+void QWaylandWindow::setExtendedWindowType(QNativeInterface::Private::QWaylandWindow::WindowType windowType) {
+    m_popupInfo.extendedWindowType = windowType;
+}
+
+QNativeInterface::Private::QWaylandWindow::WindowType QWaylandWindow::extendedWindowType() const
+{
+    return m_popupInfo.extendedWindowType;
+}
+
+void QWaylandWindow::setParentControlGeometry(const QRect &parentControlGeometry) {
+    m_popupInfo.parentControlGeometry = parentControlGeometry;
+    if (mExposed) {
+        mShellSurface->setWindowPosition(window()->position());
+    }
+}
+
+QRect QWaylandWindow::parentControlGeometry() const
+{
+    return m_popupInfo.parentControlGeometry;
 }
 
 }

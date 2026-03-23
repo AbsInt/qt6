@@ -43,6 +43,14 @@ void QQuickShapeSoftwareRenderer::setStrokeWidth(int index, qreal w)
     m_accDirty |= DirtyPen;
 }
 
+void QQuickShapeSoftwareRenderer::setCosmeticStroke(int index, bool c)
+{
+    ShapePathGuiData &d(m_sp[index]);
+    d.pen.setCosmetic(c);
+    d.dirty |= DirtyPen;
+    m_accDirty |= DirtyPen;
+}
+
 void QQuickShapeSoftwareRenderer::setFillColor(int index, const QColor &color)
 {
     ShapePathGuiData &d(m_sp[index]);
@@ -78,7 +86,7 @@ void QQuickShapeSoftwareRenderer::setCapStyle(int index, QQuickShapePath::CapSty
 }
 
 void QQuickShapeSoftwareRenderer::setStrokeStyle(int index, QQuickShapePath::StrokeStyle strokeStyle,
-                                                    qreal dashOffset, const QVector<qreal> &dashPattern)
+                                                    qreal dashOffset, const QList<qreal> &dashPattern)
 {
     ShapePathGuiData &d(m_sp[index]);
     switch (strokeStyle) {
@@ -159,6 +167,14 @@ void QQuickShapeSoftwareRenderer::setFillTransform(int index, const QSGTransform
     m_accDirty |= DirtyBrush;
 }
 
+void QQuickShapeSoftwareRenderer::setTriangulationScale(int index, qreal scale)
+{
+    ShapePathGuiData &d(m_sp[index]);
+    d.triangulationScale = scale;
+    d.dirty |= DirtyPen;
+    m_accDirty |= DirtyPen;
+}
+
 void QQuickShapeSoftwareRenderer::endSync(bool)
 {
 }
@@ -196,6 +212,7 @@ void QQuickShapeSoftwareRenderer::updateNode()
         if (listChanged || (src.dirty & DirtyPen)) {
             dst.pen = src.pen;
             dst.strokeWidth = src.strokeWidth;
+            dst.triangulationScale = src.triangulationScale;
         }
 
         if (listChanged || (src.dirty & DirtyBrush))
@@ -204,7 +221,9 @@ void QQuickShapeSoftwareRenderer::updateNode()
         src.dirty = 0;
 
         QRectF br = dst.path.boundingRect();
-        const float sw = qMax(1.0f, dst.strokeWidth);
+        float sw = qMax(1.0f, dst.strokeWidth);
+        if (dst.pen.isCosmetic())
+            sw *= 2.0f / dst.triangulationScale;
         br.adjust(-sw, -sw, sw, sw);
         m_node->m_boundingRect |= br;
     }

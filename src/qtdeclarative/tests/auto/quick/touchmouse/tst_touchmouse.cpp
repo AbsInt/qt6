@@ -1029,7 +1029,7 @@ void tst_TouchMouse::pinchOnFlickable()
     QTest::touchEvent(&window, touchscreen.get()).release(0, p, &window);
     QTRY_COMPARE(flickable->isAtXBeginning(), false);
     // wait until flicking is done
-    QTRY_COMPARE(flickable->isFlicking(), false);
+    QTRY_COMPARE_WITH_TIMEOUT(flickable->isFlicking(), false, 2s);
 
     // pinch with two touchpoints
     QPoint p1 = QPoint(40, 20);
@@ -1357,7 +1357,7 @@ void tst_TouchMouse::touchPointDeliveryOrder()
 
     QTest::QTouchEventSequence touchSeq = QTest::touchEvent(&window, touchscreen.get(), false);
 
-    QVector<QQuickItem*> events;
+    QList<QQuickItem*> events;
     EventItem *background = window.rootObject()->findChild<EventItem*>("background");
     EventItem *left = window.rootObject()->findChild<EventItem*>("left");
     EventItem *middle = window.rootObject()->findChild<EventItem*>("middle");

@@ -66,20 +66,14 @@ public:
 
     inline constexpr int count() const { return Count; }
 
-
     inline QDBusPendingReply() = default;
-    inline QDBusPendingReply(const QDBusPendingReply &other)
-        : QDBusPendingReplyBase(other)
-    { }
-    QDBusPendingReply(QDBusPendingReply &&other) noexcept = default;
+    // Rule Of Zero applies!
+
     inline Q_IMPLICIT QDBusPendingReply(const QDBusPendingCall &call) // required by qdbusxml2cpp-generated code
     { *this = call; }
     inline Q_IMPLICIT QDBusPendingReply(const QDBusMessage &message)
     { *this = message; }
 
-    inline QDBusPendingReply &operator=(const QDBusPendingReply &other)
-    { assign(other); return *this; }
-    QDBusPendingReply &operator=(QDBusPendingReply &&other) noexcept = default;
     inline QDBusPendingReply &operator=(const QDBusPendingCall &call)
     { assign(call); return *this; }
     inline QDBusPendingReply &operator=(const QDBusMessage &message)
@@ -149,18 +143,13 @@ public:
     inline int count() const { return Count; }
 
     inline QDBusPendingReply() = default;
-    inline QDBusPendingReply(const QDBusPendingReply &other)
-        : QDBusPendingReplyBase(other)
-    { }
-    QDBusPendingReply(QDBusPendingReply &&other) noexcept = default;
+    // Rule Of Zero applies!
+
     inline Q_IMPLICIT QDBusPendingReply(const QDBusPendingCall &call) // required by qdbusxml2cpp-generated code
     { *this = call; }
     inline Q_IMPLICIT QDBusPendingReply(const QDBusMessage &message)
     { *this = message; }
 
-    inline QDBusPendingReply &operator=(const QDBusPendingReply &other)
-    { assign(other); return *this; }
-    QDBusPendingReply &operator=(QDBusPendingReply &&other) noexcept = default;
     inline QDBusPendingReply &operator=(const QDBusPendingCall &call)
     { assign(call); return *this; }
     inline QDBusPendingReply &operator=(const QDBusMessage &message)

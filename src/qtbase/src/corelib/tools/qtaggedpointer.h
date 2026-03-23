@@ -22,11 +22,11 @@ namespace QtPrivate {
         static_assert((alignment & (alignment - 1)) == 0,
             "Alignment of template parameter must be power of two");
 
-        static constexpr quint8 tagBits = quint8{QtPrivate::qConstexprCountTrailingZeroBits(alignment)};
+        static constexpr quint8 tagBits = quint8(qCountTrailingZeroBits(alignment));
         static_assert(tagBits > 0,
             "Alignment of template parameter does not allow any tags");
 
-        static constexpr size_t tagSize = QtPrivate::qConstexprNextPowerOfTwo(nextByteSize(tagBits));
+        static constexpr size_t tagSize = qNextPowerOfTwo(nextByteSize(tagBits));
         static_assert(tagSize < sizeof(quintptr),
             "Alignment of template parameter allows tags masking away pointer");
 

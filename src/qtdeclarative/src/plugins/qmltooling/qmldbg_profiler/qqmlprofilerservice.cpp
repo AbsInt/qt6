@@ -21,6 +21,11 @@ QT_BEGIN_NAMESPACE
 
 Q_QML_DEBUG_PLUGIN_LOADER(QQmlAbstractProfilerAdapter)
 
+/*!
+    \class QQmlProfilerServiceImpl
+    \inmodule QtQml
+    \internal
+*/
 QQmlProfilerServiceImpl::QQmlProfilerServiceImpl(QObject *parent) :
     QQmlConfigurableDebugService<QQmlProfilerService>(1, parent),
     m_waitingForStop(false), m_globalEnabled(false), m_globalFeatures(0)
@@ -93,11 +98,11 @@ void QQmlProfilerServiceImpl::engineAboutToBeAdded(QJSEngine *engine)
 
     QMutexLocker lock(&m_configMutex);
     if (QQmlEngine *qmlEngine = qobject_cast<QQmlEngine *>(engine)) {
-        QQmlEnginePrivate *enginePrivate = QQmlEnginePrivate::get(qmlEngine);
-        QQmlProfilerAdapter *qmlAdapter = new QQmlProfilerAdapter(this, enginePrivate);
+        QQmlProfilerAdapter *qmlAdapter
+                = new QQmlProfilerAdapter(this, QQmlEnginePrivate::get(qmlEngine));
         addEngineProfiler(qmlAdapter, engine);
         QQmlProfilerAdapter *compileAdapter
-                = new QQmlProfilerAdapter(this, &(enginePrivate->typeLoader));
+                = new QQmlProfilerAdapter(this, QQmlTypeLoader::get(engine));
         addEngineProfiler(compileAdapter, engine);
     }
     QV4ProfilerAdapter *v4Adapter = new QV4ProfilerAdapter(this, engine->handle());
@@ -173,10 +178,13 @@ void QQmlProfilerServiceImpl::addGlobalProfiler(QQmlAbstractProfilerAdapter *pro
     // Global profilers are started whenever any engine profiler is started and stopped when
     // all engine profilers are stopped.
     quint64 features = 0;
-    for (QQmlAbstractProfilerAdapter *engineProfiler : std::as_const(m_engineProfilers))
+    bool anyRunning = false;
+    for (QQmlAbstractProfilerAdapter *engineProfiler : std::as_const(m_engineProfilers)) {
         features |= engineProfiler->features();
+        anyRunning = anyRunning || engineProfiler->isRunning();
+    }
 
-    if (features != 0)
+    if (anyRunning)
         profiler->startProfiling(features);
 }
 

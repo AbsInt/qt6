@@ -12,7 +12,7 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
-QmlGoToDefinitionSupport::QmlGoToDefinitionSupport(QmlLsp::QQmlCodeModel *codeModel)
+QmlGoToDefinitionSupport::QmlGoToDefinitionSupport(QmlLsp::QQmlCodeModelManager *codeModel)
     : BaseT(codeModel)
 {
 }
@@ -50,7 +50,14 @@ void QmlGoToDefinitionSupport::process(RequestPointerArgument request)
 
     auto &front = std::get<QList<QQmlLSUtils::ItemLocation>>(itemsFound).front();
 
-    auto location = QQmlLSUtils::findDefinitionOf(front.domItem);
+    const QByteArray shortestRootUrl =
+            m_codeModelManager->shortestRootUrlForFile(request->m_parameters.textDocument.uri);
+
+    const QStringList headerDirectories = shortestRootUrl.isEmpty()
+            ? QStringList{}
+            : QStringList{ QUrl::fromEncoded(shortestRootUrl).toLocalFile() };
+
+    const auto location = QQmlLSUtils::findDefinitionOf(front.domItem, headerDirectories);
     if (!location)
         return;
 

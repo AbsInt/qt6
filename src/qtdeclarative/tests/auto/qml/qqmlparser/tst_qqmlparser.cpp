@@ -53,11 +53,65 @@ private slots:
     void invalidImportVersion_data();
     void invalidImportVersion();
 
+    void propertyDeclarations_data();
+    void propertyDeclarations();
+
+    void propertyDeclarationsAST();
+
     void trailingCommaInUiArray();
 
 private:
-    QStringList excludedDirs;
+    // TODO move to some utils?
+    enum SyntaxKind {
+        // qml
+        UiProgram,
+        UiObjectMember,
+        // js
+        JSModule,
+        JSScript,
+        JSExpression,
+        JSStatement,
+    };
 
+    struct ParseResult
+    {
+        bool success;
+        QQmlJS::DiagnosticMessage diagnosticMessage;
+        const QQmlJS::AST::Node *rootNode = nullptr;
+    };
+
+    inline auto parseAs(SyntaxKind kind, const QString &code) -> ParseResult
+    {
+        QQmlJS::Lexer lexer(&m_engine);
+        QQmlJS::Parser parser(&m_engine);
+
+        const bool qmlMode = kind == UiProgram || kind == UiObjectMember;
+        lexer.setCode(code, 1, qmlMode);
+
+        const auto parse = [kind, &parser]() -> bool {
+            switch (kind) {
+            case UiProgram:
+                return parser.parse();
+            case UiObjectMember:
+                return parser.parseUiObjectMember();
+            case JSModule:
+                return parser.parseModule();
+            case JSScript:
+                return parser.parseScript();
+            case JSExpression:
+                return parser.parseExpression();
+            case JSStatement:
+                return parser.parseStatement();
+            }
+            Q_UNREACHABLE_RETURN(false);
+        };
+        return { parse(), parser.diagnosticMessage(), parser.rootNode() };
+    }
+
+private:
+    QStringList excludedDirs;
+    // need to make sure that its memory pool stays alive during the test
+    QQmlJS::Engine m_engine;
     QStringList findFiles(const QDir &);
 };
 
@@ -220,10 +274,7 @@ private:
 
 }
 
-tst_qqmlparser::tst_qqmlparser()
-    : QQmlDataTest(QT_QMLTEST_DATADIR)
-{
-}
+tst_qqmlparser::tst_qqmlparser() : QQmlDataTest(QT_QMLTEST_DATADIR) { }
 
 void tst_qqmlparser::initTestCase()
 {
@@ -839,6 +890,313 @@ void tst_qqmlparser::invalidImportVersion()
     QRegularExpression regexp(
                 "^Invalid (major )?version. Version numbers must be >= 0 and < 255\\.$");
     QVERIFY(regexp.match(parser.errorMessage()).hasMatch());
+}
+
+void tst_qqmlparser::propertyDeclarations_data()
+{
+    using namespace Syntax;
+
+    QTest::addColumn<QString>("propertyDeclaration");
+    QTest::addColumn<ParseResult>("expectedParseResult");
+
+    const auto addTestRow = [](const Phrase &phrase, const ParseResult &expectedParseResult) {
+        const QString propertyDeclaration = toString(phrase);
+        QTest::addRow("%s", qPrintable(propertyDeclaration))
+                << propertyDeclaration << expectedParseResult;
+    };
+
+    // can't reuse Parser::compileError unfortunately because it's protected
+    const auto diagnosticMsg = [](const QString &message,
+                                  QtMsgType kind = QtCriticalMsg) -> QQmlJS::DiagnosticMessage {
+        return QQmlJS::DiagnosticMessage{ message, kind, QQmlJS::SourceLocation() };
+    };
+    const auto perfectParseResult = ParseResult{ true, QQmlJS::DiagnosticMessage() };
+
+    // For the purposes of this test variables of Phrase type are divirging from camelCase
+    // this is made for the puposes of them matching closely the end-result test strings,
+    // e.g. property_var_p -> "property var p"
+    const Phrase property_var_p = { Token::T_PROPERTY, Token::T_VAR, QLatin1StringView("p") };
+    const Phrase colon_1 = { Token::T_COLON, QLatin1StringView("1") };
+
+    addTestRow(property_var_p, perfectParseResult);
+
+    //---------------------------- Default properties ---------------------------------------------
+    {
+        const Phrase default_ = { Token::T_DEFAULT };
+        const Phrase default_property_var_p = default_ + property_var_p;
+
+        addTestRow(default_property_var_p, perfectParseResult);
+
+        const Phrase default_property_var_p_colon_1 = default_property_var_p + colon_1;
+        addTestRow(default_property_var_p_colon_1, perfectParseResult);
+    }
+
+    //---------------------------- Readonly properties --------------------------------------------
+    {
+        const Phrase readonly = { Token::T_READONLY };
+        const Phrase readonly_property_var_p = readonly + property_var_p;
+
+        addTestRow(
+                readonly_property_var_p,
+                ParseResult{ true, diagnosticMsg("Read-only properties require an initializer.") });
+
+        const auto readonly_property_var_p_colon_1 = readonly_property_var_p + colon_1;
+
+        addTestRow(readonly_property_var_p_colon_1, perfectParseResult);
+
+        // TODO cover list properties?
+    }
+
+    //---------------------------- Required properties --------------------------------------------
+    {
+        const Phrase required = { Token::T_REQUIRED };
+        const Phrase required_property_var_p = required + property_var_p;
+
+        addTestRow(required_property_var_p, perfectParseResult);
+
+        const auto required_property_var_p_colon_1 = required_property_var_p + colon_1;
+
+        addTestRow(
+                required_property_var_p_colon_1,
+                ParseResult{
+                        true,
+                        diagnosticMsg("Required properties with initializer do not make sense.") });
+
+        // TODO cover other rules related to initialization of required properties
+    }
+
+    //---------------------------- Final properties ---------------------------------------------
+    {
+        const Phrase final = { Token::T_FINAL };
+        const Phrase final_property_var_p = final + property_var_p;
+
+        addTestRow(final_property_var_p, perfectParseResult);
+
+        const Phrase final_property_var_p_colon_1 = final_property_var_p + colon_1;
+        addTestRow(final_property_var_p_colon_1, perfectParseResult);
+    }
+
+    //---------------------------- Virtual properties ---------------------------------------------
+    {
+        const Phrase virtual_property_var_p = Word(Token::T_VIRTUAL) + property_var_p;
+
+        addTestRow(virtual_property_var_p, perfectParseResult);
+
+        const Phrase virtual_property_var_p_colon_1 = virtual_property_var_p + colon_1;
+        addTestRow(virtual_property_var_p_colon_1, perfectParseResult);
+    }
+
+    //---------------------------- Override properties ---------------------------------------------
+    {
+        const Phrase override_property_var_p = Word(Token::T_OVERRIDE) + property_var_p;
+
+        addTestRow(override_property_var_p, perfectParseResult);
+
+        const Phrase override_property_var_p_colon_1 = override_property_var_p + colon_1;
+        addTestRow(override_property_var_p_colon_1, perfectParseResult);
+    }
+
+    //---------------------------- Stacking property attributes -----------------------------------
+    {
+        const Phrase final = { Token::T_FINAL };
+        const Phrase default_ = { Token::T_DEFAULT };
+        const Phrase readonly = { Token::T_READONLY };
+        const Phrase required = { Token::T_REQUIRED };
+        const Phrase virtual_ = { Token::T_VIRTUAL };
+        const Phrase override_ = { Token::T_OVERRIDE };
+
+        // final +
+        addTestRow(final + default_ + property_var_p, perfectParseResult);
+        // readonly props require an initializer
+        addTestRow(final + readonly + property_var_p + colon_1, perfectParseResult);
+        addTestRow(final + required + property_var_p, perfectParseResult);
+
+        // default +
+        addTestRow(default_ + final + property_var_p, perfectParseResult);
+        addTestRow(default_ + required + property_var_p, perfectParseResult);
+        /* default + readonly is contradictory because readonly prevents external assignment,
+         * while default implies the property is the target for implicit
+         * external assignments - so a readonly property can't logically be the default */
+        addTestRow(default_ + readonly + property_var_p + colon_1,
+                   ParseResult{ true,
+                                diagnosticMsg("Readonly prevents re-assignment, hence there is no "
+                                              "use for default") });
+
+        // readonly +
+        addTestRow(readonly + final + property_var_p + colon_1, perfectParseResult);
+        // if property is readonly, a.k.a. already initialized, there is no use of marking it
+        // required
+        addTestRow(
+                readonly + required + property_var_p + colon_1,
+                ParseResult{
+                        true,
+                        diagnosticMsg("Required properties with initializer do not make sense.") });
+
+        // required +
+        addTestRow(required + final + property_var_p, perfectParseResult);
+        addTestRow(required + default_ + property_var_p, perfectParseResult);
+
+        addTestRow(final + required + default_ + property_var_p, perfectParseResult);
+
+        addTestRow(
+                override_ + virtual_ + property_var_p,
+                ParseResult{ true,
+                             diagnosticMsg(
+                                     "'virtual' is redundant when overriding a property. "
+                                     "The 'override' must only be used when actually overriding an "
+                                     "existing property; using it on a "
+                                     "new property is an error.") });
+
+        addTestRow(
+                virtual_ + override_ + property_var_p,
+                ParseResult{
+                        true,
+                        diagnosticMsg(
+                                "'virtual' is redundant when overriding a property. The 'override' "
+                                "must only be used when actually overriding an existing property; "
+                                "using it on a "
+                                "new property is an error.") });
+
+        addTestRow(final + virtual_ + property_var_p,
+                   ParseResult{ true,
+                                diagnosticMsg("The 'virtual' cannot be combined with 'final', as "
+                                              "these attributes are mutually exclusive") });
+
+        addTestRow(virtual_ + final + property_var_p,
+                   ParseResult{ true,
+                                diagnosticMsg("The 'virtual' cannot be combined with 'final', as "
+                                              "these attributes are mutually exclusive") });
+
+        addTestRow(
+                override_ + final + property_var_p,
+                ParseResult{
+                        true,
+                        diagnosticMsg(
+                                "'override' is redundant when a property is marked as 'final'") });
+
+        addTestRow(
+                final + override_ + property_var_p,
+                ParseResult{
+                        true,
+                        diagnosticMsg(
+                                "'override' is redundant when a property is marked as 'final'") });
+    }
+}
+
+/*
+ This test verifies that the QML parser correctly recognizes and validates property declarations
+with various combinations of modifiers (default, readonly, required, final, virtual, override) and
+syntactic constructs. It ensures that the parser both accepts valid property definitions and
+produces appropriate diagnostics for invalid or illogical combinations.
+ */
+void tst_qqmlparser::propertyDeclarations()
+{
+    QFETCH(QString, propertyDeclaration);
+    QFETCH(ParseResult, expectedParseResult);
+
+    const ParseResult actualParseResult = parseAs(SyntaxKind::UiObjectMember, propertyDeclaration);
+
+    QCOMPARE(actualParseResult.success, expectedParseResult.success);
+
+    // For the purposes of these tests comparing only message and type is enough
+    QCOMPARE(actualParseResult.diagnosticMessage.type, expectedParseResult.diagnosticMessage.type);
+    QEXPECT_FAIL("default readonly property var p : 1 ", "A Warning is to be implemented",
+                 Continue);
+    QCOMPARE(actualParseResult.diagnosticMessage.message,
+             expectedParseResult.diagnosticMessage.message);
+}
+
+/*
+ This test verifies that the QML parser correctly constructs and populates the corresponding AST
+ node (UiPublicMember) for QML property declarations, ensuring that modifier tokens (such as
+ final, virtual, and override) are accurately represented in the resulting node.
+ */
+void tst_qqmlparser::propertyDeclarationsAST()
+{
+    using namespace QQmlJS::AST;
+    using namespace Syntax;
+
+    // For the purposes of this test variables of Phrase type are divirging from camelCase
+    // this is made for the puposes of them matching closely the end-result test strings,
+    // e.g. property_var_p -> "property var p"
+    const QLatin1StringView propName("p");
+    const Phrase property_var_p = { Token::T_PROPERTY, Token::T_VAR, propName };
+
+    {
+        const auto *actualPublicMember = cast<const UiPublicMember *>(
+                parseAs(SyntaxKind::UiObjectMember, toString(property_var_p)).rootNode);
+
+        QCOMPARE(actualPublicMember->name, propName);
+        QCOMPARE(actualPublicMember->isDefaultMember(), false);
+        QCOMPARE(actualPublicMember->isFinal(), false);
+        QCOMPARE(actualPublicMember->isRequired(), false);
+        QCOMPARE(actualPublicMember->isReadonly(), false);
+        QCOMPARE(actualPublicMember->isOverride(), false);
+        QCOMPARE(actualPublicMember->isVirtual(), false);
+    }
+
+    {
+        const Word virtual_(Token::T_VIRTUAL);
+
+        const auto *actualPublicMember = cast<const UiPublicMember *>(
+                parseAs(SyntaxKind::UiObjectMember, toString(virtual_ + property_var_p)).rootNode);
+
+        QCOMPARE(actualPublicMember->isVirtual(), true);
+
+        QCOMPARE(actualPublicMember->name, propName);
+        QCOMPARE(actualPublicMember->isDefaultMember(), false);
+        QCOMPARE(actualPublicMember->isFinal(), false);
+        QCOMPARE(actualPublicMember->isRequired(), false);
+        QCOMPARE(actualPublicMember->isReadonly(), false);
+        QCOMPARE(actualPublicMember->isOverride(), false);
+
+        const QQmlJS::SourceLocation expectedLocation(0, stringView(virtual_).size(), 1, 1);
+        QCOMPARE(actualPublicMember->virtualToken(), expectedLocation);
+    }
+    {
+        const Word override_(Token::T_OVERRIDE);
+
+        const auto *actualPublicMember = cast<const UiPublicMember *>(
+                parseAs(SyntaxKind::UiObjectMember, toString(override_ + property_var_p)).rootNode);
+
+        QCOMPARE(actualPublicMember->isOverride(), true);
+
+        QCOMPARE(actualPublicMember->name, propName);
+        QCOMPARE(actualPublicMember->isDefaultMember(), false);
+        QCOMPARE(actualPublicMember->isFinal(), false);
+        QCOMPARE(actualPublicMember->isRequired(), false);
+        QCOMPARE(actualPublicMember->isReadonly(), false);
+        QCOMPARE(actualPublicMember->isVirtual(), false);
+
+        const QQmlJS::SourceLocation expectedLocation(0, stringView(override_).size(), 1, 1);
+        QCOMPARE(actualPublicMember->overrideToken(), expectedLocation);
+    }
+    {
+        const Word final_(Token::T_FINAL);
+        const Word readonly(Token::T_READONLY);
+
+        const auto *actualPublicMember = cast<const UiPublicMember *>(
+                parseAs(SyntaxKind::UiObjectMember, toString(final_ + readonly + property_var_p))
+                        .rootNode);
+
+        QCOMPARE(actualPublicMember->isReadonly(), true);
+        QCOMPARE(actualPublicMember->isFinal(), true);
+
+        QCOMPARE(actualPublicMember->name, propName);
+        QCOMPARE(actualPublicMember->isDefaultMember(), false);
+        QCOMPARE(actualPublicMember->isRequired(), false);
+        QCOMPARE(actualPublicMember->isOverride(), false);
+        QCOMPARE(actualPublicMember->isVirtual(), false);
+
+        const quint32 lineNum = 1;
+        const QQmlJS::SourceLocation finalTokenLocation(0, stringView(final_).size(), lineNum, 1);
+        QCOMPARE(actualPublicMember->finalToken(), finalTokenLocation);
+
+        const quint32 overrideTokenOffset = finalTokenLocation.end() + 1;
+        const QQmlJS::SourceLocation readonlyTokenLocation(
+                overrideTokenOffset, stringView(readonly).size(), lineNum, overrideTokenOffset + 1);
+        QCOMPARE(actualPublicMember->readonlyToken(), readonlyTokenLocation);
+    }
 }
 
 void tst_qqmlparser::trailingCommaInUiArray()

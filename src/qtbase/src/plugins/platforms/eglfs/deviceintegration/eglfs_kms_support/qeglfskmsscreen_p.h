@@ -59,6 +59,7 @@ public:
 
     QList<QPlatformScreen *> virtualSiblings() const override { return m_siblings; }
     void setVirtualSiblings(QList<QPlatformScreen *> sl) { m_siblings = sl; }
+    void removeSibling(QPlatformScreen *screen);
 
     QList<QPlatformScreen::Mode> modes() const override;
 
@@ -69,6 +70,7 @@ public:
 
     virtual void waitForFlip();
 
+    void updateOutput(QKmsOutput output);
     QKmsOutput &output() { return m_output; }
     void restoreMode();
 
@@ -81,6 +83,8 @@ public:
     void setCursorOutOfRange(bool b) { m_cursorOutOfRange = b; }
 
     virtual void pageFlipped(unsigned int sequence, unsigned int tv_sec, unsigned int tv_usec);
+    static bool isScreenKnown(QEglFSKmsScreen *s);
+
 protected:
     QEglFSKmsDevice *m_device;
 
@@ -96,6 +100,8 @@ protected:
     QEglFSKmsInterruptHandler *m_interruptHandler;
 
     bool m_headless;
+
+    static QSet<QEglFSKmsScreen *> s_screens;
 };
 
 QT_END_NAMESPACE

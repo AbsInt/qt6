@@ -4,6 +4,7 @@
 
 import QtQuick
 import QtQuick.Controls.impl
+import QtQuick.Controls.Basic.impl
 import QtQuick.Templates as T
 
 T.TextField {
@@ -23,6 +24,10 @@ T.TextField {
     selectedTextColor: control.palette.highlightedText
     placeholderTextColor: control.palette.placeholderText
     verticalAlignment: TextInput.AlignVCenter
+
+    ContextMenu.menu: TextEditingContextMenu {
+        editor: control
+    }
 
     PlaceholderText {
         id: placeholder

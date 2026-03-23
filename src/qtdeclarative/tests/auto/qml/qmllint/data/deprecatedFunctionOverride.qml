@@ -1,7 +1,7 @@
 import QtQuick 2.0
 
 DeprecatedFunctions {
-    function deprecatedOverride(x, y, z) {}
+    function deprecatedOverride(x, y, z) {} // qmllint disable shadow
     Component.onCompleted: {
         deprecatedOverride();
     }

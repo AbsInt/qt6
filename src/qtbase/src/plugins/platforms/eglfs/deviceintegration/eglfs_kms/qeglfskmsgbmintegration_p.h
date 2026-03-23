@@ -25,11 +25,14 @@
 QT_BEGIN_NAMESPACE
 
 class QEglFSKmsDevice;
+class QDeviceDiscovery;
+class QFileSystemWatcher;
 
 class Q_EGLFS_EXPORT QEglFSKmsGbmIntegration : public QEglFSKmsIntegration
 {
 public:
     QEglFSKmsGbmIntegration();
+    ~QEglFSKmsGbmIntegration() override;
 
     EGLDisplay createDisplay(EGLNativeDisplayType nativeDisplay) override;
     EGLNativeWindowType createNativeOffscreenWindow(const QSurfaceFormat &format) override;
@@ -43,6 +46,10 @@ protected:
     QKmsDevice *createDevice() override;
 
 private:
+    std::unique_ptr<QDeviceDiscovery> m_deviceDiscovery;
+#if QT_CONFIG(filesystemwatcher)
+    std::unique_ptr<QFileSystemWatcher> m_kmsConfigWatcher;
+#endif
 };
 
 QT_END_NAMESPACE

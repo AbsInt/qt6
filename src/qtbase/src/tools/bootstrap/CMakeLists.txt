@@ -123,7 +123,7 @@ qt_internal_extend_target(Bootstrap CONDITION WIN32
 
 qt_internal_extend_target(Bootstrap CONDITION MSVC AND CLANG
     LIBRARIES
-        clang_rt.builtins-x86_64
+        clang_rt.builtins-$<IF:$<STREQUAL:${TEST_architecture_arch},arm64>,aarch64,x86_64>
 )
 
 qt_internal_extend_target(Bootstrap CONDITION APPLE

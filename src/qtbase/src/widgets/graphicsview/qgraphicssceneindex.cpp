@@ -170,6 +170,10 @@ namespace QtPrivate { // just to keep indentation of the following functions at 
 } // namespace QtPrivate
 
 /*!
+    \class QGraphicsSceneIndexPrivate
+    \inmodule QtWidgets
+    \internal
+
     Constructs a private scene index.
 */
 QGraphicsSceneIndexPrivate::QGraphicsSceneIndexPrivate(QGraphicsScene *scene) : scene(scene)

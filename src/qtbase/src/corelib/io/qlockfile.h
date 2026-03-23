@@ -9,6 +9,7 @@
 #include <QtCore/qscopedpointer.h>
 
 #include <chrono>
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 
@@ -49,10 +50,9 @@ public:
     };
     LockError error() const;
 
-protected:
-    QScopedPointer<QLockFilePrivate> d_ptr;
-
 private:
+    std::unique_ptr<QLockFilePrivate> d_ptr;
+
     Q_DECLARE_PRIVATE(QLockFile)
     Q_DISABLE_COPY(QLockFile)
 };

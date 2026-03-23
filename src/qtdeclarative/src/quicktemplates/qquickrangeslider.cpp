@@ -829,15 +829,15 @@ qreal QQuickRangeSlider::valueAt(qreal position) const
     \row
         \li hovered
         \li This property holds whether the first handle is hovered.
-            This property was introduced in QtQuick.Controls 2.1.
+            This property was introduced in \l{QtQuick.Controls} 2.1.
     \row
         \li implicitHandleWidth
         \li This property holds the implicit width of the first handle.
-            This property was introduced in QtQuick.Controls 2.5.
+            This property was introduced in \l{QtQuick.Controls} 2.5.
     \row
         \li implicitHandleHeight
         \li This property holds the implicit height of the first handle.
-            This property was introduced in QtQuick.Controls 2.5.
+            This property was introduced in \l{QtQuick.Controls} 2.5.
     \endtable
 
     \sa first.moved(), first.increase(), first.decrease()
@@ -907,15 +907,15 @@ QQuickRangeSliderNode *QQuickRangeSlider::first() const
     \row
         \li hovered
         \li This property holds whether the second handle is hovered.
-            This property was introduced in QtQuick.Controls 2.1.
+            This property was introduced in \l{QtQuick.Controls} 2.1.
     \row
         \li implicitHandleWidth
         \li This property holds the implicit width of the second handle.
-            This property was introduced in QtQuick.Controls 2.5.
+            This property was introduced in \l{QtQuick.Controls} 2.5.
     \row
         \li implicitHandleHeight
         \li This property holds the implicit height of the second handle.
-            This property was introduced in QtQuick.Controls 2.5.
+            This property was introduced in \l{QtQuick.Controls} 2.5.
     \endtable
 
     \sa second.moved(), second.increase(), second.decrease()

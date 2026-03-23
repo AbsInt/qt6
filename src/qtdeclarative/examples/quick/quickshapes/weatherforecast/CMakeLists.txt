@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(weatherforecast LANGUAGES CXX)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick QuickTools)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -30,31 +30,72 @@ qt_add_qml_module(weatherforecastexample
   QML_FILES
     "main.qml"
     "Europe.qml"
-    "Europe_generated.qml"
     "BouncyShape.qml"
     "Cloud.qml"
-    "Cloud_generated.qml"
     "CloudWithLightning.qml"
-    "CloudWithLightning_generated.qml"
     "CloudWithRain.qml"
-    "CloudWithRain_generated.qml"
     "CloudWithSnow.qml"
-    "CloudWithSnow_generated.qml"
     "Gear.qml"
-    "Gear_generated.qml"
     "MapLabel.qml"
     "SettingsDrawer.qml"
     "Sun.qml"
-    "Sun_generated.qml"
     "SunBehindCloud.qml"
-    "SunBehindCloud_generated.qml"
     "SunBehindRainCloud.qml"
-    "SunBehindRainCloud_generated.qml"
     "SunBehindSmallCloud.qml"
-    "SunBehindSmallCloud_generated.qml"
     "DemoShape.qml"
   RESOURCES
     "assets/WorkSans-Regular.ttf"
+)
+
+qt_target_qml_from_svg(weatherforecastexample
+    OPTIMIZE_PATHS
+    TYPE_NAME "DemoShape"
+    COPYRIGHT_STATEMENT
+        "Copyright © 2024 The Qt Company Ltd. Copyright © 2010 Kolja21\\nSPDX-License-Identifier: CC-BY-3.0"
+    FILES
+        assets/Europe.svg
+    OUTPUTS
+        Europe_generated.qml
+)
+
+#![svgtoqml]
+qt_target_qml_from_svg(weatherforecastexample
+    OPTIMIZE_PATHS
+    TYPE_NAME "DemoShape"
+    COPYRIGHT_STATEMENT "Copyright © 2023 Framework7\\nSPDX-License-Identifier: MIT"
+    FILES
+        assets/gear-alt-stroke.svg
+    OUTPUTS
+        Gear_generated.qml
+)
+#![svgtoqml]
+
+qt_target_qml_from_svg(weatherforecastexample
+    OPTIMIZE_PATHS
+    TYPE_NAME "DemoShape"
+    COPYRIGHT_STATEMENT "Copyright © 2023 Googlefonts\\nSPDX-License-Identifier: Apache-2.0"
+    FILES
+        assets/cloud-svgrepo-com.svg
+        assets/cloud-with-lightning-svgrepo-com.svg
+        assets/cloud-with-lightning-and-rain-svgrepo-com.svg
+        assets/cloud-with-rain-svgrepo-com.svg
+        assets/cloud-with-snow-svgrepo-com.svg
+        assets/sun-svgrepo-com.svg
+        assets/sun-behind-large-cloud-svgrepo-com.svg
+        assets/sun-behind-rain-cloud-svgrepo-com.svg
+        assets/sun-behind-small-cloud-svgrepo-com.svg
+        assets/sun-behind-cloud-svgrepo-com.svg
+    OUTPUTS
+        Cloud_generated.qml
+        CloudWithLightning_generated.qml
+        CloudWithLightningAndRain_generated.qml
+        CloudWithRain_generated.qml
+        CloudWithSnow_generated.qml
+        Sun_generated.qml
+        SunBehindLargeCloud_generated.qml
+        SunBehindRainCloud_generated.qml
+        SunBehindSmallCloud_generated.qml
+        SunBehindCloud_generated.qml
 )
 
 set(resource_files

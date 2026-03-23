@@ -32,6 +32,8 @@
 #include <qevent.h>
 #include <qscrollbar.h>
 
+#include <QtCore/private/qflatmap_p.h>
+
 #include <vector>
 
 QT_REQUIRE_CONFIG(columnview);
@@ -46,7 +48,8 @@ public:
 
     void setPreviewWidget(QWidget *widget) {
         previewWidget = widget;
-        setMinimumWidth(previewWidget->minimumWidth());
+        if (previewWidget)
+            setMinimumWidth(previewWidget->minimumWidth());
     }
 
     void resizeEvent(QResizeEvent * event) override{
@@ -119,7 +122,6 @@ public:
     QColumnViewPrivate();
     ~QColumnViewPrivate();
     void initialize();
-    void clearConnections();
 
     QAbstractItemView *createColumn(const QModelIndex &index, bool show);
 
@@ -128,6 +130,7 @@ public:
     void disconnectView(QAbstractItemView *view);
     void doLayout();
     void setPreviewWidget(QWidget *widget);
+    QColumnViewPreviewColumn *createPreviewColumn();
     void checkColumnCreation(const QModelIndex &parent);
 
 
@@ -139,14 +142,15 @@ public:
     QList<QAbstractItemView*> columns;
     QList<int> columnSizes; // used during init and corner moving
     bool showResizeGrips;
+    bool showPreviewColumn;
     int offset;
 #if QT_CONFIG(animation)
     QPropertyAnimation currentAnimation;
     QMetaObject::Connection animationConnection;
 #endif
     std::vector<QMetaObject::Connection> gripConnections;
-    using ViewConnections = std::vector<QMetaObject::Connection>;
-    QHash<QAbstractItemView *, ViewConnections> viewConnections;
+    using ViewConnections = std::array<QMetaObject::Connection, 6>;
+    QVarLengthFlatMap<QAbstractItemView *, ViewConnections, 4> viewConnections;
 
     QWidget *previewWidget;
     QAbstractItemView *previewColumn;

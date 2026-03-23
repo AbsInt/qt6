@@ -41,7 +41,8 @@ protected:
     {
         auto privIncubator = QQmlIncubatorPrivate::get(this);
         if (QQmlEnginePrivate *enginePriv = privIncubator->enginePriv) {
-            element->incubate(enginePriv->v4engine(), object, privIncubator->requiredProperties());
+            element->incubate(enginePriv->v4Engine.get(), object,
+                              privIncubator->requiredProperties());
         }
     }
 
@@ -220,9 +221,9 @@ void QQuickStackElement::initialize(
         Q_ASSERT(scope.engine);
         QV4::ScopedValue ipv(scope, properties.value());
         QV4::Scoped<QV4::QmlContext> qmlContext(scope, qmlCallingContext.value());
-        QV4::ScopedValue qmlObject(scope, QV4::QObjectWrapper::wrap(v4, item));
+        QV4::ScopedValue qmlObject(scope, QV4::QObjectWrapper::wrap(scope.engine, item));
         QQmlComponentPrivate::setInitialProperties(
-            v4, qmlContext, qmlObject, ipv, requiredProperties, item,
+            scope.engine, qmlContext, qmlObject, ipv, requiredProperties, item,
             component ? QQmlComponentPrivate::get(component)->creator() : nullptr);
         properties.clear();
     }

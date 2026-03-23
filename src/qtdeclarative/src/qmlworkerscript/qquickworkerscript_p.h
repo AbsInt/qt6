@@ -83,10 +83,12 @@ protected:
 
 private:
     QQuickWorkerScriptEngine *engine();
-    QQuickWorkerScriptEngine *m_engine;
-    int m_scriptId;
+
     QUrl m_source;
-    bool m_componentComplete;
+    QQuickWorkerScriptEngine *m_engine = nullptr;
+    int m_scriptId = -1;
+    bool m_componentComplete = true;
+    bool m_ready = false;
 };
 
 QT_END_NAMESPACE

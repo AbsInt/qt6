@@ -18,8 +18,7 @@ ListView {
         height: count * lineHeight
         width: list.width
         interactive: false
-        property int count: 50
-        model: count
+        model: 50
         property int createdItems: 0
         property int destroyedItems: 0
         property int lineHeight: 85

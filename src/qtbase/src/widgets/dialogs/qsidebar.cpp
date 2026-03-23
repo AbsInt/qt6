@@ -46,7 +46,7 @@ QUrlModel::QUrlModel(QObject *parent) : QStandardItemModel(parent), showFullPath
 
 QUrlModel::~QUrlModel()
 {
-    for (const auto &conn : std::as_const(modelConnections))
+    for (auto &conn : modelConnections)
         disconnect(conn);
 }
 
@@ -288,7 +288,7 @@ void QUrlModel::setFileSystemModel(QFileSystemModel *model)
     if (model == fileSystemModel)
         return;
     if (fileSystemModel != nullptr) {
-        for (const auto &conn : std::as_const(modelConnections))
+        for (auto &conn : modelConnections)
             disconnect(conn);
     }
     fileSystemModel = model;
@@ -360,6 +360,11 @@ void QUrlModel::changed(const QString &path)
     }
 }
 
+/*!
+    \class QSidebar
+    \inmodule QtWidgets
+    \internal
+*/
 QSidebar::QSidebar(QWidget *parent) : QListView(parent)
 {
 }
@@ -413,7 +418,9 @@ void QSidebar::selectUrl(const QUrl &url)
     selectionModel()->clear();
     for (int i = 0; i < model()->rowCount(); ++i) {
         if (model()->index(i, 0).data(QUrlModel::UrlRole).toUrl() == url) {
-            selectionModel()->select(model()->index(i, 0), QItemSelectionModel::Select);
+            emit goToUrl(url);
+            selectionModel()->setCurrentIndex(model()->index(i, 0),
+                                              QItemSelectionModel::SelectCurrent);
             break;
         }
     }
@@ -468,7 +475,6 @@ void QSidebar::removeEntry()
 void QSidebar::clicked(const QModelIndex &index)
 {
     QUrl url = model()->index(index.row(), 0).data(QUrlModel::UrlRole).toUrl();
-    emit goToUrl(url);
     selectUrl(url);
 }
 

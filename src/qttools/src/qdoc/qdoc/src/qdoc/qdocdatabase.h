@@ -28,7 +28,8 @@ enum FindFlag {
     SearchBaseClasses = 0x1,
     SearchEnumValues = 0x2,
     TypesOnly = 0x4,
-    IgnoreModules = 0x8
+    IgnoreModules = 0x8,
+    QmlAttachedProperties = 0x10
 };
 
 class QDocForest
@@ -102,7 +103,7 @@ private:
     const FunctionNode *findFunctionNode(const QStringList &path, const Parameters &parameters,
                                          const Node *relative, Genus genus);
     const Node *findNodeForTarget(QStringList &targetPath, const Node *relative, Genus genus,
-                                  QString &ref);
+                                  QString &ref, int findFlags = 0);
 
     const Node *findTypeNode(const QStringList &path, const Node *relative, Genus genus)
     {
@@ -138,13 +139,21 @@ private:
         return nullptr;
     }
 
-    QmlTypeNode *lookupQmlType(const QString &name)
+    QmlTypeNode *lookupQmlType(const QString &name, const Node *relative = nullptr)
     {
         for (const auto *tree : searchOrder()) {
-            QmlTypeNode *qcn = tree->lookupQmlType(name);
+            QmlTypeNode *qcn = tree->lookupQmlType(name, relative);
             if (qcn)
                 return qcn;
         }
+        return nullptr;
+    }
+
+    [[nodiscard]] Aggregate *findRelatesNode(const QStringList &path)
+    {
+        for (auto *tree : searchOrder())
+            if (auto *aggregate = tree->findRelatesNode(path))
+                return aggregate;
         return nullptr;
     }
 
@@ -198,12 +207,12 @@ public:
     void addExampleNode(ExampleNode *n) { primaryTree()->addExampleNode(n); }
     ExampleNodeMap &exampleNodeMap() { return primaryTree()->exampleNodeMap(); }
 
-    QmlTypeNode *findQmlType(const QString &name)
+    QmlTypeNode *findQmlType(const QString &name, const Node *relative = nullptr)
     {
-        return m_forest.lookupQmlType(name);
+        return m_forest.lookupQmlType(name, relative);
     }
-    QmlTypeNode *findQmlType(const QString &qmid, const QString &name);
-    QmlTypeNode *findQmlType(const ImportRec &import, const QString &name);
+    QmlTypeNode *findQmlType(const QString &qmid, const QString &name, const Node *relative = nullptr);
+    QmlTypeNode *findQmlType(const ImportRec &import, const QString &name, const Node *relative = nullptr);
     QmlTypeNode *findQmlTypeInPrimaryTree(const QString &qmid, const QString &name);
 
     static NodeMultiMap &obsoleteClasses() { return s_obsoleteClasses; }
@@ -247,6 +256,12 @@ public:
     const NodeMultiMap &getQmlTypeMap(const QString &key);
     const NodeMultiMap &getSinceMap(const QString &key);
 
+    [[nodiscard]] Aggregate *findRelatesNode(const QStringList &path)
+    {
+        return m_forest.findRelatesNode(path);
+    }
+
+
     /*******************************************************************
       Many of these will be either eliminated or replaced.
     ********************************************************************/
@@ -257,13 +272,6 @@ public:
         primaryTree()->insertTarget(name, title, type, node, priority);
     }
 
-    /*******************************************************************
-      The functions declared below are called for the current tree only.
-    ********************************************************************/
-    Aggregate *findRelatesNode(const QStringList &path)
-    {
-        return primaryTree()->findRelatesNode(path);
-    }
     /*******************************************************************/
 
     /*****************************************************************************
@@ -306,9 +314,9 @@ public:
 
 private:
     const Node *findNodeForTarget(QStringList &targetPath, const Node *relative, Genus genus,
-                                  QString &ref)
+                                  QString &ref, int findFlags = 0)
     {
-        return m_forest.findNodeForTarget(targetPath, relative, genus, ref);
+        return m_forest.findNodeForTarget(targetPath, relative, genus, ref, findFlags);
     }
     const FunctionNode *findFunctionNode(const QStringList &path, const Parameters &parameters,
                                          const Node *relative, Genus genus)

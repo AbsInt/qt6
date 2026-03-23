@@ -123,7 +123,7 @@ class Q_QMLCOMPILER_EXPORT QQmlJSLogger
     Q_DISABLE_COPY_MOVE(QQmlJSLogger)
 public:
     QList<QQmlJS::LoggerCategory> categories() const;
-    static const QList<QQmlJS::LoggerCategory> &defaultCategories();
+    static const QList<QQmlJS::LoggerCategory> &builtinCategories();
 
     void registerCategory(const QQmlJS::LoggerCategory &category);
 

@@ -307,6 +307,13 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(EnumFlagsTester::TestFlags)
 
 void tst_QMetaProperty::readAndWriteWithLazyRegistration()
 {
+    static bool executedOnce = false;
+    if (executedOnce) {
+        QSKIP("lazy registration only runs once per type per process");
+        return;
+    }
+    executedOnce = true;
+
     QVERIFY(!QMetaType::fromName("CustomReadObject*").isValid());
     QVERIFY(!QMetaType::fromName("CustomWriteObject*").isValid());
 

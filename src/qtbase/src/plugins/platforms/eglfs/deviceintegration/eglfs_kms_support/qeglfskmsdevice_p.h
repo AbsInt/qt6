@@ -31,6 +31,13 @@ public:
                         bool isPrimary,
                         const QPoint &virtualPos,
                         const QList<QPlatformScreen *> &virtualSiblings) override;
+
+    void unregisterScreen(QPlatformScreen *screen) override;
+
+    void updateScreen(QPlatformScreen *screen, const QPoint &virtualPos,
+                      const QList<QPlatformScreen *> &virtualSiblings) override;
+
+    void updateScreenOutput(QPlatformScreen *screen, const QKmsOutput &output) override;
 };
 
 QT_END_NAMESPACE

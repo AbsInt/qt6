@@ -867,6 +867,10 @@ bool QRhiD3D12::isFeatureSupported(QRhi::Feature feature) const
     case QRhi::PerRenderTargetBlending:
     case QRhi::SampleVariables:
         return true;
+    case QRhi::InstanceIndexIncludesBaseInstance:
+        return false;
+    case QRhi::DepthClamp:
+        return true;
     }
     return false;
 }
@@ -6262,7 +6266,7 @@ bool QD3D12GraphicsPipeline::create()
     stream.rasterizerState.object.FrontCounterClockwise = m_frontFace == CCW;
     stream.rasterizerState.object.DepthBias = m_depthBias;
     stream.rasterizerState.object.SlopeScaledDepthBias = m_slopeScaledDepthBias;
-    stream.rasterizerState.object.DepthClipEnable = TRUE;
+    stream.rasterizerState.object.DepthClipEnable = m_depthClamp ? FALSE : TRUE;
     stream.rasterizerState.object.MultisampleEnable = sampleDesc.Count > 1;
 
     stream.depthStencilState.object.DepthEnable = m_depthTest;

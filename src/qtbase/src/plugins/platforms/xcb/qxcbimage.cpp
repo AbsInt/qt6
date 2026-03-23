@@ -80,12 +80,6 @@ bool qt_xcb_imageFormatForVisual(QXcbConnection *connection, uint8_t depth, cons
             *imageFormat = QImage::Format_Grayscale8;
             return true;
         }
-#if QT_CONFIG(xcb_native_painting)
-        if (QXcbIntegration::instance() && QXcbIntegration::instance()->nativePaintingEnabled()) {
-            *imageFormat = QImage::Format_Indexed8;
-            return true;
-        }
-#endif
         return false;
     }
 

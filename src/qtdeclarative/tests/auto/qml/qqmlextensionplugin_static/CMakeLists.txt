@@ -12,6 +12,7 @@ qt_internal_add_qml_module(MockExtensionPlugin
         plugin/plugin.cpp
     LIBRARIES
         Qt::Qml
+    TEST_PLUGIN
 )
 
 

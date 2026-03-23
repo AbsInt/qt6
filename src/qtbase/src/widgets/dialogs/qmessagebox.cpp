@@ -563,6 +563,10 @@ void QMessageBoxPrivate::helperClicked(QPlatformDialogHelper::StandardButton hel
     and \l{QMessageBox::standardButtons} {standard buttons} for
     accepting a user response.
 
+    While the parent parameter is optional, specifying it gives a hint
+    to the window manager, which can then take care of positioning, and
+    maintain a proper stacking order of the dialog window.
+
     Two APIs for using QMessageBox are provided, the property-based
     API, and the static functions. Calling one of the static functions
     is the simpler approach, but it is less flexible than using the

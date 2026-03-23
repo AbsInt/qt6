@@ -62,17 +62,6 @@ inline T qvariant_cast(const QVariant &);
 namespace QtPrivate {
 template<> constexpr inline bool qIsRelocatable<QVariant> = true;
 
-template<typename Referred>
-class ConstReference;
-
-template<typename Referred>
-class Reference;
-
-template<typename Pointed>
-class ConstPointer;
-
-template<typename Pointed>
-class Pointer;
 } // namespace QtPrivate
 
 class Q_CORE_EXPORT QVariant
@@ -245,65 +234,104 @@ private:
         >;
 
 public:
-    template<typename Referred>
+    template<typename Indirect>
+    class Reference;
+
+    template<typename Indirect>
     class ConstReference
     {
     private:
-        const Referred m_referred;
+        friend class Reference<Indirect>;
+        const Indirect m_referred;
 
     public:
         // You can initialize a const reference from another one, but you can't assign to it.
 
-        explicit ConstReference(const Referred &referred)
-                noexcept(std::is_nothrow_copy_constructible_v<Referred>)
+        explicit ConstReference(const Indirect &referred)
+                noexcept(std::is_nothrow_copy_constructible_v<Indirect>)
             : m_referred(referred) {}
-        explicit ConstReference(Referred &&referred)
-                noexcept(std::is_nothrow_move_constructible_v<Referred>)
+        explicit ConstReference(Indirect &&referred)
+                noexcept(std::is_nothrow_move_constructible_v<Indirect>)
             : m_referred(std::move(referred)) {}
-        ConstReference(const ConstReference &) = default;
-        ConstReference(ConstReference &&) = default;
+        ConstReference(const ConstReference &)
+                noexcept(std::is_nothrow_copy_constructible_v<Indirect>) = default;
+
+        // Move-constructing a reference from another one is not valid C++. You can't do this:
+        //     A a;
+        //     const A &ra(a);
+        //     const A &rb(std::move(ra));
+        ConstReference(ConstReference &&) = delete;
+
+        ConstReference(const Reference<Indirect> &)
+                noexcept(std::is_nothrow_copy_constructible_v<Indirect>);
+
+        // Move-constructing a reference from another one is not valid C++. You can't do this:
+        //     A a;
+        //     A &ra(a);
+        //     const A &rb(std::move(ra));
+        // ConstReference(Reference<Indirect> &&) = delete;
+
         ~ConstReference() = default;
         ConstReference &operator=(const ConstReference &value) = delete;
         ConstReference &operator=(ConstReference &&value) = delete;
 
-        // To be specialized for each Referred
-        operator QVariant() const noexcept(Referred::canNoexceptConvertToQVariant);
+        // To be specialized for each Indirect
+        operator QVariant() const noexcept(Indirect::CanNoexceptConvertToQVariant);
     };
 
-    template<typename Referred>
+    template<typename Indirect>
     class Reference
     {
     private:
-        Referred m_referred;
+        friend class ConstReference<Indirect>;
+        Indirect m_referred;
 
-        friend void swap(Reference a, Reference b) { return a.swap(std::move(b)); }
+        friend void swap(Reference a, Reference b) { return a.swap(b); }
 
     public:
         // Assigning and initializing are different operations for references.
 
-        explicit Reference(const Referred &referred)
-                noexcept(std::is_nothrow_copy_constructible_v<Referred>)
+        explicit Reference(const Indirect &referred)
+                noexcept(std::is_nothrow_copy_constructible_v<Indirect>)
             : m_referred(referred) {}
-        explicit Reference(Referred &&referred)
-                noexcept(std::is_nothrow_move_constructible_v<Referred>)
+        explicit Reference(Indirect &&referred)
+                noexcept(std::is_nothrow_move_constructible_v<Indirect>)
             : m_referred(std::move(referred)) {}
         Reference(const Reference &) = default;
-        Reference(Reference &&) = default;
+
+        // Move-constructing a reference from another one is not valid C++. You can't do this:
+        //     A a;
+        //     A &ra(a);
+        //     A &rb(std::move(ra));
+        Reference(Reference &&) = delete;
+
         ~Reference() = default;
 
         Reference &operator=(const Reference &value)
-                noexcept(Referred::canNoexceptAssignQVariant)
+                noexcept(Indirect::CanNoexceptAssignQVariant)
         {
             return operator=(QVariant(value));
         }
 
         Reference &operator=(Reference &&value)
-                noexcept(Referred::canNoexceptAssignQVariant)
+                noexcept(Indirect::CanNoexceptAssignQVariant)
         {
             return operator=(QVariant(value));
         }
 
-        operator QVariant() const noexcept(Referred::canNoexceptConvertToQVariant)
+        Reference &operator=(const ConstReference<Indirect> &value)
+                noexcept(Indirect::CanNoexceptAssignQVariant)
+        {
+            return operator=(QVariant(value));
+        }
+
+        Reference &operator=(ConstReference<Indirect> &&value)
+                noexcept(Indirect::CanNoexceptAssignQVariant)
+        {
+            return operator=(QVariant(value));
+        }
+
+        operator QVariant() const noexcept(Indirect::CanNoexceptConvertToQVariant)
         {
             return ConstReference(m_referred);
         }
@@ -316,49 +344,55 @@ public:
             b = std::move(tmp);
         }
 
-        // To be specialized for each Referred
-        Reference &operator=(const QVariant &value) noexcept(Referred::canNoexceptAssignQVariant);
+        // To be specialized for each Indirect
+        Reference &operator=(const QVariant &value) noexcept(Indirect::CanNoexceptAssignQVariant);
     };
 
-    template<typename Pointed>
+    template<typename Indirect>
     class ConstPointer
     {
     private:
-        Pointed m_pointed;
+        Indirect m_pointed;
 
     public:
-        explicit ConstPointer(const Pointed &pointed)
-                noexcept(std::is_nothrow_copy_constructible_v<Pointed>)
+        explicit ConstPointer(const Indirect &pointed)
+                noexcept(std::is_nothrow_copy_constructible_v<Indirect>)
             : m_pointed(pointed) {}
-        explicit ConstPointer(Pointed &&pointed)
-                noexcept(std::is_nothrow_move_constructible_v<Pointed>)
+        explicit ConstPointer(Indirect &&pointed)
+                noexcept(std::is_nothrow_move_constructible_v<Indirect>)
             : m_pointed(std::move(pointed)) {}
 
-        ConstReference<Pointed> operator*()
-                const noexcept(std::is_nothrow_copy_constructible_v<Pointed>)
+        ConstReference<Indirect> operator*()
+                const noexcept(std::is_nothrow_copy_constructible_v<Indirect>)
         {
-            return ConstReference<Pointed>(m_pointed);
+            return ConstReference<Indirect>(m_pointed);
         }
     };
 
-    template<typename Pointed>
+    template<typename Indirect>
     class Pointer
     {
     private:
-        Pointed m_pointed;
+        Indirect m_pointed;
 
     public:
-        explicit Pointer(const Pointed &pointed)
-                noexcept(std::is_nothrow_copy_constructible_v<Pointed>)
+        explicit Pointer(const Indirect &pointed)
+                noexcept(std::is_nothrow_copy_constructible_v<Indirect>)
             : m_pointed(pointed) {}
-        explicit Pointer(Pointed &&pointed)
-                noexcept(std::is_nothrow_move_constructible_v<Pointed>)
+        explicit Pointer(Indirect &&pointed)
+                noexcept(std::is_nothrow_move_constructible_v<Indirect>)
             : m_pointed(std::move(pointed)) {}
 
-        Reference<Pointed> operator*()
-                const noexcept(std::is_nothrow_copy_constructible_v<Pointed>)
+        Reference<Indirect> operator*()
+                const noexcept(std::is_nothrow_copy_constructible_v<Indirect>)
         {
-            return Reference<Pointed>(m_pointed);
+            return Reference<Indirect>(m_pointed);
+        }
+
+        operator ConstPointer<Indirect>() const
+                noexcept(std::is_nothrow_copy_constructible_v<Indirect>)
+        {
+            return ConstPointer(m_pointed);
         }
     };
 
@@ -474,7 +508,7 @@ public:
         if (!mt)
             return 0;
         int id = mt->typeId.loadRelaxed();
-        // Q_ASSUME(id > 0);
+        Q_PRESUME(id > 0);
         return id;
     }
 
@@ -762,37 +796,51 @@ private:
     QDebug qdebugHelper(QDebug) const;
 #endif
 
+    template <typename T, typename Variant> static constexpr
+    bool canGetTypeFromVariant(Variant *v) noexcept
+    {
+        if (!v)
+            return false;
+        if (std::is_const_v<Variant> && v->d.is_null)
+            return false;       // (const) data() will not detach from is_null
+        return v->d.type() == QMetaType::fromType<T>();
+    }
+
+    template <typename T> T *typedData()
+    {
+        Q_PRE(canGetTypeFromVariant<T>(this));
+        return static_cast<T *>(data());    // detaches if necessary
+    }
+
+    template <typename T> const T *typedData() const
+    {
+        Q_PRE(canGetTypeFromVariant<T>(this));
+        return &d.get<T>();
+    }
+
     template <typename T>
     friend T *get_if(QVariant *v) noexcept
     {
-        // data() will detach from is_null, returning non-nullptr
-        if (!v || v->d.type() != QMetaType::fromType<T>())
+        if (!canGetTypeFromVariant<T>(v))
             return nullptr;
-        return static_cast<T*>(v->data());
+        return v->typedData<T>();
     }
     template <typename T>
     friend const T *get_if(const QVariant *v) noexcept
     {
-        // (const) data() will not detach from is_null, return nullptr
-        if (!v || v->d.is_null || v->d.type() != QMetaType::fromType<T>())
+        if (!canGetTypeFromVariant<T>(v))
             return nullptr;
-        return static_cast<const T*>(v->data());
+        return v->typedData<const T>();
     }
 
-#define Q_MK_GET(cvref) \
-    template <typename T> \
-    friend T cvref get(QVariant cvref v) \
-    { \
-        if constexpr (std::is_const_v<T cvref>) \
-            Q_ASSERT(!v.d.is_null); \
-        Q_ASSERT(v.d.type() == QMetaType::fromType<q20::remove_cvref_t<T>>()); \
-        return static_cast<T cvref>(*get_if<T>(&v)); \
-    } \
+#define Q_MK_GET(CONST, REF)                                            \
+    template <typename T> friend CONST T REF get(CONST QVariant REF v)  \
+    { return static_cast<CONST T REF>(*v.typedData<T>()); }             \
     /* end */
-    Q_MK_GET(&)
-    Q_MK_GET(const &)
-    Q_MK_GET(&&)
-    Q_MK_GET(const &&)
+    Q_MK_GET(, &)
+    Q_MK_GET(const, &)
+    Q_MK_GET(, &&)
+    Q_MK_GET(const, &&)
 #undef Q_MK_GET
 
     static QVariant moveConstruct(QMetaType type, void *data);
@@ -895,7 +943,23 @@ inline bool QVariant::isDetached() const
 inline void swap(QVariant &value1, QVariant &value2) noexcept
 { value1.swap(value2); }
 
+template<typename Indirect>
+inline QVariant::ConstReference<Indirect>::ConstReference(const Reference<Indirect> &nonConst)
+        noexcept(std::is_nothrow_copy_constructible_v<Indirect>)
+    : ConstReference(nonConst.m_referred)
+{
+}
+
 #ifndef QT_MOC
+
+namespace QtPrivate {
+template<typename T> inline T qvariant_cast_qmetatype_converted(const QVariant &v, QMetaType targetType)
+{
+    T t{};
+    QMetaType::convert(v.metaType(), v.constData(), targetType, &t);
+    return t;
+}
+} // namespace QtPrivate
 
 template<typename T> inline T qvariant_cast(const QVariant &v)
 {
@@ -909,9 +973,7 @@ template<typename T> inline T qvariant_cast(const QVariant &v)
             return v.d.get<nonConstT>();
     }
 
-    T t{};
-    QMetaType::convert(v.metaType(), v.constData(), targetType, &t);
-    return t;
+    return QtPrivate::qvariant_cast_qmetatype_converted<T>(v, targetType);
 }
 
 template<typename T> inline T qvariant_cast(QVariant &&v)
@@ -943,9 +1005,7 @@ template<typename T> inline T qvariant_cast(QVariant &&v)
             return v.d.get<nonConstT>();
     }
 
-    T t{};
-    QMetaType::convert(v.metaType(), v.constData(), targetType, &t);
-    return t;
+    return QtPrivate::qvariant_cast_qmetatype_converted<T>(v, targetType);
 }
 
 #  ifndef QT_NO_VARIANT
@@ -982,8 +1042,13 @@ private:
 };
 }
 
-template<typename Pointer>
-class QVariantRef
+#if QT_DEPRECATED_SINCE(6, 15)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
+
+template<typename Pointer> class
+QT_DEPRECATED_VERSION_X_6_15("Use QVariant::Reference instead.")
+QVariantRef
 {
 private:
     const Pointer *m_pointer = nullptr;
@@ -1007,7 +1072,8 @@ public:
     }
 };
 
-class Q_CORE_EXPORT QVariantConstPointer
+// Keep this a single long line, otherwise syncqt doesn't create a class forwarding header
+class Q_CORE_EXPORT QT_DEPRECATED_VERSION_X_6_15("Use QVariant::ConstPointer instead.") QVariantConstPointer
 {
 private:
     QVariant m_variant;
@@ -1019,8 +1085,9 @@ public:
     const QVariant *operator->() const;
 };
 
-template<typename Pointer>
-class QVariantPointer
+template<typename Pointer> class
+QT_DEPRECATED_VERSION_X_6_15("Use QVariant::Pointer instead.")
+QVariantPointer
 {
 private:
     const Pointer *m_pointer = nullptr;
@@ -1030,6 +1097,9 @@ public:
     QVariantRef<Pointer> operator*() const { return QVariantRef<Pointer>(m_pointer); }
     Pointer operator->() const { return *m_pointer; }
 };
+
+QT_WARNING_POP
+#endif // QT_DEPRECATED_SINCE(6, 15)
 
 QT_END_NAMESPACE
 

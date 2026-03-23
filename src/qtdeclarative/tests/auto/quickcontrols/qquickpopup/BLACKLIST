@@ -15,3 +15,9 @@ android
 android
 [shrinkPopupThatWasLargerThanWindow]
 android
+
+[fadeDimmer]
+macos # QTBUG-131695
+
+[activeFocusItemAfterWindowInactive]
+wayland

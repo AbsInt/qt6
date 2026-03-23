@@ -70,7 +70,7 @@ public:
     int touchUpdates;
     int touchReleases;
     int ungrabs;
-    QVector<QEventPoint::State> touchPointStates;
+    QList<QEventPoint::State> touchPointStates;
 
 protected:
     void touchEvent(QTouchEvent *ev) override
@@ -239,6 +239,8 @@ private slots:
     void nestedWheelEventPropagation_data();
     void nestedWheelEventPropagation();
     void scrollToEndAngleDeltaOnly();
+    void positionOrFlickToChild_data();
+    void positionOrFlickToChild();
 
 private:
     std::unique_ptr<QPointingDevice> touchscreen{QTest::createTouchDevice()};
@@ -1993,7 +1995,7 @@ void tst_qquickflickable::flickTwiceUsingTouches()
     qDebug() << "contentYAfterFirstFlick " << contentYAfterFirstFlick;
     QVERIFY(contentYAfterFirstFlick > 50.0f);
     // Wait until view stops moving
-    QTRY_VERIFY(!flickable->isMoving());
+    QTRY_VERIFY_WITH_TIMEOUT(!flickable->isMoving(), 3s);
 
     QQuickTest::pointerFlick(touchscreen.get(), &window, 1, QPoint(100, 400), QPoint(100, 240), 100);
 
@@ -3619,6 +3621,119 @@ void tst_qquickflickable::scrollToEndAngleDeltaOnly()
     }
     QCOMPARE(flickable->isAtXBeginning(), true);
     sendTrackpadScroll(Qt::ScrollEnd, nullDelta, nullDelta);
+}
+
+void tst_qquickflickable::positionOrFlickToChild_data()
+{
+    QTest::addColumn<QQuickFlickable::PositionMode>("positionMode");
+    QTest::addColumn<int>("childIndex");
+    QTest::addColumn<QPoint>("expectedEndContentPos");
+
+    QTest::newRow("top label, top-left alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignLeft | QQuickFlickable::AlignTop)
+            << 0 << QPoint(10, 10);
+    QTest::newRow("top field, top-left alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignLeft | QQuickFlickable::AlignTop)
+            << 4 << QPoint(50, 10);
+    QTest::newRow("bottom label, top-left alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignLeft | QQuickFlickable::AlignTop)
+            << 3 << QPoint(160, 70);
+    QTest::newRow("bottom field, top-left alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignLeft | QQuickFlickable::AlignTop)
+            << 7 << QPoint(190, 70);
+
+    QTest::newRow("top label, bottom-right alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignRight | QQuickFlickable::AlignBottom)
+            << 0 << QPoint(0, 0);
+    QTest::newRow("top field, bottom-right alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignRight | QQuickFlickable::AlignBottom)
+            << 4 << QPoint(0, 0);
+    QTest::newRow("bottom label, bottom-right alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignRight | QQuickFlickable::AlignBottom)
+            << 3 << QPoint(0, 60);
+    QTest::newRow("bottom field, bottom-right alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignRight | QQuickFlickable::AlignBottom)
+            << 7 << QPoint(180, 60);
+
+    QTest::newRow("top label, center alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignCenter)
+            << 0 << QPoint(0, 0);
+    QTest::newRow("top field, center alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignCenter)
+            << 4 << QPoint(0, 0);
+    QTest::newRow("second-row field, center alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignCenter)
+            << 5 << QPoint(40, 15);
+    QTest::newRow("bottom label, center alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignCenter)
+            << 3 << QPoint(68, 70);
+    QTest::newRow("bottom field, center alignment")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignCenter)
+            << 7 << QPoint(190, 70);
+
+    QTest::newRow("bottom field, visible") // only vertical flick is need for this field to be visible
+            << QQuickFlickable::PositionMode(QQuickFlickable::Visible)
+            << 7 << QPoint(0, 60);
+    QTest::newRow("bottom field, contain")
+            << QQuickFlickable::PositionMode(QQuickFlickable::Contain)
+            << 7 << QPoint(180, 60);
+    QTest::newRow("third-row field, visible") // already partially visible, no movement expected
+            << QQuickFlickable::PositionMode(QQuickFlickable::Visible)
+            << 6 << QPoint(0, 0);
+    QTest::newRow("third-row field, contain")
+            << QQuickFlickable::PositionMode(QQuickFlickable::Contain)
+            << 6 << QPoint(80, 20);
+
+    QTest::newRow("third-row field, horizontal center")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignHCenter)
+            << 6 << QPoint(115, 0);
+    QTest::newRow("third-row field, horizontal center contain")
+            << QQuickFlickable::PositionMode(QQuickFlickable::AlignHCenter | QQuickFlickable::Contain)
+            << 6 << QPoint(80, 20);
+}
+
+void tst_qquickflickable::positionOrFlickToChild()
+{
+    QFETCH(QQuickFlickable::PositionMode, positionMode);
+    QFETCH(int, childIndex);
+    QFETCH(QPoint, expectedEndContentPos);
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("flickableForm.qml")));
+    auto flickable = window.contentItem()->findChild<QQuickFlickable *>();
+    QVERIFY(flickable);
+    QList<QQuickItem *> childItems = flickable->contentItem()->childItems();
+    QCOMPARE(childItems.size(), 8);
+
+    // Highlight the child of interest, for visual confirmation
+    QQuickItem *child = childItems[childIndex];
+    child->setProperty("color", QColor(Qt::darkGreen));
+
+    // Try flickToChild()
+    const QRectF bounds = child->mapToItem(flickable->contentItem(), child->boundingRect());
+    flickable->flickToChild(child, positionMode);
+    QTRY_COMPARE(flickable->isMoving(), false);
+    if (lcTests().isDebugEnabled())
+        QTest::qWait(500); // visual verification
+    qCDebug(lcTests) << "flicked to" << bounds << "ended at" << flickable->contentX() << flickable->contentY()
+                     << "expected" << expectedEndContentPos;
+    QCOMPARE(flickable->contentX(), expectedEndContentPos.x());
+    QCOMPARE(flickable->contentY(), expectedEndContentPos.y());
+
+    // Try invoking flickTo() from QML
+    QMetaObject::invokeMethod(flickable, "goHome");
+    QTRY_COMPARE(flickable->isMoving(), false);
+    QCOMPARE(flickable->contentX(), 0);
+    QCOMPARE(flickable->contentY(), 0);
+
+    // Try positionViewAtChild()
+    flickable->positionViewAtChild(child, positionMode);
+    if (lcTests().isDebugEnabled())
+        QTest::qWait(500); // visual verification
+    qCDebug(lcTests) << "positioned at" << bounds << "ended at" << flickable->contentX() << flickable->contentY()
+                     << "expected" << expectedEndContentPos;
+    QCOMPARE(flickable->contentX(), expectedEndContentPos.x());
+    QCOMPARE(flickable->contentY(), expectedEndContentPos.y());
 }
 
 QTEST_MAIN(tst_qquickflickable)

@@ -28,8 +28,8 @@ class Q_QUICK_EXPORT QQuickFlickable : public QQuickItem
 {
     Q_OBJECT
 
-    Q_PROPERTY(qreal contentWidth READ contentWidth WRITE setContentWidth NOTIFY contentWidthChanged)
-    Q_PROPERTY(qreal contentHeight READ contentHeight WRITE setContentHeight NOTIFY contentHeightChanged)
+    Q_PROPERTY(qreal contentWidth READ contentWidth WRITE setContentWidth NOTIFY contentWidthChanged VIRTUAL)
+    Q_PROPERTY(qreal contentHeight READ contentHeight WRITE setContentHeight NOTIFY contentHeightChanged VIRTUAL)
     Q_PROPERTY(qreal contentX READ contentX WRITE setContentX NOTIFY contentXChanged)
     Q_PROPERTY(qreal contentY READ contentY WRITE setContentY NOTIFY contentYChanged)
     Q_PROPERTY(QQuickItem *contentItem READ contentItem CONSTANT)
@@ -193,10 +193,27 @@ public:
     qreal horizontalOvershoot() const;
     qreal verticalOvershoot() const;
 
+    enum PositionModeFlag {
+        AlignLeft = Qt::AlignLeft,
+        AlignRight = Qt::AlignRight,
+        AlignHCenter = Qt::AlignHCenter,
+        AlignTop = Qt::AlignTop,
+        AlignBottom = Qt::AlignBottom,
+        AlignVCenter = Qt::AlignVCenter,
+        AlignCenter = AlignVCenter | AlignHCenter,
+        Visible = 0x01000,
+        Contain = 0x02000
+    };
+    Q_DECLARE_FLAGS(PositionMode, PositionModeFlag)
+    Q_FLAG(PositionMode)
+
     Q_INVOKABLE void resizeContent(qreal w, qreal h, QPointF center);
     Q_INVOKABLE void returnToBounds();
     Q_INVOKABLE void flick(qreal xVelocity, qreal yVelocity);
     Q_INVOKABLE void cancelFlick();
+    Q_REVISION(6, 11) Q_INVOKABLE void positionViewAtChild(QQuickItem *child, PositionMode mode, const QPointF &offset = QPointF());
+    Q_REVISION(6, 11) Q_INVOKABLE void flickToChild(QQuickItem *child, PositionMode mode, const QPointF &offset = QPointF());
+    Q_REVISION(6, 11) Q_INVOKABLE void flickTo(const QPointF &position);
 
 Q_SIGNALS:
     void contentWidthChanged();
@@ -283,6 +300,9 @@ protected:
 
     bool xflick() const;
     bool yflick() const;
+
+    QPointF computePosition(QPointF currentPosition, QRectF itemRect, PositionMode mode,
+                            const QPointF &offset = QPointF()) const;
 
 protected:
     QQuickFlickable(QQuickFlickablePrivate &dd, QQuickItem *parent);

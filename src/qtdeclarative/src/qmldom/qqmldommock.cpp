@@ -46,15 +46,15 @@ bool MockObject::iterateDirectSubpaths(const DomItem &self, DirectVisitor visito
     auto itV = subValues.begin();
     auto endV = subValues.end();
     while (itV != endV) {
-        cont = cont && self.dvValue(visitor, PathEls::Field(toField(itV.key())), *itV);
+        cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(toField(itV.key())), *itV);
         ++itV;
     }
     auto itO = subObjects.begin();
     auto endO = subObjects.end();
     while (itO != endO) {
-        cont = cont && self.dvItem(visitor, PathEls::Field(toField(itO.key())), [&self, &itO]() {
-            return self.copy(&(*itO));
-        });
+        cont = cont && visitor(PathEls::Field(toField(itO.key())), [&self, &itO]() {
+                   return self.copy(&(*itO));
+               });
         ++itO;
     }
     return cont;
@@ -101,7 +101,7 @@ bool MockOwner::iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor
         auto itV = subValues.begin();
         auto endV = subValues.end();
         while (itV != endV) {
-            if (!self.dvValue(visitor, PathEls::Field(toField(itV.key())), *itV))
+            if (!self.invokeVisitorOnValue(visitor, PathEls::Field(toField(itV.key())), *itV))
                 return false;
             ++itV;
         }
@@ -110,9 +110,10 @@ bool MockOwner::iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor
         auto itO = subObjects.begin();
         auto endO = subObjects.end();
         while (itO != endO) {
-            if (!self.dvItem(visitor, PathEls::Field(toField(itO.key())),
-                             [&self, &itO]() { return self.copy(&(*itO)); }))
+            if (!visitor(PathEls::Field(toField(itO.key())),
+                         [&self, &itO]() { return self.copy(&(*itO)); })) {
                 return false;
+            }
             ++itO;
         }
     }
@@ -120,7 +121,7 @@ bool MockOwner::iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor
         auto it = subMaps.begin();
         auto end = subMaps.end();
         while (it != end) {
-            if (!self.dvWrapField(visitor, toField(it.key()), it.value()))
+            if (!self.invokeVisitorOnField(visitor, toField(it.key()), it.value()))
                 return false;
             ++it;
         }
@@ -129,7 +130,7 @@ bool MockOwner::iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor
         auto it = subMultiMaps.begin();
         auto end = subMultiMaps.end();
         while (it != end) {
-            if (!self.dvWrapField(visitor, toField(it.key()), it.value()))
+            if (!self.invokeVisitorOnField(visitor, toField(it.key()), it.value()))
                 return false;
             ++it;
         }
@@ -138,7 +139,7 @@ bool MockOwner::iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor
         auto it = subLists.begin();
         auto end = subLists.end();
         while (it != end) {
-            if (!self.dvWrapField(visitor, toField(it.key()), it.value()))
+            if (!self.invokeVisitorOnField(visitor, toField(it.key()), it.value()))
                 return false;
             ++it;
         }

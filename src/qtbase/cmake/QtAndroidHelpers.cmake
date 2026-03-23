@@ -259,21 +259,8 @@ function(qt_internal_android_dependencies_content target file_content_out)
     endif()
 
     # Android Permissions
-    if(arg_PERMISSIONS)
-        foreach(permission IN LISTS arg_PERMISSIONS)
-            # Check if the permission has also extra attributes in addition to the permission name
-            list(LENGTH permission permission_len)
-            if(permission_len EQUAL 1)
-                string(APPEND file_contents "<permission name=\"${permission}\" />\n")
-            elseif(permission_len EQUAL 2)
-                list(GET permission 0 name)
-                list(GET permission 1 extras)
-                string(APPEND file_contents "<permission name=\"${name}\" extras=\"${extras}\"/>\n")
-            else()
-                message(FATAL_ERROR "Invalid permission format: ${permission} ${permission_len}")
-            endif()
-        endforeach()
-    endif()
+    _qt_internal_android_convert_permissions(permissions_string ${target} "DEPENDENCIESXML")
+    string(APPEND file_contents "${permissions_string}")
 
     # Android Features
     if(arg_FEATURES)
@@ -559,4 +546,28 @@ function(qt_internal_create_source_jar)
 
     add_dependencies(install_android_source_jar_${module} ${jar_target})
     add_dependencies(install_android_source_jars install_android_source_jar_${module})
+endfunction()
+
+# The function stores Android permissions that are required by the module target.
+# The stored INTERFACE_QT_ANDROID_PERMISSIONS is the transitive property.
+function(qt_internal_android_add_interface_permissions target)
+    get_target_property(permissions ${target} QT_ANDROID_PERMISSIONS)
+    if(NOT permissions)
+        return()
+    endif()
+
+    qt_internal_set_module_transitive_properties(${target} TYPE LINK PROPERTIES
+        INTERFACE_QT_ANDROID_PERMISSIONS "${permissions}")
+endfunction()
+
+# The function stores Android features that are required by the module target.
+# The stored INTERFACE_QT_ANDROID_FEATURES is the transitive property.
+function(qt_internal_android_add_interface_features target)
+    get_target_property(features ${target} QT_ANDROID_FEATURES)
+    if(NOT features)
+        return()
+    endif()
+
+    qt_internal_set_module_transitive_properties(${target} TYPE LINK PROPERTIES
+        INTERFACE_QT_ANDROID_FEATURES "${features}")
 endfunction()

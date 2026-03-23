@@ -717,10 +717,10 @@ void QQuickTextPrivate::setupCustomLineGeometry(QTextLine &line, qreal &height, 
 }
 
 void QQuickTextPrivate::elideFormats(
-        const int start, const int length, int offset, QVector<QTextLayout::FormatRange> *elidedFormats)
+        const int start, const int length, int offset, QList<QTextLayout::FormatRange> *elidedFormats)
 {
     const int end = start + length;
-    const QVector<QTextLayout::FormatRange> formats = layout.formats();
+    const QList<QTextLayout::FormatRange> formats = layout.formats();
     for (int i = 0; i < formats.size(); ++i) {
         QTextLayout::FormatRange format = formats.at(i);
         const int formatLength = qMin(format.start + format.length, end) - qMax(format.start, start);
@@ -1212,7 +1212,7 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
         }
         QTextEngine *engine = layout.engine();
         if (engine && engine->hasFormats()) {
-            QVector<QTextLayout::FormatRange> formats;
+            QList<QTextLayout::FormatRange> formats;
             switch (elideMode) {
             case QQuickText::ElideRight:
                 elideFormats(elideStart, elideText.size() - 1, 0, &formats);
@@ -3201,7 +3201,7 @@ bool QQuickTextPrivate::isLinkHoveredConnected()
     IS_SIGNAL_CONNECTED(q, QQuickText, linkHovered, (const QString &));
 }
 
-static void getLinks_helper(const QTextLayout *layout, QVector<QQuickTextPrivate::LinkDesc> *links)
+static void getLinks_helper(const QTextLayout *layout, QList<QQuickTextPrivate::LinkDesc> *links)
 {
     for (const QTextLayout::FormatRange &formatRange : layout->formats()) {
         if (formatRange.format.isAnchor()) {
@@ -3225,9 +3225,9 @@ static void getLinks_helper(const QTextLayout *layout, QVector<QQuickTextPrivate
     }
 }
 
-QVector<QQuickTextPrivate::LinkDesc> QQuickTextPrivate::getLinks() const
+QList<QQuickTextPrivate::LinkDesc> QQuickTextPrivate::getLinks() const
 {
-    QVector<QQuickTextPrivate::LinkDesc> links;
+    QList<QQuickTextPrivate::LinkDesc> links;
     getLinks_helper(&layout, &links);
     return links;
 }
@@ -3415,7 +3415,7 @@ void QQuickText::setRenderType(QQuickText::RenderType renderType)
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #if QT_DEPRECATED_SINCE(5, 15)
 /*!
-    \qmlmethod QtQuick::Text::doLayout()
+    \qmlmethod void QtQuick::Text::doLayout()
     \deprecated
 
     Use \l forceLayout() instead.
@@ -3428,7 +3428,7 @@ void QQuickText::doLayout()
 #endif
 #endif
 /*!
-    \qmlmethod QtQuick::Text::forceLayout()
+    \qmlmethod void QtQuick::Text::forceLayout()
     \since 5.9
 
     Triggers a re-layout of the displayed text.
@@ -3440,7 +3440,7 @@ void QQuickText::forceLayout()
 }
 
 /*!
-    \qmlmethod QtQuick::Text::linkAt(real x, real y)
+    \qmlmethod string QtQuick::Text::linkAt(real x, real y)
     \since 5.3
 
     Returns the link string at point \a x, \a y in content coordinates,

@@ -37,7 +37,9 @@
     The const qualification on a regular C++ pointer can also be expressed with
     a QScopedPointer:
 
-    \snippet code/src_corelib_tools_qscopedpointer.cpp 2
+    \snippet code/src_corelib_tools_qscopedpointer.cpp 2.0
+    \snippet code/src_corelib_tools_qscopedpointer.cpp 2.1
+    \snippet code/src_corelib_tools_qscopedpointer.cpp 2.2
 
     \section1 Custom Cleanup Handlers
 

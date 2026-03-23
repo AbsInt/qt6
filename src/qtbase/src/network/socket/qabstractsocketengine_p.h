@@ -21,6 +21,7 @@
 #include "QtNetwork/qhostaddress.h"
 #include "QtNetwork/qabstractsocket.h"
 #include <QtCore/qdeadlinetimer.h>
+#include "private/qabstractsocketenginereceiver_p.h"
 #include "private/qnetworkdatagram_p.h"
 #include "private/qobject_p.h"
 
@@ -32,19 +33,6 @@ class QAbstractSocketEnginePrivate;
 class QNetworkInterface;
 #endif
 class QNetworkProxy;
-
-class QAbstractSocketEngineReceiver {
-public:
-    virtual ~QAbstractSocketEngineReceiver(){}
-    virtual void readNotification()= 0;
-    virtual void writeNotification()= 0;
-    virtual void closeNotification()= 0;
-    virtual void exceptionNotification()= 0;
-    virtual void connectionNotification()= 0;
-#ifndef QT_NO_NETWORKPROXY
-    virtual void proxyAuthenticationRequired(const QNetworkProxy &proxy, QAuthenticator *authenticator)= 0;
-#endif
-};
 
 static constexpr std::chrono::seconds DefaultTimeout{30};
 
@@ -77,6 +65,9 @@ public:
         MaxStreamsSocketOption,
         PathMtuInformation,
         BindInterfaceIndex,
+        KeepAliveIdleOption,
+        KeepAliveIntervalOption,
+        KeepAliveCountOption,
     };
 
     enum PacketHeaderOption {

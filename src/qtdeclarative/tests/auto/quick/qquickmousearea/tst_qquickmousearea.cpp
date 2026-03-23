@@ -133,6 +133,7 @@ private slots:
     void nestedStopAtBounds();
     void nestedStopAtBounds_data();
     void nestedFlickableStopAtBounds();
+    void grandChildOutOfBounds();
     void containsPress_data();
     void containsPress();
     void ignoreBySource();
@@ -1950,10 +1951,10 @@ void tst_QQuickMouseArea::cursorUpdating()
     const QPoint p(240, 40);
     const QPoint pg = window.mapToGlobal(p);
     QCursor::setPos(pg);
-    QWheelEvent wheelEvent(p, pg, QPoint(60, -400), QPoint(0, -600),
+    QWheelEvent wheelEvent(p, pg, QPoint(60, -300), QPoint(0, -450),
                            Qt::NoButton, Qt::ControlModifier, Qt::NoScrollPhase, false);
     QGuiApplication::sendEvent(&window, &wheelEvent);
-    QTRY_VERIFY(flickable->contentY() > 300);
+    QTRY_VERIFY(flickable->contentY() > 250);
     QCOMPARE(window.cursor().shape(), Qt::IBeamCursor);
 }
 #endif
@@ -2132,6 +2133,22 @@ void tst_QQuickMouseArea::nestedFlickableStopAtBounds()
     QVERIFY(flickable->isDragging());
     QVERIFY(!mouseArea->drag()->active());
     QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, position);
+}
+
+void tst_QQuickMouseArea::grandChildOutOfBounds() // QTBUG-142366
+{
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("grandchildOutOfBounds.qml")));
+    QQuickMouseArea *grandchild = window.rootObject()->findChild<QQuickMouseArea*>("grandchild MA");
+    QVERIFY(grandchild);
+    QQuickItemPrivate *grandparentPrivate = QQuickItemPrivate::get(grandchild->parentItem()->parentItem());
+
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, {50, 150});
+    QCOMPARE(grandparentPrivate->eventHandlingChildrenWithinBounds, false);
+    QCOMPARE(grandparentPrivate->eventHandlingChildrenWithinBoundsSet, true);
+    QCOMPARE(grandchild->isPressed(), true);
+
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, {50, 150});
 }
 
 void tst_QQuickMouseArea::containsPress_data()

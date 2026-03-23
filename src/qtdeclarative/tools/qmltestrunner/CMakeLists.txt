@@ -14,7 +14,10 @@ function(qt_internal_add_entitlements_to_qmltestrunner target)
         set(entitlements_file
             "${__qt_internal_cmake_apple_support_files_path}/test.entitlements.plist")
         add_custom_command(TARGET ${target}
-            POST_BUILD COMMAND codesign --sign - -f
+            POST_BUILD COMMAND
+             codesign --remove-signature
+                "$<TARGET_FILE:${target}>"
+             && codesign --sign -
                 --entitlements "${entitlements_file}"
                 "$<TARGET_FILE:${target}>"
 

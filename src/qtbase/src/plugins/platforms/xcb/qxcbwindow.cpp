@@ -242,25 +242,6 @@ void QXcbWindow::create()
         ? QHighDpi::toNativeLocalPosition(window()->geometry(), platformScreen)
         : QHighDpi::toNativePixels(window()->geometry(), platformScreen);
 
-    if (type == Qt::Desktop) {
-        m_window = platformScreen->root();
-        m_depth = platformScreen->screen()->root_depth;
-        m_visualId = platformScreen->screen()->root_visual;
-        const xcb_visualtype_t *visual = nullptr;
-        if (connection()->hasDefaultVisualId()) {
-            visual = platformScreen->visualForId(connection()->defaultVisualId());
-            if (visual)
-                m_visualId = connection()->defaultVisualId();
-            if (!visual)
-                qWarning("Could not use default visual id. Falling back to root_visual for screen.");
-        }
-        if (!visual)
-            visual = platformScreen->visualForId(m_visualId);
-        setImageFormatForVisual(visual);
-        connection()->addWindowEventListener(m_window, this);
-        return;
-    }
-
     const QSize minimumSize = windowMinimumSize();
     if (rect.width() > 0 || rect.height() > 0) {
         rect.setWidth(qBound(1, rect.width(), XCOORD_MAX));
@@ -303,7 +284,7 @@ void QXcbWindow::create()
     if (QPlatformWindow::parent()) {
         // When using a Vulkan QWindow via QWidget::createWindowContainer() we
         // must make sure the visuals are compatible. Now, the parent will be
-        // of RasterGLSurface which typically chooses a GLX/EGL compatible
+        // of OpenGLSurface which typically chooses a GLX/EGL compatible
         // visual which may not be what the Vulkan window would choose.
         // Therefore, take the parent's visual.
         if (window()->surfaceType() == QSurface::VulkanSurface

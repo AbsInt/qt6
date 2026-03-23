@@ -9,27 +9,22 @@
 #include <QtQml/QQmlInfo>
 #include <QtQml/QQmlError>
 #include <QtQmlModels/private/qqmlobjectmodel_p.h>
-#if QT_CONFIG(qml_delegate_model)
 #include <QtQmlModels/private/qqmldelegatemodel_p.h>
-#endif
 
 QT_BEGIN_NAMESPACE
 
 QQmlInstantiatorPrivate::QQmlInstantiatorPrivate()
     : componentComplete(true)
-    , effectiveReset(false)
     , active(true)
     , async(false)
-#if QT_CONFIG(qml_delegate_model)
     , ownModel(false)
-#endif
 {
 }
 
 void QQmlInstantiatorPrivate::clear()
 {
     Q_Q(QQmlInstantiator);
-    if (!instanceModel)
+    if (!model)
         return;
 
     if (objects.isEmpty())
@@ -38,7 +33,7 @@ void QQmlInstantiatorPrivate::clear()
     for (int i=0; i < objects.size(); i++) {
         QObject *object = objects[i];
         emit q->objectRemoved(i, object);
-        instanceModel->release(object);
+        model->release(object);
         if (object && object->parent() == q)
             object->setParent(nullptr);
     }
@@ -50,7 +45,7 @@ void QQmlInstantiatorPrivate::clear()
 QObject *QQmlInstantiatorPrivate::modelObject(int index, bool async)
 {
     requestedIndex = index;
-    QObject *o = instanceModel->object(index, async ? QQmlIncubator::Asynchronous : QQmlIncubator::AsynchronousIfNested);
+    QObject *o = model->object(index, async ? QQmlIncubator::Asynchronous : QQmlIncubator::AsynchronousIfNested);
     requestedIndex = -1;
     return o;
 }
@@ -66,13 +61,13 @@ void QQmlInstantiatorPrivate::regenerate()
 
     clear();
 
-    if (!active || !instanceModel || !instanceModel->count() || !instanceModel->isValid()) {
+    if (!active || !model || !model->count() || !model->isValid()) {
         if (prevCount)
             q->countChanged();
         return;
     }
 
-    for (int i = 0; i < instanceModel->count(); i++) {
+    for (int i = 0; i < model->count(); i++) {
         QObject *object = modelObject(i, async);
         // If the item was already created we won't get a createdItem
         if (object)
@@ -88,17 +83,17 @@ void QQmlInstantiatorPrivate::_q_createdItem(int idx, QObject* item)
     if (objects.contains(item)) //Case when it was created synchronously in regenerate
         return;
     if (requestedIndex != idx) // Asynchronous creation, reference the object
-        (void)instanceModel->object(idx);
+        (void)model->object(idx);
     if (!item->parent())
         item->setParent(q);
     if (objects.size() < idx + 1) {
-        int modelCount = instanceModel->count();
+        int modelCount = model->count();
         if (objects.capacity() < modelCount)
             objects.reserve(modelCount);
         objects.resize(idx + 1);
     }
     if (QObject *o = objects.at(idx))
-        instanceModel->release(o);
+        model->release(o);
     objects.replace(idx, item);
     if (objects.size() == 1)
         q->objectChanged();
@@ -109,7 +104,7 @@ void QQmlInstantiatorPrivate::_q_modelUpdated(const QQmlChangeSet &changeSet, bo
 {
     Q_Q(QQmlInstantiator);
 
-    if (!componentComplete || effectiveReset || !active)
+    if (!componentComplete || !active)
         return;
 
     if (reset) {
@@ -120,8 +115,8 @@ void QQmlInstantiatorPrivate::_q_modelUpdated(const QQmlChangeSet &changeSet, bo
     }
 
     int difference = 0;
-    QHash<int, QVector<QPointer<QObject> > > moved;
-    const QVector<QQmlChangeSet::Change> &removes = changeSet.removes();
+    QHash<int, QList<QPointer<QObject> > > moved;
+    const QList<QQmlChangeSet::Change> &removes = changeSet.removes();
     for (const QQmlChangeSet::Change &remove : removes) {
         int index = qMin(remove.index, objects.size());
         int count = qMin(remove.index + remove.count, objects.size()) - index;
@@ -135,17 +130,17 @@ void QQmlInstantiatorPrivate::_q_modelUpdated(const QQmlChangeSet &changeSet, bo
             objects.remove(index);
             q->objectRemoved(index, obj);
             if (obj)
-                instanceModel->release(obj);
+                model->release(obj);
         }
 
         difference -= remove.count;
     }
 
-    const QVector<QQmlChangeSet::Change> &inserts = changeSet.inserts();
+    const QList<QQmlChangeSet::Change> &inserts = changeSet.inserts();
     for (const QQmlChangeSet::Change &insert : inserts) {
         int index = qMin(insert.index, objects.size());
         if (insert.isMove()) {
-            QVector<QPointer<QObject> > movedObjects = moved.value(insert.moveId);
+            QList<QPointer<QObject> > movedObjects = moved.value(insert.moveId);
             objects = objects.mid(0, index) + movedObjects + objects.mid(index);
         } else {
             if (insert.index <= objects.size())
@@ -163,22 +158,6 @@ void QQmlInstantiatorPrivate::_q_modelUpdated(const QQmlChangeSet &changeSet, bo
     if (difference != 0)
         q->countChanged();
 }
-
-#if QT_CONFIG(qml_delegate_model)
-void QQmlInstantiatorPrivate::makeModel()
-{
-    Q_Q(QQmlInstantiator);
-    QQmlDelegateModel* delegateModel = new QQmlDelegateModel(qmlContext(q), q);
-    instanceModel = delegateModel;
-    ownModel = true;
-    delegateModel->setDelegate(delegate);
-    delegateModel->setDelegateModelAccess(delegateModelAccess);
-    delegateModel->classBegin(); //Pretend it was made in QML
-    if (componentComplete)
-        delegateModel->componentComplete();
-}
-#endif
-
 
 /*!
     \qmltype Instantiator
@@ -207,6 +186,8 @@ QQmlInstantiator::~QQmlInstantiator()
 {
     Q_D(QQmlInstantiator);
     d->clear();
+    QQmlDelegateModelPointer model(d->model);
+    d->disconnectModel(this, &model);
 }
 
 /*!
@@ -319,15 +300,13 @@ void QQmlInstantiator::setDelegate(QQmlComponent* c)
     d->delegate = c;
     emit delegateChanged();
 
-#if QT_CONFIG(qml_delegate_model)
     if (!d->ownModel)
         return;
 
-    if (QQmlDelegateModel *dModel = qobject_cast<QQmlDelegateModel*>(d->instanceModel))
+    if (QQmlDelegateModel *dModel = qobject_cast<QQmlDelegateModel*>(d->model))
         dModel->setDelegate(c);
-    if (d->componentComplete)
+    else if (d->componentComplete)
         d->regenerate();
-#endif
 }
 
 /*!
@@ -352,97 +331,62 @@ void QQmlInstantiator::setDelegate(QQmlComponent* c)
 QVariant QQmlInstantiator::model() const
 {
     Q_D(const QQmlInstantiator);
-#if QT_CONFIG(qml_delegate_model)
-    if (!d->ownModel)
-        return QVariant::fromValue(d->instanceModel);
 
-    return d->instanceModel
-            ? static_cast<QQmlDelegateModel *>(d->instanceModel)->model()
-            : QVariant(0);
-#else
-    return QVariant::fromValue(d->instanceModel);
-#endif
+    if (d->ownModel)
+        return static_cast<QQmlDelegateModel *>(d->model.data())->model();
+    if (d->model)
+        return QVariant::fromValue(d->model);
+    return QVariant();
 }
 
-void QQmlInstantiator::setModel(const QVariant &v)
+void QQmlInstantiator::setModel(const QVariant &m)
 {
     Q_D(QQmlInstantiator);
-    QQmlInstanceModel *prevModel = d->instanceModel;
+    QVariant model = m;
+    if (model.userType() == qMetaTypeId<QJSValue>())
+        model = model.value<QJSValue>().toVariant();
 
-#if QT_CONFIG(qml_delegate_model)
+    QQmlDelegateModelPointer oldModel(d->model);
     if (d->ownModel) {
-        if (!prevModel) {
-            if (v == QVariant(0))
-                return;
-        } else if (static_cast<QQmlDelegateModel *>(prevModel)->model() == v) {
+        if (oldModel.delegateModel()->model() == model)
             return;
-        }
-    } else if (QVariant::fromValue(prevModel) == v) {
+    } else if (QVariant::fromValue(d->model) == model) {
         return;
     }
-#else
-    if (QVariant::fromValue(prevModel) == v)
-        return;
-#endif
 
-    QObject *object = qvariant_cast<QObject*>(v);
-    QQmlInstanceModel *vim = nullptr;
-    if (object && (vim = qobject_cast<QQmlInstanceModel *>(object))) {
-#if QT_CONFIG(qml_delegate_model)
+    d->clear();
+
+    d->disconnectModel(this, &oldModel);
+    d->model = nullptr;
+
+    QObject *object = qvariant_cast<QObject *>(model);
+
+    QQmlDelegateModelPointer newModel(qobject_cast<QQmlInstanceModel *>(object));
+    if (newModel) {
         if (d->ownModel) {
-            delete d->instanceModel;
-            prevModel = nullptr;
+            delete oldModel.instanceModel();
             d->ownModel = false;
         }
-#endif
-        d->instanceModel = vim;
-#if QT_CONFIG(qml_delegate_model)
-    } else if (v == QVariant(0) && !d->instanceModel) {
-        // Optimization: If the model is initially 0, we don't even create an instance model.
-        d->ownModel = true;
+        d->model = newModel.instanceModel();
+    } else if (d->ownModel) {
+        // d->ownModel can only be set if the old model is a QQmlDelegateModel.
+        Q_ASSERT(oldModel.delegateModel());
+        newModel = oldModel;
+        d->model = newModel.instanceModel();
+        newModel.delegateModel()->setModel(model);
     } else {
-        if (!d->ownModel || !d->instanceModel)
-            d->makeModel();
-
-        if (QQmlDelegateModel *dataModel = qobject_cast<QQmlDelegateModel *>(d->instanceModel)) {
-            d->effectiveReset = true;
-            dataModel->setModel(v);
-            d->effectiveReset = false;
-        }
-#endif
+        QQmlDelegateModel *own = QQmlDelegateModel::createForView(this, d);
+        own->setDelegate(d->delegate);
+        own->setDelegateModelAccess(d->delegateModelAccess);
+        own->setModel(model);
+        newModel = own;
     }
 
-    if (d->instanceModel != prevModel) {
-        if (prevModel) {
-            disconnect(prevModel, SIGNAL(modelUpdated(QQmlChangeSet,bool)),
-                    this, SLOT(_q_modelUpdated(QQmlChangeSet,bool)));
-            disconnect(prevModel, SIGNAL(createdItem(int,QObject*)), this, SLOT(_q_createdItem(int,QObject*)));
-            //disconnect(prevModel, SIGNAL(initItem(int,QObject*)), this, SLOT(initItem(int,QObject*)));
-            // If it was our own model before, we've deleted it. No need to disconnect anything
-        }
+    d->connectModel(this, &newModel);
 
-        if (d->instanceModel) {
-            connect(d->instanceModel, SIGNAL(modelUpdated(QQmlChangeSet,bool)),
-                    this, SLOT(_q_modelUpdated(QQmlChangeSet,bool)));
-            connect(d->instanceModel, SIGNAL(createdItem(int,QObject*)), this, SLOT(_q_createdItem(int,QObject*)));
-            //connect(d->instanceModel, SIGNAL(initItem(int,QObject*)), this, SLOT(initItem(int,QObject*)));
-
-            if (d->ownModel) {
-                QObject::connect(
-                        static_cast<QQmlDelegateModel *>(d->instanceModel),
-                        &QQmlDelegateModel::modelChanged, this, [this, d]() {
-                    if (!d->effectiveReset)
-                        emit modelChanged();
-                });
-            }
-        }
-    }
-
-    d->regenerate();
     emit modelChanged();
 }
 
-#if QT_CONFIG(qml_delegate_model)
 /*!
     \qmlproperty enumeration QtQml.Models::Instantiator::delegateModelAccess
     \since 6.10
@@ -469,12 +413,11 @@ void QQmlInstantiator::setDelegateModelAccess(
     if (!d->ownModel)
         return;
 
-    if (QQmlDelegateModel *dModel = qobject_cast<QQmlDelegateModel*>(d->instanceModel))
+    if (QQmlDelegateModel *dModel = qobject_cast<QQmlDelegateModel*>(d->model))
         dModel->setDelegateModelAccess(delegateModelAccess);
     if (d->componentComplete)
         d->regenerate();
 }
-#endif
 
 /*!
     \qmlproperty QtObject QtQml.Models::Instantiator::object
@@ -519,26 +462,13 @@ void QQmlInstantiator::componentComplete()
 {
     Q_D(QQmlInstantiator);
     d->componentComplete = true;
-#if QT_CONFIG(qml_delegate_model)
-    if (!d->ownModel) {
-        if (!d->instanceModel)
-            setModel(QVariant(1));
-        else
-            d->regenerate();
-        return;
-    }
 
-    if (!d->instanceModel)
-        return; // It's 0: Nothing to do
-
-    // Disregard any modelUpdated() triggered by componentComplete() and rather regenerate manually.
-    // See also setModel().
-    d->effectiveReset = true;
-    static_cast<QQmlDelegateModel*>(d->instanceModel)->componentComplete();
-    d->effectiveReset = false;
-#endif
-
-    d->regenerate();
+    if (d->model && d->ownModel)
+        static_cast<QQmlDelegateModel *>(d->model.data())->componentComplete();
+    else if (!d->ownModel && !d->model)
+        setModel(QVariant(1));
+    else
+        d->regenerate();
 }
 
 QT_END_NAMESPACE

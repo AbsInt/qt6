@@ -13,7 +13,7 @@ sudo zypper -nq install python-devel python-xml
 
 # install python3
 sudo zypper -nq install python311-base python311-devel python311-pip python311-virtualenv python311-wheel
-python3.11 -m pip install selenium netifaces scache
+python3.11 -m pip install selenium netifaces scache brotli httpcompressionserver
 python3.11 -m pip install -r "${BASH_SOURCE%/*}/../common/shared/requirements.txt"
 
 SetEnvVar "PYTHON3_EXECUTABLE" "/usr/bin/python3.11"
@@ -22,3 +22,6 @@ SetEnvVar "PYTHON3_EXECUTABLE" "/usr/bin/python3.11"
 # 'Defaulting to user installation because normal site-packages is not writeable'
 # So it implicitly uses pip install --user, hence the path.
 SetEnvVar "SBOM_PYTHON_APPS_PATH" "/home/qt/.local/bin"
+
+# Set SBOM_PYTHON_INTERP_PATH to Python3 instance which was used to install SBOM packages from requirements
+SetEnvVar "SBOM_PYTHON_INTERP_PATH" "/usr/bin/python3.11"

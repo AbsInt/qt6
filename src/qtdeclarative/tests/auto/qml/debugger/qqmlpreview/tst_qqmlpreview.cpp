@@ -1,9 +1,15 @@
 // Copyright (C) 2018 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
-#include <qqmldebugprocess_p.h>
-#include <debugutil_p.h>
-#include <qqmlpreviewblacklist.h>
+#include "debugutil_p.h"
+#include "qqmldebugprocess_p.h"
+#include "qqmlpreviewblacklist.h"
+
+#include <private/qqmldebugconnection_p.h>
+#include <private/qqmlpreviewclient_p.h>
+#include <private/qqmlprofilerclient_p.h>
+#include <private/qqmlprofilerqtdwriter_p.h>
+#include <private/qquickeventreplayclient_p.h>
 
 #include <QtTest/qtest.h>
 #include <QtTest/qsignalspy.h>
@@ -12,9 +18,6 @@
 #include <QtCore/qthread.h>
 #include <QtCore/qlibraryinfo.h>
 #include <QtNetwork/qhostaddress.h>
-
-#include <private/qqmldebugconnection_p.h>
-#include <private/qqmlpreviewclient_p.h>
 
 class tst_QQmlPreview : public QQmlDebugTest
 {
@@ -32,6 +35,9 @@ private:
     void verifyProcessOutputContains(const QString &string) const;
 
     QPointer<QQmlPreviewClient> m_client;
+    QPointer<QQmlProfilerQtdWriter> m_qtdWriter;
+    QPointer<QQmlProfilerClient> m_profiler;
+    QPointer<QQuickEventReplayClient> m_replay;
 
     QStringList m_files;
     QStringList m_filesNotFound;
@@ -55,6 +61,9 @@ private slots:
     void updateFile();
     void qqcStyleSelection();
     void singleton();
+    void handleInput();
+    void setAnimationSpeed();
+    void createDirectory();
 };
 
 tst_QQmlPreview::tst_QQmlPreview()
@@ -64,8 +73,10 @@ tst_QQmlPreview::tst_QQmlPreview()
 
 QQmlDebugTest::ConnectResult tst_QQmlPreview::startQmlProcess(const QString &qmlFile, QStringList environmentVariables)
 {
-    return QQmlDebugTest::connectTo(QLibraryInfo::path(QLibraryInfo::BinariesPath) + "/qml",
-                                  QStringLiteral("QmlPreview"), testFile(qmlFile), true, environmentVariables);
+    return QQmlDebugTest::connectTo(
+            QLibraryInfo::path(QLibraryInfo::BinariesPath) + "/qml",
+            QStringLiteral("QmlPreview,CanvasFrameRate,EventReplay,EngineControl"),
+            testFile(qmlFile), true, environmentVariables);
 }
 
 void tst_QQmlPreview::serveRequest(const QString &path)
@@ -95,6 +106,9 @@ void tst_QQmlPreview::serveFile(const QString &path, const QByteArray &contents)
 QList<QQmlDebugClient *> tst_QQmlPreview::createClients()
 {
     m_client = new QQmlPreviewClient(m_connection);
+    m_qtdWriter = new QQmlProfilerQtdWriter(m_connection);
+    m_profiler = new QQmlProfilerClient(m_connection, m_qtdWriter, 1 << ProfileInputEvents);
+    m_replay = new QQuickEventReplayClient(m_connection);
 
     QObject::connect(m_client.data(), &QQmlPreviewClient::request, this, &tst_QQmlPreview::serveRequest);
     QObject::connect(m_client.data(), &QQmlPreviewClient::error, this, [this](const QString &error) {
@@ -105,7 +119,7 @@ QList<QQmlDebugClient *> tst_QQmlPreview::createClients()
         m_frameStats = info;
     });
 
-    return QList<QQmlDebugClient *>({m_client});
+    return QList<QQmlDebugClient *>({m_client, m_profiler, m_replay});
 }
 
 void tst_QQmlPreview::verifyProcessOutputContains(const QString &string) const
@@ -182,7 +196,8 @@ void tst_QQmlPreview::loadFromQrc()
 
     QCOMPARE(QQmlDebugTest::connectTo(
                      QLibraryInfo::path(QLibraryInfo::BinariesPath) + "/qml",
-                     QStringLiteral("QmlPreview"), fromQrc, true),
+                     QStringLiteral("QmlPreview,CanvasFrameRate,EventReplay,EngineControl"),
+                     fromQrc, true),
              ConnectSuccess);
 
     QVERIFY(m_client);
@@ -314,7 +329,7 @@ void tst_QQmlPreview::error()
     QVERIFY(m_client);
     m_client->triggerLoad(testFileUrl("broken.qml"));
     QTRY_COMPARE_WITH_TIMEOUT(m_serviceErrors.size(), 1, 10000);
-    QVERIFY(m_serviceErrors.first().contains("broken.qml:7 Expected token `}'"));
+    QVERIFY(m_serviceErrors.first().contains("broken.qml:7:1: Expected token `}'"));
 }
 
 static float parseZoomFactor(const QString &output)
@@ -435,8 +450,8 @@ void tst_QQmlPreview::qqcStyleSelection()
     QVERIFY(m_client);
     QTRY_COMPARE(m_client->state(), QQmlDebugClient::Enabled);
     m_client->triggerLoad(testFileUrl(file));
-    QTRY_VERIFY(m_files.contains(testFile(file)));
-    QTRY_VERIFY(m_files.contains(testFile("qqc2.conf")));
+    QTRY_VERIFY_WITH_TIMEOUT(m_files.contains(testFile(file)), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(m_files.contains(testFile("qqc2.conf")), 2000);
     verifyProcessOutputContains("loaded");
 
     m_process->stop();
@@ -466,6 +481,90 @@ void tst_QQmlPreview::singleton()
     m_process->stop();
     QTRY_COMPARE(m_client->state(), QQmlDebugClient::NotConnected);
     QVERIFY(m_serviceErrors.isEmpty());
+}
+
+void tst_QQmlPreview::handleInput()
+{
+    const QString file("input.qml");
+    QCOMPARE(startQmlProcess(file), ConnectSuccess);
+    QVERIFY(m_client);
+    QTRY_COMPARE(m_client->state(), QQmlDebugClient::Enabled);
+    m_client->triggerLoad(testFileUrl(file));
+    QTRY_VERIFY(m_files.contains(testFile(file)));
+    verifyProcessOutputContains("aaa #0000ff");
+
+    const QQmlProfilerEventType mouseType {Event, MaximumRangeType, Mouse};
+    const QList<QQmlProfilerEvent> clickEvents {{
+        0ll, 0, QList<int>({InputMouseMove, 12, 13})
+    }, {
+        1ll, 0, QList<int>({InputMousePress, Qt::LeftButton, Qt::LeftButton})
+    }, {
+        2ll, 0, QList<int>({InputMouseRelease, Qt::LeftButton, Qt::NoButton})
+    }};
+
+    for (const QQmlProfilerEvent &event : clickEvents)
+        m_replay->sendEvent(mouseType, event);
+
+    verifyProcessOutputContains("aaa #ff0000");
+
+    QFile input(testFile("input.qml"));
+    QVERIFY(input.open(QIODevice::ReadOnly));
+    QByteArray contents = input.readAll();
+    contents.replace("aaa", "bbb");
+    serveFile(testFile("input.qml"), contents);
+    m_client->triggerLoad(testFileUrl(file));
+    verifyProcessOutputContains("bbb #0000ff");
+
+    for (const QQmlProfilerEvent &event : clickEvents)
+        m_replay->sendEvent(mouseType, event);
+
+    verifyProcessOutputContains("bbb #ff0000");
+
+    m_process->stop();
+    QTRY_COMPARE(m_client->state(), QQmlDebugClient::NotConnected);
+    QVERIFY(m_serviceErrors.isEmpty());
+}
+
+void tst_QQmlPreview::setAnimationSpeed()
+{
+    const QString file("qtquick2.qml");
+
+    // Basic render loop because that results in more exact animation timing.
+    // With the other render loops it can take a long time until the animation timer
+    // settles when you change it.
+    QCOMPARE(startQmlProcess(file, {QLatin1String("QSG_RENDER_LOOP=basic")}), ConnectSuccess);
+
+    QVERIFY(m_client);
+    QTRY_COMPARE(m_client->state(), QQmlDebugClient::Enabled);
+    m_client->triggerLoad(testFileUrl(file));
+    QTRY_VERIFY(m_files.contains(testFile(file)));
+    checkAnimationSpeed(m_process, 10);
+
+    m_client->triggerAnimationSpeed(2);
+    checkAnimationSpeed(m_process, 5);
+
+    m_client->triggerAnimationSpeed(0.5);
+    checkAnimationSpeed(m_process, 20);
+
+    m_client->triggerAnimationSpeed(1);
+    checkAnimationSpeed(m_process, 10);
+}
+
+void tst_QQmlPreview::createDirectory()
+{
+    const QString file("mkdir.qml");
+
+    QQmlDebugTest::connectTo(
+            debugJsServerPath("qqmlpreview"),
+            QStringLiteral("QmlPreview,CanvasFrameRate,EventReplay,EngineControl"),
+            testFile(file), true, {"TEST_MKDIR_RMDIR=1"});
+
+    QVERIFY(m_client);
+    QTRY_COMPARE(m_client->state(), QQmlDebugClient::Enabled);
+    m_client->triggerLoad(testFileUrl(file));
+    QTRY_VERIFY(m_files.contains(testFile(file)));
+
+    verifyProcessOutputContains("mkdir rmdir ok");
 }
 
 QTEST_MAIN(tst_QQmlPreview)

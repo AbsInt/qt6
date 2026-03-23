@@ -15,7 +15,7 @@
 #ifndef QTCOLORBUTTON_H
 #define QTCOLORBUTTON_H
 
-#include <QtWidgets/QToolButton>
+#include <QtWidgets/qtoolbutton.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -24,8 +24,8 @@ class QtColorButton : public QToolButton
     Q_OBJECT
     Q_PROPERTY(bool backgroundCheckered READ isBackgroundCheckered WRITE setBackgroundCheckered)
 public:
-    QtColorButton(QWidget *parent = 0);
-    ~QtColorButton();
+    QtColorButton(QWidget *parent = nullptr);
+    ~QtColorButton() override;
 
     bool isBackgroundCheckered() const;
     void setBackgroundCheckered(bool checkered);

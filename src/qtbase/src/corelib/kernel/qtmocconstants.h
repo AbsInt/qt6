@@ -39,7 +39,8 @@ enum PropertyFlags : uint {
     Resettable = 0x00000004,
     EnumOrFlag = 0x00000008,
     Alias = 0x00000010,
-    // Reserved for future usage = 0x00000020,
+    Virtual = 0x00000020,
+    Override = 0x00000040,
     StdCppSet = 0x00000100,
     Constant = 0x00000400,
     Final = 0x00000800,
@@ -59,13 +60,18 @@ enum MethodFlags : uint {
     AccessMask = 0x03, // mask
 
     MethodMethod = 0x00,
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
+    MethodSlot = 0x04,
+    MethodSignal = 0x08,
+#else
     MethodSignal = 0x04,
     MethodSlot = 0x08,
+#endif
     MethodConstructor = 0x0c,
     MethodTypeMask = 0x0c,
 
     MethodCompatibility = 0x10,
-    MethodCloned = 0x20,
+    MethodCloned = 0x20,    // Used for methods with default arguments
     MethodScriptable = 0x40,
     MethodRevisioned = 0x80,
 

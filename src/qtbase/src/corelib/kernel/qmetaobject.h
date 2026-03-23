@@ -37,7 +37,12 @@ public:
     const char *tag() const;
     enum Access { Private, Protected, Public };
     Access access() const;
-    enum MethodType { Method, Signal, Slot, Constructor };
+    enum MethodType {
+        Method = QMETHOD_CODE,
+        Signal QT7_ONLY(= QSIGNAL_CODE),
+        Slot QT7_ONLY(= QSLOT_CODE),
+        Constructor = 3,    // no Q*_CODE
+    };
     MethodType methodType() const;
     enum Attributes { Compatibility = 0x1, Cloned = 0x2, Scriptable = 0x4 };
     int attributes() const;
@@ -361,6 +366,8 @@ public:
     bool isUser() const;
     bool isConstant() const;
     bool isFinal() const;
+    bool isVirtual() const;
+    bool isOverride() const;
     bool isRequired() const;
     bool isBindable() const;
 

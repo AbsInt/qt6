@@ -50,7 +50,7 @@ function(_qt_internal_wasm_add_target_helpers target)
         if(is_test AND NOT is_manual_test)
             # Keep in sync with testrunner_files in testlib/CMakeLists.txt
             configure_file("${WASM_BUILD_DIR}/libexec/batchedtestrunner.html"
-                           "${target_output_directory}/${_target_output_name}.html" COPYONLY)
+                           "${target_output_directory}/${_target_output_name}.html" @ONLY)
             configure_file("${WASM_BUILD_DIR}/libexec/qtestoutputreporter.css"
                            "${target_output_directory}/qtestoutputreporter.css" COPYONLY)
             configure_file("${WASM_BUILD_DIR}/libexec/batchedtestrunner.js"
@@ -101,15 +101,6 @@ function(_qt_internal_wasm_add_target_helpers target)
                         ${_target_directory}/qtloader.js COPYONLY)
                     configure_file("${WASM_BUILD_DIR}/plugins/platforms/qtlogo.svg"
                         ${_target_directory}/qtlogo.svg COPYONLY)
-                    if(QT_FEATURE_shared)
-                        set(TARGET_DIR "${_target_directory}")
-                        set(SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-                        set(QT_HOST_DIR "${QT_HOST_PATH}")
-                        set(QT_WASM_DIR "${WASM_BUILD_DIR}")
-                        set(QT_INSTALL_DIR "${QT6_INSTALL_PREFIX}")
-                        configure_file("${WASM_BUILD_DIR}/libexec/generate_default_preloads.sh.in"
-                            "${_target_directory}/generate_default_preloads_for_${target}.sh" @ONLY)
-                    endif()
                 endif()
             endif()
         endif()

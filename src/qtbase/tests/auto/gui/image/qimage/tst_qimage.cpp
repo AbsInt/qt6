@@ -233,8 +233,8 @@ private slots:
     void complexTransform8bit();
 
 #ifdef Q_OS_DARWIN
-    void toCGImage_data();
-    void toCGImage();
+    void toFromCGImage_data();
+    void toFromCGImage();
 
     void toFromCGImageColorSpace_data();
     void toFromCGImageColorSpace();
@@ -261,93 +261,16 @@ private slots:
     void tofromPremultipliedFormat_data();
     void tofromPremultipliedFormat();
 
+    void pixelFormatByteOrder_data();
+    void pixelFormatByteOrder();
+
 private:
     const QString m_prefix;
 };
 
-static QLatin1String formatToString(QImage::Format format)
+static QByteArray formatToString(QImage::Format format)
 {
-    switch (format) {
-    case QImage::Format_Invalid:
-        return QLatin1String("Invalid");
-    case QImage::Format_Mono:
-        return QLatin1String("Mono");
-    case QImage::Format_MonoLSB:
-        return QLatin1String("MonoLSB");
-    case QImage::Format_Indexed8:
-        return QLatin1String("Indexed8");
-    case QImage::Format_RGB32:
-        return QLatin1String("RGB32");
-    case QImage::Format_ARGB32:
-        return QLatin1String("ARGB32");
-    case QImage::Format_ARGB32_Premultiplied:
-        return QLatin1String("ARGB32pm");
-    case QImage::Format_RGB16:
-        return QLatin1String("RGB16");
-    case QImage::Format_ARGB8565_Premultiplied:
-        return QLatin1String("ARGB8565pm");
-    case QImage::Format_RGB666:
-        return QLatin1String("RGB666");
-    case QImage::Format_ARGB6666_Premultiplied:
-        return QLatin1String("ARGB6666pm");
-    case QImage::Format_RGB555:
-        return QLatin1String("RGB555");
-    case QImage::Format_ARGB8555_Premultiplied:
-        return QLatin1String("ARGB8555pm");
-    case QImage::Format_RGB888:
-        return QLatin1String("RGB888");
-    case QImage::Format_RGB444:
-        return QLatin1String("RGB444");
-    case QImage::Format_ARGB4444_Premultiplied:
-        return QLatin1String("ARGB4444pm");
-    case QImage::Format_RGBX8888:
-        return QLatin1String("RGBx88888");
-    case QImage::Format_RGBA8888:
-        return QLatin1String("RGBA88888");
-    case QImage::Format_RGBA8888_Premultiplied:
-        return QLatin1String("RGBA88888pm");
-    case QImage::Format_BGR30:
-        return QLatin1String("BGR30");
-    case QImage::Format_A2BGR30_Premultiplied:
-        return QLatin1String("A2BGR30pm");
-    case QImage::Format_RGB30:
-        return QLatin1String("RGB30");
-    case QImage::Format_A2RGB30_Premultiplied:
-        return QLatin1String("A2RGB30pm");
-    case QImage::Format_Alpha8:
-        return QLatin1String("Alpha8");
-    case QImage::Format_Grayscale8:
-        return QLatin1String("Grayscale8");
-    case QImage::Format_RGBX64:
-        return QLatin1String("RGBx64");
-    case QImage::Format_RGBA64:
-        return QLatin1String("RGBA64");
-    case QImage::Format_RGBA64_Premultiplied:
-        return QLatin1String("RGBA64pm");
-    case QImage::Format_Grayscale16:
-        return QLatin1String("Grayscale16");
-    case QImage::Format_BGR888:
-        return QLatin1String("BGR888");
-    case QImage::Format_RGBX16FPx4:
-        return QLatin1String("RGBx16FPx4");
-    case QImage::Format_RGBA16FPx4:
-        return QLatin1String("RGBA16FPx4");
-    case QImage::Format_RGBA16FPx4_Premultiplied:
-        return QLatin1String("RGBA16FPx4pm");
-    case QImage::Format_RGBX32FPx4:
-        return QLatin1String("RGBx32FPx4");
-    case QImage::Format_RGBA32FPx4:
-        return QLatin1String("RGBA32FPx4");
-    case QImage::Format_RGBA32FPx4_Premultiplied:
-        return QLatin1String("RGBA32FPx4pm");
-    case QImage::Format_CMYK8888:
-        return QLatin1String("CMYK8888");
-    case QImage::NImageFormats:
-        break;
-    };
-    Q_UNREACHABLE();
-    qWarning("Unhandled image format");
-    return QLatin1String("unknown");
+    return QDebug::toBytes(format).mid(15);
 }
 
 tst_QImage::tst_QImage()
@@ -3159,7 +3082,7 @@ void tst_QImage::genericRgbConversion_data()
     for (int i = QImage::Format_RGB32; i < QImage::NImageFormats; ++i) {
         if (i == QImage::Format_Alpha8)
             continue;
-        const QLatin1String formatI = formatToString(QImage::Format(i));
+        const auto formatI = formatToString(QImage::Format(i));
         for (int j = QImage::Format_RGB32; j < QImage::NImageFormats; ++j) {
             if (j == QImage::Format_Alpha8)
                 continue;
@@ -3427,7 +3350,7 @@ void tst_QImage::colorSpaceRgbConversion_data()
     };
 
     for (auto fromFormat : formats) {
-        const QLatin1String formatI = formatToString(fromFormat);
+        const auto formatI = formatToString(fromFormat);
         for (auto toFormat : formats) {
             QTest::addRow("%s -> %s", formatI.data(), formatToString(toFormat).data())
                     << fromFormat << toFormat;
@@ -4363,35 +4286,65 @@ void tst_QImage::complexTransform8bit()
 
 #ifdef Q_OS_DARWIN
 
-void tst_QImage::toCGImage_data()
+void tst_QImage::toFromCGImage_data()
 {
     QTest::addColumn<QImage::Format>("format");
     QTest::addColumn<bool>("supported");
 
     // Populate test data with supported status for all QImage formats.
-    QSet<QImage::Format> supported =
-        { QImage::Format_ARGB32, QImage::Format_RGB32, QImage::Format_RGBA8888_Premultiplied,
-          QImage::Format_RGBA8888, QImage::Format_RGBX8888, QImage::Format_ARGB32_Premultiplied };
+    QSet<QImage::Format> supported = {
+        QImage::Format_Invalid,
+        QImage::Format_ARGB32,
+        QImage::Format_ARGB32_Premultiplied,
+        QImage::Format_RGB32,
+        QImage::Format_RGB888,
+        QImage::Format_RGBA8888,
+        QImage::Format_RGBX8888,
+        QImage::Format_RGBA8888_Premultiplied,
+        QImage::Format_ARGB4444_Premultiplied,
+        QImage::Format_RGB16,
+        QImage::Format_RGB30,
+        QImage::Format_A2RGB30_Premultiplied,
+        QImage::Format_RGBX64,
+        QImage::Format_RGBA64,
+        QImage::Format_RGBA64_Premultiplied,
+        QImage::Format_RGBX16FPx4,
+        QImage::Format_RGBA16FPx4,
+        QImage::Format_RGBA16FPx4_Premultiplied,
+        QImage::Format_RGBX32FPx4,
+        QImage::Format_RGBA32FPx4,
+        QImage::Format_RGBA32FPx4_Premultiplied
+    };
 
-    for (int i = QImage::Format_Invalid; i < QImage::Format_Grayscale8; ++i) {
+    for (int i = QImage::Format_Invalid; i < QImage::NImageFormats; ++i) {
         QTest::addRow("%s", formatToString(QImage::Format(i)).data())
             << QImage::Format(i) << supported.contains(QImage::Format(i));
     }
 }
 
-// Verify that toCGImage() returns a valid CGImageRef for supported image formats.
-void tst_QImage::toCGImage()
+// Verify that toCGImage() returns a valid CGImageRef for supported image formats,
+// and can read the same image back from the CGImageRef.
+void tst_QImage::toFromCGImage()
 {
     QFETCH(QImage::Format, format);
     QFETCH(bool, supported);
 
-    QImage qimage(64, 64, format);
-    qimage.fill(Qt::red);
+    QImage original(64, 64, format);
+    original.fill(Qt::red);
+    original.setColorSpace(QColorSpace::DisplayP3);
 
-    CGImageRef cgimage = qimage.toCGImage();
-    QCOMPARE(cgimage != nullptr, supported);
+    QCFType<CGImageRef> cgImage = original.toCGImage();
 
-    CGImageRelease(cgimage);
+    if (!supported)
+        QEXPECT_FAIL("", "Conversion is not supported (yet)", Abort);
+
+    QVERIFY(bool(cgImage) == (format != QImage::Format_Invalid));
+
+    QImage converted = qt_mac_toQImage(cgImage);
+
+    QCOMPARE(converted.pixelFormat(), original.pixelFormat());
+    QCOMPARE(converted.colorSpace(), original.colorSpace());
+    QCOMPARE(converted, original);
 }
 
 void tst_QImage::toFromCGImageColorSpace_data()
@@ -4715,6 +4668,29 @@ void tst_QImage::tofromPremultipliedFormat()
 
     QCOMPARE(qt_toPremultipliedFormat(unpremul), premul);
     QCOMPARE(qt_toUnpremultipliedFormat(premul), unpremul);
+}
+
+void tst_QImage::pixelFormatByteOrder_data()
+{
+    QTest::addColumn<QImage::Format>("format");
+
+    for (int i = QImage::Format_Invalid; i < QImage::NImageFormats; ++i)
+        QTest::addRow("%s", formatToString(QImage::Format(i)).data()) << QImage::Format(i);
+}
+
+void tst_QImage::pixelFormatByteOrder()
+{
+    QFETCH(QImage::Format, format);
+
+    QPixelFormat pixelFormat = QImage::toPixelFormat(format);
+
+    static const auto hostByteOrder = Q_BYTE_ORDER == Q_LITTLE_ENDIAN ?
+        QPixelFormat::LittleEndian : QPixelFormat::BigEndian;
+
+    // Byte order pixel formats are effectively BigEndian,
+    // while all other formats are host dependent.
+    QCOMPARE(pixelFormat.byteOrder(), pixelFormat.typeInterpretation() == QPixelFormat::UnsignedByte
+        ? QPixelFormat::BigEndian : hostByteOrder);
 }
 
 QTEST_GUILESS_MAIN(tst_QImage)

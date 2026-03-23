@@ -237,7 +237,7 @@ struct QLocaleId
     [[nodiscard]] QLocaleId withLikelySubtagsAdded() const noexcept;
     [[nodiscard]] QLocaleId withLikelySubtagsRemoved() const noexcept;
 
-    [[nodiscard]] QByteArray name(char separator = '-') const;
+    [[nodiscard]] Q_AUTOTEST_EXPORT QByteArray name(char separator = '-') const;
 
     ushort language_id = 0, script_id = 0, territory_id = 0;
 };
@@ -248,10 +248,12 @@ struct QLocaleData
 public:
     // Having an index for each locale enables us to have diverse sources of
     // data, e.g. calendar locales, as well as the main CLDR-derived data.
-    [[nodiscard]] static qsizetype findLocaleIndex(QLocaleId localeId) noexcept;
-    [[nodiscard]] static const QLocaleData *c() noexcept;
+    [[nodiscard]] Q_AUTOTEST_EXPORT static qsizetype findLocaleIndex(QLocaleId localeId) noexcept;
+    [[nodiscard]] Q_AUTOTEST_EXPORT static const QLocaleData *c() noexcept;
     [[nodiscard]] Q_AUTOTEST_EXPORT
     static bool allLocaleDataRows(bool (*check)(qsizetype, const QLocaleData &));
+    [[nodiscard]] Q_AUTOTEST_EXPORT
+    static const QLocaleData *dataForLocaleIndex(qsizetype index);
 
     enum DoubleForm {
         DFExponent = 0,
@@ -366,24 +368,29 @@ public:
         QString sysDecimal, sysGroup, sysMinus, sysPlus;
 #endif
         QStringView decimal, group, minus, plus, exponent;
+        const GroupSizes grouping;
         char32_t zeroUcs = 0;
         qint8 zeroLen = 0;
-        bool isC = false; // C locale sets this and nothing else.
         bool exponentCyrillic = false; // True only for floating-point parsing of Cyrillic.
+        const bool isC; // C locale sets this and nothing else.
+
         void setZero(QStringView zero)
         {
+            Q_PRE(!isC);
             // No known locale has digits that are more than one Unicode
             // code-point, so we can safely deal with digits as plain char32_t.
             switch (zero.size()) {
             case 1:
                 Q_ASSERT(!zero.at(0).isSurrogate());
                 zeroUcs = zero.at(0).unicode();
+                Q_ASSERT(!QChar::requiresSurrogates(zeroUcs + 9));
                 zeroLen = 1;
                 break;
             case 2:
                 Q_ASSERT(zero.at(0).isHighSurrogate());
                 Q_ASSERT(zero.at(1).isLowSurrogate());
                 zeroUcs = QChar::surrogateToUcs4(zero.at(0), zero.at(1));
+                Q_ASSERT(QChar::requiresSurrogates(zeroUcs));
                 zeroLen = 2;
                 break;
             default:
@@ -391,6 +398,10 @@ public:
                 break;
             }
         }
+        Q_AUTOTEST_EXPORT
+        NumericData(const QLocaleData *data, QLocaleData::NumberMode mode);
+        [[nodiscard]] const GroupSizes &groupSizes() const { return grouping; }
+
         [[nodiscard]] bool isValid(NumberMode mode) const // Asserted as a sanity check.
         {
             if (isC)
@@ -403,8 +414,38 @@ public:
                 && !minus.isEmpty() && !plus.isEmpty()
                 && (mode != DoubleScientificMode || !exponent.isEmpty());
         }
+
+        [[nodiscard]] qint8 digitValue(char32_t digit) const
+        {
+            // Compute locale-appropriate digit value (or -1)
+            if (!isC && zeroUcs != U'0') {
+                // Must match qlocale_tools_p.h's unicodeForDigit().
+                if (digit == zeroUcs || zeroUcs != U'\u3007') {
+                    if (qint32 ans = digit - zeroUcs; 0 <= ans && ans <= 9)
+                        return qint8(ans);
+                } else if (digit > U'\u3020') {
+                    if (qint32 ans = digit - U'\u3020'; 0 <= ans && ans <= 9)
+                        return qint8(ans);
+                }
+                // Accepting ASCII with zeroLen != 1 would mess up code that
+                // assumes consistent digit width.
+                if (zeroLen != 1)
+                    return -1;
+            }
+            qint32 ans = digit - U'0';
+            return qint8(0 <= ans && ans <= 9 ? ans : -1);
+        }
+
+        [[nodiscard]] bool fractionalIsGroup() const
+        {
+            // True precisely if fractional part separator and digit-grouping
+            // separator are the same. This can happen due to user
+            // mis-configuration. (Our CLDR-digestion scripts check against CLDR
+            // having such clashes.)
+            // For C locale we don't store separators, we just know them.
+            return Q_UNLIKELY(!isC && group == decimal);
+        }
     };
-    [[nodiscard]] inline NumericData numericData(NumberMode mode) const;
 
     // this function is used in QIntValidator (QtGui)
     [[nodiscard]] Q_CORE_EXPORT ParsingResult
@@ -420,7 +461,7 @@ public:
     [[nodiscard]] QString listSeparator() const;
     [[nodiscard]] QString percentSign() const;
     [[nodiscard]] QString zeroDigit() const;
-    [[nodiscard]] char32_t zeroUcs() const;
+    [[nodiscard]] Q_AUTOTEST_EXPORT char32_t zeroUcs() const;
     [[nodiscard]] QString positiveSign() const;
     [[nodiscard]] QString negativeSign() const;
     [[nodiscard]] QString exponentSeparator() const;

@@ -405,7 +405,7 @@ qsizetype QStaticByteArrayMatcherBase::indexOfIn(const char *needle, size_t nlen
     To take full advantage of this function, assign the result to an
     \c{auto} variable:
 
-    \snippet code/src_corelib_text_qbytearraymatcher.cpp 1
+    \snippet code/src_corelib_text_qbytearraymatcher.cpp 0
 */
 
 QT_END_NAMESPACE

@@ -219,7 +219,10 @@ namespace Qt {
         Tool = Popup | Dialog,
         ToolTip = Popup | Sheet,
         SplashScreen = ToolTip | Dialog,
-        Desktop = 0x00000010 | Window,
+#if QT_DEPRECATED_SINCE(6, 11)
+        Desktop Q_DECL_ENUMERATOR_DEPRECATED_X("This flag has been a no-op since Qt 6.")
+                = 0x00000010 | Window,
+#endif
         SubWindow = 0x00000012, // Note QTBUG-115729 before using
         ForeignWindow = 0x00000020 | Window,
         CoverWindow = 0x00000040 | Window,
@@ -1531,6 +1534,8 @@ namespace Qt {
         WhatsThisPropertyRole = 31,
         // QRangeModel support for QML's required property var modelData
         RangeModelDataRole = 40,
+        // QRangeModelAdapter support for accessing entire multi-role objects
+        RangeModelAdapterRole = 41,
 
         // Reserved
         UserRole = 0x0100,

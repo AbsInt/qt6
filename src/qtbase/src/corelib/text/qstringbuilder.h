@@ -101,8 +101,10 @@ private:
             // so we're special casing this one out, QTBUG-114206
             return T();
         }
-
-        const qsizetype len = Concatenable::size(*this);
+        return convertToImpl<T>(Concatenable::size(*this));
+    }
+    template <typename T> T convertToImpl(const qsizetype len) const
+    {
         T s(len, Qt::Uninitialized);
 
         // Using data_ptr() here (private API) so we can bypass the

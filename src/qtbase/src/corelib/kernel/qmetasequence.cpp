@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:significant reason:default
 
-#include "qmetacontainer.h"
-#include "qmetatype.h"
+#include <QtCore/qmetasequence.h>
+#include <QtCore/qmetatype.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -467,6 +467,140 @@ void QMetaSequence::valueAtConstIterator(const void *iterator, void *result) con
 
     Returns \c true if the QMetaSequence \a lhs represents a different container
     type than the QMetaSequence \a rhs, otherwise returns \c false.
+*/
+
+/*!
+    \class QMetaSequence::Iterable
+    \inherits QIterable
+    \since 6.11
+    \inmodule QtCore
+    \brief The QMetaSequence::Iterable class is an iterable interface for a container in a QVariant.
+
+    This class allows several methods of accessing the values of a container
+    held within a QVariant. An instance of QMetaSequence::Iterable can be
+    extracted from a QVariant if it can be converted to a QVariantList, or if
+    the container it contains is registered using
+    Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE. Most sequential containers found
+    in Qt and some found in the C++ standard library are automatically
+    registered.
+
+    \snippet code/src_corelib_kernel_qvariant.cpp 9
+
+    The container itself is not copied before iterating over it.
+
+    \sa QVariant
+*/
+
+/*!
+    \typealias QMetaSequence::Iterable::RandomAccessIterator
+    Exposes an iterator using std::random_access_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaSequence::Iterable::BidirectionalIterator
+    Exposes an iterator using std::bidirectional_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaSequence::Iterable::ForwardIterator
+    Exposes an iterator using std::forward_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaSequence::Iterable::InputIterator
+    Exposes an iterator using std::input_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaSequence::Iterable::RandomAccessConstIterator
+    Exposes a const_iterator using std::random_access_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaSequence::Iterable::BidirectionalConstIterator
+    Exposes a const_iterator using std::bidirectional_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaSequence::Iterable::ForwardConstIterator
+    Exposes a const_iterator using std::forward_iterator_tag.
+*/
+
+/*!
+    \typealias QMetaSequence::Iterable::InputConstIterator
+    Exposes a const_iterator using std::input_iterator_tag.
+*/
+
+/*!
+    \fn QVariant QMetaSequence::Iterable::at(qsizetype idx) const
+    Returns the value at position \a idx in the container.
+
+    \note If the underlying container does not provide a native way to retrieve
+          an element at an index, this method will synthesize the access using
+          iterators. This behavior is deprecated and will be removed in a future
+          version of Qt.
+*/
+
+/*!
+    \fn void QMetaSequence::Iterable::setAt(qsizetype idx, const QVariant &value)
+    Sets the element at position \a idx in the container to \a value.
+*/
+
+/*!
+    \class QMetaSequence::Iterable::ConstIterator
+    \inmodule QtCore
+    \inherits QConstIterator
+    \since 6.11
+    \brief QMetaSequence::Iterable::ConstIterator allows iteration over a container in a QVariant.
+
+    A QMetaSequence::Iterable::ConstIterator can only be created by a
+    QMetaSequence::Iterable instance, and can be used in a way similar to other
+    stl-style iterators.
+
+    \snippet code/src_corelib_kernel_qvariant.cpp 9
+*/
+
+/*!
+    \class QMetaSequence::Iterable::Iterator
+    \inmodule QtCore
+    \inherits QIterator
+    \since 6.11
+    \brief QMetaSequence::Iterable::Iterator allows iteration over a container in a QVariant.
+
+    A QMetaSequence::Iterable::Iterator can only be created by a QMetaSequence::Iterable
+    instance, and can be used in a way similar to other stl-style iterators.
+*/
+
+/*!
+    \fn QVariant::Reference<QMetaSequence::Iterable::Iterator> QMetaSequence::Iterable::Iterator::operator*() const
+    Returns the current item, converted to a QVariant::Reference.
+*/
+
+/*!
+    \fn QVariant::Pointer<QMetaSequence::Iterable::Iterator> QMetaSequence::Iterable::Iterator::operator->() const
+    Returns the current item, converted to a QVariant::Pointer.
+*/
+
+/*!
+    \fn QVariant::Reference<QMetaSequence::Iterable::Iterator> QMetaSequence::Iterable::Iterator::operator[](qsizetype n) const
+    Returns the item offset from the current one by \a n, converted to a
+    QVariant::Reference.
+*/
+
+/*!
+    \fn QVariant QMetaSequence::Iterable::ConstIterator::operator*() const
+    Returns the current item, converted to a QVariant.
+*/
+
+/*!
+    \fn QVariant::ConstPointer<QMetaSequence::Iterable::ConstIterator> QMetaSequence::Iterable::ConstIterator::operator->() const
+    Returns the current item, converted to a QVariant::ConstPointer.
+*/
+
+/*!
+    \fn QVariant QMetaSequence::Iterable::ConstIterator::operator[](qsizetype n) const
+    Returns the item offset from the current one by \a n, converted to a
+    QVariant.
 */
 
 QT_END_NAMESPACE

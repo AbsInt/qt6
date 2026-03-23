@@ -1453,6 +1453,9 @@ public:
     bool hasDepthWrite() const { return m_depthWrite; }
     void setDepthWrite(bool enable) { m_depthWrite = enable; }
 
+    bool hasDepthClamp() const { return m_depthClamp; }
+    void setDepthClamp(bool enable) { m_depthClamp = enable; }
+
     CompareOp depthOp() const { return m_depthOp; }
     void setDepthOp(CompareOp op) { m_depthOp = op; }
 
@@ -1524,6 +1527,7 @@ protected:
     QVarLengthArray<TargetBlend, 8> m_targetBlends;
     bool m_depthTest = false;
     bool m_depthWrite = false;
+    bool m_depthClamp = false;
     CompareOp m_depthOp = Less;
     bool m_stencilTest = false;
     StencilOpState m_stencilFront;
@@ -1931,7 +1935,9 @@ public:
         VariableRateShadingMap,
         VariableRateShadingMapWithTexture,
         PerRenderTargetBlending,
-        SampleVariables
+        SampleVariables,
+        InstanceIndexIncludesBaseInstance,
+        DepthClamp
     };
 
     enum BeginFrameFlag {

@@ -3,47 +3,41 @@
 // Qt-Security score:significant reason:default
 
 #include "quicktest_p.h"
+
+#include "qtestoptions_p.h"
 #include "quicktestresult_p.h"
+
 #include <QtTest/qtestsystem.h>
 #include <QtTest/private/qtestcrashhandler_p.h>
-#include "qtestoptions_p.h"
-#include <QtQml/qqml.h>
-#include <QtQml/qqmlengine.h>
-#include <QtQml/qqmlcontext.h>
-#include <QtQuick/private/qquickitem_p.h>
-#include <QtQuick/private/qquickwindow_p.h>
 #include <QtQuick/qquickitem.h>
 #include <QtQuick/qquickview.h>
 #include <QtQuick/qquickwindow.h>
-#include <QtQml/qjsvalue.h>
-#include <QtQml/qjsengine.h>
-#include <QtQml/qqmlpropertymap.h>
 #include <QtQuick/private/qquickitem_p.h>
-#include <QtQuick/qquickitem.h>
-#include <qopengl.h>
-#include <QtCore/qurl.h>
-#include <QtCore/qfileinfo.h>
+#include <QtQuick/private/qquickwindow_p.h>
+#include <QtQml/qqml.h>
+#include <QtQml/qqmlcontext.h>
+#include <QtQml/qqmlengine.h>
+#include <QtQml/qqmlfileselector.h>
+#include <QtQml/qqmlpropertymap.h>
+#include <QtQml/private/qqmlcomponent_p.h>
+#include <QtQml/private/qv4resolvedtypereference_p.h>
+#include <QtCore/qdebug.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qdiriterator.h>
-#include <QtCore/qfile.h>
-#include <QtCore/qdebug.h>
 #include <QtCore/qeventloop.h>
+#include <QtCore/qfile.h>
+#include <QtCore/qfileinfo.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qtimer.h>
-#include <QtGui/qtextdocument.h>
-#include <QtGui/QGuiApplication>
+#include <QtCore/qtranslator.h>
+#include <QtCore/qurl.h>
+#include <QtGui/qguiapplication.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/qpa/qplatformintegration.h>
-#include <QtCore/QTranslator>
-#include <QtTest/QSignalSpy>
-#include <QtQml/QQmlFileSelector>
 
 #ifdef Q_OS_ANDROID
 #  include <android/androidtestutils_p.h>
 #endif
-
-#include <private/qqmlcomponent_p.h>
-#include <private/qv4resolvedtypereference_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -375,13 +369,20 @@ private:
         if (object->hasFlag(QV4::CompiledData::Object::IsInlineComponentRoot))
             return result;
 
-        if (const auto superTypeUnit = compilationUnit->resolvedType(object->inheritedTypeNameIndex)
-                                               ->compilationUnit()) {
+        if (const auto superType
+                = compilationUnit->resolvedType(object->inheritedTypeNameIndex)->type();
+                    superType.isComposite() || superType.isInlineComponentType()) {
+
+            // Reset fragment, so that we don't run into problems with inline components
+            QUrl baseUrl = superType.sourceUrl();
+            baseUrl.setFragment(QString());
+
             // We have a non-C++ super type, which could indicate we're a subtype of a TestCase
-            if (testCaseType.isValid() && superTypeUnit->url() == testCaseType.sourceUrl())
+            if (testCaseType.isValid() && baseUrl == testCaseType.sourceUrl()) {
                 result.isTestCase = true;
-            else if (superTypeUnit->url() != compilationUnit->url()) { // urls are the same for inline component, avoid infinite recursion
-                result = enumerateTestCases(superTypeUnit);
+            } else if (baseUrl != compilationUnit->url()) {
+                // base urls are the same for inline component, avoid infinite recursion
+                result = enumerateTestCases(QQmlMetaType::obtainCompilationUnit(baseUrl));
             }
 
             if (result.isTestCase) {

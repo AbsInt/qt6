@@ -3678,7 +3678,7 @@ void tst_QQuickListView::QTBUG_9791()
     }
 
     // check that view is positioned correctly
-    QTRY_COMPARE(listview->contentX(), 590.0);
+    QTRY_COMPARE_WITH_TIMEOUT(listview->contentX(), 590.0, 3s);
 }
 
 void tst_QQuickListView::QTBUG_33568()

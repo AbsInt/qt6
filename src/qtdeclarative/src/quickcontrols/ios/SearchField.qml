@@ -96,6 +96,10 @@ T.SearchField {
         verticalAlignment: TextInput.AlignVCenter
 
         cursorDelegate: CursorDelegate {}
+
+        ContextMenu.menu: TextEditingContextMenu {
+            editor: parent
+        }
     }
 
     background: Rectangle {

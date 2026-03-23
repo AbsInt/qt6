@@ -11,7 +11,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \class QQmlJSMetaPropertyBinding
-
+    \inmodule QtQmlCompiler
     \internal
 
     Represents a single QML binding of a specific type. Typically, when you

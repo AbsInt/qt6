@@ -1,13 +1,11 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
-#include "../../../../../src/corelib/tools/qalgorithms.h"
+#include <QtCore/qalgorithms.h>
 #include <QTest>
 
 QT_WARNING_DISABLE_DEPRECATED
 
-#include <iostream>
-#include <iomanip>
 #include <sstream>
 #include <iterator>
 #include <algorithm>
@@ -378,6 +376,11 @@ void tst_QAlgorithms::popCount_data_impl(size_t sizeof_T_Int)
 template <typename T_Int>
 void tst_QAlgorithms::popCount_impl()
 {
+    // confirm constexprness
+    static_assert(qPopulationCount(T_Int{}) == 0);
+    static_assert(qPopulationCount(T_Int{1}) == 1);
+    static_assert(qPopulationCount(T_Int{127}) == 7);
+
     QFETCH(quint64, input);
     QFETCH(uint, expected);
 
@@ -422,6 +425,14 @@ void tst_QAlgorithms::countTrailing_data_impl(size_t sizeof_T_Int)
 template <typename T_Int>
 void tst_QAlgorithms::countTrailing_impl()
 {
+    // confirm constexprness
+    constexpr uint Digits = std::numeric_limits<T_Int>::digits;
+    static_assert(qCountTrailingZeroBits(T_Int{}) == Digits);
+    static_assert(qCountTrailingZeroBits(T_Int{1}) == 0);
+    static_assert(qCountTrailingZeroBits(T_Int{2}) == 1);
+    static_assert(qCountTrailingZeroBits(T_Int{128}) == 7);
+    static_assert(qCountTrailingZeroBits(T_Int(1ULL << (Digits - 1))) == Digits - 1);
+
     QFETCH(quint64, input);
     QFETCH(uint, expected);
 
@@ -457,6 +468,14 @@ void tst_QAlgorithms::countLeading_data_impl(size_t sizeof_T_Int)
 template <typename T_Int>
 void tst_QAlgorithms::countLeading_impl()
 {
+    // confirm constexprness
+    constexpr uint Digits = std::numeric_limits<T_Int>::digits;
+    static_assert(qCountLeadingZeroBits(T_Int{}) == Digits);
+    static_assert(qCountLeadingZeroBits(T_Int{1}) == Digits - 1);
+    static_assert(qCountLeadingZeroBits(T_Int{2}) == Digits - 2);
+    static_assert(qCountLeadingZeroBits(T_Int{128}) == Digits - 8);
+    static_assert(qCountLeadingZeroBits(T_Int(1ULL << (Digits - 1))) == 0);
+
     QFETCH(quint64, input);
     QFETCH(uint, expected);
 

@@ -43,6 +43,8 @@
 #include "private/qsslsocket_p.h"
 #include "private/qsslconfiguration_p.h"
 
+#include <memory>
+
 using namespace std::chrono_literals;
 
 QT_WARNING_PUSH
@@ -1828,8 +1830,8 @@ void tst_QSslSocket::setLocalCertificateChain()
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, SLOT(quit()));
 
-    const QScopedPointer<QSslSocket, QScopedPointerDeleteLater> client(new QSslSocket);
-    socket = client.data();
+    const std::unique_ptr<QSslSocket, QScopedPointerDeleteLater> client(new QSslSocket);
+    socket = client.get();
     connect(socket, SIGNAL(encrypted()), &loop, SLOT(quit()));
     connect(socket, SIGNAL(errorOccurred(QAbstractSocket::SocketError)), &loop, SLOT(quit()));
     connect(socket, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(ignoreErrorSlot()));
@@ -3295,7 +3297,7 @@ class SslServer4 : public QTcpServer
     Q_OBJECT
 public:
 
-    QScopedPointer<WebSocket> socket;
+    std::unique_ptr<WebSocket> socket;
 
 protected:
     void incomingConnection(qintptr socketDescriptor) override
@@ -3324,7 +3326,7 @@ void tst_QSslSocket::qtbug18498_peek()
         if (!--encryptedCounter)
             exitLoop();
     });
-    WebSocket *serversocket = server.socket.data();
+    WebSocket *serversocket = server.socket.get();
     connect(serversocket, &QSslSocket::encrypted, this, [&encryptedCounter](){
         if (!--encryptedCounter)
             exitLoop();
@@ -3366,13 +3368,13 @@ class SslServer5 : public QTcpServer
 {
     Q_OBJECT
 public:
-    SslServer5() : socket(0) {}
-    QSslSocket *socket;
+    SslServer5() {}
+    std::unique_ptr<QSslSocket> socket;
 
 protected:
     void incomingConnection(qintptr socketDescriptor) override
     {
-        socket =  new QSslSocket;
+        socket = std::make_unique<QSslSocket>();
         socket->setSocketDescriptor(socketDescriptor);
     }
 };
@@ -3385,12 +3387,12 @@ void tst_QSslSocket::qtbug18498_peek2()
 
     SslServer5 listener;
     QVERIFY(listener.listen(QHostAddress::Any));
-    QScopedPointer<QSslSocket> client(new QSslSocket);
+    std::unique_ptr<QSslSocket> client(new QSslSocket);
     client->connectToHost(QHostAddress::LocalHost, listener.serverPort());
     QVERIFY(client->waitForConnected(5000));
     QVERIFY(listener.waitForNewConnection(1000));
 
-    QScopedPointer<QSslSocket> server(listener.socket);
+    QSslSocket *server = listener.socket.get();
 
     QVERIFY(server->write("HELLO\r\n", 7));
     QTRY_COMPARE(client->bytesAvailable(), 7);

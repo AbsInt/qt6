@@ -59,7 +59,6 @@ public:
 
     void folderDialogListViewCurrentIndexChanged();
 
-    QPointer<QQuickDialogButtonBox> buttonBox;
     QPointer<QQuickListView> folderDialogListView;
     QPointer<QQuickFolderBreadcrumbBar> breadcrumbBar;
 };

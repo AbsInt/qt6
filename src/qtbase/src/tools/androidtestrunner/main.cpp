@@ -49,15 +49,17 @@ struct Options
     QString buildPath;
     QString manifestPath;
     QString adbCommand{"adb"_L1};
+    QString bundletoolPath;
     QString serial;
     QString makeCommand;
     QString package;
     QString activity;
+    QStringList permissions;
     QStringList testArgsList;
     QString stdoutFileName;
     QHash<QString, QString> outFiles;
     QStringList amStarttestArgs;
-    QString apkPath;
+    QString packagePath;
     QString ndkStackPath;
     QList<QStringList> preTestRunAdbCommands;
     bool showLogcatOutput = false;
@@ -130,6 +132,24 @@ static bool execAdbCommand(const QStringList &args, QByteArray *output = nullptr
     return execCommand(g_options.adbCommand, argsWithSerial, output, verbose);
 }
 
+static bool execBundletoolCommand(const QStringList &args, QByteArray *output = nullptr,
+                                  bool verbose = true)
+{
+    QString java("java"_L1);
+    QStringList argsFull = QStringList() << "-jar"_L1 << g_options.bundletoolPath << args;
+    return execCommand(java, argsFull, output, verbose);
+}
+
+static void setPackagePath(const QString &path)
+{
+    if (!g_options.packagePath.isEmpty()) {
+        qCritical("Both --aab and --apk options provided. This is not supported.");
+        g_options.helpRequested = true;
+        return;
+    }
+    g_options.packagePath = path;
+}
+
 static bool execCommand(const QString &command, QByteArray *output = nullptr, bool verbose = true)
 {
     auto args = QProcess::splitCommand(command);
@@ -149,6 +169,11 @@ static bool parseOptions()
                 g_options.helpRequested = true;
             else
                 g_options.adbCommand = arguments.at(++i);
+        } else if (argument.compare("--bundletool"_L1, Qt::CaseInsensitive) == 0) {
+            if (i + 1 == arguments.size())
+                g_options.helpRequested = true;
+            else
+                g_options.bundletoolPath = arguments.at(++i);
         } else if (argument.compare("--path"_L1, Qt::CaseInsensitive) == 0) {
             if (i + 1 == arguments.size())
                 g_options.helpRequested = true;
@@ -168,7 +193,12 @@ static bool parseOptions()
             if (i + 1 == arguments.size())
                 g_options.helpRequested = true;
             else
-                g_options.apkPath = arguments.at(++i);
+                setPackagePath(arguments.at(++i));
+        } else if (argument.compare("--aab"_L1, Qt::CaseInsensitive) == 0) {
+            if (i + 1 == arguments.size())
+                g_options.helpRequested = true;
+            else
+                setPackagePath(arguments.at(++i));
         } else if (argument.compare("--activity"_L1, Qt::CaseInsensitive) == 0) {
             if (i + 1 == arguments.size())
                 g_options.helpRequested = true;
@@ -216,7 +246,7 @@ static bool parseOptions()
     for (;i < arguments.size(); ++i)
         g_options.testArgsList << arguments.at(i);
 
-    if (g_options.helpRequested || g_options.buildPath.isEmpty() || g_options.apkPath.isEmpty())
+    if (g_options.helpRequested || g_options.buildPath.isEmpty() || g_options.packagePath.isEmpty())
         return false;
 
     g_options.serial = qEnvironmentVariable("ANDROID_SERIAL");
@@ -238,79 +268,127 @@ static bool parseOptions()
 
 static void printHelp()
 {
-    qWarning(       "Syntax: %s <options> -- [TESTARGS] \n"
-                    "\n"
-                    "  Runs a Qt for Android test on an emulator or a device. Specify a device\n"
-                    "  using the environment variables ANDROID_SERIAL or ANDROID_DEVICE_SERIAL.\n"
-                    "  Returns the number of failed tests, -1 on test runner deployment related\n"
-                    "  failures or zero on success."
-                    "\n"
-                    "  Mandatory arguments:\n"
-                    "    --path <path>: The path where androiddeployqt builds the android package.\n"
-                    "\n"
-                    "    --make <make cmd>: make command to create an APK, for example:\n"
-                    "       \"cmake --build <build-dir> --target <target>_make_apk\".\n"
-                    "\n"
-                    "    --apk <apk path>: The test apk path. The apk has to exist already, if it\n"
-                    "       does not exist the make command must be provided for building the apk.\n"
-                    "\n"
-                    "  Optional arguments:\n"
-                    "    --adb <adb cmd>: The Android ADB command. If missing the one from\n"
-                    "       $PATH will be used.\n"
-                    "\n"
-                    "    --activity <acitvity>: The Activity to run. If missing the first\n"
-                    "       activity from AndroidManifest.qml file will be used.\n"
-                    "\n"
-                    "    --timeout <seconds>: Timeout to run the test. Default is 10 minutes.\n"
-                    "\n"
-                    "    --skip-install-root: Do not append INSTALL_ROOT=... to the make command.\n"
-                    "\n"
-                    "    --show-logcat: Print Logcat output to stdout. If an ANR occurs during\n"
-                    "       the test run, logs from the system_server process are included.\n"
-                    "\n"
-                    "    --ndk-stack: Path to ndk-stack tool that symbolizes crash stacktraces.\n"
-                    "       By default, ANDROID_NDK_ROOT env var is used to deduce the tool path.\n"
-                    "\n"
-                    "    -- Arguments that will be passed to the test application.\n"
-                    "\n"
-                    "    --verbose: Prints out information during processing.\n"
-                    "\n"
-                    "    --pre-test-adb-command <command>: call the adb <command> after\n"
-                    "       installation and before the test run.\n"
-                    "\n"
-                    "    --manifest <path>: Custom path to the AndroidManifest.xml.\n"
-                    "\n"
-                    "    --help: Displays this information.\n",
-                    qPrintable(QCoreApplication::arguments().at(0))
-            );
+    qWarning("Syntax: %s <options> -- [TESTARGS] \n"
+             "\n"
+             "  Runs a Qt for Android test on an emulator or a device. Specify a device\n"
+             "  using the environment variables ANDROID_SERIAL or ANDROID_DEVICE_SERIAL.\n"
+             "  Returns the number of failed tests, -1 on test runner deployment related\n"
+             "  failures or zero on success."
+             "\n"
+             "  Mandatory arguments:\n"
+             "    --path <path>: The path where androiddeployqt builds the android package.\n"
+             "\n"
+             "    --make <make cmd>: make command to create an APK, for example:\n"
+             "       \"cmake --build <build-dir> --target <target>_make_apk\".\n"
+             "\n"
+             "    --apk <apk path>: The test apk path. The apk has to exist already, if it\n"
+             "       does not exist the make command must be provided for building the apk.\n"
+             "\n"
+             "    --aab <aab path>: The test aab path. The aab has to exist already, if it\n"
+             "       does not exist the make command must be provided for building the aab.\n"
+             "\n"
+             "  Optional arguments:\n"
+             "    --adb <adb cmd>: The Android ADB command. If missing the one from\n"
+             "       $PATH will be used.\n"
+             "\n"
+             "    --activity <acitvity>: The Activity to run. If missing the first\n"
+             "       activity from AndroidManifest.qml file will be used.\n"
+             "\n"
+             "    --timeout <seconds>: Timeout to run the test. Default is 10 minutes.\n"
+             "\n"
+             "    --skip-install-root: Do not append INSTALL_ROOT=... to the make command.\n"
+             "\n"
+             "    --show-logcat: Print Logcat output to stdout. If an ANR occurs during\n"
+             "       the test run, logs from the system_server process are included.\n"
+             "\n"
+             "    --ndk-stack: Path to ndk-stack tool that symbolizes crash stacktraces.\n"
+             "       By default, ANDROID_NDK_ROOT env var is used to deduce the tool path.\n"
+             "\n"
+             "    -- Arguments that will be passed to the test application.\n"
+             "\n"
+             "    --verbose: Prints out information during processing.\n"
+             "\n"
+             "    --pre-test-adb-command <command>: call the adb <command> after\n"
+             "       installation and before the test run.\n"
+             "\n"
+             "    --manifest <path>: Custom path to the AndroidManifest.xml.\n"
+             "\n"
+             "    --bundletool <bundletool path>: The path to Android bundletool.\n"
+             "       See https://developer.android.com/tools/bundletool for details.\n"
+             "\n"
+             "    --help: Displays this information.\n",
+             qPrintable(QCoreApplication::arguments().at(0)));
 }
 
-static QString packageNameFromAndroidManifest(const QString &androidManifestPath)
+static bool processAndroidManifest()
 {
-    QFile androidManifestXml(androidManifestPath);
-    if (androidManifestXml.open(QIODevice::ReadOnly)) {
-        QXmlStreamReader reader(&androidManifestXml);
-        while (!reader.atEnd()) {
-            reader.readNext();
-            if (reader.isStartElement() && reader.name() == "manifest"_L1)
-                return reader.attributes().value("package"_L1).toString();
-        }
+    QFile androidManifestXml(g_options.manifestPath);
+    if (!androidManifestXml.open(QIODevice::ReadOnly)) {
+        qCritical("Unable to read android manifest '%s'", qPrintable(g_options.manifestPath));
+        return false;
     }
-    return {};
+
+    QXmlStreamReader reader(&androidManifestXml);
+    while (!reader.atEnd()) {
+        reader.readNext();
+        if (!reader.isStartElement())
+            continue;
+
+        if (reader.name() == "manifest"_L1)
+            g_options.package = reader.attributes().value("package"_L1).toString();
+        else if (reader.name() == "activity"_L1 && g_options.activity.isEmpty())
+            g_options.activity = reader.attributes().value("android:name"_L1).toString();
+        else if (reader.name() == "uses-permission"_L1)
+            g_options.permissions.append(reader.attributes().value("android:name"_L1).toString());
+    }
+    return true;
 }
 
-static QString activityFromAndroidManifest(const QString &androidManifestPath)
+static QStringList queryDangerousPermissions()
 {
-    QFile androidManifestXml(androidManifestPath);
-    if (androidManifestXml.open(QIODevice::ReadOnly)) {
-        QXmlStreamReader reader(&androidManifestXml);
-        while (!reader.atEnd()) {
-            reader.readNext();
-            if (reader.isStartElement() && reader.name() == "activity"_L1)
-                return reader.attributes().value("android:name"_L1).toString();
+    QByteArray output;
+    const QStringList args({ "shell"_L1, "dumpsys"_L1, "package"_L1, "permissions"_L1 });
+    if (!execAdbCommand(args, &output, false)) {
+        qWarning("Failed to query permissions via dumpsys");
+        return {};
+    }
+
+    /*
+     * Permissions section from this command look like:
+     *
+     * Permission [android.permission.INTERNET] (c8cafdc):
+     *     sourcePackage=android
+     *     uid=1000 gids=[3003] type=0 prot=normal|instant
+     *     perm=PermissionInfo{5f5bfbb android.permission.INTERNET}
+     *     flags=0x0
+     */
+     const static QRegularExpression regex("^\\s*Permission\\s+\\[([^\\]]+)\\]\\s+\\(([^)]+)\\):"_L1);
+    QStringList dangerousPermissions;
+    QString currentPerm;
+
+    const QStringList lines = QString::fromUtf8(output).split(u'\n');
+    for (const QString &line : lines) {
+        QRegularExpressionMatch match = regex.match(line);
+        if (match.hasMatch()) {
+            currentPerm = match.captured(1);
+            continue;
+        }
+
+        if (currentPerm.isEmpty())
+            continue;
+
+        int protIndex = line.indexOf("prot="_L1);
+        if (protIndex == -1)
+            continue;
+
+        QString protectionTypes = line.mid(protIndex + 5).trimmed();
+        if (protectionTypes.contains("dangerous"_L1, Qt::CaseInsensitive)) {
+            dangerousPermissions.append(currentPerm);
+            currentPerm.clear();
         }
     }
-    return {};
+
+    return dangerousPermissions;
 }
 
 static void setOutputFile(QString file, QString format)
@@ -870,10 +948,10 @@ int main(int argc, char *argv[])
         return EXIT_ERROR;
     }
 
-    if (!QFile::exists(g_options.apkPath)) {
+    if (!QFile::exists(g_options.packagePath)) {
         qCritical("No apk \"%s\" found after running the make command. "
                   "Check the provided path and the make command.",
-                  qPrintable(g_options.apkPath));
+                  qPrintable(g_options.packagePath));
         return EXIT_ERROR;
     }
 
@@ -895,9 +973,14 @@ int main(int argc, char *argv[])
         qCritical("Unable to find '%s'.", qPrintable(g_options.manifestPath));
         return EXIT_ERROR;
     }
-    g_options.package = packageNameFromAndroidManifest(g_options.manifestPath);
-    if (g_options.activity.isEmpty())
-        g_options.activity = activityFromAndroidManifest(g_options.manifestPath);
+
+    if (!processAndroidManifest())
+        return EXIT_ERROR;
+
+    if (g_options.package.isEmpty()) {
+        qCritical("Unable to get package name for '%s'", qPrintable(g_options.packagePath));
+        return EXIT_ERROR;
+    }
 
     // parseTestArgs depends on g_options.package
     if (!parseTestArgs())
@@ -906,10 +989,34 @@ int main(int argc, char *argv[])
     // do not install or run packages while another test is running
     testRunnerLock.acquire();
 
-    const QStringList installArgs = { "install"_L1, "-r"_L1, "-g"_L1, g_options.apkPath };
-    g_testInfo.isPackageInstalled.store(execAdbCommand(installArgs, nullptr));
-    if (!g_testInfo.isPackageInstalled)
-        return EXIT_ERROR;
+    if (g_options.packagePath.endsWith(".apk"_L1)) {
+        const QStringList installArgs = { "install"_L1, "-r"_L1, g_options.packagePath };
+        g_testInfo.isPackageInstalled.store(execAdbCommand(installArgs, nullptr));
+        if (!g_testInfo.isPackageInstalled)
+            return EXIT_ERROR;
+    } else if (g_options.packagePath.endsWith(".aab"_L1)) {
+        QFileInfo aab(g_options.packagePath);
+        const auto apksFilePath = aab.absoluteDir().absoluteFilePath(aab.baseName() + ".apks"_L1);
+        if (!execBundletoolCommand({ "build-apks"_L1, "--bundle"_L1, g_options.packagePath,
+                                     "--output"_L1, apksFilePath, "--local-testing"_L1,
+                                     "--overwrite"_L1 }))
+            return EXIT_ERROR;
+
+        if (!execBundletoolCommand({ "install-apks"_L1, "--apks"_L1, apksFilePath }))
+            return EXIT_ERROR;
+    }
+
+    const QStringList dangerousPermisisons = queryDangerousPermissions();
+    for (const auto &permission : g_options.permissions) {
+        if (!dangerousPermisisons.contains(permission))
+            continue;
+
+        if (!execAdbCommand({ "shell"_L1, "pm"_L1, "grant"_L1, g_options.package, permission },
+                            nullptr)) {
+            qWarning("Unable to grant '%s' to '%s'. Probably the Android version mismatch.",
+                        qPrintable(permission), qPrintable(g_options.package));
+        }
+    }
 
     // Call additional adb command if set after installation and before starting the test
     for (const auto &command : g_options.preTestRunAdbCommands) {

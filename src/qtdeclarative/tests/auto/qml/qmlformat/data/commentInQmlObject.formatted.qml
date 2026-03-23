@@ -1,4 +1,5 @@
 import QtQml
 
-// hello world
-QtObject {}
+QtObject {
+    // hello world
+}

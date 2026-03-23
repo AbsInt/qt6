@@ -186,6 +186,12 @@ private slots:
 
         Q_ASSERT(!qApp); // Rules should not require an app to resolve
 
+        static bool calledOnce = false;
+        if (calledOnce)
+            QSKIP("QLoggingRegistry_environment can only run once");
+
+        calledOnce = true;
+
         qputenv("QT_LOGGING_RULES", "qt.foo.bar=true");
         QLoggingCategory qtEnabledByLoggingRule("qt.foo.bar");
         QCOMPARE(qtEnabledByLoggingRule.isDebugEnabled(), true);

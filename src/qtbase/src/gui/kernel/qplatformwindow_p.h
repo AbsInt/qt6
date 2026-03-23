@@ -125,6 +125,14 @@ struct Q_GUI_EXPORT QWaylandWindow : public QObject
 public:
     QT_DECLARE_NATIVE_INTERFACE(QWaylandWindow, 1, QWindow)
 
+    enum WindowType {
+        Default,
+        ToolTip,
+        ComboBox,
+        Menu,
+        SubMenu,
+    };
+
     virtual wl_surface *surface() const = 0;
     virtual void setCustomMargins(const QMargins &margins) = 0;
     virtual void requestXdgActivationToken(uint serial) = 0;
@@ -135,6 +143,11 @@ public:
         auto role = std::any_cast<T *>(&anyRole);
         return role ? *role : nullptr;
     }
+    virtual void setSessionRestoreId(const QString &role) = 0;
+
+    virtual void setExtendedWindowType(WindowType windowType) = 0;
+    virtual void setParentControlGeometry(const QRect &parentAnchor) = 0;
+
 Q_SIGNALS:
     void surfaceCreated();
     void surfaceDestroyed();

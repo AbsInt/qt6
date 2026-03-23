@@ -35,6 +35,12 @@ using namespace Qt::StringLiterals;
 #if QT_CONFIG(accessibility)
 
 #if QT_CONFIG(spinbox)
+
+/*!
+    \class QAccessibleAbstractSpinBox
+    \inmodule QtWidgets
+    \internal
+*/
 QAccessibleAbstractSpinBox::QAccessibleAbstractSpinBox(QWidget *w)
     : QAccessibleWidgetV2(w, QAccessible::SpinBox), lineEdit(nullptr)
 {
@@ -243,6 +249,12 @@ QSpinBox *QAccessibleSpinBox::spinBox() const
 
 
 // ================================== QAccessibleDoubleSpinBox ==================================
+
+/*!
+    \class QAccessibleDoubleSpinBox
+    \inmodule QtWidgets
+    \internal
+*/
 QAccessibleDoubleSpinBox::QAccessibleDoubleSpinBox(QWidget *widget)
     : QAccessibleAbstractSpinBox(widget)
 {
@@ -347,6 +359,22 @@ void *QAccessibleAbstractSlider::interface_cast(QAccessible::InterfaceType t)
     if (t == QAccessible::ValueInterface)
         return static_cast<QAccessibleValueInterface*>(this);
     return QAccessibleWidgetV2::interface_cast(t);
+}
+
+QList<QAccessible::Attribute> QAccessibleAbstractSlider::attributeKeys() const
+{
+    QList<QAccessible::Attribute> keys = QAccessibleWidgetV2::attributeKeys();
+    keys.append(QAccessible::Attribute::Orientation);
+
+    return keys;
+}
+
+QVariant QAccessibleAbstractSlider::attributeValue(QAccessible::Attribute key) const
+{
+    if (key == QAccessible::Attribute::Orientation)
+        return QVariant::fromValue(abstractSlider()->orientation());
+
+    return QAccessibleWidgetV2::attributeValue(key);
 }
 
 QVariant QAccessibleAbstractSlider::currentValue() const

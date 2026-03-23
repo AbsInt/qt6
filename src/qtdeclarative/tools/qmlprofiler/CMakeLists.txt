@@ -17,7 +17,6 @@ qt_internal_add_tool(${target_name}
         main.cpp
         qmlprofilerapplication.cpp qmlprofilerapplication.h
         qmlprofilerclient.cpp qmlprofilerclient.h
-        qmlprofilerdata.cpp qmlprofilerdata.h
     LIBRARIES
         Qt::Network
         Qt::QmlDebugPrivate

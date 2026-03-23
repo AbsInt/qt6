@@ -359,7 +359,7 @@ void tst_QGuiVariant::toString_data()
 #endif
 
     QFont font( "times", 12 );
-    QTest::newRow("qfont") << QVariant::fromValue(font) << QString("times,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1");
+    QTest::newRow("qfont") << QVariant::fromValue(font) << QString("times,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0");
     QTest::newRow( "qcolor" ) << QVariant::fromValue( QColor( 10, 10, 10 ) ) << QString( "#0a0a0a" );
 }
 

@@ -214,9 +214,13 @@ QEglFSWindow *QEglFSKmsEglDeviceIntegration::createWindow(QWindow *window) const
     QEglFSKmsEglDeviceWindow *eglWindow = new QEglFSKmsEglDeviceWindow(window, this);
 
     m_funcs->initialize(eglWindow->screen()->display());
-    if (Q_UNLIKELY(!(m_funcs->has_egl_output_base && m_funcs->has_egl_output_drm && m_funcs->has_egl_stream &&
-                     m_funcs->has_egl_stream_producer_eglsurface && m_funcs->has_egl_stream_consumer_egloutput)))
+    if (Q_UNLIKELY(!(m_funcs->has_egl_output_base && m_funcs->has_egl_output_drm
+                     && m_funcs->has_egl_stream && m_funcs->has_egl_stream_producer_eglsurface
+                     && m_funcs->has_egl_stream_consumer_egloutput))) {
+        qCDebug(qLcEglfsKmsDebug, "EGL_EXTENSIONS %s",
+                eglQueryString(eglWindow->screen()->display(), EGL_EXTENSIONS));
         qFatal("Required extensions missing!");
+    }
 
     return eglWindow;
 }

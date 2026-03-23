@@ -15,7 +15,7 @@
 #ifndef QTGRADIENTEDITOR_H
 #define QTGRADIENTEDITOR_H
 
-#include <QtWidgets/QWidget>
+#include <QtWidgets/qwidget.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -27,8 +27,8 @@ class QtGradientEditor : public QWidget
     Q_PROPERTY(bool detailsVisible READ detailsVisible WRITE setDetailsVisible)
     Q_PROPERTY(bool detailsButtonVisible READ isDetailsButtonVisible WRITE setDetailsButtonVisible)
 public:
-    QtGradientEditor(QWidget *parent = 0);
-    ~QtGradientEditor();
+    explicit QtGradientEditor(QWidget *parent = nullptr);
+    ~QtGradientEditor() override;
 
     void setGradient(const QGradient &gradient);
     QGradient gradient() const;

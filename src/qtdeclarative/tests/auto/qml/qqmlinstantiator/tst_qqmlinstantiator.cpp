@@ -44,8 +44,12 @@ private slots:
 
     void listDataDestruction();
 
+    void setDelegateAfterModel();
+
     void delegateModelAccess_data();
     void delegateModelAccess();
+
+    void replaceDelegate();
 };
 
 tst_qqmlinstantiator::tst_qqmlinstantiator()
@@ -227,7 +231,7 @@ void tst_qqmlinstantiator::createAndRemove()
         qobject_cast<QQmlInstantiator*>(rootObject->findChild<QObject*>("instantiator1"));
     QVERIFY(instantiator != nullptr);
     model->drop(1);
-    QVector<QString> names;
+    QList<QString> names;
     names << "Beta" << "Gamma" << "Delta";
     for (int i=0; i<3; i++) {
         QObject *object = instantiator->objectAt(i);
@@ -328,6 +332,25 @@ void tst_qqmlinstantiator::listDataDestruction()
     QScopedPointer<QObject> o(component.create());
     QVERIFY(!o.isNull());
     QCOMPARE(o->objectName(), QLatin1String("A"));
+}
+
+void tst_qqmlinstantiator::setDelegateAfterModel()
+{
+    // TODO: We can't do this trick with DelegateModel on Instantiator because Instantiator
+    //       explicitly avoids touching the delegate of a DelegateModel passed in as model.
+    //       That's fine, but inconsistent with other views.
+
+    QQmlEngine engine;
+    const QUrl url = testFileUrl("setDelegateAfterModel.qml");
+    QQmlComponent component(&engine, url);
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+
+    // If the model was lost by setting the delegate, the count would be 0.
+    QCOMPARE(object->property("count").toInt(), 3);
+    object->setProperty("useObjectModel", QVariant::fromValue<bool>(true));
+    QCOMPARE(object->property("count").toInt(), 2);
 }
 
 class SingleBoolItemModel : public QAbstractListModel
@@ -518,6 +541,29 @@ void tst_qqmlinstantiator::delegateModelAccess()
 
     QCOMPARE(delegate->property("modelX").toDouble(), expected);
     QCOMPARE(modelChangedSpy.count(), expectedModelUpdates);
+}
+
+void tst_qqmlinstantiator::replaceDelegate()
+{
+    QTest::failOnWarning();
+
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("replaceDelegate.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+    QTest::ignoreMessage(QtWarningMsg, "created");
+    QScopedPointer<QObject> outer(component.create());
+    const QUrl url = outer->property("source").value<QUrl>();
+    QVERIFY(url.isValid());
+    QVERIFY(outer->property("object").value<QObject *>() != nullptr);
+    outer->setProperty("source", QUrl());
+    QVERIFY(outer->property("object").value<QObject *>() == nullptr);
+
+    // Restoring the delegate causes the object to be created only _once_.
+    // See failOnWarning() above.
+    QTest::ignoreMessage(QtWarningMsg, "created");
+    outer->setProperty("source", url);
+    QVERIFY(outer->property("object").value<QObject *>() != nullptr);
 }
 
 QTEST_MAIN(tst_qqmlinstantiator)

@@ -207,6 +207,19 @@ QQuickFlickablePrivate::AxisData::~AxisData()
 
 class QQuickFlickableContentItem : public QQuickItem
 {
+public:
+    explicit QQuickFlickableContentItem(QQuickItem *parent = nullptr) : QQuickItem(parent)
+    {
+        auto *d = QQuickItemPrivate::get(this);
+        // A user can set contentWidth/contentHeight to make this item
+        // arbitrarily small (or large); yet, the expectation is that pointer handlers
+        // declared in the Flickable react to events within the whole Flickable.
+        // So assume the contentItem doesn't fully contain all its children (don't check).
+        d->eventHandlingChildrenWithinBounds = false;
+        d->eventHandlingChildrenWithinBoundsSet = true;
+    }
+
+private:
     /*!
         \internal
         The flickable area inside the viewport can be bigger than the bounds of the
@@ -2170,7 +2183,7 @@ void QQuickFlickable::geometryChange(const QRectF &newGeometry, const QRectF &ol
 }
 
 /*!
-    \qmlmethod QtQuick::Flickable::flick(qreal xVelocity, qreal yVelocity)
+    \qmlmethod void QtQuick::Flickable::flick(qreal xVelocity, qreal yVelocity)
 
     Flicks the content with \a xVelocity horizontally and \a yVelocity vertically in pixels/sec.
 
@@ -2220,7 +2233,7 @@ void QQuickFlickablePrivate::flickingStarted(bool flickingH, bool flickingV)
 }
 
 /*!
-    \qmlmethod QtQuick::Flickable::cancelFlick()
+    \qmlmethod void QtQuick::Flickable::cancelFlick()
 
     Cancels the current flick animation.
 */
@@ -2231,6 +2244,173 @@ void QQuickFlickable::cancelFlick()
     d->resetTimeline(d->hData);
     d->resetTimeline(d->vData);
     movementEnding();
+}
+
+/*!
+    \qmlmethod void QtQuick::Flickable::positionViewAtChild(QQuickItem *child, PositionMode mode, point offset)
+    \since 6.11
+
+    Positions \l {Flickable::}{contentX} and \l {Flickable::}{contentY} such
+    that \a child item (if it is a child) is at the position specified by \a mode. \a mode
+    can be an or-ed combination of the following:
+
+    \value Flickable.AlignLeft Position the child at the left of the view.
+    \value Flickable.AlignHCenter Position the child at the horizontal center of the view.
+    \value Flickable.AlignRight Position the child at the right of the view.
+    \value Flickable.AlignTop Position the child at the top of the view.
+    \value Flickable.AlignVCenter Position the child at the vertical center of the view.
+    \value Flickable.AlignBottom Position the child at the bottom of the view.
+    \value Flickable.AlignCenter The same as (Flickable.AlignHCenter | Flickable.AlignVCenter)
+    \value Flickable.Visible If any part of the child is visible then take no action. Otherwise
+           move the content item so that the entire child becomes visible.
+    \value Flickable.Contain If the entire child is visible then take no action. Otherwise
+           move the content item so that the entire child becomes visible. If the child is
+           bigger than the view, the top-left part of the child will be preferred.
+
+    If no vertical alignment is specified, vertical positioning will be ignored.
+    The same is true for horizontal alignment.
+
+    Optionally, you can specify \a offset to move \e contentX and \e contentY an extra number of
+    pixels beyond the target alignment.
+
+    If positioning the flickable at the child item would cause empty space to be displayed at the
+    beginning or end of the flickable, the flickable will be positioned at the boundary.
+
+    \snippet qml/flickablePositionActiveFocusPosition.qml 0
+*/
+
+void QQuickFlickable::positionViewAtChild(QQuickItem *child, PositionMode mode, const QPointF &offset)
+{
+    Q_D(QQuickFlickable);
+    cancelFlick();
+
+    if (!d->contentItem->isAncestorOf(child))
+        return;
+
+    const QRectF itemRect =
+            child->mapRectToItem(d->contentItem, QRectF(0, 0, child->width(), child->height()));
+
+    QPointF currentPosition = QPointF(contentX(), contentY());
+    QPointF newPosition = computePosition(currentPosition, itemRect, mode, offset);
+
+    if (newPosition.x() != currentPosition.x()) {
+        setContentX(newPosition.x());
+        d->fixupX();
+    }
+    if (newPosition.y() != currentPosition.y()) {
+        setContentY(newPosition.y());
+        d->fixupY();
+    }
+}
+
+/*!
+    \qmlmethod void QtQuick::Flickable::flickToChild(QQuickItem *child, PositionMode mode, point offset)
+    \since 6.11
+
+    Flicks the flickable such that \a child item (if it is a child) is at the position
+    specified by \a mode. \a mode can be an or-ed combination of the following:
+
+    \value Flickable.AlignLeft Flick the child at the left of the view.
+    \value Flickable.AlignHCenter Flick the child at the horizontal center of the view.
+    \value Flickable.AlignRight Flick the child at the right of the view.
+    \value Flickable.AlignTop Flick the child at the top of the view.
+    \value Flickable.AlignVCenter Flick the child at the vertical center of the view.
+    \value Flickable.AlignBottom Flick the child at the bottom of the view.
+    \value Flickable.AlignCenter The same as (Flickable.AlignHCenter | Flickable.AlignVCenter)
+    \value Flickable.Visible If any part of the child is visible then take no action. Otherwise
+           move the content item so that the entire child becomes visible.
+    \value Flickable.Contain If the entire child is visible then take no action. Otherwise
+           move the content item so that the entire child becomes visible. If the child is
+           bigger than the view, the top-left part of the child will be preferred.
+
+    If no vertical alignment is specified, vertical flicking will be ignored.
+    The same is true for horizontal alignment.
+
+    Optionally, you can specify \a offset to flick an extra number of
+    pixels beyond the target alignment.
+
+    If flicking the flickable at the child item would cause empty space to be displayed at the
+    beginning or end of the flickable, the flickable will stop flicking at the boundary.
+
+    \snippet qml/flickableFlickActiveFocusPosition.qml 0
+*/
+
+void QQuickFlickable::flickToChild(QQuickItem *child, PositionMode mode, const QPointF &offset)
+{
+    Q_D(QQuickFlickable);
+    cancelFlick();
+
+    if (!d->contentItem->isAncestorOf(child))
+        return;
+
+    const QRectF itemRect =
+            child->mapRectToItem(d->contentItem, QRectF(0, 0, child->width(), child->height()));
+
+    QPointF currentPosition = QPointF(contentX(), contentY());
+    QPointF newPosition = computePosition(currentPosition, itemRect, mode, offset);
+
+    flickTo(newPosition);
+}
+
+/*!
+    \qmlmethod void QtQuick::Flickable::flickTo(point position)
+    \since 6.11
+
+    Flicks the flickable to \a position.
+
+    If flicking the flickable would cause empty space to be displayed at the
+    beginning or end of the flickable, the flickable will stop flicking at the boundary.
+*/
+
+void QQuickFlickable::flickTo(const QPointF &newPosition)
+{
+    Q_D(QQuickFlickable);
+
+    QPointF currentPosition = QPointF(contentX(), contentY());
+
+    qreal xVelocity = 0.0;
+    qreal yVelocity = 0.0;
+
+    const qreal deltaX = newPosition.x() - currentPosition.x();
+    const qreal deltaY = newPosition.y() - currentPosition.y();
+
+    // Calculate velocity based on distance to travel
+    // Formula: v = sqrt(2 * deceleration * distance)
+
+    if (xflick() && qAbs(deltaX) > 0.5) {
+        const qreal decel = flickDeceleration();
+        qreal velocity = qSqrt(2.0 * decel * qAbs(deltaX));
+        if (qAbs(velocity) < _q_MinimumFlickVelocity)
+            velocity = 0;
+        const qreal maxVel = maximumFlickVelocity();
+        if (maxVel > 0 && velocity > maxVel)
+            velocity = maxVel;
+        xVelocity = deltaX > 0 ? -velocity : velocity;
+    }
+
+    if (yflick() && qAbs(deltaY) > 0.5) {
+        const qreal decel = flickDeceleration();
+        qreal velocity = qSqrt(2.0 * decel * qAbs(deltaY));
+        if (qAbs(velocity) < _q_MinimumFlickVelocity)
+            velocity = 0;
+        const qreal maxVel = maximumFlickVelocity();
+        if (maxVel > 0 && velocity > maxVel)
+            velocity = maxVel;
+        yVelocity = deltaY > 0 ? -velocity : velocity;
+    }
+
+    if (qAbs(xVelocity) > 0.0 || qAbs(yVelocity) > 0.0) {
+        flick(xVelocity, yVelocity);
+    } else {
+        if (newPosition.x() != currentPosition.x()) {
+            setContentX(newPosition.x());
+            d->fixupX();
+        }
+        if (newPosition.y() != currentPosition.y()) {
+            setContentY(newPosition.y());
+            d->fixupY();
+        }
+    }
 }
 
 void QQuickFlickablePrivate::data_append(QQmlListProperty<QObject> *prop, QObject *o)
@@ -2590,7 +2770,7 @@ qreal QQuickFlickable::originX() const
 
 
 /*!
-    \qmlmethod QtQuick::Flickable::resizeContent(real width, real height, QPointF center)
+    \qmlmethod void QtQuick::Flickable::resizeContent(real width, real height, point center)
 
     Resizes the content to \a width x \a height about \a center.
 
@@ -2628,7 +2808,7 @@ void QQuickFlickable::resizeContent(qreal w, qreal h, QPointF center)
 }
 
 /*!
-    \qmlmethod QtQuick::Flickable::returnToBounds()
+    \qmlmethod void QtQuick::Flickable::returnToBounds()
 
     Ensures the content is within legal bounds.
 
@@ -2694,6 +2874,69 @@ bool QQuickFlickable::yflick() const
     if (d->flickableDirection == QQuickFlickable::AutoFlickDirection)
         return std::floor(qAbs(contentHeightWithMargins - height()));
     return d->flickableDirection & QQuickFlickable::VerticalFlick;
+}
+
+QPointF QQuickFlickable::computePosition(QPointF currentPosition, QRectF itemRect, PositionMode mode, const QPointF &offset) const
+{
+    QPointF newPosition = currentPosition;
+
+    if (xflick()) {
+        const qreal viewWidth = width();
+
+        if (mode & QQuickFlickable::AlignLeft)
+            newPosition.setX(itemRect.left());
+        if (mode & QQuickFlickable::AlignHCenter)
+            newPosition.setX(itemRect.left() - (viewWidth - itemRect.width()) / 2);
+        if (mode & QQuickFlickable::AlignRight)
+            newPosition.setX(itemRect.right() - viewWidth);
+        if (mode & QQuickFlickable::Visible) {
+            if (itemRect.right() < currentPosition.x())
+                newPosition.setX(itemRect.left());
+            else if (itemRect.left() > currentPosition.x() + viewWidth)
+                newPosition.setX(itemRect.right() - viewWidth);
+        }
+        if (mode & QQuickFlickable::Contain) {
+            if (itemRect.right() > currentPosition.x() + viewWidth)
+                newPosition.setX(itemRect.right() - viewWidth);
+            if (itemRect.left() < newPosition.x())
+                newPosition.setX(itemRect.left());
+        }
+
+        const qreal minX = -minXExtent();
+        const qreal maxX = -maxXExtent();
+        newPosition.setX(qMin(newPosition.x(), maxX));
+        newPosition.setX(qMax(newPosition.x(), minX));
+    }
+
+    if (yflick()) {
+        const qreal viewHeight = height();
+
+        if (mode & QQuickFlickable::AlignTop)
+            newPosition.setY(itemRect.top());
+        if (mode & QQuickFlickable::AlignVCenter)
+            newPosition.setY(itemRect.top() - (viewHeight - itemRect.height()) / 2);
+        if (mode & QQuickFlickable::AlignBottom)
+            newPosition.setY(itemRect.bottom() - viewHeight);
+        if (mode & QQuickFlickable::Visible) {
+            if (itemRect.bottom() < currentPosition.y())
+                newPosition.setY(itemRect.top());
+            else if (itemRect.top() > currentPosition.y() + viewHeight)
+                newPosition.setY(itemRect.bottom() - viewHeight);
+        }
+        if (mode & QQuickFlickable::Contain) {
+            if (itemRect.bottom() > currentPosition.y() + viewHeight)
+                newPosition.setY(itemRect.bottom() - viewHeight);
+            if (itemRect.top() < currentPosition.y())
+                newPosition.setY(itemRect.top());
+        }
+
+        const qreal minY = -minYExtent();
+        const qreal maxY = -maxYExtent();
+        newPosition.setY(qMin(newPosition.y(), maxY));
+        newPosition.setY(qMax(newPosition.y(), minY));
+    }
+
+    return newPosition + offset;
 }
 
 void QQuickFlickable::mouseUngrabEvent()

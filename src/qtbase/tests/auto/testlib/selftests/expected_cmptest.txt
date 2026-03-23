@@ -252,6 +252,14 @@ FAIL!  : tst_Cmptest::tryVerify() '!c' returned FALSE. ()
 FAIL!  : tst_Cmptest::tryVerify2() '!c' returned FALSE. (Should time out and fail)
    Loc: [qtbase/tests/auto/testlib/selftests/cmptest/tst_cmptest.cpp(0)]
 PASS   : tst_Cmptest::verifyExplicitOperatorBool()
+XFAIL  : tst_Cmptest::defaultTryVerifyTimeout(times-out) The timeout (std::chrono::milliseconds) is deliberately too short
+   Loc: [qtbase/tests/auto/testlib/selftests/cmptest/tst_cmptest.cpp(0)]
+PASS   : tst_Cmptest::defaultTryVerifyTimeout(times-out)
+PASS   : tst_Cmptest::defaultTryVerifyTimeout(ample-time)
+XFAIL  : tst_Cmptest::defaultTryCompareTimeout(times-out) The timeout (std::chrono::milliseconds) is deliberately too short
+   Loc: [qtbase/tests/auto/testlib/selftests/cmptest/tst_cmptest.cpp(0)]
+PASS   : tst_Cmptest::defaultTryCompareTimeout(times-out)
+PASS   : tst_Cmptest::defaultTryCompareTimeout(ample-time)
 PASS   : tst_Cmptest::cleanupTestCase()
-Totals: 23 passed, 51 failed, 0 skipped, 0 blacklisted, 0ms
+Totals: 27 passed, 51 failed, 0 skipped, 0 blacklisted, 0ms
 ********* Finished testing of tst_Cmptest *********

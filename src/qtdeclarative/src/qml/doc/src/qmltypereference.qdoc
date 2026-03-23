@@ -114,9 +114,9 @@ that reliably exists (daylight-savings transitions skip an hour, near
 one end or the other of a day).
 
 This value type is provided by the QML language. It can be implicitly converted
-to a \l{QtQml::Date}{Date} object.
+to a \l{The Date JavaScript Object}{Date} object.
 
-\sa {QtQml::Date}{QML Date object}, {QML Value Types}
+\sa {The Date JavaScript Object}{QML Date object}, {QML Value Types}
 */
 
 /*!
@@ -228,6 +228,71 @@ When integrating with C++, note that any QRect or QRectF value
 \l{qtqml-cppintegration-data.html}{passed into QML from C++} is automatically
 converted into a \c rect value, and vice-versa. When a \c rect value is passed to C++, it
 is automatically converted into a QRectF value.
+
+\sa{QML Value Types}
+*/
+
+/*!
+\qmltype Easing
+\nativetype QQmlEasing
+\inqmlmodule QtQml
+\since 6.11
+\brief Provides access to the easing enums and convenience API.
+
+The Easing singleton provides access to the \c Easing enum, which is
+typically used by \l {PropertyAnimation::easing}{animations}. It also
+provides the \c valueForProgress function as a convenience API:
+
+\snippet qml/Easing.qml 0
+
+The goal of this function is to offer a convenient way of easing a value
+along a given curve. For more advanced curves, use the \l easingCurve
+value type.
+*/
+
+/*!
+\qmlvaluetype easingCurve
+\ingroup qtqmlvaluetypes
+\since 6.11
+\brief Value that represents an easing curve.
+
+The \c easingCurve type is a value with attributes that define an
+\l {QEasingCurve}{easing curve}:
+\list
+\li \c {enumeration type}
+\li \c {real amplitude}
+\li \c {real overshoot}
+\li \c {real period}
+\li \c {list<real> bezierCurve}
+\endlist
+
+It is useful when doing custom animations with \l FrameAnimation, for example,
+or in any use case that requires easing a value along a given curve.
+
+To create an \c easingCurve value, import \c QtQml (or \c QtQuick) into a namespace:
+
+\snippet qml/easingCurve.qml import QtQml
+
+Then, create an instance of it with \c new:
+
+\snippet qml/easingCurve.qml easingCurve new declaration
+
+The following example is similar to the one described by the
+documentation of \l Easing:
+
+\snippet qml/easingCurve.qml children
+
+It's also possible to create \c easingCurve via structured value type syntax:
+
+\snippet qml/easingCurve.qml easingCurve structed value type declaration
+
+When integrating with C++, note that any QEasingCurve value
+\l{qtqml-cppintegration-data.html}{passed into QML from C++} is automatically
+converted into an \c easingCurve value. When an \c easingCurve value is passed
+to C++, it is automatically converted into a QEasingCurve value.
+
+A default-constructed \c easingCurve is equal to
+\c {new QtQml.easingCurve(QtQml.Easing.Linear)}.
 
 \sa{QML Value Types}
 */

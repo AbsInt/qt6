@@ -16,6 +16,7 @@ public:
     // compiler-generated special member functions are fine!
     void swap(QStack<T> &other) noexcept { QList<T>::swap(other); } // prevent QList<->QStack swaps
     void push(const T &t) { QList<T>::append(t); }
+    void push(T &&t) { QList<T>::append(std::move(t)); }
     T pop() { return QList<T>::takeLast(); }
     T &top() { return QList<T>::last(); }
     const T &top() const { return QList<T>::last(); }

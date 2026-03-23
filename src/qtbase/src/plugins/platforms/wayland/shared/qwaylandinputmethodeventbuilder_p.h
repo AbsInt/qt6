@@ -1,5 +1,6 @@
 // Copyright (C) 2016 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QWAYLANDINPUTMETHODEVENTBUILDER_H
 #define QWAYLANDINPUTMETHODEVENTBUILDER_H
@@ -17,6 +18,8 @@
 
 #include <QInputMethodEvent>
 #include <private/qglobal_p.h>
+
+#include <utility> // for std::pair
 
 QT_BEGIN_NAMESPACE
 
@@ -42,7 +45,7 @@ public:
 
     static int trimmedIndexFromWayland(const QString &text, int length, int base = 0);
 private:
-    QPair<int, int> replacementForDeleteSurrounding();
+    std::pair<int, int> replacementForDeleteSurrounding();
 
     int32_t m_anchor = 0;
     int32_t m_cursor = 0;

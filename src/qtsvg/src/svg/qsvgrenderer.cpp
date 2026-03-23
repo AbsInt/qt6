@@ -1,11 +1,13 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #include "qsvgrenderer.h"
 
 #ifndef QT_NO_SVGRENDERER
 
-#include "qsvgtinydocument_p.h"
+#include "qsvgdocument_p.h"
 
 #include "qbytearray.h"
 #include "qtimer.h"
@@ -71,15 +73,10 @@ class QSvgRendererPrivate : public QObjectPrivate
 public:
     explicit QSvgRendererPrivate()
         : QObjectPrivate(),
-          render(0), timer(0),
+          timer(0),
           fps(30)
     {
         options = defaultOptions();
-    }
-
-    ~QSvgRendererPrivate()
-    {
-        delete render;
     }
 
     void startOrStopTimer()
@@ -111,7 +108,7 @@ public:
         return envOk ? envOpts : appDefaultOptions;
     }
 
-    QSvgTinyDocument *render;
+    std::unique_ptr<QSvgDocument> render;
     QTimer *timer;
     int fps;
     QtSvg::Options options;
@@ -175,7 +172,7 @@ QSvgRenderer::~QSvgRenderer()
 bool QSvgRenderer::isValid() const
 {
     Q_D(const QSvgRenderer);
-    return d->render;
+    return bool(d->render);
 }
 
 /*!
@@ -414,12 +411,10 @@ static bool loadDocument(QSvgRenderer *const q,
                          QSvgRendererPrivate *const d,
                          const TInputType &in)
 {
-    delete d->render;
-    d->render = QSvgTinyDocument::load(in, d->options);
-    if (d->render && !d->render->size().isValid()) {
-        delete d->render;
-        d->render = nullptr;
-    }
+    d->render = QSvgDocument::load(in, d->options);
+    if (d->render && !d->render->size().isValid())
+        d->render.reset();
+
     d->startOrStopTimer();
 
     if (d->render)
@@ -428,7 +423,7 @@ static bool loadDocument(QSvgRenderer *const q,
     //force first update
     QSvgRendererPrivate::callRepaintNeeded(q);
 
-    return d->render;
+    return bool(d->render);
 }
 
 /*!

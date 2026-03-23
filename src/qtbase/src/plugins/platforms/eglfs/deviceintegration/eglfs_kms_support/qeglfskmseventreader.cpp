@@ -21,7 +21,10 @@ static void pageFlipHandler(int fd, unsigned int sequence, unsigned int tv_sec, 
     t->eventHost()->handlePageFlipCompleted(user_data);
 
     QEglFSKmsScreen *screen = static_cast<QEglFSKmsScreen *>(user_data);
-    screen->pageFlipped(sequence, tv_sec, tv_usec);
+    if (QEglFSKmsScreen::isScreenKnown(screen))
+        screen->pageFlipped(sequence, tv_sec, tv_usec);
+    else
+        qWarning("Deleted screen got it's pageFlipHandler called; Dead pointer: %p", user_data);
 }
 
 class RegisterWaitFlipEvent : public QEvent

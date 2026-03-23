@@ -25,9 +25,6 @@ T.RoundButton {
 
     icon.width: 24
     icon.height: 24
-    icon.color: !enabled ? Material.hintTextColor :
-        flat && highlighted ? Material.accentColor :
-        highlighted ? Material.primaryHighlightedTextColor : Material.foreground
 
     Material.elevation: control.down ? 8 : 2
     Material.background: flat ? "transparent" : undefined
@@ -38,11 +35,13 @@ T.RoundButton {
         display: control.display
 
         icon: control.icon
+        defaultIconColor: !control.enabled ? control.Material.hintTextColor
+            : control.flat && control.highlighted ? control.Material.accentColor
+            : control.highlighted ? control.Material.primaryHighlightedTextColor
+            : control.Material.foreground
         text: control.text
         font: control.font
-        color: !control.enabled ? control.Material.hintTextColor :
-            control.flat && control.highlighted ? control.Material.accentColor :
-            control.highlighted ? control.Material.primaryHighlightedTextColor : control.Material.foreground
+        color: defaultIconColor
     }
 
     // TODO: Add a proper ripple/ink effect for mouse/touch input and focus state

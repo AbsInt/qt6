@@ -233,6 +233,10 @@ void tst_QFiledialog::directoryEnteredSignal()
     sidebar->setCurrentIndex(secondItem);
     QTest::keyPress(sidebar->viewport(), Qt::Key_Return);
     QCOMPARE(spyDirectoryEntered.size(), 1);
+    // ensure signal isn't emitted again when clicking on the already active item
+    QTest::mouseClick(sidebar->viewport(), Qt::LeftButton, {},
+                      sidebar->visualRect(secondItem).center());
+    QCOMPARE(spyDirectoryEntered.size(), 1);
     spyDirectoryEntered.clear();
 
     // lookInCombo
@@ -815,9 +819,9 @@ void tst_QFiledialog::labelText()
     QFileDialog fd;
     QDialogButtonBox buttonBox;
     QPushButton *cancelButton = buttonBox.addButton(QDialogButtonBox::Cancel);
-    QCOMPARE(fd.labelText(QFileDialog::LookIn), QString("Look in:"));
+    QCOMPARE(fd.labelText(QFileDialog::LookIn), QString("&Look in:"));
     QCOMPARE(fd.labelText(QFileDialog::FileName), QString("File &name:"));
-    QCOMPARE(fd.labelText(QFileDialog::FileType), QString("Files of type:"));
+    QCOMPARE(fd.labelText(QFileDialog::FileType), QString("Files of &type:"));
     QCOMPARE(fd.labelText(QFileDialog::Accept), QString("&Open")); ///### see task 241462
     QCOMPARE(fd.labelText(QFileDialog::Reject), cancelButton->text());
 

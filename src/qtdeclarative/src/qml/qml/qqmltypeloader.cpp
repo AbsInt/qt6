@@ -25,7 +25,7 @@
 #include <qtqml_tracepoints_p.h>
 
 #include <QtCore/qdir.h>
-#include <QtCore/qdiriterator.h>
+#include <QtCore/qdirlisting.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qlibraryinfo.h>
 #include <QtCore/qthread.h>
@@ -36,8 +36,10 @@
 
 #include <functional>
 
-#define ASSERT_LOADTHREAD() Q_ASSERT(thread() && thread()->isThisThread())
-#define ASSERT_ENGINETHREAD() Q_ASSERT(engine()->thread()->isCurrentThread())
+#define ASSERT_LOADTHREAD() \
+    Q_ASSERT(thread() && thread()->isThisThread())
+#define ASSERT_ENGINETHREAD() \
+    Q_ASSERT(!engine()->jsEngine() || engine()->jsEngine()->thread()->isCurrentThread())
 
 QT_BEGIN_NAMESPACE
 
@@ -282,7 +284,7 @@ void QQmlTypeLoader::loadWithStaticDataThread(const QQmlDataBlob::Ptr &blob, con
 {
     ASSERT_LOADTHREAD();
 
-    setData(blob, data);
+    setData(blob, data, DataOrigin::Static);
 }
 
 void QQmlTypeLoader::loadWithCachedUnitThread(const QQmlDataBlob::Ptr &blob, const QQmlPrivate::CachedQmlUnit *unit)
@@ -305,7 +307,9 @@ void QQmlTypeLoader::loadThread(const QQmlDataBlob::Ptr &blob)
 
     if (QQmlFile::isSynchronous(blob->m_url)) {
         const QString fileName = QQmlFile::urlToLocalFileOrQrc(blob->m_url);
-        if (!QQml_isFileCaseCorrect(fileName)) {
+        if (!fileExists(fileName) && QFileInfo::exists(fileName)) {
+            // If the file doesn't exist at all, that's fine. It may be cached. If it's a case
+            // mismatch, though, we have to error out.
             blob->setError(QLatin1String("File name case mismatch"));
             return;
         }
@@ -377,7 +381,7 @@ void QQmlTypeLoader::networkReplyFinished(QNetworkReply *reply)
         blob->networkError(reply->error());
     } else {
         QByteArray data = reply->readAll();
-        setData(blob, data);
+        setData(blob, data, DataOrigin::Device);
     }
 }
 
@@ -414,7 +418,7 @@ void doInitializeEngine(
     if (thread && thread->isThisThread())
         thread->initializeEngine(iface, uri);
     else
-        iface->initializeEngine(data->engine(), uri);
+        iface->initializeEngine(data->engine()->qmlEngine(), uri);
 }
 
 void QQmlTypeLoader::initializeEngine(QQmlEngineExtensionInterface *iface, const char *uri)
@@ -429,13 +433,23 @@ void QQmlTypeLoader::initializeEngine(QQmlExtensionInterface *iface, const char 
     doInitializeEngine(iface, thread(), &m_data, uri);
 }
 
-void QQmlTypeLoader::setData(const QQmlDataBlob::Ptr &blob, const QByteArray &data)
+/*!
+ * \internal
+ * Use the given \a data as source code for the given \a blob. \a origin states where the \a data
+ * came from and what we can do with it. DataOrigin::Static means that it's arbitrary static data
+ * passed by the user. We shall not produce a .qmlc file for it and we shall disregard any existing
+ * compilation units. DataOrigin::Device means that it was loaded from a file or other device and
+ * can be assumed to remain the same. We can use any caching mechanism to load a compilation unit
+ * for it and we can produce a .qmlc file for it.
+ */
+void QQmlTypeLoader::setData(const QQmlDataBlob::Ptr &blob, const QByteArray &data, DataOrigin origin)
 {
     ASSERT_LOADTHREAD();
 
     QQmlDataBlob::SourceCodeData d;
     d.inlineSourceCode = QString::fromUtf8(data);
     d.hasInlineSourceCode = true;
+    d.hasStaticData = (origin == DataOrigin::Static);
     setData(blob, d);
 }
 
@@ -648,11 +662,10 @@ void QQmlTypeLoader::clearQmldirInfo()
 }
 
 static void initializeConfiguredData(
-        const QQmlTypeLoaderConfiguredDataPtr &data, QQmlEngine *engine)
+        const QQmlTypeLoaderConfiguredDataPtr &data, QV4::ExecutionEngine *engine)
 {
-    QV4::ExecutionEngine *v4 = engine->handle();
-    data->diskCacheOptions = v4->diskCacheOptions();
-    data->isDebugging = v4->debugger() != nullptr;
+    data->diskCacheOptions = engine->diskCacheOptions();
+    data->isDebugging = engine->debugger() != nullptr;
     data->initialized = true;
 }
 
@@ -1063,7 +1076,7 @@ void QQmlTypeLoader::Blob::dependencyComplete(const QQmlDataBlob::Ptr &blob)
 
 bool QQmlTypeLoader::Blob::loadDependentImports(
         const QList<QQmlDirParser::Import> &imports, const QString &qualifier,
-        QTypeRevision version, quint16 precedence, QQmlImports::ImportFlags flags,
+        QTypeRevision version, quint8 precedence, QQmlImports::ImportFlags flags,
         QList<QQmlError> *errors)
 {
     assertTypeLoaderThread();
@@ -1213,7 +1226,7 @@ static QStringList parseEnvPath(const QString &envImportPath)
 /*!
 Constructs a new type loader that uses the given \a engine.
 */
-QQmlTypeLoader::QQmlTypeLoader(QQmlEngine *engine)
+QQmlTypeLoader::QQmlTypeLoader(QV4::ExecutionEngine *engine)
     : m_data(engine)
 {
     QQmlTypeLoaderConfiguredDataPtr data(&m_data);
@@ -1306,12 +1319,30 @@ QQmlTypeLoader::~QQmlTypeLoader()
     clearQmldirInfo();
 }
 
-QUrl QQmlTypeLoader::normalize(const QUrl &unNormalizedUrl)
+template<typename Blob>
+QQmlRefPointer<Blob> handleExisting(
+        const QQmlTypeLoaderSharedDataPtr &data, QQmlRefPointer<Blob> &&blob,
+        QQmlTypeLoader::Mode mode)
 {
-    QUrl normalized(unNormalizedUrl);
-    if (normalized.scheme() == QLatin1String("qrc"))
-        normalized.setHost(QString()); // map qrc:///a.qml to qrc:/a.qml
-    return normalized;
+    if ((mode == QQmlTypeLoader::PreferSynchronous && QQmlFile::isSynchronous(blob->finalUrl()))
+            || mode == QQmlTypeLoader::Synchronous) {
+        // this was started Asynchronous, but we need to force Synchronous
+        // completion now.
+
+        // This only works when called directly from e.g. the UI thread, but not
+        // when recursively called on the QML thread via resolveTypes()
+
+        // NB: We do not want to know whether the thread is the main thread, but specifically
+        //     that the thread is _not_ the thread we're waiting for.
+        //     If !QT_CONFIG(qml_type_loader_thread) the QML thread is the main thread.
+
+        QQmlTypeLoaderThread *thread = data.thread();
+        if (thread && !thread->isThisThread()) {
+            while (!blob->isCompleteOrError())
+                thread->waitForNextMessage(); // Requires lock to be held, via data above
+        }
+    }
+    return blob;
 }
 
 /*!
@@ -1325,34 +1356,14 @@ QQmlRefPointer<QQmlTypeData> QQmlTypeLoader::getType(const QUrl &unNormalizedUrl
             (QQmlFile::urlToLocalFileOrQrc(unNormalizedUrl).isEmpty() ||
              !QDir::isRelativePath(QQmlFile::urlToLocalFileOrQrc(unNormalizedUrl))));
 
-    const QUrl url = normalize(unNormalizedUrl);
-
-    const auto handleExisting = [&](const QQmlRefPointer<QQmlTypeData> &typeData) {
-        if ((mode == PreferSynchronous || mode == Synchronous) && QQmlFile::isSynchronous(url)) {
-            // this was started Asynchronous, but we need to force Synchronous
-            // completion now (if at all possible with this type of URL).
-
-            // This only works when called directly from e.g. the UI thread, but not
-            // when recursively called on the QML thread via resolveTypes()
-
-            // NB: We do not want to know whether the thread is the main thread, but specifically
-            //     that the thread is _not_ the thread we're waiting for.
-            //     If !QT_CONFIG(qml_type_loader_thread) the QML thread is the main thread.
-            if (thread() && !thread()->isThisThread()) {
-                while (!typeData->isCompleteOrError())
-                    thread()->waitForNextMessage(); // Requires lock to be held, via data above
-            }
-        }
-        return typeData;
-    };
-
     QQmlRefPointer<QQmlTypeData> typeData;
     {
+        const QUrl url = QQmlMetaType::normalizedUrl(unNormalizedUrl);
         QQmlTypeLoaderSharedDataPtr data(&m_data);
 
         typeData = data->typeCache.value(url);
         if (typeData)
-            return handleExisting(typeData);
+            return handleExisting(data, std::move(typeData), mode);
 
         // Trim before adding the new type, so that we don't immediately trim it away
         if (data->typeCache.size() >= data->typeCacheTrimThreshold)
@@ -1364,18 +1375,7 @@ QQmlRefPointer<QQmlTypeData> QQmlTypeLoader::getType(const QUrl &unNormalizedUrl
         data->typeCache.insert(url, typeData);
     }
 
-    QQmlMetaType::CachedUnitLookupError error = QQmlMetaType::CachedUnitLookupError::NoError;
-    const QQmlMetaType::CacheMode cacheMode = aotCacheMode();
-    if (const QQmlPrivate::CachedQmlUnit *cachedUnit = (cacheMode != QQmlMetaType::RejectAll)
-            ? QQmlMetaType::findCachedCompilationUnit(typeData->url(), cacheMode, &error)
-            : nullptr) {
-        loadWithCachedUnit(QQmlDataBlob::Ptr(typeData.data()), cachedUnit, mode);
-    } else {
-        typeData->setCachedUnitStatus(error);
-        load(QQmlDataBlob::Ptr(typeData.data()), mode);
-    }
-
-    return typeData;
+    return finalizeBlob(std::move(typeData), mode);
 }
 
 /*!
@@ -1394,7 +1394,33 @@ QQmlRefPointer<QQmlTypeData> QQmlTypeLoader::getType(
 
 static bool isModuleUrl(const QUrl &url)
 {
-    return url.path().endsWith(QLatin1String(".mjs"));
+    return url.fragment() == QLatin1String("module") || url.path().endsWith(QLatin1String(".mjs"));
+}
+
+QQmlRefPointer<QQmlScriptBlob> QQmlTypeLoader::getScript(const QUrl &unNormalizedUrl, Mode mode)
+{
+    // This can be called from either thread.
+
+    Q_ASSERT(!unNormalizedUrl.isRelative() &&
+             (QQmlFile::urlToLocalFileOrQrc(unNormalizedUrl).isEmpty() ||
+              !QDir::isRelativePath(QQmlFile::urlToLocalFileOrQrc(unNormalizedUrl))));
+
+    QQmlRefPointer<QQmlScriptBlob> scriptBlob;
+    {
+        const QUrl url = QQmlMetaType::normalizedUrl(unNormalizedUrl);
+        QQmlTypeLoaderSharedDataPtr data(&m_data);
+
+        scriptBlob = data->scriptCache.value(url);
+        if (scriptBlob)
+            return handleExisting(data, std::move(scriptBlob), mode);
+
+        scriptBlob = QQml::makeRefPointer<QQmlScriptBlob>(url, this, isModuleUrl(url)
+                ? QQmlScriptBlob::IsESModule::Yes
+                : QQmlScriptBlob::IsESModule::No);
+        data->scriptCache.insert(url, scriptBlob);
+    }
+
+    return finalizeBlob(std::move(scriptBlob), mode);
 }
 
 QQmlRefPointer<QV4::CompiledData::CompilationUnit> QQmlTypeLoader::injectModule(
@@ -1417,7 +1443,8 @@ QQmlRefPointer<QV4::CompiledData::CompilationUnit> QQmlTypeLoader::injectModule(
 }
 
 /*!
-Return a QQmlScriptBlob for \a url.  The QQmlScriptData may be cached.
+Return a QQmlScriptBlob for \a unNormalizedUrl or \a relativeUrl.
+This assumes PreferSynchronous, and therefore the result may not be ready yet.
 */
 QQmlRefPointer<QQmlScriptBlob> QQmlTypeLoader::getScript(
         const QUrl &unNormalizedUrl, const QUrl &relativeUrl)
@@ -1428,7 +1455,7 @@ QQmlRefPointer<QQmlScriptBlob> QQmlTypeLoader::getScript(
             (QQmlFile::urlToLocalFileOrQrc(unNormalizedUrl).isEmpty() ||
              !QDir::isRelativePath(QQmlFile::urlToLocalFileOrQrc(unNormalizedUrl))));
 
-    const QUrl url = normalize(unNormalizedUrl);
+    const QUrl url = QQmlMetaType::normalizedUrl(unNormalizedUrl);
 
     QQmlRefPointer<QQmlScriptBlob> scriptBlob;
     {
@@ -1440,6 +1467,7 @@ QQmlRefPointer<QQmlScriptBlob> QQmlTypeLoader::getScript(
         if (!scriptBlob && unNormalizedUrl != relativeUrl)
             scriptBlob = data->scriptCache.value(relativeUrl);
 
+        // Do not try to finish the loading via handleExisting() here.
         if (scriptBlob)
             return scriptBlob;
 
@@ -1449,18 +1477,7 @@ QQmlRefPointer<QQmlScriptBlob> QQmlTypeLoader::getScript(
         data->scriptCache.insert(url, scriptBlob);
     }
 
-    QQmlMetaType::CachedUnitLookupError error = QQmlMetaType::CachedUnitLookupError::NoError;
-    const QQmlMetaType::CacheMode cacheMode = aotCacheMode();
-    if (const QQmlPrivate::CachedQmlUnit *cachedUnit = (cacheMode != QQmlMetaType::RejectAll)
-            ? QQmlMetaType::findCachedCompilationUnit(scriptBlob->url(), cacheMode, &error)
-            : nullptr) {
-        QQmlTypeLoader::loadWithCachedUnit(QQmlDataBlob::Ptr(scriptBlob.data()), cachedUnit);
-    } else {
-        scriptBlob->setCachedUnitStatus(error);
-        QQmlTypeLoader::load(QQmlDataBlob::Ptr(scriptBlob.data()));
-    }
-
-    return scriptBlob;
+    return finalizeBlob(std::move(scriptBlob), PreferSynchronous);
 }
 
 /*!
@@ -1528,100 +1545,142 @@ QString QQmlTypeLoader::absoluteFilePath(const QString &path)
     }
 #endif
 
-    int lastSlash = path.lastIndexOf(QLatin1Char('/'));
-    QString dirPath(path.left(lastSlash));
-
-    QQmlTypeLoaderSharedDataPtr data(&m_data);
-    if (!data->importDirCache.contains(dirPath)) {
-        bool exists = QDir(dirPath).exists();
-        QCache<QString, bool> *entry = exists ? new QCache<QString, bool> : nullptr;
-        data->importDirCache.insert(dirPath, entry);
-    }
-    QCache<QString, bool> *fileSet = data->importDirCache.object(dirPath);
-
-    if (!fileSet)
-        return QString();
-
-    QString absoluteFilePath;
-    QString fileName(path.mid(lastSlash+1, path.size()-lastSlash-1));
-
-    bool *value = fileSet->object(fileName);
-    if (value) {
-        if (*value)
-            absoluteFilePath = path;
-    } else {
-        bool exists = QFile::exists(path);
-        fileSet->insert(fileName, new bool(exists));
-        if (exists)
-            absoluteFilePath = path;
-    }
-
-    if (absoluteFilePath.size() > 2 && absoluteFilePath.at(0) != QLatin1Char('/') && absoluteFilePath.at(1) != QLatin1Char(':'))
-        absoluteFilePath = QFileInfo(absoluteFilePath).absoluteFilePath();
-
-    return absoluteFilePath;
+    return fileExists(path)
+            ? QFileInfo(path).absoluteFilePath()
+            : QString();
 }
 
-bool QQmlTypeLoader::fileExists(const QString &path, const QString &file)
+static constexpr QDirListing::IteratorFlags dirListingFlags()
+{
+    return QDirListing::IteratorFlag::CaseSensitive | QDirListing::IteratorFlag::IncludeHidden;
+}
+
+enum class FileSetPopulateResult { NotFound, Found, Overflow };
+static FileSetPopulateResult populateFileSet(
+        QCache<QString, bool> *fileSet, const QString &path, const QString &file)
+{
+    const QDirListing listing(path, dirListingFlags());
+    bool seen = false;
+    for (const auto &entry : listing) {
+        const QString next = entry.fileName();
+        if (next == file)
+            seen = true;
+        fileSet->insert(next, new bool(true));
+        if (fileSet->totalCost() == fileSet->maxCost())
+            break;
+    }
+
+    if (seen)
+        return FileSetPopulateResult::Found;
+    if (fileSet->totalCost() < fileSet->maxCost())
+        return FileSetPopulateResult::NotFound;
+    return FileSetPopulateResult::Overflow;
+}
+
+static QString stripTrailingSlashes(const QString &path)
+{
+    for (qsizetype length = path.size(); length > 0; --length) {
+        if (path[length - 1] != QLatin1Char('/'))
+            return path.left(length);
+    }
+
+    return QString();
+}
+
+bool QQmlTypeLoader::fileExists(const QString &dirPath, const QString &file)
 {
     // Can be called from either thread.
+
+    // We want to use QDirListing here because that gives us case-sensitive results even on
+    // case-insensitive file systems. That is, for a file date.qml it only lists date.qml, not
+    // Date.qml, dAte.qml, DATE.qml etc. QFileInfo::exists(), on the other hand, will happily
+    // claim that Date.qml exists in such a situation on a case-insensitive file sysem. Such a
+    // thing then shadows the JavaScript Date object and disaster ensues.
+
+    const QString path = stripTrailingSlashes(dirPath);
 
     const QChar nullChar(QChar::Null);
     if (path.isEmpty() || path.contains(nullChar) || file.isEmpty() || file.contains(nullChar))
         return false;
 
-    Q_ASSERT(path.endsWith(QLatin1Char('/')));
 
     QQmlTypeLoaderSharedDataPtr data(&m_data);
     QCache<QString, bool> *fileSet = data->importDirCache.object(path);
     if (fileSet) {
-        if (bool *value = fileSet->object(file))
-            return *value;
+        if (const bool *exists = fileSet->object(file))
+            return *exists;
+
+        // If the cache isn't full, we know that we've scanned the whole directory.
+        // The file not being in the cache then means it doesn't exist.
+        if (fileSet->totalCost() < fileSet->maxCost())
+            return false;
+
     } else if (data->importDirCache.contains(path)) {
         // explicit nullptr in cache
         return false;
     }
 
-    auto addToCache = [&](const QFileInfo &fileInfo) {
+    auto addToCache = [&](const QString &path, const QString &file) {
+        const QDir dir(path);
+
         if (!fileSet) {
-            fileSet = fileInfo.dir().exists() ? new QCache<QString, bool> : nullptr;
+            // First try to cache the whole directory, but only up to the maxCost of the cache.
+
+            fileSet = dir.exists() ? new QCache<QString, bool> : nullptr;
             const bool inserted = data->importDirCache.insert(path, fileSet);
             Q_ASSERT(inserted);
             if (!fileSet)
                 return false;
+
+            switch (populateFileSet(fileSet, dir.path(), file)) {
+            case FileSetPopulateResult::NotFound:
+                return false;
+            case FileSetPopulateResult::Found:
+                return true;
+            case FileSetPopulateResult::Overflow:
+                break;
+            }
+
+            // Cache overflow. Look up files individually
+        } else {
+            // If the directory was completely cached, we'd have returned early above.
+            Q_ASSERT(fileSet->totalCost() == fileSet->maxCost());
+
         }
 
-        const bool exists = fileInfo.exists();
+        const QDirListing singleFile(dir.path(), {file}, dirListingFlags());
+        const bool exists = singleFile.begin() != singleFile.end();
         fileSet->insert(file, new bool(exists));
+        Q_ASSERT(fileSet->totalCost() == fileSet->maxCost());
         return exists;
     };
 
     if (path.at(0) == QLatin1Char(':')) {
         // qrc resource
-        return addToCache(QFileInfo(path + file));
+        return addToCache(path, file);
     }
 
     if (path.size() > 3 && path.at(3) == QLatin1Char(':')
             && path.startsWith(QLatin1String("qrc"), Qt::CaseInsensitive)) {
         // qrc resource url
-        return addToCache(QFileInfo(QQmlFile::urlToLocalFileOrQrc(path + file)));
+        return addToCache(QQmlFile::urlToLocalFileOrQrc(path), file);
     }
 
 #if defined(Q_OS_ANDROID)
     if (path.size() > 7 && path.at(6) == QLatin1Char(':') && path.at(7) == QLatin1Char('/')
             && path.startsWith(QLatin1String("assets"), Qt::CaseInsensitive)) {
         // assets resource url
-        return addToCache(QFileInfo(QQmlFile::urlToLocalFileOrQrc(path + file)));
+        return addToCache(QQmlFile::urlToLocalFileOrQrc(path), file);
     }
 
     if (path.size() > 8 && path.at(7) == QLatin1Char(':') && path.at(8) == QLatin1Char('/')
             && path.startsWith(QLatin1String("content"), Qt::CaseInsensitive)) {
         // content url
-        return addToCache(QFileInfo(QQmlFile::urlToLocalFileOrQrc(path + file)));
+        return addToCache(QQmlFile::urlToLocalFileOrQrc(path), file);
     }
 #endif
 
-    return addToCache(QFileInfo(path + file));
+    return addToCache(path, file);
 }
 
 
@@ -1647,20 +1706,22 @@ bool QQmlTypeLoader::directoryExists(const QString &path)
         return fileInfo.exists() && fileInfo.isDir();
     }
 
-    int length = path.size();
-    if (path.endsWith(QLatin1Char('/')))
-        --length;
-    QString dirPath(path.left(length));
+    const QString dirPath = stripTrailingSlashes(path);
 
     QQmlTypeLoaderSharedDataPtr data(&m_data);
     if (!data->importDirCache.contains(dirPath)) {
-        bool exists = QDir(dirPath).exists();
-        QCache<QString, bool> *files = exists ? new QCache<QString, bool> : nullptr;
-        data->importDirCache.insert(dirPath, files);
+        if (QDir(dirPath).exists()) {
+            QCache<QString, bool> *files = new QCache<QString, bool>;
+            populateFileSet(files, dirPath, QString());
+            data->importDirCache.insert(dirPath, files);
+            return true;
+        }
+
+        data->importDirCache.insert(dirPath, nullptr);
+        return false;
     }
 
-    QCache<QString, bool> *fileSet = data->importDirCache.object(dirPath);
-    return fileSet != nullptr;
+    return data->importDirCache.object(dirPath) != nullptr;
 }
 
 
@@ -1706,11 +1767,11 @@ const QQmlTypeLoaderQmldirContent QQmlTypeLoader::qmldirContent(const QString &f
 
 #define ERROR(description) { QQmlError e; e.setDescription(description); qmldir->setError(e); }
 #define NOT_READABLE_ERROR QString(QLatin1String("module \"$$URI$$\" definition \"%1\" not readable"))
-#define CASE_MISMATCH_ERROR QString(QLatin1String("cannot load module \"$$URI$$\": File name case mismatch for \"%1\""))
+#define NOT_FOUND_ERROR QString(QLatin1String("cannot load module \"$$URI$$\": File \"%1\" not found"))
 
     QFile file(filePath);
-    if (!QQml_isFileCaseCorrect(filePath)) {
-        ERROR(CASE_MISMATCH_ERROR.arg(filePath));
+    if (!fileExists(filePath)) {
+        ERROR(NOT_FOUND_ERROR.arg(filePath));
     } else if (file.open(QFile::ReadOnly)) {
         QByteArray data = file.readAll();
         qmldir->setContent(filePath, QString::fromUtf8(data));
@@ -1744,6 +1805,15 @@ void QQmlTypeLoader::setQmldirContent(const QString &url, const QString &content
         qmldir->setContent(url, content);
 }
 
+template<typename Blob>
+void clearBlobs(QHash<QUrl, QQmlRefPointer<Blob>> *blobs)
+{
+    std::for_each(blobs->cbegin(), blobs->cend(), [](const QQmlRefPointer<Blob> &blob) {
+        blob->resetTypeLoader();
+    });
+    blobs->clear();
+}
+
 /*!
 Clears cached information about loaded files, including any type data, scripts
 and qmldir information.
@@ -1765,10 +1835,10 @@ void QQmlTypeLoader::clearCache()
     threadData->importQmlDirCache.clear();
 
     QQmlTypeLoaderSharedDataPtr data(&m_data);
-    data->typeCache.clear();
+    clearBlobs(&data->typeCache);
+    clearBlobs(&data->scriptCache);
+    clearBlobs(&data->qmldirCache);
     data->typeCacheTrimThreshold = QQmlTypeLoaderSharedData::MinimumTypeCacheTrimThreshold;
-    data->scriptCache.clear();
-    data->qmldirCache.clear();
     data->importDirCache.clear();
 
     // The thread will auto-restart next time we need it.

@@ -66,6 +66,7 @@ qt_add_qml_module(testbench
         "controls/DelayButton.qml"
         "controls/Dial.qml"
         "controls/Dialog.qml"
+        "controls/DoubleSpinBox.qml"
         "controls/Frame.qml"
         "controls/GroupBox.qml"
         "controls/ItemDelegate.qml"

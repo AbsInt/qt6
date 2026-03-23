@@ -49,6 +49,8 @@ private:
     collectDocumentationLinks(const QQmlJS::Dom::DomItem &item, const QQmlJSScope::ConstPtr &scope,
                               const QString &name) const;
     void registerDocumentations(const QStringList &docs) const;
+
+    mutable QMutex m_mutex;
     std::unique_ptr<QQmlLSHelpProviderBase> m_helpPlugin;
     QString m_docRootPath;
     QHash<QString, QString> m_cppTypesToQmlTypes;

@@ -13,6 +13,7 @@ Item {
     property sslConfiguration defaultSslObject;
     property sslDtlsConfiguration dtlsDefaultSslObj;
     property sslKey key;
+    property sslConfiguration otherUserSslConf;
 
     TestCase {
         name: "qtSslConfigurationTest"
@@ -21,7 +22,6 @@ Item {
             userSslObject.peerVerifyMode = SslSocket.QueryPeer
             userSslObject.peerVerifyDepth = 0
             userSslObject.protocol = Ssl.TlsV1_2
-            userSslObject.sslOptions = [Ssl.SslOptionDisableEmptyFragments]
 
             defaultSslObject.peerVerifyMode = SslSocket.VerifyPeer;
             dtlsDefaultSslObj.peerVerifyMode = SslSocket.VerifyNone;
@@ -119,9 +119,6 @@ Item {
                             field: typeof dtlsDefaultSslObj, answer: "object" },
                         { tag: "key is creatable object",
                             field: typeof key, answer: "object" },
-                        { tag: "userSslObject.sslOptions is creatable object",
-                            field: typeof userSslObject.sslOptions,
-                            answer: "object" },
 
                         // userSslObject
                         { tag: "userSslObject.peerVerifyMode == Ssl.QueryPeer",
@@ -137,9 +134,6 @@ Item {
                         // userSslObject
                         { tag: "userSslObject.peerVerifyDepth == 0",
                             field: userSslObject.peerVerifyDepth, answer: 0 },
-                        { tag: "userSslObject.sslOptions == Ssl.SslOptionDisableEmptyFragments",
-                            field: userSslObject.sslOptions[0],
-                            answer: Ssl.SslOptionDisableEmptyFragments },
                         { tag: "SSL configuration protocol == SslProtocol.TlsV1_2",
                             field: userSslObject.protocol, answer: Ssl.TlsV1_2 },
                         { tag: "key.keyFile == :/data/key.pem",
@@ -153,6 +147,34 @@ Item {
 
         function test_sslConfigurationFields(data) {
             compare(data.field, data.answer)
+        }
+
+        function test_sslConfigurationSslOptionFlags() {
+            // Keep the expected value in sync with QSslConfiguration::defaultSslConfiguration!
+            const defaultSslFlags = Ssl.SslOptionDisableEmptyFragments
+                                  | Ssl.SslOptionDisableLegacyRenegotiation
+                                  | Ssl.SslOptionDisableCompression
+                                  | Ssl.SslOptionDisableSessionPersistence
+            compare(otherUserSslConf.sslOptionFlags, defaultSslFlags)
+
+            const newSslFlags = Ssl.SslOptionDisableLegacyRenegotiation
+                              | Ssl.SslOptionDisableSessionSharing
+            otherUserSslConf.sslOptionFlags = newSslFlags
+            compare(otherUserSslConf.sslOptionFlags, newSslFlags)
+        }
+    }
+
+    TestCase {
+        name: "deprecatedSslOptionsPropertyTest"
+        when: testDeprecatedSslOptionsProperty
+
+        function test_sslOptions() {
+            // userSslObject.sslOptions is creatable object
+            compare(typeof userSslObject.sslOptions, "object")
+
+            // userSslObject.sslOptions == Ssl.SslOptionDisableEmptyFragments
+            userSslObject.sslOptions = [Ssl.SslOptionDisableEmptyFragments]
+            compare(userSslObject.sslOptions[0], Ssl.SslOptionDisableEmptyFragments)
         }
     }
 }

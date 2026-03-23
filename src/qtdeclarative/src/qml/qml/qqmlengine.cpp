@@ -312,29 +312,28 @@ void QQmlData::signalEmitted(QAbstractDeclarativeData *, QObject *object, int in
         QMetaMethod m = QMetaObjectPrivate::signal(object->metaObject(), index);
         QList<QByteArray> parameterTypes = m.parameterTypes();
 
-        auto ev = std::make_unique<QMetaCallEvent>(m.methodIndex(), 0, nullptr,
-                                                   object, index,
-                                                   parameterTypes.size() + 1);
-
-        void **args = ev->args();
-        QMetaType *types = ev->types();
-
-        for (int ii = 0; ii < parameterTypes.size(); ++ii) {
-            const QByteArray &typeName = parameterTypes.at(ii);
+        QVarLengthArray<const QtPrivate::QMetaTypeInterface *, 16> argTypes;
+        argTypes.reserve(1 + parameterTypes.size());
+        argTypes.emplace_back(nullptr); // return type
+        for (const QByteArray &typeName: parameterTypes) {
+            QMetaType type;
             if (typeName.endsWith('*'))
-                types[ii + 1] = QMetaType(QMetaType::VoidStar);
+                type = QMetaType(QMetaType::VoidStar);
             else
-                types[ii + 1] = QMetaType::fromName(typeName);
+                type = QMetaType::fromName(typeName);
 
-            if (!types[ii + 1].isValid()) {
+            if (!type.isValid()) {
                 qWarning("QObject::connect: Cannot queue arguments of type '%s'\n"
                          "(Make sure '%s' is registered using qRegisterMetaType().)",
                          typeName.constData(), typeName.constData());
                 return;
             }
 
-            args[ii + 1] = types[ii + 1].create(a[ii + 1]);
+            argTypes.emplace_back(type.iface());
         }
+
+        auto ev = std::make_unique<QQueuedMetaCallEvent>(m.methodIndex(), 0, nullptr, object, index,
+                                                         argTypes.size(), argTypes.data(), a);
 
         QQmlThreadNotifierProxyObject *mpo = new QQmlThreadNotifierProxyObject;
         mpo->target = object;
@@ -510,7 +509,7 @@ void QQmlEnginePrivate::init()
   Create a new QQmlEngine with the given \a parent.
 */
 QQmlEngine::QQmlEngine(QObject *parent)
-: QJSEngine(*new QQmlEnginePrivate(this), parent)
+: QJSEngine(*new QQmlEnginePrivate, parent)
 {
     Q_D(QQmlEngine);
     d->init();
@@ -539,7 +538,15 @@ QQmlEngine::QQmlEngine(QQmlEnginePrivate &dd, QObject *parent)
 QQmlEngine::~QQmlEngine()
 {
     Q_D(QQmlEngine);
-    handle()->inShutdown = true;
+
+#if QT_CONFIG(qml_worker_script)
+    // Delete the workerscript engine early
+    // so that it won't be able to use the type loader anymore.
+    delete std::exchange(d->workerScriptEngine, nullptr);
+#endif
+
+    QV4::ExecutionEngine *v4 = handle();
+    v4->inShutdown = true;
     QJSEnginePrivate::removeFromDebugServer(this);
 
     // Emit onDestruction signals for the root context before
@@ -556,11 +563,13 @@ QQmlEngine::~QQmlEngine()
     delete d->rootContext;
     d->rootContext = nullptr;
 
-    d->typeLoader.invalidate();
+    v4->typeLoader()->invalidate();
 
     // QQmlGadgetPtrWrapper can have QQmlData with various references.
     qDeleteAll(d->cachedValueTypeInstances);
     d->cachedValueTypeInstances.clear();
+
+    v4->resetQmlEngine();
 }
 
 /*! \fn void QQmlEngine::quit()
@@ -618,16 +627,28 @@ void QQmlEngine::clearComponentCache()
     // QQmlGadgetPtrWrapper can have QQmlData with various references.
     qDeleteAll(std::exchange(d->cachedValueTypeInstances, {}));
 
+    QV4::ExecutionEngine *v4 = handle();
+
+    // Reset the values of JavaScript libraries and ECMAScript modules
+    // So that they get re-evaluated on next usage.
+    {
+        const auto cus = v4->compilationUnits();
+        for (const auto &cu : cus) {
+            cu->setValue(QV4::Value::emptyValue());
+            delete[] std::exchange(cu->imports, nullptr);
+        }
+    }
+
     // Contexts can hold on to CUs but live on the JS heap.
     // Use a non-incremental GC run to get rid of those.
-    QV4::MemoryManager *mm = handle()->memoryManager;
+    QV4::MemoryManager *mm = v4->memoryManager;
     auto oldLimit = mm->gcStateMachine->timeLimit;
     mm->setGCTimeLimit(-1);
     mm->runGC();
     mm->gcStateMachine->timeLimit = std::move(oldLimit);
 
-    handle()->trimCompilationUnits();
-    d->typeLoader.clearCache();
+    v4->trimCompilationUnits();
+    v4->typeLoader()->clearCache();
     QQmlMetaType::freeUnusedTypesAndCaches();
 }
 
@@ -645,9 +666,9 @@ void QQmlEngine::clearComponentCache()
  */
 void QQmlEngine::trimComponentCache()
 {
-    Q_D(QQmlEngine);
-    handle()->trimCompilationUnits();
-    d->typeLoader.trimCache();
+    QV4::ExecutionEngine *v4 = handle();
+    v4->trimCompilationUnits();
+    v4->typeLoader()->trimCache();
 }
 
 /*!
@@ -699,8 +720,7 @@ QQmlContext *QQmlEngine::rootContext() const
 */
 QQmlAbstractUrlInterceptor *QQmlEngine::urlInterceptor() const
 {
-    Q_D(const QQmlEngine);
-    return d->typeLoader.urlInterceptors().last();
+    return QQmlTypeLoader::get(this)->urlInterceptors().last();
 }
 #endif
 
@@ -715,8 +735,7 @@ QQmlAbstractUrlInterceptor *QQmlEngine::urlInterceptor() const
 */
 void QQmlEngine::addUrlInterceptor(QQmlAbstractUrlInterceptor *urlInterceptor)
 {
-    Q_D(QQmlEngine);
-    d->typeLoader.addUrlInterceptor(urlInterceptor);
+    QQmlTypeLoader::get(this)->addUrlInterceptor(urlInterceptor);
 }
 
 /*!
@@ -729,8 +748,7 @@ void QQmlEngine::addUrlInterceptor(QQmlAbstractUrlInterceptor *urlInterceptor)
 */
 void QQmlEngine::removeUrlInterceptor(QQmlAbstractUrlInterceptor *urlInterceptor)
 {
-    Q_D(QQmlEngine);
-    d->typeLoader.removeUrlInterceptor(urlInterceptor);
+    QQmlTypeLoader::get(this)->removeUrlInterceptor(urlInterceptor);
 }
 
 /*!
@@ -739,8 +757,7 @@ void QQmlEngine::removeUrlInterceptor(QQmlAbstractUrlInterceptor *urlInterceptor
  */
 QUrl QQmlEngine::interceptUrl(const QUrl &url, QQmlAbstractUrlInterceptor::DataType type) const
 {
-    Q_D(const QQmlEngine);
-    return d->typeLoader.interceptUrl(url, type);
+    return QQmlTypeLoader::get(this)->interceptUrl(url, type);
 }
 
 /*!
@@ -748,8 +765,7 @@ QUrl QQmlEngine::interceptUrl(const QUrl &url, QQmlAbstractUrlInterceptor::DataT
  */
 QList<QQmlAbstractUrlInterceptor *> QQmlEngine::urlInterceptors() const
 {
-    Q_D(const QQmlEngine);
-    return d->typeLoader.urlInterceptors();
+    return QQmlTypeLoader::get(this)->urlInterceptors();
 }
 
 QSharedPointer<QQmlImageProviderBase> QQmlEnginePrivate::imageProvider(const QString &providerId) const
@@ -774,8 +790,7 @@ QSharedPointer<QQmlImageProviderBase> QQmlEnginePrivate::imageProvider(const QSt
 */
 void QQmlEngine::setNetworkAccessManagerFactory(QQmlNetworkAccessManagerFactory *factory)
 {
-    Q_D(QQmlEngine);
-    d->typeLoader.setNetworkAccessManagerFactory(factory);
+    QQmlTypeLoader::get(this)->setNetworkAccessManagerFactory(factory);
 }
 
 class QQmlEnginePublicAPIToken {};
@@ -787,16 +802,7 @@ class QQmlEnginePublicAPIToken {};
 */
 QQmlNetworkAccessManagerFactory *QQmlEngine::networkAccessManagerFactory() const
 {
-    Q_D(const QQmlEngine);
-    return d->typeLoader.networkAccessManagerFactory().get(QQmlEnginePublicAPIToken());
-}
-
-QNetworkAccessManager *QQmlEnginePrivate::getNetworkAccessManager()
-{
-    Q_Q(QQmlEngine);
-    if (!networkAccessManager)
-        networkAccessManager = typeLoader.createNetworkAccessManager(q);
-    return networkAccessManager;
+    return QQmlTypeLoader::get(this)->networkAccessManagerFactory().get(QQmlEnginePublicAPIToken());
 }
 
 /*!
@@ -813,9 +819,7 @@ QNetworkAccessManager *QQmlEnginePrivate::getNetworkAccessManager()
 */
 QNetworkAccessManager *QQmlEngine::networkAccessManager() const
 {
-    // ### Qt7: This method is clearly not const since it _creates_ the network access manager.
-    Q_D(const QQmlEngine);
-    return const_cast<QQmlEnginePrivate *>(d)->getNetworkAccessManager();
+    return handle()->getNetworkAccessManager();
 }
 #endif // qml_network
 
@@ -1070,7 +1074,7 @@ QJSValue QQmlEngine::singletonInstance<QJSValue>(QAnyStringView uri, QAnyStringV
     Q_D(QQmlEngine);
 
     auto loadHelper = QQml::makeRefPointer<LoadHelper>(
-            &d->typeLoader, uri, typeName, QQmlTypeLoader::Synchronous);
+            QQmlTypeLoader::get(this), uri, typeName, QQmlTypeLoader::Synchronous);
     const QQmlType type = loadHelper->type();
 
     if (!type.isSingleton())
@@ -1589,7 +1593,7 @@ void QQmlEnginePrivate::cleanupScarceResources()
     // note that the actual SRD is owned by the JS engine,
     // so we cannot delete the SRD; but we can free the
     // memory used by the variant in the SRD.
-    QV4::ExecutionEngine *engine = v4engine();
+    QV4::ExecutionEngine *engine = v4Engine.get();
     while (QV4::ExecutionEngine::ScarceResourceData *sr = engine->scarceResources.first()) {
         sr->data = QVariant();
         engine->scarceResources.remove(sr);
@@ -1614,8 +1618,7 @@ void QQmlEnginePrivate::cleanupScarceResources()
 */
 void QQmlEngine::addImportPath(const QString& path)
 {
-    Q_D(QQmlEngine);
-    d->typeLoader.addImportPath(path);
+    QQmlTypeLoader::get(this)->addImportPath(path);
 }
 
 /*!
@@ -1635,8 +1638,7 @@ void QQmlEngine::addImportPath(const QString& path)
 */
 QStringList QQmlEngine::importPathList() const
 {
-    Q_D(const QQmlEngine);
-    return d->typeLoader.importPathList();
+    return QQmlTypeLoader::get(this)->importPathList();
 }
 
 /*!
@@ -1653,8 +1655,7 @@ QStringList QQmlEngine::importPathList() const
   */
 void QQmlEngine::setImportPathList(const QStringList &paths)
 {
-    Q_D(QQmlEngine);
-    d->typeLoader.setImportPathList(paths);
+    QQmlTypeLoader::get(this)->setImportPathList(paths);
 }
 
 
@@ -1671,8 +1672,7 @@ void QQmlEngine::setImportPathList(const QStringList &paths)
 */
 void QQmlEngine::addPluginPath(const QString& path)
 {
-    Q_D(QQmlEngine);
-    d->typeLoader.addPluginPath(path);
+    QQmlTypeLoader::get(this)->addPluginPath(path);
 }
 
 /*!
@@ -1686,8 +1686,7 @@ void QQmlEngine::addPluginPath(const QString& path)
 */
 QStringList QQmlEngine::pluginPathList() const
 {
-    Q_D(const QQmlEngine);
-    return d->typeLoader.pluginPathList();
+    return QQmlTypeLoader::get(this)->pluginPathList();
 }
 
 /*!
@@ -1702,8 +1701,7 @@ QStringList QQmlEngine::pluginPathList() const
   */
 void QQmlEngine::setPluginPathList(const QStringList &paths)
 {
-    Q_D(QQmlEngine);
-    d->typeLoader.setPluginPathList(paths);
+    QQmlTypeLoader::get(this)->setPluginPathList(paths);
 }
 
 #if QT_CONFIG(library)
@@ -1724,9 +1722,8 @@ void QQmlEngine::setPluginPathList(const QStringList &paths)
 */
 bool QQmlEngine::importPlugin(const QString &filePath, const QString &uri, QList<QQmlError> *errors)
 {
-    Q_D(QQmlEngine);
     QQmlTypeLoaderQmldirContent qmldir;
-    QQmlPluginImporter importer(uri, QTypeRevision(),  &qmldir, &d->typeLoader, errors);
+    QQmlPluginImporter importer(uri, QTypeRevision(),  &qmldir, QQmlTypeLoader::get(this), errors);
     return importer.importDynamicPlugin(filePath, uri, false).isValid();
 }
 #endif
@@ -1836,7 +1833,7 @@ QJSValue QQmlEnginePrivate::singletonInstance<QJSValue>(const QQmlType &type)
             // should behave identically to QML singleton types.
             q->setContextForObject(o, new QQmlContext(q->rootContext(), q));
         }
-        singletonInstances.convertAndInsert(v4engine(), siinfo, &value);
+        singletonInstances.convertAndInsert(v4Engine.get(), siinfo, &value);
 
     } else if (siinfo->qobjectCallback) {
         QObject *o = siinfo->qobjectCallback(q, q);
@@ -1875,12 +1872,15 @@ QJSValue QQmlEnginePrivate::singletonInstance<QJSValue>(const QQmlType &type)
         }
 
         value = q->newQObject(o);
-        singletonInstances.convertAndInsert(v4engine(), siinfo, &value);
+        singletonInstances.convertAndInsert(v4Engine.get(), siinfo, &value);
     } else if (!siinfo->url.isEmpty()) {
         QQmlComponent component(q, siinfo->url, QQmlComponent::PreferSynchronous);
         if (component.isError()) {
             warning(component.errors());
-            v4engine()->throwError(QLatin1String("Due to the preceding error(s), Singleton \"%1\" could not be loaded.").arg(QString::fromUtf8(type.typeName())));
+            v4Engine->throwError(
+                    QLatin1String("Due to the preceding error(s), "
+                                  "Singleton \"%1\" could not be loaded.")
+                            .arg(QString::fromUtf8(type.typeName())));
 
             return QJSValue(QJSValue::UndefinedValue);
         }
@@ -1899,26 +1899,19 @@ QJSValue QQmlEnginePrivate::singletonInstance<QJSValue>(const QQmlType &type)
             for (const auto &reqProp: *requiredProperties)
                 errors.push_back(QQmlComponentPrivate::unsetRequiredPropertyToQQmlError(reqProp));
             warning(errors);
-            v4engine()->throwError(QLatin1String("Due to the preceding error(s), Singleton \"%1\" could not be loaded.").arg(QString::fromUtf8(type.typeName())));
+            v4Engine->throwError(
+                    QLatin1String("Due to the preceding error(s), "
+                                  "Singleton \"%1\" could not be loaded.")
+                            .arg(QString::fromUtf8(type.typeName())));
             return QJSValue(QJSValue::UndefinedValue);
         }
 
         value = q->newQObject(o);
-        singletonInstances.convertAndInsert(v4engine(), siinfo, &value);
+        singletonInstances.convertAndInsert(v4Engine.get(), siinfo, &value);
         component.completeCreate();
     }
 
     return value;
-}
-
-bool QQmlEnginePrivate::isTypeLoaded(const QUrl &url) const
-{
-    return typeLoader.isTypeLoaded(url);
-}
-
-bool QQmlEnginePrivate::isScriptLoaded(const QUrl &url) const
-{
-    return typeLoader.isScriptLoaded(url);
 }
 
 void QQmlEnginePrivate::executeRuntimeFunction(const QUrl &url, qsizetype functionIndex,
@@ -1946,7 +1939,7 @@ void QQmlEnginePrivate::executeRuntimeFunction(const QV4::ExecutableCompilationU
     Q_ASSERT(function);
     Q_ASSERT(function->compiledFunction);
 
-    QV4::ExecutionEngine *v4 = v4engine();
+    QV4::ExecutionEngine *v4 = v4Engine.get();
 
     // NB: always use scriptContext() by default as this method ignores whether
     // there's already a stack frame (except when dealing with closures). the
@@ -1982,14 +1975,14 @@ void QQmlEnginePrivate::executeRuntimeFunction(const QV4::ExecutableCompilationU
 
 QV4::ExecutableCompilationUnit *QQmlEnginePrivate::compilationUnitFromUrl(const QUrl &url)
 {
-    QV4::ExecutionEngine *v4 = v4engine();
+    QV4::ExecutionEngine *v4 = v4Engine.get();
     if (auto unit = v4->compilationUnitForUrl(url)) {
         if (!unit->runtimeStrings)
             unit->populate();
         return unit.data();
     }
 
-    auto unit = typeLoader.getType(url)->compilationUnit();
+    auto unit = v4->typeLoader()->getType(url)->compilationUnit();
     if (!unit)
         return nullptr;
 
@@ -2014,7 +2007,7 @@ QQmlEnginePrivate::createInternalContext(const QQmlRefPointer<QV4::ExecutableCom
     const auto *dependentScripts = unit->dependentScriptsPtr();
     const qsizetype dependentScriptsSize = dependentScripts->size();
     if (isComponentRoot && dependentScriptsSize) {
-        QV4::ExecutionEngine *v4 = v4engine();
+        QV4::ExecutionEngine *v4 = v4Engine.get();
         Q_ASSERT(v4);
         QV4::Scope scope(v4);
 
@@ -2026,108 +2019,6 @@ QQmlEnginePrivate::createInternalContext(const QQmlRefPointer<QV4::ExecutableCom
     }
 
     return context;
-}
-
-#if defined(Q_OS_WIN)
-// Normalize a file name using Shell API. As opposed to converting it
-// to a short 8.3 name and back, this also works for drives where 8.3 notation
-// is disabled (see 8dot3name options of fsutil.exe).
-static inline QString shellNormalizeFileName(const QString &name)
-{
-    const QString nativeSeparatorName(QDir::toNativeSeparators(name));
-    const LPCTSTR nameC = reinterpret_cast<LPCTSTR>(nativeSeparatorName.utf16());
-// The correct declaration of the SHGetPathFromIDList symbol is
-// being used in mingw-w64 as of r6215, which is a v3 snapshot.
-#if defined(Q_CC_MINGW) && (!defined(__MINGW64_VERSION_MAJOR) || __MINGW64_VERSION_MAJOR < 3)
-    ITEMIDLIST *file;
-    if (FAILED(SHParseDisplayName(nameC, NULL, reinterpret_cast<LPITEMIDLIST>(&file), 0, NULL)))
-        return name;
-#else
-    PIDLIST_ABSOLUTE file;
-    if (FAILED(SHParseDisplayName(nameC, NULL, &file, 0, NULL)))
-        return name;
-#endif
-    TCHAR buffer[MAX_PATH];
-    bool gotPath = SHGetPathFromIDList(file, buffer);
-    ILFree(file);
-
-    if (!gotPath)
-        return name;
-
-    QString canonicalName = QString::fromWCharArray(buffer);
-    // Upper case drive letter
-    if (canonicalName.size() > 2 && canonicalName.at(1) == QLatin1Char(':'))
-        canonicalName[0] = canonicalName.at(0).toUpper();
-    return QDir::cleanPath(canonicalName);
-}
-#endif // Q_OS_WIN
-
-bool QQml_isFileCaseCorrect(const QString &fileName, int lengthIn /* = -1 */)
-{
-#if defined(Q_OS_DARWIN) || defined(Q_OS_WIN)
-    QFileInfo info(fileName);
-    const QString absolute = info.absoluteFilePath();
-
-    // No difference if the path is qrc based
-    if (absolute[0] == QLatin1Char(':'))
-        return true;
-
-#if defined(Q_OS_DARWIN)
-    const QString canonical = info.canonicalFilePath();
-    if (const auto suffix = info.suffix();
-        (suffix == "qml"_L1 || suffix == "dylib"_L1) && info.exists()) {
-        // APFS and HFS+ are both case preserving, in which case we can trust that the
-        // canonical file path reported above is correct. But if any of these file systems
-        // are mounted via SMB or Virtiofs (Virtualization.framework) macOS will report
-        // that the canonical file name of "Foo" is "Foo", even if the underlying file
-        // on the host file system has a canonical name of "foo". As we can't trust the
-        // canonical name in this case, we go though QDirIterator instead, as the directory
-        // listing for the mounted filesystem _does_ report the correct canonical file name.
-        if (pathconf(canonical.toUtf8().constData(), _PC_CASE_PRESERVING) != 1) {
-            qCDebug(lcQmlImport) << "Detected QML file on non-case-preserving file system"
-                << QStorageInfo(canonical) << "Verifying file case via directory listing";
-            QDirIterator dirIterator(info.absolutePath(), { info.fileName() },
-                QDir::Files | QDir::CaseSensitive, QDirIterator::FollowSymlinks);
-            if (!dirIterator.hasNext())
-                return false;
-        }
-    }
-#elif defined(Q_OS_WIN)
-    const QString canonical = shellNormalizeFileName(absolute);
-#endif
-
-    const int absoluteLength = absolute.length();
-    const int canonicalLength = canonical.length();
-
-    int length = qMin(absoluteLength, canonicalLength);
-    if (lengthIn >= 0) {
-        length = qMin(lengthIn, length);
-    } else {
-        // No length given: Limit to file name. Do not trigger
-        // on drive letters or folder names.
-        int lastSlash = absolute.lastIndexOf(QLatin1Char('/'));
-        if (lastSlash < 0)
-            lastSlash = absolute.lastIndexOf(QLatin1Char('\\'));
-        if (lastSlash >= 0) {
-            const int fileNameLength = absoluteLength - 1 - lastSlash;
-            length = qMin(length, fileNameLength);
-        }
-    }
-
-    for (int ii = 0; ii < length; ++ii) {
-        const QChar &a = absolute.at(absoluteLength - 1 - ii);
-        const QChar &c = canonical.at(canonicalLength - 1 - ii);
-
-        if (a.toLower() != c.toLower())
-            return true;
-        if (a != c)
-            return false;
-    }
-#else
-    Q_UNUSED(lengthIn);
-    Q_UNUSED(fileName);
-#endif
-    return true;
 }
 
 /*!

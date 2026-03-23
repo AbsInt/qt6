@@ -7,10 +7,12 @@
 #include <QtQuick/qquickview.h>
 #include <QtQuick/qquickitem.h>
 #include <QtQuick/private/qquickhoverhandler_p.h>
+#include <QtQuick/private/qquickitem_p.h>
 #include <QtQuick/private/qquickpointerhandler_p_p.h>
 #include <QtQuick/private/qquickmousearea_p.h>
 #include <qpa/qwindowsysteminterface.h>
 
+#include <private/qguiapplication_p.h>
 #include <private/qquickwindow_p.h>
 
 #include <QtQml/qqmlengine.h>
@@ -51,7 +53,11 @@ private slots:
     void ensureHoverHandlerWorksWhenItemHasHoverDisabled();
     void changeCursor();
     void touchDrag();
+    void twoHandlersTwoTouches();
     void asProperty();
+    void effectivelyClips_data();
+    void effectivelyClips();
+    void grandChildOutOfBounds();
 
 private:
     void createView(QScopedPointer<QQuickView> &window, const char *fileName);
@@ -392,9 +398,20 @@ void tst_HoverHandler::movingItemWithHoverHandler()
     QCursor::setPos(paddlePos);
     window->show();
     QVERIFY(QTest::qWaitForWindowExposed(window));
+    // If the cursor is in a specific known position and the window is shown under it,
+    // QGuiApplicationPrivate::lastCursorPosition must be set.
+    // Usually, QGuiApplicationPrivate::processEnterEvent() will do that.
+    // Otherwise this test will fail (not Qt Quick's fault).
+    // We do not call QTest::mouseMove() here, because we are testing the expectation
+    // that QQuickDeliveryAgentPrivate::flushFrameSynchronousEvents() updates the hover
+    // state of items that move under or away from the last known mouse cursor position.
+    if (!QTest::qWaitFor([paddlePos]() { return QGuiApplicationPrivate::lastCursorPosition.toPoint() == paddlePos; }))
+        QSKIP("QCursor::setPos() doesn't work, or didn't update QGuiApplicationPrivate::lastCursorPosition");
+    qCDebug(lcPointerTests) << "QGuiApplicationPrivate::lastCursorPosition after QCursor::setPos()"
+                            << QGuiApplicationPrivate::lastCursorPosition.toPoint();
 
     QTRY_COMPARE(paddleHH->isHovered(), true);
-    // TODO check the cursor shape after fixing QTBUG-53987
+    QTRY_COMPARE(window->cursor().shape(), Qt::SizeVerCursor);
 
     const auto &deliveryTargets =
             QQuickPointerHandlerPrivate::deviceDeliveryTargets(QPointingDevice::primaryPointingDevice());
@@ -406,15 +423,15 @@ void tst_HoverHandler::movingItemWithHoverHandler()
     // and then each HoverHandler's QQuickPointerHandler::handlePointerEvent() adds itself again.
     // As long as we visit the same handlers each time, the list should not grow. (QTBUG-135975)
     qCDebug(lcPointerTests) << "deviceDeliveryTargets after paddle movement" << deliveryTargets;
-    QCOMPARE(deliveryTargets.size(), targetsCount);
+    QCOMPARE_LE(deliveryTargets.size(), targetsCount);
 
     paddle->setX(p.x() - paddle->width() / 2);
     QTRY_COMPARE(paddleHH->isHovered(), true);
-    QCOMPARE(deliveryTargets.size(), targetsCount);
+    QCOMPARE_LE(deliveryTargets.size(), targetsCount);
 
     paddle->setX(540);
     QTRY_COMPARE(paddleHH->isHovered(), false);
-    QCOMPARE(deliveryTargets.size(), targetsCount);
+    QCOMPARE_LE(deliveryTargets.size(), targetsCount);
 }
 
 void tst_HoverHandler::margin() // QTBUG-85303
@@ -426,6 +443,11 @@ void tst_HoverHandler::margin() // QTBUG-85303
     QVERIFY(item);
     QQuickHoverHandler *hh = item->findChild<QQuickHoverHandler *>();
     QVERIFY(hh);
+    const auto margin = hh->margin();
+    const auto itemPriv = QQuickItemPrivate::get(hh->parentItem());
+    QCOMPARE(itemPriv->biggestPointerHandlerMargin(), margin);
+    QCOMPARE(itemPriv->eventHandlingBounds(),
+             hh->parentItem()->boundingRect().marginsAdded({margin, margin, margin, margin}));
 
     QPoint itemCenter(item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
     QPoint leftMargin = itemCenter - QPoint(35, 35);
@@ -526,6 +548,8 @@ void tst_HoverHandler::deviceCursor()
     QVERIFY(airbrushEraserHandler);
     QQuickHoverHandler *mouseHandler = root->findChild<QQuickHoverHandler *>("mouse");
     QVERIFY(mouseHandler);
+    QQuickHoverHandler *conflictingMouseHandler = root->findChild<QQuickHoverHandler *>("conflictingMouse");
+    QVERIFY(conflictingMouseHandler);
 
     QPoint point(100, 100);
 
@@ -551,6 +575,8 @@ void tst_HoverHandler::deviceCursor()
         QCOMPARE(eraserHandler->isHovered(), eraserHandler == expectedActiveHandler);
         QCOMPARE(aibrushHandler->isHovered(), aibrushHandler == expectedActiveHandler);
         QCOMPARE(airbrushEraserHandler->isHovered(), airbrushEraserHandler == expectedActiveHandler);
+        qCDebug(lcPointerTests) << "mouse HoverHandlers hovered?"
+                                << mouseHandler->isHovered() << conflictingMouseHandler->isHovered();
     };
 
     // simulate move events from various tablet stylus types
@@ -770,6 +796,47 @@ void tst_HoverHandler::touchDrag()
     QTest::touchEvent(&window, touchscreen.get()).release(0, out, &window);
 }
 
+void tst_HoverHandler::twoHandlersTwoTouches()
+{
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("twoHandlers.qml")));
+    const QQuickItem *root = window.rootObject();
+    QQuickHoverHandler *left = root->findChild<QQuickHoverHandler *>("left");
+    QVERIFY(left);
+    QQuickHoverHandler *right = root->findChild<QQuickHoverHandler *>("right");
+    QVERIFY(right);
+
+    const QPoint pl = left->parentItem()->boundingRect().center().toPoint();
+    const QPoint pr = right->parentItem()->position().toPoint() + QPoint(10, 10);
+
+    // showView() moved the mouse outside the window before showing it,
+    // so we don't expect mouse interference: this is a pure touchscreen test.
+    // Press the left HoverHandler: flushFrameSynchronousEvents acts
+    // as if the cursor is there, and sends a hover event.
+    QTest::touchEvent(&window, touchscreen.get()).press(0, pl, &window);
+    QQuickTouchUtils::flush(&window);
+    QTRY_COMPARE(left->isHovered(), true);
+    QCOMPARE(right->isHovered(), false);
+
+    // press the right HoverHandler too: it doesn't hover, because only one subtree can be hovered (for now, at least)
+    QTest::touchEvent(&window, touchscreen.get()).stationary(0).press(1, pr, &window);
+    QQuickTouchUtils::flush(&window);
+    QCOMPARE(right->isHovered(), false);
+    QCOMPARE(left->isHovered(), true);
+
+    // release the left: neither HoverHandler is hovered, even though the right one is still pressed
+    QTest::touchEvent(&window, touchscreen.get()).release(0, pl, &window).stationary(1);
+    QQuickTouchUtils::flush(&window);
+    QTRY_COMPARE(left->isHovered(), false);
+    QCOMPARE(right->isHovered(), false);
+
+    // release the right
+    QTest::touchEvent(&window, touchscreen.get()).release(1, pr, &window);
+    QQuickTouchUtils::flush(&window);
+    QCOMPARE(left->isHovered(), false);
+    QCOMPARE(right->isHovered(), false);
+}
+
 void tst_HoverHandler::asProperty()
 {
     QQuickView window;
@@ -781,6 +848,235 @@ void tst_HoverHandler::asProperty()
     QCOMPARE(handler->isHovered(), false);
     QTest::mouseMove(&window, root->boundingRect().center().toPoint());
     QTRY_COMPARE(handler->isHovered(), true);
+}
+
+void tst_HoverHandler::effectivelyClips_data()
+{
+    QTest::addColumn<QPoint>("cursorPos");
+    QTest::addColumn<QPoint>("goatPos");
+    QTest::addColumn<qreal>("scale");
+    QTest::addColumn<int>("rotation");
+    QTest::addColumn<bool>("expectRootContainsChildren");
+    QTest::addColumn<bool>("expectShadowContainsChildren");
+    QTest::addColumn<bool>("expectFrameContainsChildren");
+    QTest::addColumn<bool>("expectShadowHovered");
+    QTest::addColumn<bool>("expectFrameHovered");
+    QTest::addColumn<bool>("expectGoatHovered");
+    QTest::addColumn<Qt::CursorShape>("expectedCursor");
+
+    QTest::newRow("shrinkAndRotate") << QPoint(90, 150) << QPoint() << 0.7 << 15
+                                     << true << true << false   << false << true << false << Qt::UpArrowCursor;
+    QTest::newRow("rotate") << QPoint(90, 150) << QPoint() << 1.0 << 10
+                            << true << true << false   << false << true << true << Qt::SizeAllCursor;
+    QTest::newRow("pokeHornsOut") << QPoint(90, 150) << QPoint(0, -10) << 1.0 << 0
+                                  << true << true << false   << false << true << false << Qt::UpArrowCursor;
+    QTest::newRow("pokeHornsWayOut") << QPoint(90, 150) << QPoint(0, -30) << 1.0 << 0
+                                     << true << true << false   << false << true << false << Qt::UpArrowCursor;
+}
+
+void tst_HoverHandler::effectivelyClips() // QTBUG-140340
+{
+    QFETCH(QPoint, cursorPos);
+    QFETCH(QPoint, goatPos);
+    QFETCH(qreal, scale);
+    QFETCH(int, rotation);
+    QFETCH(bool, expectRootContainsChildren);
+    QFETCH(bool, expectShadowContainsChildren);
+    QFETCH(bool, expectFrameContainsChildren);
+    QFETCH(bool, expectShadowHovered);
+    QFETCH(bool, expectFrameHovered);
+    QFETCH(bool, expectGoatHovered);
+    QFETCH(Qt::CursorShape, expectedCursor);
+
+    // reset counters
+#ifdef QT_BUILD_INTERNAL
+    QQuickItemPrivate::eventHandlingChildrenWithinBounds_counter = 0;
+    QQuickItemPrivate::itemToParentTransform_counter = 0;
+    QQuickItemPrivate::itemToWindowTransform_counter = 0;
+    QQuickItemPrivate::windowToItemTransform_counter = 0;
+    QQuickItemPrivate::effectiveClippingSkips_counter = 0;
+#endif
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("goat.qml")));
+    QSignalSpy renderSpy(&window, &QQuickWindow::afterRendering);
+    QQuickItem *root = window.rootObject();
+    QQuickItemPrivate *rootPrivate = QQuickItemPrivate::get(root);
+    QQuickHoverHandler *shadowHandler = root->findChild<QQuickHoverHandler *>("shadow");
+    QVERIFY(shadowHandler);
+    QQuickItemPrivate *shadowPrivate = QQuickItemPrivate::get(shadowHandler->parentItem());
+    QQuickHoverHandler *frameHandler = root->findChild<QQuickHoverHandler *>("frame");
+    QVERIFY(frameHandler);
+    QQuickItemPrivate *framePrivate = QQuickItemPrivate::get(frameHandler->parentItem());
+    QQuickHoverHandler *goatHandler = root->findChild<QQuickHoverHandler *>("goat");
+    QQuickItem *goat = goatHandler->parentItem();
+    QVERIFY(goatHandler);
+    QQuickHoverHandler *pupilHandler = root->findChild<QQuickHoverHandler *>("pupil");
+    QVERIFY(pupilHandler);
+
+    // nothing poking out, so far
+    QVERIFY(rootPrivate->effectivelyClipsEventHandlingChildren());
+    QVERIFY(shadowPrivate->effectivelyClipsEventHandlingChildren());
+    QVERIFY(framePrivate->effectivelyClipsEventHandlingChildren());
+
+    // expect to initially hover the pupil of the eye
+    const QPoint cursorGlobalPos = window.mapToGlobal(cursorPos);
+    QCursor::setPos(cursorGlobalPos);
+    bool cursorSet = true;
+    if (!QTest::qWaitFor([cursorGlobalPos]() {
+            return QGuiApplicationPrivate::lastCursorPosition.toPoint() == cursorGlobalPos; })) {
+        qCDebug(lcPointerTests) << "QCursor::setPos doesn't work: expected"
+                                << cursorGlobalPos << "got" << QGuiApplicationPrivate::lastCursorPosition;
+        cursorSet = false;
+    }
+
+    auto checkPupilHovered = [pupilHandler, goatHandler, frameHandler, shadowHandler, &window]() {
+        QTRY_COMPARE(pupilHandler->isHovered(), true);
+        QCOMPARE(goatHandler->isHovered(), true);
+        QCOMPARE(frameHandler->isHovered(), true);
+        QCOMPARE(shadowHandler->isHovered(), false);
+        QCOMPARE(window.cursor(), Qt::CrossCursor);
+    };
+    auto checkOtherHovered = [pupilHandler, goatHandler, frameHandler, shadowHandler,
+                              expectShadowHovered, expectFrameHovered, expectGoatHovered,
+                              &window, expectedCursor]() {
+        qCDebug(lcPointerTests) << "hovered"
+                                << pupilHandler->isHovered() << shadowHandler->isHovered()
+                                << frameHandler->isHovered() << goatHandler->isHovered()
+                                << "cursor" << window.cursor();
+        QTRY_COMPARE(pupilHandler->isHovered(), false);
+        QCOMPARE(goatHandler->isHovered(), expectGoatHovered);
+        QCOMPARE(frameHandler->isHovered(), expectFrameHovered);
+        QCOMPARE(shadowHandler->isHovered(), expectShadowHovered);
+        QCOMPARE(window.cursor(), expectedCursor);
+    };
+    if (cursorSet)
+        checkPupilHovered();
+
+    // fake an animation by changing properties back and forth, watch hover and cursor changes
+    for (int i = 0; i < 10; ++i) {
+        int renderCount = renderSpy.size();
+        if (i % 2) {
+            goat->setPosition({});
+            goat->setScale(1);
+            goat->setRotation(0);
+            QTRY_COMPARE_GT(renderSpy.size(), renderCount);
+            if (cursorSet)
+                checkPupilHovered();
+        } else {
+            // If the goat's rectangular bounds poke out of the frame, the frame notices;
+            // but the shadow has no child items.
+            // If it pokes outside the declared root item as well, though,
+            // rootPrivate->eventHandlingChildrenWithinBounds doesn't currently get updated.
+            // Perhaps it should: but that would be more expensive
+            // (transformChanged() would need to traverse up the hierarchy every time).
+            goat->setPosition(goatPos);
+            goat->setScale(scale);
+            goat->setRotation(rotation);
+            QTRY_COMPARE_GT(renderSpy.size(), renderCount);
+            QCOMPARE(shadowPrivate->effectivelyClipsEventHandlingChildren(), expectShadowContainsChildren);
+            qCDebug(lcPointerTests) << "step" << i << ": item contains children:"
+                                    << rootPrivate->effectivelyClipsEventHandlingChildren()
+                                    << framePrivate->effectivelyClipsEventHandlingChildren()
+                                    << "expected" << expectRootContainsChildren << expectFrameContainsChildren;
+            if (i > 0)
+                QCOMPARE(framePrivate->effectivelyClipsEventHandlingChildren(), expectFrameContainsChildren);
+            QCOMPARE(rootPrivate->effectivelyClipsEventHandlingChildren(), expectRootContainsChildren);
+            if (cursorSet)
+                checkOtherHovered();
+        }
+    }
+
+#ifdef QT_BUILD_INTERNAL
+    qCDebug(lcPointerTests) << "counters"
+        << QQuickItemPrivate::eventHandlingChildrenWithinBounds_counter
+        << QQuickItemPrivate::itemToParentTransform_counter
+        << QQuickItemPrivate::itemToWindowTransform_counter
+        << QQuickItemPrivate::windowToItemTransform_counter
+        << QQuickItemPrivate::effectiveClippingSkips_counter;
+    // Example counts:
+    // 6 231 127 27 10
+    // 6 157 55 9 10
+    // 6 237 135 29 10
+
+    // Check that we didn't call the transform functions exceessively often
+    // (these numbers can be adjusted if we do something that causes a moderate increase,
+    // but try to avoid really pessimizing it again)
+    QCOMPARE_LT(QQuickItemPrivate::itemToParentTransform_counter, 280ull);
+    QCOMPARE_LT(QQuickItemPrivate::itemToWindowTransform_counter, 160ull);
+    QCOMPARE_LT(QQuickItemPrivate::windowToItemTransform_counter, 36ull);
+    // Check that we were able to skip hover delivery to some items because
+    // eventHandlingChildrenWithinBounds was true and the mouse position was outside.
+    QCOMPARE_GE(QQuickItemPrivate::effectiveClippingSkips_counter, 5ull);
+#endif
+}
+
+void tst_HoverHandler::grandChildOutOfBounds()
+{
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("grandchildOutOfBounds.qml")));
+    QQuickItem *root = window.rootObject();
+    QQuickHoverHandler *handler = root->findChild<QQuickHoverHandler *>();
+    QVERIFY(handler);
+    QQuickItem *grandchild = handler->parentItem();
+    QVERIFY(grandchild);
+    QQuickItem *grandparent = grandchild->parentItem()->parentItem();
+    QCOMPARE(grandparent->parentItem(), root);
+    QQuickItemPrivate *grandparentPriv = QQuickItemPrivate::get(grandparent);
+
+    const QPoint bottomRight = QPoint(root->width() - 20, root->height() - 20);
+    const QPoint bottomRightG = window.mapToGlobal(bottomRight);
+    const QPoint pos = handler->parentItem()->mapToScene({10, handler->parentItem()->height() - 10}).toPoint();
+
+    // showView() positions the mouse cursor to the right of the window, if possible;
+    // so approach from the right side to avoid crossing any children.
+    // We use QCursor::setPos() if possible, because it's a more thorough test
+    // (if the cursor moves and the test fails, something is wrong); but the test
+    // can _pass_ just as well with mouseMove(), so fall back to that if necessary.
+    QCursor::setPos(bottomRightG);
+    bool canSetCursorPos = true;
+    if (!QTest::qWaitFor([bottomRightG]() {
+            return QGuiApplicationPrivate::lastCursorPosition.toPoint() == bottomRightG; })) {
+        qCDebug(lcPointerTests) << "QCursor::setPos doesn't work: expected"
+                                << bottomRightG << "got" << QGuiApplicationPrivate::lastCursorPosition;
+        canSetCursorPos = false;
+    }
+    if (!canSetCursorPos)
+        QTest::mouseMove(&window, bottomRight);
+
+    // Hover the outer end of the "diving board": it should work,
+    // even though that part of the item is outside its parent and grandparent items.
+    if (canSetCursorPos)
+        QCursor::setPos(window.mapToGlobal(pos));
+    else
+        QTest::mouseMove(&window, pos);
+    QTRY_COMPARE(handler->isHovered(), true);
+#if QT_CONFIG(cursor)
+    if (canSetCursorPos)
+        QTRY_COMPARE(window.cursor().shape(), Qt::ForbiddenCursor);
+#endif
+
+    // Move it within its grandparent's bounds, but remember where it was.
+    const auto yWas = grandchild->y();
+    grandchild->setY(-70);
+    // Grandparent would have children within bounds now, but it doesn't recheck
+    // (this is considered an optimization, but can be reconsidered if necessary).
+    QCOMPARE(grandparentPriv->eventHandlingChildrenWithinBounds, false);
+    // The cursor didn't move, so now HoverHandler is no longer hovered.
+    QTRY_COMPARE(handler->isHovered(), false);
+#if QT_CONFIG(cursor)
+    if (canSetCursorPos)
+        QTRY_COMPARE(window.cursor().shape(), Qt::ArrowCursor);
+#endif
+
+    // Put it back where it was. Presto, it's hovered again.
+    grandchild->setY(yWas);
+    QCOMPARE(grandparentPriv->eventHandlingChildrenWithinBounds, false);
+    QTRY_COMPARE(handler->isHovered(), true);
+#if QT_CONFIG(cursor)
+    if (canSetCursorPos)
+        QTRY_COMPARE(window.cursor().shape(), Qt::ForbiddenCursor);
+#endif
 }
 
 QTEST_MAIN(tst_HoverHandler)

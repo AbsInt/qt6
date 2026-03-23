@@ -29,6 +29,12 @@ Q_TRACE_POINT(qtqml, QQmlHandlingSignal_entry, const QQmlEngine *engine, const Q
               const QString &fileName, int line, int column)
 Q_TRACE_POINT(qtqml, QQmlHandlingSignal_exit)
 
+/*!
+    \class QQmlBoundSignal
+    \inmodule QtQml
+    \internal
+*/
+
 QQmlBoundSignalExpression::QQmlBoundSignalExpression(const QObject *target, int index, const QQmlRefPointer<QQmlContextData> &ctxt, QObject *scope,
         const QString &expression, const QString &fileName, quint16 line, quint16 column,
         const QString &handlerName, const QString &parameterString)

@@ -267,7 +267,7 @@ ReturnedValue ObjectPrototype::method_create(const FunctionObject *builtin, cons
 
 
     if (argc > 1 && !argv[1].isUndefined()) {
-        Value *arguments = scope.alloc(argc);
+        Value *arguments = scope.constructUndefined(argc);
         arguments[0] = newObject;
         memcpy(arguments + 1, argv + 1, (argc - 1)*sizeof(Value));
         return method_defineProperties(builtin, thisObject, arguments, argc);

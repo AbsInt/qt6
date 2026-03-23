@@ -13,7 +13,7 @@
 #include <QtCore/qvariant.h>
 #include <QtCore/qpoint.h>
 #include <QtCore/qdatastream.h>
-#include <QtCore/qsequentialiterable.h>
+#include <QtCore/qmetasequence.h>
 #include <QtCore/qloggingcategory.h>
 #include <QtCore/qwaitcondition.h>
 #include <QtCore/qthread.h>
@@ -1660,7 +1660,7 @@ void tst_QJSManagedValue::jsvalueArrayToSequenceType()
         array.setProperty(3, QJSValue(std::move(testObject)));
         auto asVariant = QVariant::fromValue(array);
         QVERIFY(asVariant.canConvert<QVariantList>());
-        auto asIterable = asVariant.value<QSequentialIterable>();
+        auto asIterable = asVariant.value<QMetaSequence::Iterable>();
         for (auto it = asIterable.begin(); it != asIterable.end(); ++it) {
             Q_UNUSED(*it);
         }

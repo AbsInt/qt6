@@ -21,7 +21,6 @@ T.TabButton {
 
     icon.width: 24
     icon.height: 24
-    icon.color: !enabled ? Material.hintTextColor : down || checked ? Material.accentColor : Material.foreground
 
     contentItem: IconLabel {
         spacing: control.spacing
@@ -29,9 +28,11 @@ T.TabButton {
         display: control.display
 
         icon: control.icon
+        defaultIconColor: !control.enabled ? control.Material.hintTextColor
+            : control.down || control.checked ? control.Material.accentColor : control.Material.foreground
         text: control.text
         font: control.font
-        color: !control.enabled ? control.Material.hintTextColor : control.down || control.checked ? control.Material.accentColor : control.Material.foreground
+        color: defaultIconColor
     }
 
     background: Ripple {

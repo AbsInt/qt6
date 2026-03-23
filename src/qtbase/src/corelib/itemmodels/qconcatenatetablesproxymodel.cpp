@@ -3,10 +3,16 @@
 // Qt-Security score:significant reason:default
 
 #include "qconcatenatetablesproxymodel.h"
+
 #include <private/qabstractitemmodel_p.h>
+
 #include "qsize.h"
 #include "qmap.h"
+#include <QtCore/qvarlengtharray.h>
 #include "qdebug.h"
+
+#include <array>
+#include <type_traits>
 
 QT_BEGIN_NAMESPACE
 
@@ -56,18 +62,35 @@ public:
 
     struct ModelInfo {
         using ConnArray = std::array<QMetaObject::Connection, 17>;
-        ModelInfo(QAbstractItemModel *m, ConnArray &&con)
-            : model(m), connections(std::move(con)) {}
+        template <typename...Args>
+        using if_compatible = std::enable_if_t<
+                sizeof...(Args) == std::tuple_size_v<ConnArray> &&
+                std::conjunction_v<
+                    // only non-references (= rvalues), only non-const
+                    std::is_same<ConnArray::value_type, Args>...
+                >,
+            bool>;
+        Q_DISABLE_COPY(ModelInfo)
+        ModelInfo(ModelInfo &&) = default;
+        ModelInfo &operator=(ModelInfo &&) = default;
+        template <typename...Args, if_compatible<Args...> = true>
+        explicit ModelInfo(QAbstractItemModel *m, Args&&...args)
+            : model(m), connections{std::forward<Args>(args)...} {}
         QAbstractItemModel *model = nullptr;
         ConnArray connections;
     };
-    QList<ModelInfo> m_models;
+    QVarLengthArray<ModelInfo, 16> m_models;
     mutable QHash<int, QByteArray> m_roleNames;
 
-    QList<ModelInfo>::const_iterator findSourceModel(const QAbstractItemModel *m) const
+    const ModelInfo *findSourceModel(const QAbstractItemModel *m) const
     {
         auto byModelPtr = [m](const auto &modInfo) { return modInfo.model == m; };
         return std::find_if(m_models.cbegin(), m_models.cend(), byModelPtr);
+    }
+
+    ModelInfo *findSourceModel(const QAbstractItemModel *m)
+    {
+        return const_cast<ModelInfo *>(std::as_const(*this).findSourceModel(m));
     }
 
     bool containsSourceModel(const QAbstractItemModel *m) const
@@ -366,7 +389,7 @@ bool QConcatenateTablesProxyModelPrivate::mapDropCoordinatesToSource(int row, in
         // Drop after the last item
         if (row == -1 || row == m_rowCount) {
             *sourceRow = -1;
-            *sourceModel = m_models.constLast().model;
+            *sourceModel = m_models.back().model;
             return true;
         }
         // Drop between toplevel items
@@ -476,7 +499,7 @@ void QConcatenateTablesProxyModel::addSourceModel(QAbstractItemModel *sourceMode
     if (newRows > 0)
         beginInsertRows(QModelIndex(), d->m_rowCount, d->m_rowCount + newRows - 1);
     d->m_rowCount += newRows;
-    d->m_models.emplace_back(sourceModel, std::array{
+    d->m_models.emplace_back(sourceModel,
         QObjectPrivate::connect(sourceModel, &QAbstractItemModel::dataChanged,
                                 d, &QConcatenateTablesProxyModelPrivate::slotDataChanged),
         QObjectPrivate::connect(sourceModel, &QAbstractItemModel::rowsInserted,
@@ -512,8 +535,8 @@ void QConcatenateTablesProxyModel::addSourceModel(QAbstractItemModel *sourceMode
         QObjectPrivate::connect(sourceModel, &QAbstractItemModel::modelAboutToBeReset,
                                 d, &QConcatenateTablesProxyModelPrivate::slotModelAboutToBeReset),
         QObjectPrivate::connect(sourceModel, &QAbstractItemModel::modelReset,
-                                d, &QConcatenateTablesProxyModelPrivate::slotModelReset),
-    });
+                                d, &QConcatenateTablesProxyModelPrivate::slotModelReset)
+    );
     if (!d->m_roleNamesDirty) {
         // do update immediately, since append() is a simple update:
         const auto newRoleNames = sourceModel->roleNames();
@@ -536,7 +559,7 @@ void QConcatenateTablesProxyModel::removeSourceModel(QAbstractItemModel *sourceM
     Q_D(QConcatenateTablesProxyModel);
 
     auto it = d->findSourceModel(sourceModel);
-    Q_ASSERT(it != d->m_models.cend());
+    Q_ASSERT(it != d->m_models.end());
     for (auto &c : it->connections)
         disconnect(c);
 

@@ -296,8 +296,7 @@ void QQuickDesignerSupportItems::disableBehaivour(QObject *object)
 
 void QQuickDesignerSupportItems::stopUnifiedTimer()
 {
-    QUnifiedTimer::instance()->setSlowdownFactor(0.00001);
-    QUnifiedTimer::instance()->setSlowModeEnabled(true);
+    QUnifiedTimer::instance()->setSpeedModifier(0);
 }
 
 void QQuickDesignerSupportItems::registerFixResourcePathsForObjectCallBack(void (*callback)(QObject *))

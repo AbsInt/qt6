@@ -383,7 +383,7 @@ struct OffsetFormatMatch
 {
     qsizetype size = 0;
     int offset = 0;
-    operator bool() const { return size != 0; }
+    operator bool() const { return size > 0; }
 };
 
 OffsetFormatMatch matchOffsetText(QStringView text, QStringView format, const QLocale &locale,
@@ -504,9 +504,22 @@ OffsetFormatMatch matchOffsetFormat(QStringView text, const QLocale &locale, qsi
             const QStringView gmtPrefix = offsetFormat.first(cut);
             const QStringView gmtSuffix = offsetFormat.sliced(cut + 2); // After %0
             const qsizetype gmtSize = cut + gmtSuffix.size();
+            const auto crossMatch = [gmtPrefix, text]
+                (QLatin1StringView lhs, QLatin1StringView rhs) {
+                const qsizetype len = lhs.size();
+                Q_ASSERT(len == rhs.size());
+                if (!gmtPrefix.startsWith(lhs) || !text.startsWith(rhs))
+                    return false;
+                if (gmtPrefix.size() == len)
+                    return true;
+                return text.sliced(len).startsWith(gmtPrefix.sliced(len));
+            };
             // Cheap pre-test: check suffix does appear after prefix, albeit we must
             // later check it actually appears right after the offset text:
-            if ((gmtPrefix.isEmpty() || text.startsWith(gmtPrefix))
+            if ((gmtPrefix.isEmpty() || text.startsWith(gmtPrefix)
+                 // Treat GMT and UTC as matches for one another to match
+                 // QUtcTimeZonePrivate::displayName()'s kludges:
+                 || crossMatch("GMT"_L1, "UTC"_L1) || crossMatch("UTC"_L1, "GMT"_L1))
                 && (gmtSuffix.isEmpty() || text.sliced(cut).indexOf(gmtSuffix) >= 0)) {
                 if (auto match = matchOffsetText(text.sliced(cut), posHourForm, locale, scale)) {
                     if (text.sliced(cut + match.size).startsWith(gmtSuffix)) // too sliced ?
@@ -626,6 +639,27 @@ QString QTimeZonePrivate::localeName(qint64 atMSecsSinceEpoch, int offsetFromUtc
             // Custom zone with perverse m_id ?
             return;
         }
+        const auto isMixedCaseAbbrev = [tail](char ch) {
+            // cv-RU and en-GU abbreviate Chamorro as ChST
+            // scn-IT abbreviates Cuba as CuT/CuST/CuDT
+            // blo-BJ abbreviates GMT as Gk
+            switch (tail.size()) {
+            case 2: return tail == "Gk";
+            case 3: return tail == "CuT";
+            case 4:
+                if (tail[0] == 'C' && tail[1] == ch && tail[3] == 'T') {
+                    switch (ch) {
+                    case 'h': return tail[2] == 'S';
+                    case 'u': return tail[2] == 'S' || tail[2] == 'D';
+                    default: break;
+                    }
+                }
+                return false;
+            default:
+                break;
+            }
+            return false;
+        };
 
         // Even if it is abbr or city name, we don't care if we've found one before.
         bool maybeAbbr = ianaAbbrev.isEmpty(), maybeCityName = ianaTail.isEmpty(), inword = false;
@@ -647,7 +681,7 @@ QString QTimeZonePrivate::localeName(qint64 atMSecsSinceEpoch, int offsetFromUtc
                     maybeCityName = false;
                 inword = false;
             } else if (QChar::isLower(ch)) {
-                maybeAbbr = false;
+                maybeAbbr = isMixedCaseAbbrev(ch);
                 // Dar_es_Salaam shows both cases as word starts
                 inword = true;
             } else if (QChar::isUpper(ch)) {
@@ -851,7 +885,8 @@ QTimeZonePrivate::findLongNamePrefix(QStringView text, const QLocale &locale,
                 if (range.size > best.nameLength) {
                     QStringView name = range.viewData(longMetaZoneNameTable);
                     if (text.startsWith(name)) {
-                        best = { static_cast<qsizetype>(range.size), type, invalidIanaId, row.metaIdIndex };
+                        best = { static_cast<qsizetype>(range.size), type,
+                                 invalidIanaId, row.metaIdIndex };
                         if (best.nameLength >= text.size())
                             break;
                     }
@@ -973,11 +1008,13 @@ QTimeZonePrivate::findLongNamePrefix(QStringView text, const QLocale &locale,
     }
 #undef localeRows
 
-    if (found.nameLength > 0)
-        return found;
+    return found;
+}
 
-    // (We don't want offset format to match 'tttt', so do need to limit this.)
-    // The final fall-back for localeName() is a zoneOffsetFormat(,,NarrowFormat,,):
+QTimeZonePrivate::NamePrefixMatch
+QTimeZonePrivate::findNarrowOffsetPrefix(QStringView text, const QLocale &locale)
+{
+    // NB: uses QLocale::FormatType with non-canonical meaning !
     if (const auto match = matchOffsetFormat(text, locale, locale.d->m_index,
                                              QLocale::NarrowFormat)) {
         // Check offset is sane:
@@ -991,29 +1028,7 @@ QTimeZonePrivate::findLongNamePrefix(QStringView text, const QLocale &locale,
                      match.size, QTimeZone::GenericTime };
         }
     }
-
-    // Match the unlocalized long form of QUtcTimeZonePrivate:
-    if (text.startsWith(u"UTC")) {
-        if (text.size() > 4 && (text[3] == u'+' || text[3] == u'-')) {
-            // Compare QUtcTimeZonePrivate::offsetFromUtcString()
-            using QtMiscUtils::isAsciiDigit;
-            qsizetype length = 3;
-            int groups = 0; // Number of groups of digits seen (allow up to three).
-            do {
-                // text[length] is sign or the colon after last digit-group.
-                Q_ASSERT(length < text.size());
-                if (length + 1 >= text.size() || !isAsciiDigit(text[length + 1].unicode()))
-                    break;
-                length +=
-                    (length + 2 < text.size() && isAsciiDigit(text[length + 2].unicode())) ? 3 : 2;
-            } while (++groups < 3 && length < text.size() && text[length] == u':');
-            if (length > 4)
-                return { text.first(length).toLatin1(), length, QTimeZone::GenericTime };
-        }
-        return { utcQByteArray(), 3, QTimeZone::GenericTime };
-    }
-
-    return {}; // No match found.
+    return {};
 }
 #endif // ICU or not
 

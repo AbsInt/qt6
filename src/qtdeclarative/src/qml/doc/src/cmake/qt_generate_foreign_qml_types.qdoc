@@ -14,12 +14,11 @@
 
 \section1 Synopsis
 
-\badcode
+\code [cmake]
 qt_generate_foreign_qml_types(
     source_target
     destination_qml_target
 )
-
 \endcode
 
 \versionlessCMakeCommandsNote qt6_generate_foreign_qml_types()
@@ -33,7 +32,7 @@ types in the QML module \c destination_qml_target.
 This can be useful when one wants to create a library with optional QML integration, without
 depending directly on QML.
 
-\badcode
+\code
 // myclass.h
 #include <QtQmlIntegration/qqmlintegration.h>
 
@@ -46,7 +45,7 @@ class MyClass : public QObject
 };
 \endcode
 
-\badcode
+\code [cmake]
 # CMakeLists.txt
 qt_add_library(mylib myclass.h ...)
 target_link_libraries(mylib PRIVATE Qt::Core Qt::QmlIntegration)
@@ -59,9 +58,9 @@ qt_add_qml_module(mylib_declarative
 qt_generate_foreign_qml_types(mylib mylib_declarative)
 \endcode
 
-\note In the example above, \c mylib does not depend on QtQml or QtQuick, but only on the
-header-only QmlIntegration target (for the \l{qqmlintegration.h} header, which provides
-the \l QML_ELEMENT macro).
+\note In the example above, \c mylib does not depend on \c QtQml or \c QtQuick,
+but only on the header-only \c QmlIntegration target (for the \l{qqmlintegration.h}
+header, which provides the \l QML_ELEMENT macro).
 
 The effect is equivalent to using \c QML_FOREIGN with custom structs in the QML library to expose
 the types.

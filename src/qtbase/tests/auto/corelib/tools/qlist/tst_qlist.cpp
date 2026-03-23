@@ -801,10 +801,47 @@ void tst_QList::assignFromInitializerList() const
     T val2(SimpleValue<T>::at(2));
     T val3(SimpleValue<T>::at(3));
 
-    QList<T> v1 = {val1, val2, val3};
+    QList<T> v1 = {};
+    QCOMPARE(v1.size(), 0);
+
+    v1 = {};
+    QCOMPARE(v1.size(), 0);
+
+    v1 = {val1, val2, val3};
     QCOMPARE(v1, QList<T>() << val1 << val2 << val3);
     QCOMPARE(v1, (QList<T> {val1, val2, val3}));
+    qsizetype oldCapacity = v1.capacity();
 
+    v1 = {};
+    QCOMPARE(v1.size(), 0);
+    QCOMPARE(v1.capacity(), oldCapacity);
+
+    v1 = {val1, val2, val3};
+    QCOMPARE(v1, (QList<T> {val1, val2, val3}));
+
+    // repeat, but make v1 shared before we assign
+    QList v2 = {val3, val1, val2};
+    v1 = v2;
+    v1 = {val1, val2, val3};
+    QCOMPARE(v1, QList<T>() << val1 << val2 << val3);
+    QCOMPARE(v1, (QList<T> {val1, val2, val3}));
+    oldCapacity = v1.capacity();
+    v1 = v2;
+    v1 = {};
+    QCOMPARE(v1.size(), 0);
+    QCOMPARE(v1.capacity(), oldCapacity);
+    v1 = v2;
+    v1 = {val1, val2, val3};
+    QCOMPARE(v1, (QList<T> {val1, val2, val3}));
+
+    // repeat again, but now detached copies
+    v1 = v2;
+    v1.detach();
+    v1 = {val1, val2, val3};
+    QCOMPARE(v1, QList<T>() << val1 << val2 << val3);
+    QCOMPARE(v1, (QList<T> {val1, val2, val3}));
+    v1 = v2;
+    v1.detach();
     v1 = {};
     QCOMPARE(v1.size(), 0);
 }
@@ -978,6 +1015,65 @@ void tst_QList::assign() const
         QVERIFY(!myvec.isSharedWith(myvecCopy));
         QVERIFY(!myvecCopy.isSharedWith(myvec));
         QCOMPARE(myvecCopy, QList<T>() << T_FOO << T_FOO);
+    }
+
+    // test assigning an empty range to an empty list
+    {
+        QList<T> myvec, empty;
+
+        const T *ptr = nullptr;
+        myvec.assign(ptr, ptr);
+        QVERIFY(myvec.isEmpty());
+
+        ptr = SimpleValue<T>::Values + 3;
+        myvec.assign(ptr, ptr);
+        QVERIFY(myvec.isEmpty());
+    }
+
+    // test assigning empty to non-empty
+    {
+        QList<T> nonempty = SimpleValue<T>::vector(2);
+        QList<T> myvec;
+
+        const T *ptr = nullptr;
+        myvec = nonempty;
+        myvec.assign(ptr, ptr);
+        QVERIFY(myvec.isEmpty());
+
+        ptr = SimpleValue<T>::Values + 3;
+        myvec = nonempty;
+        myvec.assign(ptr, ptr);
+        QVERIFY(myvec.isEmpty());
+
+        // repeat, after having detached
+        ptr = nullptr;
+        myvec = nonempty;
+        myvec.detach();
+        myvec.assign(ptr, ptr);
+        QVERIFY(myvec.isEmpty());
+
+        ptr = SimpleValue<T>::Values + 3;
+        myvec = nonempty;
+        myvec.detach();
+        myvec.assign(ptr, ptr);
+        QVERIFY(myvec.isEmpty());
+    }
+
+    // assign a smaller range
+    {
+        QList<T> myvec = SimpleValue<T>::vector(3);
+        QCOMPARE(myvec.size(), 3);
+
+        myvec.assign(SimpleValue<T>::Values + 3, SimpleValue<T>::Values + 5);
+        QCOMPARE(myvec.size(), 2);
+        QCOMPARE(myvec.at(0), T_CAT);
+        QCOMPARE(myvec.at(1), T_DOG);
+
+        // with detaching:
+        QList copy = myvec;
+        myvec.assign(SimpleValue<T>::Values, SimpleValue<T>::Values + 1);
+        QCOMPARE(myvec.size(), 1);
+        QCOMPARE(myvec.at(0), T_FOO);
     }
 }
 

@@ -121,8 +121,22 @@ protected:
         QQmlDebugService(s_key, version, parent) {}
 };
 
-class Q_QML_EXPORT QQmlEngineDebugService : public QQmlDebugService
+class Q_QML_EXPORT QQuickEventReplayService : public QQmlDebugService
 {
+    Q_OBJECT
+public:
+    ~QQuickEventReplayService() override;
+
+    static const QString s_key;
+
+protected:
+    friend class QQmlDebugConnector;
+
+    explicit QQuickEventReplayService(float version, QObject *parent = nullptr) :
+          QQmlDebugService(s_key, version, parent) {}
+};
+
+class Q_QML_EXPORT QQmlEngineDebugService : public QQmlDebugService{
     Q_OBJECT
 public:
     ~QQmlEngineDebugService() override;

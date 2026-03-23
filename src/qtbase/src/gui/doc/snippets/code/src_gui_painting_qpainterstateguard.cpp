@@ -42,7 +42,7 @@ void MyGuardWidget::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.setPen(Qt::red);
     if (drawText) {
-        QPainterStateGuard guard(&painter)
+        QPainterStateGuard guard(&painter);
         painter.setPen(Qt::blue);
         painter.setFont(QFont("Arial", 30));
         painter.drawText(rect(), Qt::AlignCenter, "Qt");

@@ -761,22 +761,46 @@ void QQmlLSCompletion::insideQmlObjectCompletion(const DomItem &parentForContext
     }
 
     if (betweenLocations(leftBrace, positionInfo, rightBrace)) {
-        // default/final/required/readonly property completion
-        constexpr static std::array completions {
-            ""_L1, "default "_L1, "final "_L1, "required "_L1, "readonly "_L1, "default final "_L1,
-            "default required "_L1, "final required "_L1, "final readonly "_L1,
-            "default final required "_L1 };
-        for (QLatin1StringView view : completions) {
-            // readonly properties require an initializer
-            if (view != QUtf8StringView("readonly ")) {
+        // TODO(QTBUG-138020)
+
+        // property attributes completion
+        constexpr static std::array completions{ ""_L1,
+                                                 "default "_L1,
+                                                 "final "_L1,
+                                                 "virtual "_L1,
+                                                 "override "_L1,
+                                                 "required "_L1,
+                                                 "readonly "_L1,
+                                                 "default final "_L1,
+                                                 "default virtual "_L1,
+                                                 "default override "_L1,
+                                                 "default required "_L1,
+                                                 "final required "_L1,
+                                                 "final readonly "_L1,
+                                                 "virtual required "_L1,
+                                                 "virtual readonly "_L1,
+                                                 "override required "_L1,
+                                                 "override readonly "_L1,
+                                                 "default final required "_L1,
+                                                 "default virtual required "_L1,
+                                                 "default override required "_L1 };
+        for (QLatin1StringView completion : completions) {
+            // By default we should suggest both declarations: with and without an initializer
+            // However readonly properties are required to have an initializer,
+            // and required ones, on the contrary, should not have an initializer
+
+            if (!completion.contains(QLatin1StringView("readonly"))) {
                 result = makeSnippet(
-                        QByteArray(view.data()).append("property type name;"),
-                        QByteArray(view.data()).append("property ${1:type} ${0:name};"));
+                        QByteArray(completion.data()).append("property type name;"),
+                        QByteArray(completion.data()).append("property ${1:type} ${0:name};"));
             }
 
-            result = makeSnippet(
-                    QByteArray(view.data()).append("property type name: value;"),
-                    QByteArray(view.data()).append("property ${1:type} ${2:name}: ${0:value};"));
+            if (!completion.contains(QLatin1StringView("required"))) {
+                result = makeSnippet(
+                        QByteArray(completion.data()).append("property type name: value;"),
+                        QByteArray(completion.data())
+                                .append("property ${1:type} ${2:name}: ${0:value};"));
+            }
         }
 
         // signal
@@ -810,6 +834,7 @@ void QQmlLSCompletion::insideQmlObjectCompletion(const DomItem &parentForContext
     }
 }
 
+// TODO(QTBUG-138020)
 void QQmlLSCompletion::insidePropertyDefinitionCompletion(
         const DomItem &currentItem, const QQmlLSCompletionPosition &positionInfo,
         BackInsertIterator result) const
@@ -819,52 +844,47 @@ void QQmlLSCompletion::insidePropertyDefinitionCompletion(
 
     // do completions for the keywords
     if (positionInfo.offset() < propertyKeyword.end()) {
-        const QQmlJS::SourceLocation readonlyKeyword = info.regions[ReadonlyKeywordRegion];
-        const QQmlJS::SourceLocation defaultKeyword = info.regions[DefaultKeywordRegion];
-        const QQmlJS::SourceLocation requiredKeyword = info.regions[RequiredKeywordRegion];
-        const QQmlJS::SourceLocation finalKeyword = info.regions[FinalKeywordRegion];
-
-        bool completeReadonly = true;
-        bool completeRequired = true;
-        bool completeDefault = true;
-        bool completeFinal = true;
-
-        // if there is already a readonly keyword before the cursor: do not auto complete it again
-        if (readonlyKeyword.isValid() && readonlyKeyword.begin() < positionInfo.offset()) {
-            completeReadonly = false;
-            // also, required keywords do not like readonly keywords
-            completeRequired = false;
-        }
-
-        // same for required
-        if (requiredKeyword.isValid() && requiredKeyword.begin() < positionInfo.offset()) {
-            completeRequired = false;
-            // also, required keywords do not like readonly keywords
-            completeReadonly = false;
-        }
-
-        // same for default
-        if (defaultKeyword.isValid() && defaultKeyword.begin() < positionInfo.offset()) {
-            completeDefault = false;
-        }
-
-        // same for final
-        if (finalKeyword.isValid() && finalKeyword.begin() < positionInfo.offset())
-            completeFinal = false;
-
-        auto addCompletionKeyword = [&result](QUtf8StringView view, bool complete) {
-            if (!complete)
-                return;
+        auto addCompletionKeyword = [&result](QUtf8StringView view) {
             CompletionItem item;
             item.label = view.data();
             item.kind = int(CompletionItemKind::Keyword);
             result = item;
         };
-        addCompletionKeyword(u8"readonly", completeReadonly);
-        addCompletionKeyword(u8"required", completeRequired);
-        addCompletionKeyword(u8"default", completeDefault);
-        addCompletionKeyword(u8"final", completeFinal);
-        addCompletionKeyword(u8"property", true);
+
+        const auto alreadyTyped = [&info,
+                                   &positionInfo](const FileLocationRegion &keywordRegion) -> bool {
+            const auto &keywordSLoc = info.regions[keywordRegion];
+            return keywordSLoc.isValid() && keywordSLoc.begin() < positionInfo.offset();
+        };
+
+        const bool alreadyTypedReadonlyOrRequired =
+                alreadyTyped(ReadonlyKeywordRegion) || alreadyTyped(RequiredKeywordRegion);
+        if (!alreadyTypedReadonlyOrRequired) {
+            // Suggestions for `readonly` and `required` are mutually exclusive.
+            // If one is already typed, we suggest neither.
+            // If neither is present, both are valid suggestions.
+
+            addCompletionKeyword(u8"readonly");
+            addCompletionKeyword(u8"required");
+        }
+
+        if (!alreadyTyped(DefaultKeywordRegion)) {
+            addCompletionKeyword(u8"default");
+        }
+
+        const bool alreadyTypedVirtualOrOverrideOrFinal = alreadyTyped(VirtualKeywordRegion)
+                || alreadyTyped(OverrideKeywordRegion) || alreadyTyped(FinalKeywordRegion);
+        if (!alreadyTypedVirtualOrOverrideOrFinal) {
+            // `virtual`, `override`, and `final` cannot be combined.
+            // If one is typed, suggest nothing.
+            // If none are typed, suggest all three.
+
+            addCompletionKeyword(u8"final");
+            addCompletionKeyword(u8"virtual");
+            addCompletionKeyword(u8"override");
+        }
+
+        addCompletionKeyword(u8"property");
 
         return;
     }

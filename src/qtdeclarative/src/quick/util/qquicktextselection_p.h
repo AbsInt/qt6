@@ -29,20 +29,73 @@ QT_BEGIN_NAMESPACE
 class QFont;
 class QQuickTextControl;
 
-class Q_QUICK_EXPORT QQuickTextSelection : public QObject
+class Q_QUICK_EXPORT QQuickTextSelection : public QObject, public QQmlParserStatus
 {
     Q_OBJECT
+    Q_INTERFACES(QQmlParserStatus)
 
+    // specify the selection
+    Q_PROPERTY(QQuickTextDocument *document READ document WRITE setDocument NOTIFY documentChanged FINAL)
+    Q_PROPERTY(int selectionStart READ selectionStart WRITE setSelectionStart NOTIFY selectionStartChanged FINAL)
+    Q_PROPERTY(int selectionEnd READ selectionEnd WRITE setSelectionEnd NOTIFY selectionEndChanged FINAL)
+
+    // modify the selected text
     Q_PROPERTY(QString text READ text WRITE setText NOTIFY textChanged FINAL)
     Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged FINAL)
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged FINAL)
     Q_PROPERTY(Qt::Alignment alignment READ alignment WRITE setAlignment NOTIFY alignmentChanged FINAL)
 
-    QML_ANONYMOUS
-    QML_ADDED_IN_VERSION(6, 7)
+    QML_NAMED_ELEMENT(TextSelection)
+    QML_ADDED_IN_VERSION(6, 11)
 
 public:
+
+    // keep this in sync with QTextCursor::MoveOperation
+    enum MoveOperation {
+        NoMove = QTextCursor::NoMove,
+
+        Start,
+        Up,
+        StartOfLine,
+        StartOfBlock,
+        StartOfWord,
+        PreviousBlock,
+        PreviousCharacter,
+        PreviousWord,
+        Left,
+        WordLeft,
+
+        End,
+        Down,
+        EndOfLine,
+        EndOfWord,
+        EndOfBlock,
+        NextBlock,
+        NextCharacter,
+        NextWord,
+        Right,
+        WordRight,
+
+        NextCell,
+        PreviousCell,
+        NextRow,
+        PreviousRow
+    };
+    Q_ENUM(MoveOperation);
+
     explicit QQuickTextSelection(QObject *parent = nullptr);
+
+    void classBegin() override {}
+    void componentComplete() override;
+
+    QQuickTextDocument *document() const;
+    void setDocument(QQuickTextDocument *doc);
+
+    int selectionStart() const;
+    void setSelectionStart(int start);
+
+    int selectionEnd() const;
+    void setSelectionEnd(int end);
 
     QString text() const;
     void setText(const QString &text);
@@ -56,7 +109,17 @@ public:
     Qt::Alignment alignment() const;
     void setAlignment(Qt::Alignment align);
 
+    Q_INVOKABLE bool moveSelectionStart(MoveOperation op, int n = 1);
+    Q_INVOKABLE bool moveSelectionEnd(MoveOperation op, int n = 1);
+
+    Q_INVOKABLE void duplicate();
+
+    Q_INVOKABLE void linkTo(const QUrl &destination);
+
 Q_SIGNALS:
+    void documentChanged();
+    void selectionStartChanged();
+    void selectionEndChanged();
     void textChanged();
     void fontChanged();
     void colorChanged();
@@ -71,6 +134,7 @@ private:
     QTextCursor m_cursor;
     QTextCharFormat m_charFormat;
     QTextBlockFormat m_blockFormat;
+    QQuickTextDocument *m_doc = nullptr;
     QQuickTextControl *m_control = nullptr;
 };
 

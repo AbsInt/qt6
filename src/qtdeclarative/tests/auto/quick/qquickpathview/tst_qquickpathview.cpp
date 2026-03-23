@@ -1562,7 +1562,7 @@ void tst_QQuickPathView::mouseDrag()
     QCOMPARE(draggingSpy.size(), 2);
     QCOMPARE(dragStartedSpy.size(), 1);
     QCOMPARE(dragEndedSpy.size(), 1);
-    QTRY_COMPARE(movingSpy.size(), 2);
+    QTRY_COMPARE_EQ_WITH_TIMEOUT(movingSpy.size(), 2, 2000);
     QTRY_COMPARE(moveEndedSpy.size(), 1);
     QCOMPARE(moveStartedSpy.size(), 1);
 
@@ -2322,7 +2322,7 @@ void tst_QQuickPathView::nestedinFlickable()
 
     // no further moves after the initial move beyond threshold
     QTest::mouseRelease(window.data(), Qt::LeftButton, Qt::NoModifier, QPoint(73,219));
-    QTRY_COMPARE(movingSpy.size(), 2);
+    QTRY_COMPARE_WITH_TIMEOUT(movingSpy.size(), 2, 2s);
     QTRY_COMPARE(moveEndedSpy.size(), 1);
     QCOMPARE(moveStartedSpy.size(), 1);
     // Flickable should not handle this
@@ -2702,9 +2702,9 @@ void tst_QQuickPathView::objectModelMove()
     QCOMPARE(pathView->count(), 3);
 
     // Keep track of the amount of listeners
-    QVector<QString> itemObjectNames;
+    QList<QString> itemObjectNames;
     itemObjectNames << QLatin1String("red") << QLatin1String("green") << QLatin1String("blue");
-    QVector<QQuickItem*> childItems;
+    QList<QQuickItem*> childItems;
     for (const QString &itemObjectName : std::as_const(itemObjectNames)) {
         QQuickItem *childItem = findItem<QQuickItem>(pathView, itemObjectName);
         QVERIFY(childItem);
@@ -2850,7 +2850,7 @@ void tst_QQuickPathView::touchMove()
     // Wait for the flick to finish
     QVERIFY(QTest::qWaitFor([&]()
         { return !pathview->isFlicking(); }
-    ));
+    , QDeadlineTimer(5000)));
     QVERIFY(!pathview->isMoving());
     QVERIFY(!pathview->isDragging());
     QCOMPARE(movingSpy.size(), 2);

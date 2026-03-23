@@ -951,6 +951,8 @@ bool QRhiVulkan::create(QRhi::Flags flags)
     // elsewhere states that the minimum bufferOffset is 4...
     texbufAlign = qMax<VkDeviceSize>(4, physDevProperties.limits.optimalBufferCopyOffsetAlignment);
 
+    caps.depthClamp = physDevFeatures.depthClamp;
+
     caps.wideLines = physDevFeatures.wideLines;
 
     caps.texture3DSliceAs2D = caps.apiVersion >= QVersionNumber(1, 1);
@@ -2156,6 +2158,22 @@ bool QRhiVulkan::createOffscreenRenderPass(QVkRenderPassDescriptor *rpD,
         rpD->shadingRateRef = { uint32_t(rpD->attDescs.size() - 1), VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR };
     }
 #endif
+
+    // Add self-dependency to be able to add memory barriers for writes in graphics stages
+    VkSubpassDependency selfDependency;
+    VkPipelineStageFlags stageMask = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+    selfDependency.srcSubpass      = 0;
+    selfDependency.dstSubpass      = 0;
+    selfDependency.srcStageMask    = stageMask;
+    selfDependency.dstStageMask    = stageMask;
+    selfDependency.srcAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    selfDependency.dstAccessMask   = selfDependency.srcAccessMask;
+#ifdef VK_VERSION_1_1
+    selfDependency.dependencyFlags = rpD->multiViewCount >= 2 ? VK_DEPENDENCY_VIEW_LOCAL_BIT : 0;
+#else
+    selfDependency.dependencyFlags = 0;
+#endif
+    rpD->subpassDeps.append(selfDependency);
 
     // rpD->subpassDeps stays empty: don't yet know the correct initial/final
     // access and stage stuff for the implicit deps at this point, so leave it
@@ -4815,7 +4833,7 @@ QList<QSize> QRhiVulkan::supportedShadingRates(int sampleCount) const
 
 void QRhiVulkan::enqueueTransitionPassResources(QVkCommandBuffer *cbD)
 {
-    cbD->passResTrackers.append(QRhiPassResourceTracker());
+    cbD->passResTrackers.emplace_back();
     cbD->currentPassResTrackerIndex = cbD->passResTrackers.size() - 1;
 
     QVkCommandBuffer::Command &cmd(cbD->commands.get());
@@ -4873,6 +4891,17 @@ void QRhiVulkan::recordPrimaryCommandBuffer(QVkCommandBuffer *cbD)
                                      cmd.args.beginRenderPass.useSecondaryCb ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS
                                                                              : VK_SUBPASS_CONTENTS_INLINE);
             break;
+        case QVkCommandBuffer::Command::MemoryBarrier: {
+            VkMemoryBarrier barrier;
+            barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+            barrier.pNext = nullptr;
+            barrier.dstAccessMask = cmd.args.memoryBarrier.dstAccessMask;
+            barrier.srcAccessMask = cmd.args.memoryBarrier.srcAccessMask;
+            df->vkCmdPipelineBarrier(cbD->cb, cmd.args.memoryBarrier.srcStageMask, cmd.args.memoryBarrier.dstStageMask, cmd.args.memoryBarrier.dependencyFlags,
+                                 1, &barrier,
+                                 0, VK_NULL_HANDLE,
+                                 0, VK_NULL_HANDLE);
+        } break;
         case QVkCommandBuffer::Command::EndRenderPass:
             df->vkCmdEndRenderPass(cbD->cb);
             break;
@@ -5149,11 +5178,11 @@ void QRhiVulkan::recordTransitionPassResources(QVkCommandBuffer *cbD, const QRhi
     if (tracker.isEmpty())
         return;
 
-    for (auto it = tracker.cbeginBuffers(), itEnd = tracker.cendBuffers(); it != itEnd; ++it) {
-        QVkBuffer *bufD = QRHI_RES(QVkBuffer, it.key());
-        VkAccessFlags access = toVkAccess(it->access);
-        VkPipelineStageFlags stage = toVkPipelineStage(it->stage);
-        QVkBuffer::UsageState s = toVkBufferUsageState(it->stateAtPassBegin);
+    for (const auto &[rhiB, trackedB]: tracker.buffers()) {
+        QVkBuffer *bufD = QRHI_RES(QVkBuffer, rhiB);
+        VkAccessFlags access = toVkAccess(trackedB.access);
+        VkPipelineStageFlags stage = toVkPipelineStage(trackedB.stage);
+        QVkBuffer::UsageState s = toVkBufferUsageState(trackedB.stateAtPassBegin);
         if (!s.stage)
             continue;
         if (s.access == access && s.stage == stage) {
@@ -5166,7 +5195,7 @@ void QRhiVulkan::recordTransitionPassResources(QVkCommandBuffer *cbD, const QRhi
         bufMemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         bufMemBarrier.srcAccessMask = s.access;
         bufMemBarrier.dstAccessMask = access;
-        bufMemBarrier.buffer = bufD->buffers[it->slot];
+        bufMemBarrier.buffer = bufD->buffers[trackedB.slot];
         bufMemBarrier.size = VK_WHOLE_SIZE;
         df->vkCmdPipelineBarrier(cbD->cb, s.stage, stage, 0,
                                  0, nullptr,
@@ -5174,12 +5203,12 @@ void QRhiVulkan::recordTransitionPassResources(QVkCommandBuffer *cbD, const QRhi
                                  0, nullptr);
     }
 
-    for (auto it = tracker.cbeginTextures(), itEnd = tracker.cendTextures(); it != itEnd; ++it) {
-        QVkTexture *texD = QRHI_RES(QVkTexture, it.key());
-        VkImageLayout layout = toVkLayout(it->access);
-        VkAccessFlags access = toVkAccess(it->access);
-        VkPipelineStageFlags stage = toVkPipelineStage(it->stage);
-        QVkTexture::UsageState s = toVkTextureUsageState(it->stateAtPassBegin);
+    for (const auto &[rhiT, trackedT]: tracker.textures()) {
+        QVkTexture *texD = QRHI_RES(QVkTexture, rhiT);
+        VkImageLayout layout = toVkLayout(trackedT.access);
+        VkAccessFlags access = toVkAccess(trackedT.access);
+        VkPipelineStageFlags stage = toVkPipelineStage(trackedT.stage);
+        QVkTexture::UsageState s = toVkTextureUsageState(trackedT.stateAtPassBegin);
         if (s.access == access && s.stage == stage && s.layout == layout) {
             if (!accessIsWrite(access))
                 continue;
@@ -5382,6 +5411,10 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
         return caps.renderPass2KHR && caps.imageBasedShadingRate;
     case QRhi::PerRenderTargetBlending:
     case QRhi::SampleVariables:
+        return true;
+    case QRhi::InstanceIndexIncludesBaseInstance:
+        return true;
+    case QRhi::DepthClamp:
         return true;
     default:
         Q_UNREACHABLE_RETURN(false);
@@ -5709,6 +5742,9 @@ void QRhiVulkan::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBin
     QVkShaderResourceBindings *srbD = QRHI_RES(QVkShaderResourceBindings, srb);
     auto &descSetBd(srbD->boundResourceData[currentFrameSlot]);
     bool rewriteDescSet = false;
+    bool addWriteBarrier = false;
+    VkPipelineStageFlags writeBarrierSrcStageMask = 0;
+    VkPipelineStageFlags writeBarrierDstStageMask = 0;
 
     // Do host writes and mark referenced shader resources as in-use.
     // Also prepare to ensure the descriptor set we are going to bind refers to up-to-date Vk objects.
@@ -5796,9 +5832,22 @@ void QRhiVulkan::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBin
                 access = QRhiPassResourceTracker::TexStorageStore;
             else
                 access = QRhiPassResourceTracker::TexStorageLoadStore;
+
+            const auto stage = QRhiPassResourceTracker::toPassTrackerTextureStage(b->stage);
+            const auto prevAccess = passResTracker.textures().find(texD);
+            if (prevAccess != passResTracker.textures().end()) {
+                const QRhiPassResourceTracker::Texture &tex = prevAccess->second;
+                if (tex.access == QRhiPassResourceTracker::TexStorageStore
+                        || tex.access == QRhiPassResourceTracker::TexStorageLoadStore) {
+                    addWriteBarrier = true;
+                    writeBarrierDstStageMask |= toVkPipelineStage(stage);
+                    writeBarrierSrcStageMask |= toVkPipelineStage(tex.stage);
+                }
+            }
+
             trackedRegisterTexture(&passResTracker, texD,
                                    access,
-                                   QRhiPassResourceTracker::toPassTrackerTextureStage(b->stage));
+                                   stage);
 
             if (texD->generation != bd.simage.generation || texD->m_id != bd.simage.id) {
                 rewriteDescSet = true;
@@ -5825,9 +5874,21 @@ void QRhiVulkan::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBin
                 access = QRhiPassResourceTracker::BufStorageStore;
             else
                 access = QRhiPassResourceTracker::BufStorageLoadStore;
+
+            const auto stage = QRhiPassResourceTracker::toPassTrackerBufferStage(b->stage);
+            const auto prevAccess = passResTracker.buffers().find(bufD);
+            if (prevAccess != passResTracker.buffers().end()) {
+                const QRhiPassResourceTracker::Buffer &buf = prevAccess->second;
+                if (buf.access == QRhiPassResourceTracker::BufStorageStore
+                        || buf.access == QRhiPassResourceTracker::BufStorageLoadStore) {
+                    addWriteBarrier = true;
+                    writeBarrierDstStageMask |= toVkPipelineStage(stage);
+                    writeBarrierSrcStageMask |= toVkPipelineStage(buf.stage);
+                }
+            }
             trackedRegisterBuffer(&passResTracker, bufD, bufD->m_type == QRhiBuffer::Dynamic ? currentFrameSlot : 0,
                                   access,
-                                  QRhiPassResourceTracker::toPassTrackerBufferStage(b->stage));
+                                  stage);
 
             if (bufD->generation != bd.sbuf.generation || bufD->m_id != bd.sbuf.id) {
                 rewriteDescSet = true;
@@ -5839,6 +5900,28 @@ void QRhiVulkan::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBin
         default:
             Q_UNREACHABLE();
             break;
+        }
+    }
+
+    if (addWriteBarrier) {
+        if (cbD->passUsesSecondaryCb) {
+            VkMemoryBarrier barrier;
+            barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+            barrier.pNext = nullptr;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            barrier.srcAccessMask = barrier.dstAccessMask;
+            df->vkCmdPipelineBarrier(cbD->activeSecondaryCbStack.last(), writeBarrierSrcStageMask, writeBarrierDstStageMask, 0,
+                                 1, &barrier,
+                                 0, VK_NULL_HANDLE,
+                                 0, VK_NULL_HANDLE);
+        } else {
+            QVkCommandBuffer::Command &cmd(cbD->commands.get());
+            cmd.cmd = QVkCommandBuffer::Command::MemoryBarrier;
+            cmd.args.memoryBarrier.dependencyFlags = 0;
+            cmd.args.memoryBarrier.dstStageMask = writeBarrierDstStageMask;
+            cmd.args.memoryBarrier.srcStageMask = writeBarrierSrcStageMask;
+            cmd.args.memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            cmd.args.memoryBarrier.srcAccessMask = cmd.args.memoryBarrier.dstAccessMask;
         }
     }
 
@@ -8413,6 +8496,8 @@ bool QVkGraphicsPipeline::create()
 
     VkPipelineRasterizationStateCreateInfo rastInfo = {};
     rastInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    if (m_depthClamp && rhiD->caps.depthClamp)
+        rastInfo.depthClampEnable = m_depthClamp;
     rastInfo.cullMode = toVkCullMode(m_cullMode);
     rastInfo.frontFace = toVkFrontFace(m_frontFace);
     if (m_depthBias != 0 || !qFuzzyIsNull(m_slopeScaledDepthBias)) {
@@ -8702,7 +8787,7 @@ static inline bool hdrFormatMatchesVkSurfaceFormat(QRhiSwapChain::Format f, cons
         return s.format == VK_FORMAT_R16G16B16A16_SFLOAT
                 && s.colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT;
     case QRhiSwapChain::HDR10:
-        return (s.format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 || s.format == VK_FORMAT_A2R10G10B10_UNORM_PACK32)
+        return s.format == VK_FORMAT_A2B10G10R10_UNORM_PACK32
                 && s.colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT;
     case QRhiSwapChain::HDRExtendedDisplayP3Linear:
         return s.format == VK_FORMAT_R16G16B16A16_SFLOAT
@@ -8821,36 +8906,80 @@ bool QVkSwapChain::ensureSurface()
     quint32 formatCount = 0;
     rhiD->vkGetPhysicalDeviceSurfaceFormatsKHR(rhiD->physDev, surface, &formatCount, nullptr);
     QList<VkSurfaceFormatKHR> formats(formatCount);
-    if (formatCount)
-        rhiD->vkGetPhysicalDeviceSurfaceFormatsKHR(rhiD->physDev, surface, &formatCount, formats.data());
+    rhiD->vkGetPhysicalDeviceSurfaceFormatsKHR(rhiD->physDev, surface, &formatCount,
+                                               formats.data());
 
-    // See if there is a better match than the default BGRA8 format. (but if
-    // not, we will stick to the default)
+    // Initially select the first available format, will only be used as a worst-case fallback
+    colorFormat = formats.constFirst().format;
+    colorSpace = formats.constFirst().colorSpace;
+
+    // See if we can find the preferred SDR format
     const bool srgbRequested = m_flags.testFlag(sRGB);
-    for (int i = 0; i < int(formatCount); ++i) {
-        if (formats[i].format != VK_FORMAT_UNDEFINED) {
-            bool ok = srgbRequested == isSrgbFormat(formats[i].format);
-            if (m_format != SDR)
-                ok &= hdrFormatMatchesVkSurfaceFormat(m_format, formats[i]);
+    bool foundBestFormat = false;
+    if (m_format == SDR) {
+        for (int i = 0; i < int(formatCount); ++i) {
+            bool ok;
+            if (srgbRequested) {
+                ok = defaultSrgbColorFormat == formats[i].format;
+            } else {
+                ok = defaultColorFormat == formats[i].format;
+            }
             if (ok) {
+                foundBestFormat = true;
                 colorFormat = formats[i].format;
                 colorSpace = formats[i].colorSpace;
-#if QT_CONFIG(wayland)
-                // On Wayland, only one color management surface can be created at a time without
-                // triggering a protocol error, and we create one ourselves in some situations.
-                // To avoid this problem, use VK_COLOR_SPACE_PASS_THROUGH_EXT when supported,
-                // so that the driver doesn't create a color management surface as well.
-                const bool hasPassThrough = std::any_of(formats.begin(), formats.end(), [this](const VkSurfaceFormatKHR &fmt) {
-                    return fmt.format == colorFormat && fmt.colorSpace == VK_COLOR_SPACE_PASS_THROUGH_EXT;
-                });
-                if (hasPassThrough) {
-                    colorSpace = VK_COLOR_SPACE_PASS_THROUGH_EXT;
-                }
-#endif
                 break;
             }
         }
     }
+
+    // Otherwise pick one that fits our requirements:
+    if (!foundBestFormat && (m_format != SDR || srgbRequested)) {
+        for (int i = 0; i < int(formatCount); ++i) {
+            bool ok = false;
+            if (m_format != SDR) {
+                ok = hdrFormatMatchesVkSurfaceFormat(m_format, formats[i]);
+            } else if (srgbRequested) {
+                ok = isSrgbFormat(formats[i].format);
+            }
+            if (ok) {
+                colorFormat = formats[i].format;
+                colorSpace = formats[i].colorSpace;
+                break;
+            }
+        }
+    }
+
+    // Although this should be rare, warn when we fail to select a suitable format
+    if (m_format != SDR) {
+        VkSurfaceFormatKHR format{};
+        format.format = colorFormat;
+        format.colorSpace = colorSpace;
+        if (!hdrFormatMatchesVkSurfaceFormat(m_format, format)) {
+            qWarning("Failed to select a suitable VkFormat for HDR, using format %d as fallback",
+                     colorFormat);
+        }
+    } else {
+        if (srgbRequested && !isSrgbFormat(colorFormat)) {
+            qWarning("Failed to select a suitable VkFormat for sRGB, using format %d as fallback",
+                     colorFormat);
+        }
+    }
+
+#if QT_CONFIG(wayland)
+    // On Wayland, only one color management surface can be created at a time without
+    // triggering a protocol error, and we create one ourselves in some situations.
+    // To avoid this problem, use VK_COLOR_SPACE_PASS_THROUGH_EXT when supported,
+    // so that the driver doesn't create a color management surface as well.
+    const bool hasPassThrough =
+            std::any_of(formats.begin(), formats.end(), [this](const VkSurfaceFormatKHR &fmt) {
+                return fmt.format == colorFormat
+                        && fmt.colorSpace == VK_COLOR_SPACE_PASS_THROUGH_EXT;
+            });
+    if (hasPassThrough) {
+        colorSpace = VK_COLOR_SPACE_PASS_THROUGH_EXT;
+    }
+#endif
 
     samples = rhiD->effectiveSampleCountBits(m_sampleCount);
 

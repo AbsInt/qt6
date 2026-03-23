@@ -20,21 +20,15 @@
 #include <QtCore/qurl.h>
 #include <QtCore/qpointer.h>
 
-#include <private/qv4value_p.h>
+#include <private/qqmlnotifyingblob_p.h>
 #include <private/qv4context_p.h>
 #include <private/qv4persistent_p.h>
+#include <private/qv4value_p.h>
 
 QT_BEGIN_NAMESPACE
 
-class QJSEngine;
-class QJSValue;
-#if QT_CONFIG(qml_network)
-class QNetworkAccessManager;
-#endif
-class QNetworkReply;
-class QV4Include : public QObject
+class QV4Include : public QQmlNotifyingBlob::Callback
 {
-    Q_OBJECT
 public:
     enum Status {
         Ok = 0,
@@ -46,27 +40,19 @@ public:
     static QJSValue method_include(QV4::ExecutionEngine *engine, const QUrl &url,
                                    const QJSValue &callbackFunction);
 
-private Q_SLOTS:
-    void finished();
+    void ready(QQmlNotifyingBlob *) final;
 
 private:
-    QV4Include(const QUrl &url, QV4::ExecutionEngine *engine, QV4::QmlContext *qmlContext,
-               const QV4::Value &callback);
-    ~QV4Include();
+    static void callback(QV4::FunctionObject *callback, QV4::Object *result);
+    static QV4::ReturnedValue resultValue(QV4::ExecutionEngine *v4);
+    static void populateResultValue(
+            QV4::Object *o, Status status, const QString &statusText = QString());
+    static void processScriptBlob(
+            QQmlScriptBlob *scriptBlob, QV4::Object *result, QV4::FunctionObject *callbackFunction,
+            QV4::QmlContext *qmlContext);
 
-    QV4::ReturnedValue result();
-
-    static QV4::ReturnedValue resultValue(QV4::ExecutionEngine *v4, Status status = Loading,
-                                          const QString &statusText = QString());
-    static void callback(const QV4::Value &callback, const QV4::Value &status);
-
-    QV4::ExecutionEngine *v4;
-    QUrl m_url;
-
-#if QT_CONFIG(qml_network)
-    QNetworkAccessManager *m_network;
-    QPointer<QNetworkReply> m_reply;
-#endif
+    QV4Include(
+            QV4::Object *result, QV4::FunctionObject *callbackFunction, QV4::QmlContext *qmlContext);
 
     QV4::PersistentValue m_callbackFunction;
     QV4::PersistentValue m_resultObject;

@@ -348,8 +348,8 @@ public:
 protected:
     void seat_bind_resource(Resource *resource) override
     {
+        wl_seat::send_name(resource->handle, m_seatName);
         wl_seat::send_capabilities(resource->handle, m_capabilities);
-        wl_seat::send_name(resource->handle, m_seatName); // in any normal world this is would be set before capabilities. Weston does it after
     }
 
     void seat_get_pointer(Resource *resource, uint32_t id) override;

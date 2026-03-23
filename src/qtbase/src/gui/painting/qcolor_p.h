@@ -22,7 +22,7 @@
 
 QT_BEGIN_NAMESPACE
 
-std::optional<QRgb> qt_get_hex_rgb(const char *) Q_DECL_PURE_FUNCTION;
+Q_DECL_PURE_FUNCTION std::optional<QRgb> qt_get_hex_rgb(const char *);
 
 QT_END_NAMESPACE
 

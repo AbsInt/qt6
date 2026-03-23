@@ -24,6 +24,7 @@
 QT_BEGIN_NAMESPACE
 
 class QQuickWindowQmlImplPrivate;
+class QQuickScreenInfo;
 
 struct QWindowForeign
 {
@@ -38,10 +39,9 @@ class Q_QUICK_EXPORT QQuickWindowQmlImpl : public QQuickWindow, public QQmlParse
     Q_OBJECT
     Q_INTERFACES(QQmlParserStatus)
 
-    Q_PROPERTY(bool visible READ isVisible WRITE setVisible NOTIFY visibleChanged)
-    Q_PROPERTY(QWindow::Visibility visibility READ visibility WRITE setVisibility NOTIFY
-                       visibilityChanged)
-    Q_PROPERTY(QObject *screen READ screen WRITE setScreen NOTIFY screenChanged REVISION(2, 3))
+    Q_PROPERTY(bool visible READ isVisible WRITE setVisible NOTIFY visibleChanged OVERRIDE)
+    Q_PROPERTY(QWindow::Visibility visibility READ visibility WRITE setVisibility NOTIFY visibilityChanged OVERRIDE)
+    Q_PROPERTY(QQuickScreenInfo *screen READ screen WRITE setScreen NOTIFY screenChanged REVISION(2, 3))
     QML_ATTACHED(QQuickWindowAttached)
     QML_NAMED_ELEMENT(Window)
     QML_ADDED_IN_VERSION(2, 1)
@@ -53,8 +53,8 @@ public:
     void setVisible(bool visible);
     void setVisibility(QWindow::Visibility visibility);
 
-    QObject *screen() const;
-    void setScreen(QObject *screen);
+    QQuickScreenInfo *screen() const;
+    void setScreen(QQuickScreenInfo *screen);
 
     QObject *visualParent() const;
     void setVisualParent(QObject *parent);

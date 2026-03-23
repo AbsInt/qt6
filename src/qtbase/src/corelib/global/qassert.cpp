@@ -71,7 +71,9 @@ Q_NORETURN void qAbort()
 
     Example:
 
-    \snippet code/src_corelib_global_qglobal.cpp 17
+    \snippet code/src_corelib_global_qglobal.cpp 17&19_include_open
+    \snippet code/src_corelib_global_qglobal.cpp 17assert
+    \snippet code/src_corelib_global_qglobal.cpp 17&19_return_close
 
     If \c b is zero, the Q_ASSERT statement will output the following
     message using the qFatal() function:
@@ -94,7 +96,9 @@ Q_NORETURN void qAbort()
 
     Example:
 
-    \snippet code/src_corelib_global_qglobal.cpp 19
+    \snippet code/src_corelib_global_qglobal.cpp 17&19_include_open
+    \snippet code/src_corelib_global_qglobal.cpp 19assert
+    \snippet code/src_corelib_global_qglobal.cpp 17&19_return_close
 
     If \c b is zero, the Q_ASSERT_X statement will output the following
     message using the qFatal() function:
@@ -201,7 +205,20 @@ void qBadAlloc()
     Do not use it in new code. It is retained as-is for compatibility with old
     code and will likely be removed in the next major version Qt.
 
-    \sa Q_ASSERT(), Q_UNREACHABLE(), Q_LIKELY()
+    \sa Q_ASSERT(), Q_UNREACHABLE(), Q_LIKELY(), Q_PRESUME()
+*/
+
+/*!
+    \macro void Q_PRESUME(bool expr)
+    \relates <QtAssert>
+    \since 6.11
+
+    Causes the compiler to assume that \a expr is \c true.
+
+    This macro emits Q_ASSERT() and a C++23-style \c{[[assume]]} attribute
+    when supported by the compiler. Otherwise it falls back to Q_ASSERT().
+
+    \sa Q_ASSERT(), Q_UNREACHABLE(), Q_LIKELY(), Q_ASSUME()
 */
 
 /*!
@@ -237,7 +254,7 @@ void qBadAlloc()
     compilers that need them, without causing warnings for compilers that
     complain about its presence.
 
-    \sa Q_ASSERT(), qFatal(), Q_UNREACHABLE_RETURN()
+    \sa Q_ASSERT(), qFatal(), Q_UNREACHABLE_RETURN(), Q_PRESUME()
 */
 
 /*!
@@ -252,6 +269,6 @@ void qBadAlloc()
     \endcode
     except it omits the return on compilers that would warn about it.
 
-    \sa Q_UNREACHABLE()
+    \sa Q_UNREACHABLE(), Q_PRESUME()
 */
 QT_END_NAMESPACE

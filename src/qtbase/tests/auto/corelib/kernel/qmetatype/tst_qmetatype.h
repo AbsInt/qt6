@@ -25,7 +25,6 @@ struct MessageHandlerCustom : public MessageHandler
 class tst_QMetaType: public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QList<QVariant> prop READ prop WRITE setProp)
 
 public:
     struct GadgetPropertyType {
@@ -34,14 +33,8 @@ public:
         QVariant testData;
     };
 
-    tst_QMetaType() { propList << 42 << "Hello"; }
-
-    QList<QVariant> prop() const { return propList; }
-    void setProp(const QList<QVariant> &list) { propList = list; }
-
 private:
     void registerGadget(const char * name, const QList<GadgetPropertyType> &gadgetProperties);
-    QList<QVariant> propList;
 
 private slots:
 #if QT_CONFIG(thread)

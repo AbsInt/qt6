@@ -28,7 +28,7 @@ static void qt_print_node_count()
     \title Qt Quick Scene Graph Node classes
     \brief Nodes that can be used as part of the scene graph.
 
-    This page lists the nodes in \l {Qt Quick}'s \l {scene graph}{Qt Quick Scene Graph}.
+    This page lists the nodes in \l {Qt Quick}'s \l {Qt Quick Scene Graph}{scene graph}.
  */
 
 /*!

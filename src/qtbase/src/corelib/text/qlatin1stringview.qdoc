@@ -505,7 +505,8 @@
 /*!
     \fn qsizetype QLatin1StringView::indexOf(QStringView str, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
     \fn qsizetype QLatin1StringView::indexOf(QLatin1StringView l1, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
-    \fn qsizetype QLatin1StringView::indexOf(QChar c, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    \fn qsizetype QLatin1StringView::indexOf(QChar c, qsizetype from = 0) const
+    \fn qsizetype QLatin1StringView::indexOf(QChar c, qsizetype from, Qt::CaseSensitivity cs) const
     \since 5.14
 
     Returns the index position in this Latin-1 string view of the first
@@ -540,6 +541,9 @@
 /*!
     \fn qsizetype QLatin1StringView::lastIndexOf(QStringView str, qsizetype from, Qt::CaseSensitivity cs) const
     \fn qsizetype QLatin1StringView::lastIndexOf(QLatin1StringView l1, qsizetype from, Qt::CaseSensitivity cs) const
+    \fn qsizetype QLatin1StringView::lastIndexOf(QChar c) const
+    \fn qsizetype QLatin1StringView::lastIndexOf(QChar c, Qt::CaseSensitivity cs) const
+    \fn qsizetype QLatin1StringView::lastIndexOf(QChar c, qsizetype from) const
     \fn qsizetype QLatin1StringView::lastIndexOf(QChar c, qsizetype from, Qt::CaseSensitivity cs) const
     \since 5.14
 

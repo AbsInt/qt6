@@ -15,13 +15,12 @@
 // We mean it.
 //
 
-#include "qv4global_p.h"
-#include "qv4engine_p.h"
-#include "qv4functionobject_p.h"
-#include "qv4qmlcontext_p.h"
-#include "private/qv4compilercontext_p.h"
+#include <private/qv4compilercontext_p.h>
+#include <private/qv4engine_p.h>
+#include <private/qv4global_p.h>
+#include <private/qv4qmlcontext_p.h>
 
-#include <QQmlError>
+#include <QtQml/qqmlerror.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -33,45 +32,72 @@ class Engine;
 
 namespace QV4 {
 
-struct Q_QML_EXPORT Script {
-    Script(ExecutionContext *scope, QV4::Compiler::ContextType mode, const QString &sourceCode, const QString &source = QString(), int line = 1, int column = 0)
-        : sourceFile(source), line(line), column(column), sourceCode(sourceCode)
-        , context(scope), strictMode(false), inheritContext(false), parsed(false), contextType(mode)
-        , parseAsBinding(false) {}
-    Script(ExecutionEngine *engine, QmlContext *qml, bool parseAsBinding, const QString &sourceCode, const QString &source = QString(), int line = 1, int column = 0)
-        : sourceFile(source), line(line), column(column), sourceCode(sourceCode)
-        , context(engine->rootContext()), strictMode(false), inheritContext(true), parsed(false)
-        , parseAsBinding(parseAsBinding) {
+struct Q_QML_EXPORT Script
+{
+    enum class InheritContext { No, Yes };
+    static QQmlRefPointer<QV4::CompiledData::CompilationUnit> precompile(
+            QV4::Compiler::Module *module, QQmlJS::Engine *jsEngine,
+            Compiler::JSUnitGenerator *unitGenerator, const QString &fileName,
+            const QString &source, QList<QQmlError> *reportedErrors = nullptr,
+            QV4::Compiler::ContextType contextType = QV4::Compiler::ContextType::Global,
+            InheritContext inheritContext = InheritContext::No);
+
+    Script(
+            ExecutionContext *scope, QV4::Compiler::ContextType mode, const QString &sourceCode,
+            const QString &source = QString(), int line = 1)
+        : m_sourceFile(source)
+        , m_sourceCode(sourceCode)
+        , m_context(scope)
+        , m_line(line)
+        , m_contextType(mode)
+    {}
+
+    Script(
+            ExecutionEngine *engine, QmlContext *qml, bool parseAsBinding, const QString &sourceCode,
+            const QString &source = QString(), int line = 1)
+        : m_sourceFile(source)
+        , m_sourceCode(sourceCode)
+        , m_context(engine->rootContext())
+        , m_line(line)
+        , m_parseAsBinding(parseAsBinding)
+        , m_inheritContext(true)
+    {
         if (qml)
-            qmlContext.set(engine, *qml);
+            m_qmlContext.set(engine, *qml);
     }
-    Script(ExecutionEngine *engine, QmlContext *qml, const QQmlRefPointer<ExecutableCompilationUnit> &compilationUnit);
+
+    Script(
+            ExecutionEngine *engine, QmlContext *qml,
+            const QQmlRefPointer<ExecutableCompilationUnit> &compilationUnit);
+
     ~Script();
-    QString sourceFile;
-    int line;
-    int column;
-    QString sourceCode;
-    ExecutionContext *context;
-    bool strictMode;
-    bool inheritContext;
-    bool parsed;
-    QV4::Compiler::ContextType contextType = QV4::Compiler::ContextType::Eval;
-    QV4::PersistentValue qmlContext;
-    QQmlRefPointer<ExecutableCompilationUnit> compilationUnit;
-    QV4::WriteBarrier::Pointer<Function> vmFunction;
-    bool parseAsBinding;
+
+    void setStrictMode(bool strictMode = true) { m_strictMode = strictMode; }
+    void setInheritContext(bool inheritContext = true) { m_inheritContext = inheritContext; }
+    void setParseAsBinding(bool parseAsBinding = true) { m_parseAsBinding = parseAsBinding; }
+    QQmlRefPointer<ExecutableCompilationUnit> compilationUnit() const { return m_compilationUnit; }
 
     void parse();
     ReturnedValue run(const QV4::Value *thisObject = nullptr);
 
     Function *function();
 
-    static QQmlRefPointer<QV4::CompiledData::CompilationUnit> precompile(
-            QV4::Compiler::Module *module, QQmlJS::Engine *jsEngine,
-            Compiler::JSUnitGenerator *unitGenerator, const QString &fileName,
-            const QString &source, QList<QQmlError> *reportedErrors = nullptr,
-            QV4::Compiler::ContextType contextType = QV4::Compiler::ContextType::Global);
-    static Script *createFromFileOrCache(ExecutionEngine *engine, QmlContext *qmlContext, const QString &fileName, const QUrl &originalUrl, QString *error);
+private:
+    QString m_sourceFile;
+    QString m_sourceCode;
+    QV4::PersistentValue m_qmlContext;
+    QQmlRefPointer<ExecutableCompilationUnit> m_compilationUnit;
+    QV4::WriteBarrier::Pointer<Function> m_vmFunction;
+
+    ExecutionContext *m_context = nullptr;
+
+    int m_line = 1;
+    QV4::Compiler::ContextType m_contextType = QV4::Compiler::ContextType::Eval;
+
+    bool m_strictMode = false;
+    bool m_parseAsBinding = false;
+    bool m_inheritContext = false;
+    bool m_parsed = false;
 };
 
 }

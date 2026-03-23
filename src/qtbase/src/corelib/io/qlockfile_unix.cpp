@@ -285,6 +285,11 @@ QString QLockFilePrivate::processNameByPid(qint64 pid)
 #endif
 }
 
+int QLockFilePrivate::openNewFileDescriptor(const QString &fileName)
+{
+    return QT_OPEN(fileName.toLocal8Bit().constData(), QT_OPEN_RDONLY);
+}
+
 void QLockFile::unlock()
 {
     Q_D(QLockFile);

@@ -84,7 +84,7 @@
     Qt::Alignment parameter, which means that any combination of
     Qt::AlignmentFlag values, or \c{{ }}, is legal:
 
-    \snippet code/src_corelib_global_qglobal.cpp 0
+    \snippet code/src_corelib_global_qglobal_widgets.cpp 0
 
     If you try to pass a value from another enum or just a plain
     integer other than 0, the compiler will report an error. If you
@@ -471,8 +471,10 @@
     \macro Q_DECLARE_OPERATORS_FOR_FLAGS(Flags)
     \relates QFlags
 
-    The Q_DECLARE_OPERATORS_FOR_FLAGS() macro declares global \c
-    operator|() functions for \a Flags, which is of type QFlags<T>.
+    The Q_DECLARE_OPERATORS_FOR_FLAGS() macro declares global
+    bitwise operator functions \c operator|(), \c operator&(),
+    \c operator^(), \c operator~() and their assignment forms:
+    &=, |=, and ^=. for \a Flags, which is of type QFlags<T>.
 
     See the QFlags documentation for details.
 

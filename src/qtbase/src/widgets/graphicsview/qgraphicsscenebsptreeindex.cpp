@@ -58,6 +58,10 @@ static inline int intmaxlog(int n)
 }
 
 /*!
+    \class QGraphicsSceneBspTreeIndexPrivate
+    \inmodule QtWidgets
+    \internal
+
     Constructs a private scene bsp index.
 */
 QGraphicsSceneBspTreeIndexPrivate::QGraphicsSceneBspTreeIndexPrivate(QGraphicsScene *scene)

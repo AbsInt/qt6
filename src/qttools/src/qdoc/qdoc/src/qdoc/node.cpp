@@ -9,6 +9,8 @@
 #include "enumnode.h"
 #include "functionnode.h"
 #include "generator.h"
+#include "inclusionfilter.h"
+#include "nodecontext.h"
 #include "qdocdatabase.h"
 #include "qmltypenode.h"
 #include "qmlpropertynode.h"
@@ -155,6 +157,19 @@ bool Node::nodeSortKeyOrNameLessThan(const Node *n1, const Node *n2)
     }
     return nodeNameLessThan(n1, n2);
 }
+
+
+NodeContext Node::createContext() const
+{
+    NodeContext context;
+    context.type = nodeType();
+    context.isPrivate = isPrivate();
+    context.isInternal = isInternal();
+    context.isPureVirtual = isPureVirtual();
+
+    return context;
+}
+
 
 /*!
     \internal
@@ -545,10 +560,12 @@ void Node::setStatus(Status t)
     // Set non-null, empty URL to nodes that are ignored as
     // link targets
     switch (t) {
-    case Internal:
-        if (Config::instance().showInternal())
+    case Internal: {
+        const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+        if (InclusionFilter::processInternalDocs(policy))
             break;
         Q_FALLTHROUGH();
+    }
     case DontDocument:
         m_url = QStringLiteral("");
         break;
@@ -876,6 +893,19 @@ void Node::setLocation(const Location &t)
         m_declLocation = t;
         m_defLocation = t;
     }
+}
+
+/*!
+    Returns \c true if this node is considered to be
+    part of the API as per the InclusionPolicy retrieved
+    from configuration.
+*/
+bool Node::isInAPI() const
+{
+    const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+    bool inPolicy = InclusionFilter::isIncluded(policy, this->createContext());
+
+    return inPolicy && !isDontDocument() && hasDoc();
 }
 
 /*!

@@ -2145,7 +2145,9 @@ QString QFont::key() const
       \li Word spacing
       \li Stretch
       \li Style strategy
-      \li Font style (omitted when unavailable)
+      \li Font style
+      \li Font features
+      \li Variable axes
     \endlist
 
     \sa fromString()
@@ -2168,11 +2170,16 @@ QString QFont::toString() const
         QString::number(letterSpacing()) + comma +
         QString::number(wordSpacing()) + comma +
         QString::number(stretch()) + comma +
-        QString::number((int)styleStrategy());
+        QString::number((int)styleStrategy()) + comma +
+        styleName();
 
-    QString fontStyle = styleName();
-    if (!fontStyle.isEmpty())
-        fontDescription += comma + fontStyle;
+    fontDescription += comma + QString::number(d->features.size());
+    for (const auto &[tag, value] : std::as_const(d->features).asKeyValueRange())
+        fontDescription += comma + QLatin1StringView{tag.toString()} + u'=' + QString::number(value);
+
+    fontDescription += comma + QString::number(d->request.variableAxisValues.size());
+    for (const auto &[tag, value] : std::as_const(d->request.variableAxisValues).asKeyValueRange())
+        fontDescription += comma + QLatin1StringView{tag.toString()} + u'=' + QString::number(value);
 
     return fontDescription;
 }
@@ -2187,6 +2194,41 @@ size_t qHash(const QFont &font, size_t seed) noexcept
     return qHash(QFontPrivate::get(font)->request, seed);
 }
 
+static std::optional<std::pair<QFont::Tag, quint32>> fontFeatureFromString(QStringView view)
+{
+    const int separator = view.indexOf(u'=');
+    if (separator == -1)
+        return std::nullopt;
+
+    const std::optional<QFont::Tag> tag = QFont::Tag::fromString(view.sliced(0, separator));
+    if (!tag)
+        return std::nullopt;
+
+    bool valueOk = false;
+    const quint32 value = view.sliced(separator + 1).toUInt(&valueOk);
+    if (!valueOk)
+        return std::nullopt;
+
+    return std::make_pair(*tag, value);
+}
+
+static std::optional<std::pair<QFont::Tag, float>> variableAxisFromString(QStringView view)
+{
+    const int separator = view.indexOf(u'=');
+    if (separator == -1)
+        return std::nullopt;
+
+    const std::optional<QFont::Tag> tag = QFont::Tag::fromString(view.sliced(0, separator));
+    if (!tag)
+        return std::nullopt;
+
+    bool valueOk = false;
+    const float value = view.sliced(separator + 1).toFloat(&valueOk);
+    if (!valueOk)
+        return std::nullopt;
+
+    return std::make_pair(*tag, value);
+}
 
 /*!
     Sets this font to match the description \a descrip. The description
@@ -2200,8 +2242,7 @@ bool QFont::fromString(const QString &descrip)
     const auto sr = QStringView(descrip).trimmed();
     const auto l = sr.split(u',');
     const int count = l.size();
-    if (!count || (count > 2 && count < 9) || count == 9 || count > 17 ||
-        l.first().isEmpty()) {
+    if (!count || (count > 2 && count < 10) || l.first().isEmpty()) {
         qWarning("QFont::fromString: Invalid description '%s'",
                  descrip.isEmpty() ? "(empty)" : descrip.toLatin1().data());
         return false;
@@ -2210,14 +2251,8 @@ bool QFont::fromString(const QString &descrip)
     setFamily(l[0].toString());
     if (count > 1 && l[1].toDouble() > 0.0)
         setPointSizeF(l[1].toDouble());
-    if (count == 9) {
-        setStyleHint((StyleHint) l[2].toInt());
-        setWeight(QFont::Weight(l[3].toInt()));
-        setItalic(l[4].toInt());
-        setUnderline(l[5].toInt());
-        setStrikeOut(l[6].toInt());
-        setFixedPitch(l[7].toInt());
-    } else if (count >= 10) {
+
+    if (count >= 10) {
         if (l[2].toInt() > 0)
             setPixelSize(l[2].toInt());
         setStyleHint((StyleHint) l[3].toInt());
@@ -2229,6 +2264,8 @@ bool QFont::fromString(const QString &descrip)
         setUnderline(l[6].toInt());
         setStrikeOut(l[7].toInt());
         setFixedPitch(l[8].toInt());
+        if (!d->request.fixedPitch) // assume 'false' fixedPitch equals default
+            d->request.ignorePitch = true;
         if (count >= 16) {
             setCapitalization((Capitalization)l[10].toInt());
             setLetterSpacing((SpacingType)l[11].toInt(), l[12].toDouble());
@@ -2236,14 +2273,42 @@ bool QFont::fromString(const QString &descrip)
             setStretch(l[14].toInt());
             setStyleStrategy((StyleStrategy)l[15].toInt());
         }
-        if (count == 11 || count == 17)
-            d->request.styleName = l[count - 1].toString();
+
+        if (count == 11)
+            d->request.styleName = l[10].toString();
+        else if (count >= 17)
+            d->request.styleName = l[16].toString();
         else
             d->request.styleName.clear();
-    }
 
-    if (count >= 9 && !d->request.fixedPitch) // assume 'false' fixedPitch equals default
-        d->request.ignorePitch = true;
+        clearFeatures();
+        clearVariableAxes();
+
+        int position = 17;
+        if (position >= count)
+            return true;
+
+        const int featureCount = l[position++].toInt();
+        if (position + featureCount > count)
+            return true;
+
+        for (int i = 0; i < featureCount; ++i) {
+            if (const auto feature = fontFeatureFromString(l[position++]))
+                setFeature(feature->first, feature->second);
+        }
+
+        if (position >= count)
+            return true;
+
+        const int variableAxisCount = l[position++].toInt();
+        if (position + variableAxisCount > count)
+            return true;
+
+        for (int i = 0; i < variableAxisCount; ++i) {
+            if (const auto axis = variableAxisFromString(l[position++]))
+                setVariableAxis(axis->first, axis->second);
+        }
+    }
 
     return true;
 }
@@ -3617,13 +3682,17 @@ void QFontCache::decreaseCache()
         EngineCache::ConstIterator it = engineCache.constBegin(),
                                   end = engineCache.constEnd();
         for (; it != end; ++it) {
+            const auto useCount = engineCacheCount.value(it.value().data);
+            const auto refCount = it.value().data->ref.loadRelaxed();
+            const auto cacheCost = it.value().data->cache_cost;
+
             FC_DEBUG("    %p: timestamp %4u hits %2u ref %2d/%2d, cost %u bytes",
                      it.value().data, it.value().timestamp, it.value().hits,
-                     it.value().data->ref.loadRelaxed(), engineCacheCount.value(it.value().data),
-                     it.value().data->cache_cost);
+                     refCount, useCount, cacheCost);
 
-            if (it.value().data->ref.loadRelaxed() > engineCacheCount.value(it.value().data))
-                in_use_cost += it.value().data->cache_cost / engineCacheCount.value(it.value().data);
+            Q_ASSERT(useCount > 0);
+            if (useCount > 0 && refCount > useCount)
+                in_use_cost += cacheCost / useCount;
         }
 
         // attempt to make up for rounding errors

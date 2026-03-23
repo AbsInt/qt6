@@ -6,8 +6,25 @@
 #####################################################################
 
 set(qml_files
+    "CopyAction.qml"
     "CursorDelegate.qml"
+    "CutAction.qml"
+    "DeleteAction.qml"
     "DialogButtonBoxDelegate.qml"
+    "PasteAction.qml"
+    "SelectAllAction.qml"
+    "TextEditingContextMenu.qml"
+)
+
+set_source_files_properties(
+    CopyAction.qml
+    CutAction.qml
+    DeleteAction.qml
+    PasteAction.qml
+    SelectAllAction.qml
+    TextEditingContextMenu.qml
+    PROPERTIES
+        QT_QML_SOURCE_VERSIONS "6.11"
 )
 
 qt_internal_add_qml_module(QuickControls2IOSStyleImpl

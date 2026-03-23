@@ -19,7 +19,6 @@ T.ToolButton {
 
     icon.width: 24
     icon.height: 24
-    icon.color: visualFocus ? control.palette.highlight : control.palette.buttonText
 
     contentItem: IconLabel {
         spacing: control.spacing
@@ -27,9 +26,10 @@ T.ToolButton {
         display: control.display
 
         icon: control.icon
+        defaultIconColor: control.visualFocus ? control.palette.highlight : control.palette.buttonText
         text: control.text
         font: control.font
-        color: control.visualFocus ? control.palette.highlight : control.palette.buttonText
+        color: defaultIconColor
     }
 
     background: Rectangle {

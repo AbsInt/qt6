@@ -33,7 +33,7 @@
 #include <sys/socket.h>
 #include <netinet/sctp.h>
 #endif
-#ifdef Q_OS_BSD4
+#ifdef AF_LINK
 #  include <net/if_dl.h>
 #endif
 
@@ -142,10 +142,6 @@ static void convertToLevelAndOption(QNativeSocketEngine::SocketOption opt,
             level = IPPROTO_IP;
 #ifdef IP_PKTINFO
             n = IP_PKTINFO;
-#elif defined(IP_RECVDSTADDR)
-            // variant found in QNX and FreeBSD; it will get us only the
-            // destination address, not the interface; we need IP_RECVIF for that.
-            n = IP_RECVDSTADDR;
 #endif
         }
         break;
@@ -173,6 +169,26 @@ static void convertToLevelAndOption(QNativeSocketEngine::SocketOption opt,
             n = IP_MTU;
 #endif
         }
+        break;
+    case QNativeSocketEngine::KeepAliveIdleOption:
+        level = IPPROTO_TCP;
+#ifdef TCP_KEEPALIVE
+        n = TCP_KEEPALIVE;
+#else
+        n = TCP_KEEPIDLE;
+#endif
+        break;
+    case QNativeSocketEngine::KeepAliveIntervalOption:
+#ifdef TCP_KEEPINTVL
+        level = IPPROTO_TCP;
+        n = TCP_KEEPINTVL;
+#endif
+        break;
+    case QNativeSocketEngine::KeepAliveCountOption:
+#ifdef TCP_KEEPCNT
+        level = IPPROTO_TCP;
+        n = TCP_KEEPCNT;
+#endif
         break;
     }
 }
@@ -360,6 +376,18 @@ bool QNativeSocketEnginePrivate::setOption(QNativeSocketEngine::SocketOption opt
     case QNativeSocketEngine::BindExclusively:
         return true;
 
+    case QNativeSocketEngine::ReceivePacketInformation:
+        if (socketProtocol == QAbstractSocket::IPv4Protocol) {
+#if !defined(IP_PKTINFO) && defined(IP_RECVDSTADDR) && defined(IP_RECVIF)
+            // Seen on FreeBSD and QNX. We need both to get the information we want.
+            int r = 0;
+            r += ::setsockopt(socketDescriptor, IPPROTO_IP, IP_RECVDSTADDR, &v, sizeof(v));
+            r += ::setsockopt(socketDescriptor, IPPROTO_IP, IP_RECVIF, &v, sizeof(v));
+            return r == 0;
+#endif
+        }
+        break;
+
     case QNativeSocketEngine::MaxStreamsSocketOption: {
 #ifndef QT_NO_SCTP
         sctp_initmsg sctpInitMsg;
@@ -422,16 +450,29 @@ bool QNativeSocketEnginePrivate::nativeConnect(const QHostAddress &addr, quint16
     qDebug() << "QNativeSocketEnginePrivate::nativeConnect() " << socketDescriptor;
 #endif
 
-    qt_sockaddr aa;
-    QT_SOCKLEN_T sockAddrSize;
-    setPortAndAddress(port, addr, &aa, &sockAddrSize);
+    int socketError = 0;
+    if (socketState == QAbstractSocket::ConnectingState) {
+        // We are already connecting, try to read out an error if any.
+        // This is to avoid calling connect() more than necessary, as the kernel may try to send
+        // us messages on poll/select of this socket whenever we do.
+        socklen_t len = sizeof(socketError);
+        if (getsockopt(int(socketDescriptor), SOL_SOCKET, SO_ERROR, &socketError, &len) != 0) {
+            // getsockopt failed - let's treat socketError as undefined to be safe. So, reset.
+            socketError = 0;
+        }
+    }
 
-    int connectResult = qt_safe_connect(socketDescriptor, &aa.a, sockAddrSize);
-#if defined (QNATIVESOCKETENGINE_DEBUG)
-    int ecopy = errno;
-#endif
+    int connectResult = -1;
+    if (socketError == 0) {
+        qt_sockaddr aa;
+        QT_SOCKLEN_T sockAddrSize;
+        setPortAndAddress(port, addr, &aa, &sockAddrSize);
+
+        connectResult = qt_safe_connect(socketDescriptor, &aa.a, sockAddrSize);
+        socketError = errno;
+    }
     if (connectResult == -1) {
-        switch (errno) {
+        switch (socketError) {
         case EISCONN:
             socketState = QAbstractSocket::ConnectedState;
             break;
@@ -483,7 +524,7 @@ bool QNativeSocketEnginePrivate::nativeConnect(const QHostAddress &addr, quint16
             qDebug("QNativeSocketEnginePrivate::nativeConnect(%s, %i) == false (%s)",
                    addr.toString().toLatin1().constData(), port,
                    socketState == QAbstractSocket::ConnectingState
-                   ? "Connection in progress" : strerror(ecopy));
+                   ? "Connection in progress" : strerror(socketError));
 #endif
             return false;
         }
@@ -915,7 +956,7 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxS
 {
     // we use quintptr to force the alignment
     quintptr cbuf[(CMSG_SPACE(sizeof(struct in6_pktinfo)) + CMSG_SPACE(sizeof(int))
-#if !defined(IP_PKTINFO) && defined(IP_RECVIF) && defined(Q_OS_BSD4)
+#if !defined(IP_PKTINFO) && defined(IP_RECVIF) && defined(AF_LINK)
                    + CMSG_SPACE(sizeof(sockaddr_dl))
 #endif
 #ifndef QT_NO_SCTP
@@ -1007,7 +1048,7 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxS
                 header->destinationAddress.setAddress(ntohl(addr->s_addr));
             }
 #  endif
-#  if defined(IP_RECVIF) && defined(Q_OS_BSD4)
+#  if defined(IP_RECVIF) && defined(AF_LINK)
             if (cmsgptr->cmsg_level == IPPROTO_IP && cmsgptr->cmsg_type == IP_RECVIF
                     && cmsgptr->cmsg_len >= CMSG_LEN(sizeof(sockaddr_dl))) {
                 sockaddr_dl *sdl = reinterpret_cast<sockaddr_dl *>(CMSG_DATA(cmsgptr));
@@ -1431,7 +1472,7 @@ int QNativeSocketEnginePrivate::nativeSelect(QDeadlineTimer deadline, bool check
     }
 
     static const short read_flags = POLLIN | POLLHUP | POLLERR;
-    static const short write_flags = POLLOUT | POLLERR;
+    static const short write_flags = POLLOUT | POLLHUP | POLLERR;
 
     *selectForRead = ((pfd.revents & read_flags) != 0);
     *selectForWrite = ((pfd.revents & write_flags) != 0);

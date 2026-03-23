@@ -103,6 +103,7 @@ public:
         AcceleratorChanged   = 0x80C0,
         Announcement         = 0x80D0,
         IdentifierChanged    = 0x80E0,
+        RoleChanged          = 0x80E1,
 
         // was declared after AcceleratorChanged, without explicit value
         InvalidEvent                    = AcceleratorChanged + 1,
@@ -155,8 +156,6 @@ public:
 
         quint64 searchEdit : 1;
 
-        // quint64 horizontal : 1;
-        // quint64 vertical : 1;
         // quint64 invalidEntry : 1;
         // quint64 managesDescendants : 1;
         // quint64 singleLine : 1; // we have multi line, this is redundant.
@@ -270,6 +269,7 @@ public:
         WebDocument    = 0x00000084,
         Section        = 0x00000085,
         Notification   = 0x00000086,
+        Switch         = 0x00000087,
 
         // IAccessible2 roles
         // IA2_ROLE_CANVAS = 0x401, // An object that can be drawn into and to manage events from the objects drawn into it
@@ -382,6 +382,7 @@ public:
         Custom,
         Level,
         Locale,
+        Orientation,
     };
     Q_ENUM(Attribute)
 

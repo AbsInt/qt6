@@ -48,27 +48,27 @@ void QQmlFilterBase::setEnabled(const bool enabled)
 }
 
 /*!
-    \qmlproperty bool Filter::invert
+    \qmlproperty bool Filter::inverted
 
     This property inverts the filter, causing the data that would normally be
     filtered out to be presented instead.
 
     The default value is \c false.
 */
-bool QQmlFilterBase::invert() const
+bool QQmlFilterBase::isInverted() const
 {
     Q_D(const QQmlFilterBase);
-    return d->m_invert;
+    return d->m_inverted;
 }
 
-void QQmlFilterBase::setInvert(const bool invert)
+void QQmlFilterBase::setInverted(const bool invert)
 {
     Q_D(QQmlFilterBase);
-    if (d->m_invert == invert)
+    if (d->m_inverted == invert)
         return;
-    d->m_invert = invert;
+    d->m_inverted = invert;
     invalidate();
-    emit invertChanged();
+    emit invertedChanged();
 }
 
 /*!

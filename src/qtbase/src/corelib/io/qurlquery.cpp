@@ -29,7 +29,8 @@ QT_BEGIN_NAMESPACE
 
   It is used to parse the query strings found in URLs like the following:
 
-  \image qurl-querystring.png
+  \image qurl-querystring.png {Illustration of a URL with part after question mark
+         highlighted as query string.}
 
   Query strings like the above are used to transmit options in the URL and are
   usually decoded into multiple key-value pairs. The one above would contain
@@ -548,7 +549,8 @@ QString QUrlQuery::query(QUrl::ComponentFormattingOptions encoding) const
     and between key-value pairs in the URL's query string. The default
     value delimiter is '=' and the default pair delimiter is '&'.
 
-    \image qurl-querystring.png
+    \image qurl-querystring.png {Illustration of a URL with part after
+         question mark highlighted as query string.}
 
     \a valueDelimiter will be used for separating keys from values,
     and \a pairDelimiter will be used to separate key-value pairs.

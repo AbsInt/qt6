@@ -5,6 +5,7 @@
         "QDocModule": "qttestlib",
         "QtUsage": "Used for testing of the Qt Test module.",
         "Comment": {
+            "OldBranch": "Stick to its v2.x branch; no suitable file in v3",
             "UpstreamFile": "single_include/catch2/catch.hpp",
             "Generator": "scripts/generateSingleHeader.py",
             "General": "no relevant CPE found"

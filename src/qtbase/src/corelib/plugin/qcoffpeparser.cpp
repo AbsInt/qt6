@@ -1,5 +1,6 @@
 // Copyright (C) 2021 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:data-parser
 
 #include "qcoffpeparser_p.h"
 
@@ -44,6 +45,8 @@ static const WORD ExpectedMachine =
         // nothing, just so everything is #elf
 #elif defined(Q_PROCESSOR_ARM_32)
             IMAGE_FILE_MACHINE_ARMNT
+#elif defined(Q_PROCESSOR_ARM_64_EC)
+            IMAGE_FILE_MACHINE_AMD64
 #elif defined(Q_PROCESSOR_ARM_64)
             IMAGE_FILE_MACHINE_ARM64
 #elif defined(Q_PROCESSOR_IA64)

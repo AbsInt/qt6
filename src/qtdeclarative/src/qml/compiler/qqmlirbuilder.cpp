@@ -445,11 +445,6 @@ bool IRBuilder::generateFromQml(const QString &code, const QString &url, Documen
     return errors.isEmpty();
 }
 
-bool IRBuilder::visit(QQmlJS::AST::UiArrayMemberList *ast)
-{
-    return QQmlJS::AST::Visitor::visit(ast);
-}
-
 bool IRBuilder::visit(QQmlJS::AST::UiProgram *)
 {
     Q_ASSERT(!"should not happen");
@@ -574,31 +569,6 @@ bool IRBuilder::visit(QQmlJS::AST::UiArrayBinding *node)
 
     qSwap(_object, object);
     return false;
-}
-
-bool IRBuilder::visit(QQmlJS::AST::UiHeaderItemList *list)
-{
-    return QQmlJS::AST::Visitor::visit(list);
-}
-
-bool IRBuilder::visit(QQmlJS::AST::UiObjectInitializer *ast)
-{
-    return QQmlJS::AST::Visitor::visit(ast);
-}
-
-bool IRBuilder::visit(QQmlJS::AST::UiObjectMemberList *ast)
-{
-    return QQmlJS::AST::Visitor::visit(ast);
-}
-
-bool IRBuilder::visit(QQmlJS::AST::UiParameterList *ast)
-{
-    return QQmlJS::AST::Visitor::visit(ast);
-}
-
-bool IRBuilder::visit(QQmlJS::AST::UiQualifiedId *id)
-{
-    return QQmlJS::AST::Visitor::visit(id);
 }
 
 void IRBuilder::accept(QQmlJS::AST::Node *node)
@@ -1076,6 +1046,8 @@ bool IRBuilder::visit(QQmlJS::AST::UiPublicMember *node)
             Property *property = New<Property>();
             property->setIsReadOnly(node->isReadonly());
             property->setIsRequired(node->isRequired());
+            property->setIsVirtual(node->isVirtual());
+            property->setIsOverride(node->isOverride());
             property->setIsFinal(node->isFinal());
 
             const QV4::CompiledData::CommonType builtinPropertyType
@@ -2010,7 +1982,7 @@ JSCodeGen::JSCodeGen(
     _fileNameIsUrl = true;
 }
 
-QVector<int> JSCodeGen::generateJSCodeForFunctionsAndBindings(
+QList<int> JSCodeGen::generateJSCodeForFunctionsAndBindings(
         const QList<CompiledFunctionOrExpression> &functions)
 {
     auto qmlName = [&](const CompiledFunctionOrExpression &c) {
@@ -2019,7 +1991,7 @@ QVector<int> JSCodeGen::generateJSCodeForFunctionsAndBindings(
         else
             return QStringLiteral("%qml-expression-entry");
     };
-    QVector<int> runtimeFunctionIndices(functions.size());
+    QList<int> runtimeFunctionIndices(functions.size());
 
     QV4::Compiler::ScanFunctions scan(this, document->code, QV4::Compiler::ContextType::Global);
     scan.enterGlobalEnvironment(QV4::Compiler::ContextType::Binding);
@@ -2047,7 +2019,7 @@ QVector<int> JSCodeGen::generateJSCodeForFunctionsAndBindings(
     scan.leaveEnvironment();
 
     if (hasError())
-        return QVector<int>();
+        return QList<int>();
 
     _context = nullptr;
 

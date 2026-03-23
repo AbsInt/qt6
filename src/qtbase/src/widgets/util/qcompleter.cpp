@@ -122,6 +122,8 @@
 #include "QtGui/qevent.h"
 #include <private/qapplication_p.h>
 #include <private/qwidget_p.h>
+#include <qpa/qplatformwindow.h>
+#include <qpa/qplatformwindow_p.h>
 #if QT_CONFIG(lineedit)
 #include "QtWidgets/qlineedit.h"
 #endif
@@ -925,10 +927,19 @@ void QCompleterPrivate::showPopup(const QRect& rect)
     popup->setGeometry(pos.x(), pos.y(), w, h);
 
     if (!popup->isVisible()) {
-        // Make sure popup has a transient parent set, Wayland needs it. QTBUG-130474
-        popup->winId(); // force creation of windowHandle
-        popup->windowHandle()->setTransientParent(widget->window()->windowHandle());
-
+#if QT_CONFIG(wayland)
+        popup->createWinId();
+        if (auto waylandWindow = dynamic_cast<QNativeInterface::Private::QWaylandWindow*>(popup->windowHandle()->handle())) {
+            popup->windowHandle()->setTransientParent(widget->window()->windowHandle());
+            if (!rect.isValid()) { // Automatically positioned popup
+                const QRect controlGeometry = QRect(
+                        widget->mapTo(widget->topLevelWidget(), QPoint(0, 0)), widget->size());
+                waylandWindow->setParentControlGeometry(controlGeometry);
+                waylandWindow->setExtendedWindowType(
+                        QNativeInterface::Private::QWaylandWindow::ComboBox);
+            }
+        }
+#endif
         popup->show();
     }
 }

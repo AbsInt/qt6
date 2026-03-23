@@ -33,11 +33,13 @@ QT_BEGIN_NAMESPACE
 namespace QQmlJS {
 namespace Dom {
 
-class QQmlDomAstCreator final : public AST::Visitor
+class QQmlDomAstCreatorBase : public AST::Visitor
 {
     Q_DECLARE_TR_FUNCTIONS(QQmlDomAstCreator)
+public:
     using AST::Visitor::endVisit;
     using AST::Visitor::visit;
+private:
 
     static constexpr const auto className = "QmlDomAstCreator";
 
@@ -132,9 +134,9 @@ private:
 
     MutableDomItem qmlFile;
     std::shared_ptr<QmlFile> qmlFilePtr;
-    QVector<QmlStackElement> nodeStack;
+    QList<QmlStackElement> nodeStack;
     QList<ScriptStackElement> scriptNodeStack;
-    QVector<int> arrayBindingLevels;
+    QList<int> arrayBindingLevels;
     FileLocations::Tree rootMap;
     int m_nestedFunctionDepth = 0;
     bool m_enableScriptExpressions = false;
@@ -311,7 +313,7 @@ private:
     ScriptElementVariant scriptElementForQualifiedId(AST::UiQualifiedId *expression);
 
 public:
-    explicit QQmlDomAstCreator(const MutableDomItem &qmlFile);
+    explicit QQmlDomAstCreatorBase(const MutableDomItem &qmlFile);
 
     bool visit(AST::UiProgram *program) override;
     void endVisit(AST::UiProgram *) override;
@@ -513,6 +515,8 @@ public:
     bool visit(AST::NewMemberExpression *) override;
     void endVisit(AST::NewMemberExpression *) override;
 
+    void endVisit(AST::WithStatement *) override;
+
     // lists of stuff whose children don't need a qqmljsscope: visitation order can be custom
     bool visit(AST::UiParameterList *) override;
     bool visit(AST::Elision *elision) override;
@@ -564,6 +568,57 @@ public:
     friend class QQmlDomAstCreatorWithQQmlJSScope;
 };
 
+template<typename U, typename... V>
+using IsInList = std::disjunction<std::is_same<U, V>...>;
+template<typename U>
+using RequiresCustomIteration =
+        IsInList<U, AST::PatternElementList, AST::PatternPropertyList, AST::FormalParameterList,
+                 AST::VariableDeclarationList, AST::TemplateLiteral>;
+
+template <typename T, typename std::enable_if_t<RequiresCustomIteration<T>::value, bool> = true>
+bool visitWithCustomListIteration(T *t, AST::Visitor *visitor)
+{
+    for (T *it = t; it; it = it->next) {
+        if constexpr (std::is_same_v<T, AST::PatternElementList>) {
+            AST::Node::accept(it->elision, visitor);
+            AST::Node::accept(it->element, visitor);
+        } else if constexpr (std::is_same_v<T, AST::PatternPropertyList>) {
+            AST::Node::accept(it->property, visitor);
+        } else if constexpr (std::is_same_v<T, AST::FormalParameterList>) {
+            AST::Node::accept(it->element, visitor);
+        } else if constexpr (std::is_same_v<T, AST::VariableDeclarationList>) {
+            AST::Node::accept(it->declaration, visitor);
+        } else if constexpr (std::is_same_v<T, AST::ArgumentList>) {
+            AST::Node::accept(it->expression, visitor);
+        } else if constexpr (std::is_same_v<T, AST::PatternElementList>) {
+            AST::Node::accept(it->elision, visitor);
+            AST::Node::accept(it->element, visitor);
+        } else if constexpr (std::is_same_v<T, AST::TemplateLiteral>) {
+            AST::Node::accept(it->expression, visitor);
+        } else {
+            Q_UNREACHABLE();
+        }
+    }
+    return false;
+}
+
+template <typename T, typename std::enable_if_t<!RequiresCustomIteration<T>::value, bool> = true>
+bool visitWithCustomListIteration(T *, AST::Visitor *)
+{
+    return true;
+}
+
+class QQmlDomAstCreator final : public QQmlDomAstCreatorBase
+{
+    using QQmlDomAstCreatorBase::QQmlDomAstCreatorBase;
+    using QQmlDomAstCreatorBase::visit;
+    using QQmlDomAstCreatorBase::endVisit;
+
+#define X(name) bool visit(AST::name *) override;
+    QQmlJSASTClassListToVisit
+#undef X
+};
+
 class QQmlDomAstCreatorWithQQmlJSScope : public AST::Visitor
 {
 public:
@@ -600,13 +655,6 @@ private:
     void setScopeInDomAfterEndvisit();
     void setScopeInDomBeforeEndvisit();
 
-    template<typename U, typename... V>
-    using IsInList = std::disjunction<std::is_same<U, V>...>;
-    template<typename U>
-    using RequiresCustomIteration =
-            IsInList<U, AST::PatternElementList, AST::PatternPropertyList, AST::FormalParameterList,
-                     AST::VariableDeclarationList, AST::TemplateLiteral>;
-
     enum VisitorKind : bool { DomCreator, ScopeCreator };
     /*! \internal
         \brief Holds the information to reactivate a visitor
@@ -625,33 +673,6 @@ private:
         }
     };
 
-    template<typename T>
-    void customListIteration(T *t)
-    {
-        static_assert(RequiresCustomIteration<T>::value);
-        for (T* it = t; it; it = it->next) {
-            if constexpr (std::is_same_v<T, AST::PatternElementList>) {
-                AST::Node::accept(it->elision, this);
-                AST::Node::accept(it->element, this);
-            } else if constexpr (std::is_same_v<T, AST::PatternPropertyList>) {
-                AST::Node::accept(it->property, this);
-            } else if constexpr (std::is_same_v<T, AST::FormalParameterList>) {
-                AST::Node::accept(it->element, this);
-            } else if constexpr (std::is_same_v<T, AST::VariableDeclarationList>) {
-                AST::Node::accept(it->declaration, this);
-            } else if constexpr (std::is_same_v<T, AST::ArgumentList>) {
-                AST::Node::accept(it->expression, this);
-            } else if constexpr (std::is_same_v<T, AST::PatternElementList>) {
-                AST::Node::accept(it->elision, this);
-                AST::Node::accept(it->element, this);
-            } else if constexpr (std::is_same_v<T, AST::TemplateLiteral>) {
-                AST::Node::accept(it->expression, this);
-            } else {
-                Q_UNREACHABLE();
-            }
-        }
-    }
-
     static void initMarkerForActiveVisitor(std::optional<InactiveVisitorMarker> &inactiveVisitorMarker,
                                AST::Node::Kind nodeKind, bool continueForDom)
     {
@@ -662,17 +683,6 @@ private:
     };
 
     template<typename T>
-    bool performListIterationIfRequired(T *t)
-    {
-        if constexpr (RequiresCustomIteration<T>::value) {
-            customListIteration(t);
-            return false;
-        }
-        Q_UNUSED(t);
-        return true;
-    }
-
-    template<typename T>
     bool visitT(T *t)
     {
         const auto handleVisitResult = [this, t](const bool continueVisit) {
@@ -680,7 +690,7 @@ private:
                 m_inactiveVisitorMarker->count += 1;
 
             if (continueVisit)
-                return performListIterationIfRequired(t);
+                return visitWithCustomListIteration(t, this);
             return continueVisit;
         };
 
@@ -693,10 +703,10 @@ private:
             else if (continueForDom ^ continueForScope) {
                 initMarkerForActiveVisitor(m_inactiveVisitorMarker, AST::Node::Kind(t->kind),
                                            continueForDom);
-                return performListIterationIfRequired(t);
+                return visitWithCustomListIteration(t, this);
             } else {
                 Q_ASSERT(continueForDom && continueForScope);
-                return performListIterationIfRequired(t);
+                return visitWithCustomListIteration(t, this);
             }
             Q_UNREACHABLE();
         }
@@ -742,7 +752,7 @@ private:
     QQmlJSImporter *m_importer = nullptr;
     QString m_implicitImportDirectory;
     QQmlJSImportVisitor m_scopeCreator;
-    QQmlDomAstCreator m_domCreator;
+    QQmlDomAstCreatorBase m_domCreator;
 
     std::optional<InactiveVisitorMarker> m_inactiveVisitorMarker;
     bool m_enableScriptExpressions = false;

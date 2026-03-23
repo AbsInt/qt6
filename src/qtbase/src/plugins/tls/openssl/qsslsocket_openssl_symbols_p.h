@@ -682,8 +682,11 @@ void q_SSL_CTX_set_security_level(SSL_CTX *ctx, int level);
 X509 *q_SSL_get1_peer_certificate(SSL *a);
 #define q_SSL_get_peer_certificate q_SSL_get1_peer_certificate
 int q_EVP_PKEY_get_bits(const EVP_PKEY *pkey);
+int q_EVP_PKEY_get_security_bits(const EVP_PKEY *pkey);
 int q_EVP_PKEY_get_base_id(const EVP_PKEY *pkey);
 #define q_EVP_PKEY_base_id q_EVP_PKEY_get_base_id
+const char *q_EVP_PKEY_get0_type_name(const EVP_PKEY *pkey);
+#define q_EVP_PKEY_type_name q_EVP_PKEY_get0_type_name
 #else
 X509 *q_SSL_get_peer_certificate(SSL *a);
 int q_EVP_PKEY_base_id(EVP_PKEY *a);

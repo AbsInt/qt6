@@ -85,20 +85,21 @@ Q_DECLARE_TYPEINFO(SafeSymbols, Q_RELOCATABLE_TYPE);
 class SymbolStack : public QStack<SafeSymbols>
 {
 public:
+    const SafeSymbols &constTop() const { return top(); }
     inline bool hasNext() {
-        while (!isEmpty() && top().index >= top().symbols.size())
+        while (!isEmpty() && constTop().index >= constTop().symbols.size())
             pop();
         return !isEmpty();
     }
     inline Token next() {
-        while (!isEmpty() && top().index >= top().symbols.size())
+        while (!isEmpty() && constTop().index >= constTop().symbols.size())
             pop();
         if (isEmpty())
             return NOTOKEN;
-        return top().symbols.at(top().index++).token;
+        return constTop().symbols.at(top().index++).token;
     }
     bool test(Token);
-    inline const Symbol &symbol() const { return top().symbols.at(top().index-1); }
+    inline const Symbol &symbol() const { return constTop().symbols.at(constTop().index-1); }
     inline Token token() { return symbol().token; }
     inline QByteArray lexem() const { return symbol().lexem(); }
     inline QByteArray unquotedLexem() { return symbol().unquotedLexem(); }

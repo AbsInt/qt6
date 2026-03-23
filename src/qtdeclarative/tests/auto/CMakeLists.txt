@@ -17,6 +17,9 @@ if(TARGET Qt::Quick)
     add_subdirectory(qml)
     add_subdirectory(quick)
     add_subdirectory(quickshapes)
+    if (WASM)
+        add_subdirectory(wasm)
+    endif()
 endif()
 
 # Limit set of tests to run for static Qt builds.
@@ -33,7 +36,7 @@ if(TARGET Qt::QuickTest)
 endif()
 add_subdirectory(toolsupport)
 if(TARGET Qt::Quick)
-if(NOT UIKIT AND NOT ANDROID AND NOT QNX AND NOT VXWORKS) # FIXME: QTBUG-92591 QTBUG-100202
+if(NOT UIKIT AND NOT ANDROID AND NOT QNX AND NOT VXWORKS AND NOT WASM) # FIXME: QTBUG-92591 QTBUG-100202
     add_subdirectory(qmltest)
 endif()
 endif()

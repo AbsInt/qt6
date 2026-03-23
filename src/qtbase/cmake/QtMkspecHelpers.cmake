@@ -27,7 +27,7 @@ macro(qt_internal_setup_platform_definitions_and_mkspec)
         endif()
 
         if(CLANG)
-            if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC" OR MSVC)
+            if(CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC" OR MSVC)
                 set(QT_DEFAULT_MKSPEC win32-clang-msvc)
             elseif(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU" OR MINGW)
                 set(QT_DEFAULT_MKSPEC win32-clang-g++)

@@ -72,7 +72,7 @@ QEglFSKmsEglDeviceScreen::~QEglFSKmsEglDeviceScreen()
     }
 
     const int remainingScreenCount = qGuiApp->screens().size();
-    qCDebug(qLcEglfsKmsDebug, "Screen dtor. Remaining screens: %d", remainingScreenCount);
+    qCDebug(qLcEglfsKmsDebug, "Screen dtor. %p Remaining screens: %d", this, remainingScreenCount);
     if (!remainingScreenCount && !device()->screenConfig()->separateScreens())
         static_cast<QEglFSKmsEglDevice *>(device())->destroyGlobalCursor();
 }

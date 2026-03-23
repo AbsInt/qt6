@@ -1,6 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2024 Jie Liu <liujie01@kylinos.cn>
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QWAYLANDINPUTDEVICE_H
 #define QWAYLANDINPUTDEVICE_H
@@ -74,6 +75,16 @@ class CursorSurface;
 #endif
 
 Q_DECLARE_LOGGING_CATEGORY(lcQpaWaylandInput);
+
+struct QWaylandEventCompressionPrivate
+{
+    QWaylandEventCompressionPrivate();
+
+    bool compressEvent();
+
+    QElapsedTimer timeElapsed;
+    QTimer delayTimer;
+};
 
 class Q_WAYLANDCLIENT_EXPORT QWaylandInputDevice
                             : public QObject
@@ -158,7 +169,6 @@ protected:
     uint32_t mId = -1;
     uint32_t mCaps = 0;
     QString mSeatName;
-    bool mSeatNameKnown = false;
 
 #if QT_CONFIG(cursor)
     struct CursorState {
@@ -200,7 +210,6 @@ protected:
 
     void seat_capabilities(uint32_t caps) override;
     void seat_name(const QString &name) override;
-    void maybeRegisterInputDevices();
     void handleTouchPoint(int id, QEventPoint::State state, const QPointF &surfacePosition = QPoint());
 
     QPointingDevice *mTouchDevice = nullptr;
@@ -362,7 +371,7 @@ public:
     Qt::MouseButton mLastButton = Qt::NoButton;
 
     struct FrameData {
-        QWaylandPointerEvent *event = nullptr;
+        QScopedPointer<QWaylandPointerEvent> event;
 
         QPointF delta;
         QPoint delta120;
@@ -379,7 +388,13 @@ public:
     } mFrameData;
 
     bool mScrollBeginSent = false;
+    bool mScrollEnd = false;
     QPointF mScrollDeltaRemainder;
+    QPointer<QWaylandWindow> mScrollTarget;
+
+    QWaylandEventCompressionPrivate mEventCompression;
+
+    void maybePointerFrame();
 
     void setFrameEvent(QWaylandPointerEvent *event);
     void flushScrollEvent();

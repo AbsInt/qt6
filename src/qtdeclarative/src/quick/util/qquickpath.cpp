@@ -318,15 +318,7 @@ qsizetype QQuickPath::pathElements_count(QQmlListProperty<QQuickPathElement> *pr
 void QQuickPath::pathElements_clear(QQmlListProperty<QQuickPathElement> *property)
 {
     QQuickPathPrivate *d = privatePath(property->object);
-    QQuickPath *path = static_cast<QQuickPath*>(property->object);
-
-    path->disconnectPathElements();
-    d->_pathElements.clear();
-    d->_pathCurves.clear();
-    d->_pointCache.clear();
-    d->_pathTexts.clear();
-    d->_path.clear();
-    emit path->changed();
+    d->clearPathElements();
 }
 
 void QQuickPath::pathElements_replace(
@@ -1186,6 +1178,8 @@ QDebug operator<<(QDebug debug, const QQuickCurve *curve)
 {
     QDebugStateSaver saver(debug);
     debug.nospace() << curve->metaObject()->className() << '(' << (const void *)curve;
+    if (!curve->objectName().isEmpty())
+        debug << " name=" << curve->objectName();
     debug << " x=" << curve->x();
     debug << " y=" << curve->y();
     debug << " relativeX=" << curve->relativeX();
@@ -1228,6 +1222,12 @@ QDebug operator<<(QDebug debug, const QQuickCurve *curve)
 
 
     \sa Path
+*/
+
+/*!
+    \class QQuickPathAttribute
+    \inmodule QtQuick
+    \internal
 */
 
 /*!
@@ -1452,6 +1452,12 @@ void QQuickPathMove::addToPath(QPainterPath &path, const QQuickPathData &data)
     \endtable
 
     \sa Path, PathCubic, PathLine, PathArc, PathAngleArc, PathCurve, PathSvg
+*/
+
+/*!
+    \class QQuickPathQuad
+    \inmodule QtQuick
+    \internal
 */
 
 /*!
@@ -2633,11 +2639,10 @@ void QQuickPathRectangle::setBevel(bool bevel)
 
 bool QQuickPathRectangle::cornerBevel(Qt::Corner corner) const
 {
-    if (!_extra.isAllocated())
+    if (_extra.isAllocated())
+        return _extra->isBevelSet(corner);
+    else
         return false;
-
-    // Check both if a specific corner is set, or if the more general bevel property is set.
-    return _extra->isBevelSet(corner) || _extra->cornerProperties & (1 << 8);
 }
 
 void QQuickPathRectangle::setCornerBevel(Qt::Corner corner, bool newCornerBevel)
@@ -2907,16 +2912,16 @@ void QQuickPathPolyline::setPath(const QVariant &path)
 {
     if (path.userType() == QMetaType::QPolygonF) {
         setPath(path.value<QPolygonF>());
-    } else if (path.canConvert<QVector<QPointF>>()) {
-        setPath(path.value<QVector<QPointF>>());
+    } else if (path.canConvert<QList<QPointF>>()) {
+        setPath(path.value<QList<QPointF>>());
     } else if (path.canConvert<QVariantList>()) {
-        // This handles cases other than QPolygonF or QVector<QPointF>, such as
-        // QList<QPointF>, QVector<QPoint>, QVariantList of QPointF, QVariantList of QPoint.
-        QVector<QPointF> pathList;
+        // This handles cases other than QPolygonF or QList<QPointF>, such as
+        // QList<QPointF>, QList<QPoint>, QVariantList of QPointF, QVariantList of QPoint.
+        QList<QPointF> pathList;
         QVariantList vl = path.value<QVariantList>();
         // If path is a QJSValue, e.g. coming from a JS array of Qt.point() in QML,
         // then path.value<QVariantList>() is inefficient.
-        // TODO We should be able to iterate over path.value<QSequentialIterable>() eventually
+        // TODO We should be able to iterate over path.value<QMetaSequence::Iterable>() eventually
         for (const QVariant &v : vl)
             pathList.append(v.toPointF());
         setPath(pathList);
@@ -2925,7 +2930,7 @@ void QQuickPathPolyline::setPath(const QVariant &path)
     }
 }
 
-void QQuickPathPolyline::setPath(const QVector<QPointF> &path)
+void QQuickPathPolyline::setPath(const QList<QPointF> &path)
 {
     if (m_path != path) {
         const QPointF &oldStart = start();
@@ -3024,9 +3029,9 @@ void QQuickPathPolyline::addToPath(QPainterPath &path, const QQuickPathData &/*d
     This property defines the vertices of the polylines.
 
     It can be a JS array of JS arrays of points constructed with \c Qt.point(),
-    a QList or QVector of QPolygonF, or QVector<QVector<QPointF>>.
+    a QList or QVector of QPolygonF, or QList<QList<QPointF>>.
     If you are binding this to a custom property in some C++ object,
-    QVector<QPolygonF> or QVector<QVector<QPointF>> is the most
+    QList<QPolygonF> or QList<QList<QPointF>> is the most
     appropriate type to use.
 */
 
@@ -3041,28 +3046,28 @@ QVariant QQuickPathMultiline::paths() const
 
 void QQuickPathMultiline::setPaths(const QVariant &paths)
 {
-    if (paths.canConvert<QVector<QPolygonF>>()) {
-        const QVector<QPolygonF> pathPolygons = paths.value<QVector<QPolygonF>>();
-        QVector<QVector<QPointF>> pathVectors;
+    if (paths.canConvert<QList<QPolygonF>>()) {
+        const QList<QPolygonF> pathPolygons = paths.value<QList<QPolygonF>>();
+        QList<QList<QPointF>> pathVectors;
         for (const QPolygonF &p : pathPolygons)
             pathVectors << p;
         setPaths(pathVectors);
-    } else if (paths.canConvert<QVector<QVector<QPointF>>>()) {
-        setPaths(paths.value<QVector<QVector<QPointF>>>());
+    } else if (paths.canConvert<QList<QList<QPointF>>>()) {
+        setPaths(paths.value<QList<QList<QPointF>>>());
     } else if (paths.canConvert<QVariantList>()) {
-        // This handles cases other than QVector<QPolygonF> or QVector<QVector<QPointF>>, such as
-        // QList<QVector<QPointF>>, QList<QList<QPointF>>, QVariantList of QVector<QPointF>,
-        // QVariantList of QVariantList of QPointF, QVector<QList<QPoint>> etc.
-        QVector<QVector<QPointF>> pathsList;
+        // This handles cases other than QList<QPolygonF> or QList<QList<QPointF>>, such as
+        // QList<QList<QPointF>>, QList<QList<QPointF>>, QVariantList of QList<QPointF>,
+        // QVariantList of QVariantList of QPointF, QList<QList<QPoint>> etc.
+        QList<QList<QPointF>> pathsList;
         QVariantList vll = paths.value<QVariantList>();
         for (const QVariant &v : vll) {
-            // If we bind a QVector<QPolygonF> property directly, rather than via QVariant,
+            // If we bind a QList<QPolygonF> property directly, rather than via QVariant,
             // it will come through as QJSValue that can be converted to QVariantList of QPolygonF.
             if (v.canConvert<QPolygonF>()) {
                 pathsList.append(v.value<QPolygonF>());
             } else {
                 QVariantList vl = v.value<QVariantList>();
-                QVector<QPointF> l;
+                QList<QPointF> l;
                 for (const QVariant &point : vl) {
                     if (point.canConvert<QPointF>())
                         l.append(point.toPointF());
@@ -3074,11 +3079,11 @@ void QQuickPathMultiline::setPaths(const QVariant &paths)
         setPaths(pathsList);
     } else {
         qWarning() << "PathMultiline: paths of type" << paths.userType() << "not supported";
-        setPaths(QVector<QVector<QPointF>>());
+        setPaths(QList<QList<QPointF>>());
     }
 }
 
-void QQuickPathMultiline::setPaths(const QVector<QVector<QPointF>> &paths)
+void QQuickPathMultiline::setPaths(const QList<QList<QPointF>> &paths)
 {
     if (m_paths != paths) {
         const QPointF &oldStart = start();
@@ -3102,7 +3107,7 @@ void QQuickPathMultiline::addToPath(QPainterPath &path, const QQuickPathData &)
 {
     if (!m_paths.size())
         return;
-    for (const QVector<QPointF> &p: m_paths) {
+    for (const QList<QPointF> &p: m_paths) {
         path.moveTo(p.first());
         for (int i = 1; i < p.size(); ++i)
             path.lineTo(p.at(i));

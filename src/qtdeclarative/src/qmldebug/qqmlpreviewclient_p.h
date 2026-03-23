@@ -37,7 +37,8 @@ public:
         Directory,
         ClearCache,
         Zoom,
-        Fps
+        Fps,
+        AnimationSpeed,
     };
 
     struct FpsInfo {
@@ -62,6 +63,7 @@ public:
     void triggerLoad(const QUrl &url);
     void triggerRerun();
     void triggerZoom(float factor);
+    void triggerAnimationSpeed(float factor);
 
 Q_SIGNALS:
     void request(const QString &path);

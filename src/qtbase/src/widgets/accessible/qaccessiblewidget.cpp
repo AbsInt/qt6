@@ -225,29 +225,20 @@ QAccessibleWidget::relations(QAccessible::Relation match /*= QAccessible::AllRel
     QList<std::pair<QAccessibleInterface *, QAccessible::Relation>> rels;
     if (match & QAccessible::Label) {
         const QAccessible::Relation rel = QAccessible::Label;
-        if (QWidget *parent = widget()->parentWidget()) {
 #if QT_CONFIG(shortcut) && QT_CONFIG(label)
-            // first check for all siblings that are labels to us
-            // ideally we would go through all objects and check, but that
-            // will be too expensive
-            const QList<QWidget*> kids = _q_ac_childWidgets(parent);
-            for (QWidget *kid : kids) {
-                if (QLabel *labelSibling = qobject_cast<QLabel*>(kid)) {
-                    if (labelSibling->buddy() == widget()) {
-                        QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(labelSibling);
-                        rels.emplace_back(iface, rel);
-                    }
-                }
-            }
+        for (QLabel *label : std::as_const(widget()->d_func()->labels)) {
+            Q_ASSERT(label);
+            QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(label);
+            rels.emplace_back(iface, rel);
+        }
 #endif
 #if QT_CONFIG(groupbox)
-            QGroupBox *groupbox = qobject_cast<QGroupBox*>(parent);
-            if (groupbox && !groupbox->title().isEmpty()) {
-                QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(groupbox);
-                rels.emplace_back(iface, rel);
-            }
-#endif
+        QGroupBox *groupbox = qobject_cast<QGroupBox *>(widget()->parentWidget());
+        if (groupbox && !groupbox->title().isEmpty()) {
+            QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(groupbox);
+            rels.emplace_back(iface, rel);
         }
+#endif
     }
 
     if (match & QAccessible::Controlled) {
@@ -465,6 +456,11 @@ QAccessibleWidgetV2::QAccessibleWidgetV2(QWidget *object, QAccessible::Role role
 {
 }
 
+/*!
+    \class QAccessibleWidgetV2
+    \inmodule QtWidgets
+    \internal
+*/
 QAccessibleWidgetV2::QAccessibleWidgetV2(QWidget *object, QAccessible::Role role)
     : QAccessibleWidget(object, role)
 {

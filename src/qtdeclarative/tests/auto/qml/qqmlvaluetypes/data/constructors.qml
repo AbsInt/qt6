@@ -11,4 +11,5 @@ Q.QtObject {
     property var quaternion: new Q.quaternion()
     property var matrix4x4: new Q.matrix4x4()
     property var font: new Q.font()
+    property var easeCurve: new Q.easingCurve()
 }

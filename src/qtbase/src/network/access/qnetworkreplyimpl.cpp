@@ -783,6 +783,11 @@ void QNetworkReplyImpl::close()
 }
 
 /*!
+    \class QNetworkReplyImpl
+    \internal
+*/
+
+/*!
     Returns the number of bytes available for reading with
     QIODevice::read(). The number of bytes available may grow until
     the finished() signal is emitted.

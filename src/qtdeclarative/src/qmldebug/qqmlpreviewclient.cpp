@@ -94,6 +94,13 @@ void QQmlPreviewClient::triggerZoom(float factor)
     sendMessage(packet.data());
 }
 
+void QQmlPreviewClient::triggerAnimationSpeed(float factor)
+{
+    QPacket packet(connection()->currentDataStreamVersion());
+    packet << static_cast<qint8>(AnimationSpeed) << factor;
+    sendMessage(packet.data());
+}
+
 QT_END_NAMESPACE
 
 #include "moc_qqmlpreviewclient_p.cpp"

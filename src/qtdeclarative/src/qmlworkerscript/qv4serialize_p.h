@@ -38,4 +38,4 @@ private:
 
 QT_END_NAMESPACE
 
-#endif // QV8WORKER_P_H
+#endif // QV4SERIALIZE_P_H

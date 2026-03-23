@@ -35,7 +35,7 @@ QT_BEGIN_NAMESPACE
     (inherited from QOpenGLCompositorWindow).
 
     \note When implementing QOpenGLCompositorWindow::textures() for
-    windows of type RasterSurface or RasterGLSurface, simply return
+    windows of type RasterSurface, simply return
     the list provided by this class' textures().
 */
 

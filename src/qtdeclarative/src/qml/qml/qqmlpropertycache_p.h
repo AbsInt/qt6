@@ -21,12 +21,17 @@
 #include <private/qqmlenumvalue_p.h>
 #include <private/qqmlpropertydata_p.h>
 #include <private/qqmlrefcount_p.h>
+#include <private/qexpected_p.h>
 
 #include <QtCore/qvarlengtharray.h>
 #include <QtCore/qvector.h>
 #include <QtCore/qversionnumber.h>
+#include <QtCore/qxpfunctional.h>
+#include <QtCore/qloggingcategory.h>
 
 #include <limits>
+
+class tst_qqmlpropertycache;
 
 QT_BEGIN_NAMESPACE
 
@@ -117,8 +122,72 @@ private:
     mutable QBasicAtomicInteger<quintptr> d = 0;
 };
 
-class Q_QML_EXPORT QQmlPropertyCache final
-    : public QQmlRefCounted<QQmlPropertyCache>
+// TODO should be moved somewhere else?
+namespace OverrideSemantics {
+enum class Status : uint8_t {
+    Valid = 0,
+    NoOverride, // Derived { (virtual|final) property var a;} Base {}
+
+    MissingBase, // Derived { override property var a;} Base {}
+    OverridingFinal, // Derived { * property var a;} Base {final property var a;}
+    OverridingNonVirtual, // Derived { (virtual|final) property var a;} Base {property var a;}
+    OverridingNonVirtualError, // Derived { override property var a;} Base {property var a;}
+    MissingOverrideOrFinalSpecifier, // Derived { (virtual) property var a;} Base { virtual property var a;}
+
+    InvokabilityMismatch, // property overrides method(function, slot, invokable) or vice-versa
+
+    Unknown
+};
+
+inline bool isValidOverride(Status res)
+{
+    return res == Status::NoOverride
+            || res == Status::Valid
+            // MissingOverrideOrFinalSpecifier, OverridingNonVirtual and InvokabilityMismatch
+            // are currently considered valid to preserve backwards compatibility.
+            // It will become invalid in Qt7
+            || res == Status::MissingOverrideOrFinalSpecifier || res == Status::OverridingNonVirtual
+            || res == Status::InvokabilityMismatch;
+}
+
+enum class CheckMode : uint8_t {
+    Minimal = 0, // pre virtual and override keywords
+    Full
+};
+
+[[nodiscard]] Q_AUTOTEST_EXPORT Status handleOverride(QQmlPropertyData &overridingProperty,
+                                                      QQmlPropertyData *existingProperty,
+                                                      CheckMode mode = CheckMode::Minimal);
+
+using HandlerRef =
+        qxp::function_ref<Status(QQmlPropertyData &, QQmlPropertyData *, CheckMode) const>;
+
+} // namespace OverrideSemantics
+
+Q_DECLARE_LOGGING_CATEGORY(qqmlPropertyCacheAppend)
+
+/*
+ * QQmlPropertyCache has the following structure:
+ *
+ * It maintains a non-owning map (StringCache) that associates each property name
+ * with a pointer to a QQmlPropertyData object. Each pointer refers to an element
+ * stored in one of the owning containers — for example, PropertyIndexCache or
+ * MethodsIndexCache.
+ *
+ * As a result, if an owning container such as PropertyIndexCache is resized,
+ * the entries in StringCache become invalid.
+ *
+ * To protect users of this class from such undefined behavior, most modifying
+ * methods are kept private. A few trusted classes, such as QQmlPropertyCacheCreator,
+ * are declared as friends. As the name suggests, QQmlPropertyCacheCreator is responsible
+ * for constructing and populating a QQmlPropertyCache instance in one controlled place,
+ * ensuring that all indices and data remain coherent.
+ *
+ * Because the internal logic of this class is non-trivial, the unit test
+ * (tst_qqmlpropertycache) is also declared as a friend to support proper testing
+ * and maintainability.
+ */
+class Q_QML_EXPORT QQmlPropertyCache final : public QQmlRefCounted<QQmlPropertyCache>
 {
 public:
     using Ptr = QQmlRefPointer<QQmlPropertyCache>;
@@ -136,7 +205,9 @@ public:
     static Ptr createStandalone(
             const QMetaObject *, QTypeRevision metaObjectRevision = QTypeRevision::zero());
 
-    QQmlPropertyCache() = default;
+    QQmlPropertyCache(
+            OverrideSemantics::HandlerRef handleOverride = OverrideSemantics::handleOverride)
+        : _handleOverride(handleOverride) { };
     ~QQmlPropertyCache();
 
     void update(const QMetaObject *);
@@ -152,18 +223,6 @@ public:
 
     QQmlPropertyCache::Ptr copyAndReserve(
             int propertyCount, int methodCount, int signalCount, int enumCount) const;
-    void appendProperty(const QString &, QQmlPropertyData::Flags flags, int coreIndex,
-                        QMetaType propType, QTypeRevision revision, int notifyIndex);
-    void appendAlias(const QString &, QQmlPropertyData::Flags flags, int coreIndex,
-                     QMetaType propType, QTypeRevision version, int notifyIndex,
-                     int encodedTargetIndex);
-    void appendSignal(const QString &, QQmlPropertyData::Flags, int coreIndex,
-                      const QMetaType *types = nullptr,
-                      const QList<QByteArray> &names = QList<QByteArray>());
-    void appendMethod(const QString &, QQmlPropertyData::Flags flags, int coreIndex,
-                      QMetaType returnType, const QList<QByteArray> &names,
-                      const QVector<QMetaType> &parameterTypes);
-    void appendEnum(const QString &, const QVector<QQmlEnumValue> &);
 
     const QMetaObject *metaObject() const;
     const QMetaObject *createMetaObject() const;
@@ -243,8 +302,14 @@ private:
     template <typename T> friend class QQmlPropertyCacheAliasCreator;
     template <typename T> friend class QQmlComponentAndAliasResolver;
     friend class QQmlMetaObject;
+    friend class ::tst_qqmlpropertycache;
 
-    QQmlPropertyCache(const QQmlMetaObjectPointer &metaObject) : _metaObject(metaObject) {}
+    QQmlPropertyCache(
+            const QQmlMetaObjectPointer &metaObject,
+            OverrideSemantics::HandlerRef handleOverride = OverrideSemantics::handleOverride)
+        : _handleOverride(handleOverride), _metaObject(metaObject)
+    {
+    }
 
     inline QQmlPropertyCache::Ptr copy(const QQmlMetaObjectPointer &mo, int reserve) const;
 
@@ -253,11 +318,31 @@ private:
                 QQmlPropertyData::Flags methodFlags = QQmlPropertyData::Flags(),
                 QQmlPropertyData::Flags signalFlags = QQmlPropertyData::Flags());
 
-    QQmlPropertyCacheMethodArguments *createArgumentsObject(int count, const QList<QByteArray> &names);
+    // TODO incorporate warning from maybeLog
+    using Error = OverrideSemantics::Status;
+    using AppendResult = q23::expected<void, Error>;
 
-    typedef QVector<QQmlPropertyData> IndexCache;
+    // TODO QTBUG-141728
+    // Always adds a property to the propertyIndex even if override semantics are invalid, not
+    // accessible by name though
+    AppendResult appendPropertyAttr(const QString &name, QQmlPropertyData &&data);
+    AppendResult appendAlias(const QString &, QQmlPropertyData::Flags flags, int coreIndex,
+                             QMetaType propType, QTypeRevision version, int notifyIndex,
+                             int encodedTargetIndex);
+    void appendSignal(const QString &, QQmlPropertyData::Flags, int coreIndex,
+                      const QMetaType *types = nullptr,
+                      const QList<QByteArray> &names = QList<QByteArray>());
+    void appendMethod(const QString &, QQmlPropertyData::Flags flags, int coreIndex,
+                      QMetaType returnType, const QList<QByteArray> &names,
+                      const QList<QMetaType> &parameterTypes);
+    void appendEnum(const QString &, const QList<QQmlEnumValue> &);
+
+    QQmlPropertyCacheMethodArguments *createArgumentsObject(int count,
+                                                            const QList<QByteArray> &names);
+
+    typedef QList<QQmlPropertyData> IndexCache;
     typedef QLinkedStringMultiHash<std::pair<int, QQmlPropertyData *> > StringCache;
-    typedef QVector<QTypeRevision> AllowedRevisionCache;
+    typedef QList<QTypeRevision> AllowedRevisionCache;
 
     const QQmlPropertyData *findProperty(StringCache::ConstIterator it, QObject *,
                                    const QQmlRefPointer<QQmlContextData> &) const;
@@ -277,44 +362,63 @@ private:
         stringCache.insert(key, std::make_pair(index, data));
     }
 
-private:
-    enum OverrideResult { NoOverride, InvalidOverride, ValidOverride };
-
-    template<typename String>
-    OverrideResult handleOverride(const String &name, QQmlPropertyData *data, QQmlPropertyData *old)
+    // Conditionally logs diagnostics for override semantics.
+    //
+    // Important: "Valid" override semantics do not imply "no warning".
+    // Some override situations are allowed by the language rules but are still
+    // diagnosed to help users avoid surprising or unintended behavior.
+    //
+    // Does not construct diagnostic messages when no logging is required
+    // to compute qPrintable(name) and className() only when needed.
+    template <typename String>
+    void maybeLog(OverrideSemantics::Status status, const String &name) const
     {
-        if (!old)
-            return NoOverride;
-
-        if (data->markAsOverrideOf(old))
-            return ValidOverride;
-
-        qWarning("Final member %s is overridden in class %s. The override won't be used.",
-                 qPrintable(name), className());
-        return InvalidOverride;
-    }
-
-    template<typename String>
-    OverrideResult handleOverride(const String &name, QQmlPropertyData *data)
-    {
-        return handleOverride(name, data, findNamedProperty(name));
-    }
-
-    void doAppendPropertyData(const QString &name, QQmlPropertyData &&data)
-    {
-        QQmlPropertyData *old = findNamedProperty(name);
-        const OverrideResult overrideResult = handleOverride(name, &data, old);
-        if (overrideResult == InvalidOverride) {
-            // Insert the overridden member once more, to keep the counts in sync
-            propertyIndexCache.append(*old);
+        switch (status) {
+        case OverrideSemantics::Status::OverridingFinal: {
+            qCWarning(qqmlPropertyCacheAppend).noquote()
+                    << QStringLiteral("Final member %1 is overridden in class %2. The "
+                                      "override won't be used.")
+                               .arg(qPrintable(name), className());
             return;
         }
-
-        const int index = propertyIndexCache.size();
-        propertyIndexCache.append(std::move(data));
-
-        setNamedProperty(name, index + propertyOffset(), propertyIndexCache.data() + index);
+        case OverrideSemantics::Status::MissingBase: {
+            qCWarning(qqmlPropertyCacheAppend).noquote()
+                    << QStringLiteral("Member %1 of the object %2 does not override anything."
+                                      " Consider removing \"override\". ")
+                               .arg(qPrintable(name), className());
+            return;
+        }
+        case OverrideSemantics::Status::OverridingNonVirtual: {
+            // TODO: Make this a warning as soon as we can
+            qCDebug(qqmlPropertyCacheAppend).noquote()
+                    << QStringLiteral("Member %1 of the object %2 overrides a non-virtual member. "
+                              "Consider renaming it or mark it virtual in the base object")
+                            .arg(qPrintable(name), className());
+            return;
+        }
+        case OverrideSemantics::Status::OverridingNonVirtualError: {
+            qCWarning(qqmlPropertyCacheAppend).noquote()
+                    << QStringLiteral("Member %1 of the object %2 overrides a non-virtual member. "
+                                      "Consider renaming it or mark it virtual in the base object")
+                               .arg(qPrintable(name), className());
+            return;
+        }
+        case OverrideSemantics::Status::MissingOverrideOrFinalSpecifier: {
+            qCWarning(qqmlPropertyCacheAppend).noquote()
+                    << QStringLiteral(
+                               "Member %1 of the object %2 overrides a member of the base object. "
+                               "Consider renaming it or adding final or override specifier")
+                               .arg(qPrintable(name), className());
+            return;
+        }
+        // TODO QTBUG-98320, when override is cleaned up for methods, we need a warning for InvokabilityMismatch
+        default:
+            return;
+        }
     }
+
+private:
+    OverrideSemantics::HandlerRef _handleOverride;
 
     int propertyIndexCacheStart = 0; // placed here to avoid gap between QQmlRefCount and _parent
     QQmlPropertyCache::ConstPtr _parent;
@@ -324,7 +428,7 @@ private:
     IndexCache signalHandlerIndexCache;
     StringCache stringCache;
     AllowedRevisionCache allowedRevisionCache;
-    QVector<QQmlEnumData> enumCache;
+    QList<QQmlEnumData> enumCache;
 
     QQmlMetaObjectPointer _metaObject;
     QByteArray _dynamicClassName;

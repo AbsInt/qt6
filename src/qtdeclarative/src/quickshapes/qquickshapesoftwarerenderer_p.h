@@ -40,15 +40,17 @@ public:
     void setPath(int index, const QPainterPath &path, QQuickShapePath::PathHints pathHints = {}) override;
     void setStrokeColor(int index, const QColor &color) override;
     void setStrokeWidth(int index, qreal w) override;
+    void setCosmeticStroke(int index, bool c) override;
     void setFillColor(int index, const QColor &color) override;
     void setFillRule(int index, QQuickShapePath::FillRule fillRule) override;
     void setJoinStyle(int index, QQuickShapePath::JoinStyle joinStyle, int miterLimit) override;
     void setCapStyle(int index, QQuickShapePath::CapStyle capStyle) override;
     void setStrokeStyle(int index, QQuickShapePath::StrokeStyle strokeStyle,
-                        qreal dashOffset, const QVector<qreal> &dashPattern) override;
+                        qreal dashOffset, const QList<qreal> &dashPattern) override;
     void setFillGradient(int index, QQuickShapeGradient *gradient) override;
     void setFillTextureProvider(int index, QQuickItem *textureProviderItem) override;
     void setFillTransform(int index, const QSGTransform &transform) override;
+    void setTriangulationScale(int index, qreal scale) override;
     void endSync(bool async) override;
     void handleSceneChange(QQuickWindow *window) override;
 
@@ -64,11 +66,12 @@ private:
         QPainterPath path;
         QPen pen;
         float strokeWidth;
+        float triangulationScale;
         QColor fillColor;
         QBrush brush;
         Qt::FillRule fillRule;
     };
-    QVector<ShapePathGuiData> m_sp;
+    QList<ShapePathGuiData> m_sp;
 };
 
 class QQuickShapeSoftwareRenderNode : public QSGRenderNode
@@ -90,9 +93,10 @@ private:
         QPainterPath path;
         QPen pen;
         float strokeWidth;
+        float triangulationScale;
         QBrush brush;
     };
-    QVector<ShapePathRenderData> m_sp;
+    QList<ShapePathRenderData> m_sp;
     QRectF m_boundingRect;
 
     friend class QQuickShapeSoftwareRenderer;

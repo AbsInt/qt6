@@ -167,13 +167,13 @@ public:
 
     QTypeRevision addFileImport(
             QQmlTypeLoader *typeLoader, const QString &uri, const QString &prefix,
-            QTypeRevision requestedVersion, ImportFlags flags, quint16 precedence,
+            QTypeRevision requestedVersion, ImportFlags flags, quint8 precedence,
             QString *localQmldir, QList<QQmlError> *errors);
 
     QTypeRevision addLibraryImport(
             QQmlTypeLoader *typeLoader, const QString &uri, const QString &prefix,
             QTypeRevision requestedVersion, const QString &qmldirIdentifier,
-            const QString &qmldirUrl, ImportFlags flags, quint16 precedence,
+            const QString &qmldirUrl, ImportFlags flags, quint8 precedence,
             QList<QQmlError> *errors);
 
     QTypeRevision updateQmldirContent(
@@ -226,6 +226,41 @@ public:
     static QQmlError moduleNotFoundError(const QString &uri, QTypeRevision version);
 
 private:
+    enum class IsLibrary : bool { No = false, Yes = true };
+
+    static void insertImport(QQmlImportNamespace *nameSpace, QQmlImportInstance *import)
+    {
+        for (auto it = nameSpace->imports.cbegin(), end = nameSpace->imports.cend();
+             it != end; ++it) {
+            if ((*it)->precedence < import->precedence)
+                continue;
+
+            nameSpace->imports.insert(it, import);
+            return;
+        }
+        nameSpace->imports.append(import);
+    }
+
+    template<IsLibrary isLibrary>
+    static QQmlImportInstance *addImportToNamespace(
+            QQmlImportNamespace *nameSpace, const QString &uri, const QString &url,
+            QTypeRevision version, quint8 precedence)
+    {
+        Q_ASSERT(nameSpace);
+        Q_ASSERT(url.isEmpty() || url.endsWith(QLatin1Char('/')));
+
+        QQmlImportInstance *import = new QQmlImportInstance;
+        import->uri = uri;
+        import->url = url;
+        import->version = version;
+        import->isLibrary = bool(isLibrary);
+        import->precedence = precedence;
+        import->implicitlyImported = precedence >= QQmlImportInstance::Implicit;
+
+        insertImport(nameSpace, import);
+        return import;
+    }
+
     QQmlImportNamespace *importNamespace(const QString &prefix);
 
     bool resolveType(
@@ -251,6 +286,41 @@ private:
             QQmlTypeLoaderQmldirContent *qmldir, QList<QQmlError> *errors);
 
     QString resolvedUri(const QString &dir_arg, QQmlTypeLoader *typeLoader);
+
+    template<IsLibrary isLibrary, typename Handler>
+    QTypeRevision finalizeImport(
+            QQmlImportNamespace *nameSpace, const QQmlTypeLoaderQmldirContent &qmldir,
+            const QString &importUri, const QString &url, quint8 precedence,
+            QTypeRevision requestedVersion, QTypeRevision importedVersion,
+            QList<QQmlError> *errors, Handler &&handler)
+    {
+        QQmlImportInstance *inserted = addImportToNamespace<isLibrary>(
+                nameSpace, importUri, url, requestedVersion, precedence);
+        Q_ASSERT(inserted);
+
+        registerBuiltinModuleTypes(qmldir, importedVersion);
+
+        if (!inserted->setQmldirContent(url, qmldir, nameSpace, errors))
+            return QTypeRevision();
+
+        return handler(inserted);
+    }
+
+    template<IsLibrary isLibrary>
+    QTypeRevision finalizeImport(
+            QQmlImportNamespace *nameSpace, const QQmlTypeLoaderQmldirContent &qmldir,
+            const QString &importUri, const QString &url, quint8 precedence,
+            QTypeRevision requestedVersion, QTypeRevision importedVersion,
+            QList<QQmlError> *errors)
+    {
+        return finalizeImport<isLibrary>(
+                nameSpace, qmldir, importUri, url, precedence, requestedVersion, importedVersion,
+                errors, [importedVersion](QQmlImportInstance *inserted) {
+            Q_UNUSED(inserted);
+            Q_ASSERT(importedVersion.isValid());
+            return importedVersion;
+        });
+    }
 
     QUrl m_baseUrl;
     QString m_base;

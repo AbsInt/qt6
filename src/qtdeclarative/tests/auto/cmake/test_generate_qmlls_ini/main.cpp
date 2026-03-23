@@ -16,6 +16,7 @@ private slots:
     void qmllsIniAreCorrect_data();
     void qmllsIniAreCorrect();
 
+    void qmllsBuildIni_data();
     void qmllsBuildIni();
 };
 
@@ -146,9 +147,11 @@ importPaths="%4"
                                   expectedImportPaths.join(QDir::listSeparator())));
 }
 
-void tst_generate_qmlls_ini::qmllsBuildIni()
+void tst_generate_qmlls_ini::qmllsBuildIni_data()
 {
-    static constexpr QLatin1String qmllsBuildIniPath = ".qt/.qmlls.build.ini"_L1;
+    QTest::addColumn<QString>("expectedSource");
+    QTest::addColumn<QStringList>("expectedImportPaths");
+    QTest::addColumn<QStringList>("expectedResourceFiles");
 
     QDir build(BUILD_DIRECTORY);
     QVERIFY(build.exists());
@@ -159,26 +162,58 @@ void tst_generate_qmlls_ini::qmllsBuildIni()
                       .toLatin1());
     }
 
-    const QString content = contentOf(build.filePath(qmllsBuildIniPath));
     const QString pathOfCurrentModule = build.absolutePath();
 
     QVERIFY(source.cd("QmllsBuildIni"_L1));
     QVERIFY(build.cd("QmllsBuildIni"_L1));
 
-    const QString escapedSource = source.absolutePath().replace("/"_L1, "<SLASH>"_L1);
-    const QString importPaths =
-            QStringList{ build.absoluteFilePath("qml2"_L1),
-                         build.absoluteFilePath("qml"_L1),
-                         build.absoluteFilePath("qml3/MyModule3"_L1),
-                         pathOfCurrentModule,
-                         build.absolutePath(),
-                         build.absoluteFilePath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath)) }
-                    .join(QDir::listSeparator());
+    QTest::addRow("normal") << source.absolutePath()
+                            << QStringList{ build.absoluteFilePath("qml2"_L1),
+                                            build.absoluteFilePath("qml"_L1),
+                                            build.absoluteFilePath("qml3/MyModule3"_L1),
+                                            pathOfCurrentModule,
+                                            build.absolutePath(),
+                                            build.absoluteFilePath(QLibraryInfo::path(
+                                                    QLibraryInfo::QmlImportsPath)) }
+                            << QStringList{
+                                   build.absoluteFilePath(".qt/rcc/qmake_QmllsBuildIni.qrc"_L1),
+                                   build.absoluteFilePath(".qt/rcc/QmllsBuildIni_raw_qml_0.qrc"_L1)
+                               };
+
+    QVERIFY(source.cd("../ImportPathOrderStudy/MyApp"_L1));
+    QVERIFY(build.cd("../ImportPathOrderStudy/MyApp"_L1));
+
+    QTest::addRow("noResourceFilesFromOtherModules")
+            << source.absolutePath()
+            << QStringList{ pathOfCurrentModule + "/A"_L1, pathOfCurrentModule + "/B"_L1,
+               build.absolutePath(), pathOfCurrentModule,
+               QLibraryInfo::path(QLibraryInfo::QmlImportsPath), }
+            << QStringList{ build.absoluteFilePath(".qt/rcc/qmake_ImportPathOrderStudy.qrc"_L1),
+               build.absoluteFilePath(
+                   ".qt/rcc/appImportPathOrderStudy_raw_qml_0.qrc"_L1), };
+}
+
+void tst_generate_qmlls_ini::qmllsBuildIni()
+{
+    QFETCH(QString, expectedSource);
+    QFETCH(QStringList, expectedImportPaths);
+    QFETCH(QStringList, expectedResourceFiles);
+
+    static constexpr QLatin1String qmllsBuildIniPath = ".qt/.qmlls.build.ini"_L1;
+
+    QDir build(BUILD_DIRECTORY);
+    QVERIFY(build.exists());
+
+    const QString content = contentOf(build.filePath(qmllsBuildIniPath));
 
     static constexpr QLatin1String expectedContent = R"([%1]
 importPaths="%2"
+resourceFiles="%3"
 )"_L1;
-    QVERIFY(content.contains(expectedContent.arg(escapedSource, importPaths)));
+    QVERIFY(content.contains(
+            expectedContent.arg(expectedSource.replace("/"_L1, "<SLASH>"_L1),
+                                expectedImportPaths.join(QDir::listSeparator()),
+                                expectedResourceFiles.join(QDir::listSeparator()))));
 }
 
 QTEST_MAIN(tst_generate_qmlls_ini)

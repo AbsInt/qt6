@@ -227,6 +227,11 @@ void QNetworkAccessAuthenticationManager::cacheCredentials(const QUrl &url,
 }
 
 /*!
+    \class QNetworkAccessAuthenticationManager
+    \internal
+*/
+
+/*!
     Fetch the credential data from the credential cache.
 
     If auth is 0 (as it is when called from createRequest()), this will try to

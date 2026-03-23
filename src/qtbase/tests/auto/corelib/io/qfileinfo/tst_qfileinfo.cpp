@@ -262,6 +262,7 @@ private:
     QTemporaryDir m_dir;
     QSharedPointer<QTemporaryDir> m_dataDir;
     QTemporaryDir m_tempSubDir;
+    bool uncServerAvailable = false;
 };
 
 void tst_QFileInfo::initTestCase()
@@ -278,6 +279,12 @@ void tst_QFileInfo::initTestCase()
     QVERIFY2(m_dir.isValid(),
              ("Failed to create temporary dir: " + m_dir.errorString()).toUtf8());
     QVERIFY(QDir::setCurrent(m_dir.path()));
+
+#ifdef Q_OS_WIN
+    // "When used with directories, _access determines only whether the specified directory exists"
+    if (_waccess(qUtf16Printable("//" + QTest::uncServerName() + "/testshare"), 0) == 0)
+        uncServerAvailable = true;
+#endif
 }
 
 void tst_QFileInfo::cleanupTestCase()
@@ -396,10 +403,10 @@ void tst_QFileInfo::isDir_data()
     const QString uncRoot = QStringLiteral("//") + QTest::uncServerName();
     QTest::newRow("unc 1") << uncRoot << true;
     QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
-    QTest::newRow("unc 3") << uncRoot + "/testshare" << true;
-    QTest::newRow("unc 4") << uncRoot + "/testshare/" << true;
-    QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << true;
-    QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << true;
+    QTest::newRow("unc 3") << uncRoot + "/testshare" << uncServerAvailable;
+    QTest::newRow("unc 4") << uncRoot + "/testshare/" << uncServerAvailable;
+    QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << uncServerAvailable;
+    QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << uncServerAvailable;
     QTest::newRow("unc 7") << uncRoot + "/testshare/adirthatshouldnotexist" << false;
 #endif
 }
@@ -584,10 +591,10 @@ void tst_QFileInfo::exists_data()
     const QString uncRoot = QStringLiteral("//") + QTest::uncServerName();
     QTest::newRow("unc 1") << uncRoot << true;
     QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
-    QTest::newRow("unc 3") << uncRoot + "/testshare" << true;
-    QTest::newRow("unc 4") << uncRoot + "/testshare/" << true;
-    QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << true;
-    QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << true;
+    QTest::newRow("unc 3") << uncRoot + "/testshare" << uncServerAvailable;
+    QTest::newRow("unc 4") << uncRoot + "/testshare/" << uncServerAvailable;
+    QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << uncServerAvailable;
+    QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << uncServerAvailable;
     QTest::newRow("unc 7") << uncRoot + "/testshare/adirthatshouldnotexist" << false;
     QTest::newRow("unc 8") << uncRoot + "/asharethatshouldnotexist" << false;
     QTest::newRow("unc 9") << "//ahostthatshouldnotexist" << false;
@@ -1941,7 +1948,7 @@ void tst_QFileInfo::ntfsJunctionPointsAndSymlinks_data()
             << NtfsTestResource(NtfsTestResource::SymLink, relToRelSymlink, relToRelTarget)
             << relToRelSymlink << QDir::fromNativeSeparators(absTarget) << target.canonicalFilePath();
     }
-    {
+    if (uncServerAvailable) {
         // Symlink to UNC share
         pwd.mkdir("unc");
         QString uncTarget = QStringLiteral("//") + QTest::uncServerName() + "/testshare";

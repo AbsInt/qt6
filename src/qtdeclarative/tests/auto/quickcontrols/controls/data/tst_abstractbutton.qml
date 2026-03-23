@@ -538,9 +538,11 @@ TestCase {
             initButton: buttonPropertyValue, initAction: defaultValue,
             assignExpected: buttonPropertyValue, assignChanged: false,
             resetExpected: buttonPropertyValue, resetChanged: false })
+        // QTBUG-87459: setting a transparent icon color on the Action when the button's icon
+        // has no explicit color should result in the original icon colors being used.
         data.push({ tag: "default both " + propertyName, property: propertyName,
             initButton: undefined, initAction: defaultValue,
-            assignExpected: defaultValue, assignChanged: false,
+            assignExpected: defaultValue, assignChanged: true,
             resetExpected: defaultValue, resetChanged: false })
         data.push({ tag: "modify button " + propertyName, property: propertyName,
             initButton: undefined, initAction: actionPropertyValue,

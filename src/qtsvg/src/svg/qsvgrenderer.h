@@ -1,5 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QSVGRENDERER_H
 #define QSVGRENDERER_H
@@ -57,7 +59,7 @@ public:
     void setFramesPerSecond(int num);
     int currentFrame() const;
     void setCurrentFrame(int);
-    int animationDuration() const;//in seconds
+    int animationDuration() const;
     bool isAnimationEnabled() const;
     void setAnimationEnabled(bool enable);
 

@@ -4,6 +4,8 @@
 #ifndef QQNXCURSOR_H
 #define QQNXCURSOR_H
 
+#include <screen/screen.h>
+
 #include <qpa/qplatformcursor.h>
 #include <QtCore/QLoggingCategory>
 
@@ -14,7 +16,8 @@ QT_BEGIN_NAMESPACE
 class QQnxCursor : public QPlatformCursor
 {
 public:
-    QQnxCursor();
+    QQnxCursor(screen_context_t context);
+    ~QQnxCursor();
 
 #if !defined(QT_NO_CURSOR)
     void changeCursor(QCursor *windowCursor, QWindow *window) override;
@@ -25,6 +28,10 @@ public:
 
 private:
     QPoint m_pos;
+    screen_context_t m_screenContext;
+    screen_session_t m_session = 0;
+    int m_currentCShape = 0;
+    bool m_customCursorEnabled = false;
 };
 
 QT_END_NAMESPACE

@@ -4,14 +4,17 @@
 #include "location.h"
 
 #include "config.h"
+#include "outputdirectory.h"
 
 #include <QtCore/qdebug.h>
 #include <QtCore/qdir.h>
+#include <QtCore/qfile.h>
 #include <QtCore/qregularexpression.h>
+#include <QtCore/qtextstream.h>
 
-#include <climits>
 #include <cstdio>
 #include <cstdlib>
+#include <utility>
 
 using namespace Qt::Literals::StringLiterals;
 
@@ -22,8 +25,11 @@ int Location::s_warningCount = 0;
 int Location::s_warningLimit = -1;
 QString Location::s_programName;
 QString Location::s_project;
+QString Location::s_projectRoot;
 QSet<QString> Location::s_reports;
 QRegularExpression *Location::s_spuriousRegExp = nullptr;
+std::unique_ptr<QFile> Location::s_warningLogFile;
+std::unique_ptr<QTextStream> Location::s_warningLogStream;
 
 /*!
   \class Location
@@ -87,6 +93,37 @@ Location &Location::operator=(const Location &other)
     m_etc = other.m_etc;
     delete oldStk;
     return *this;
+}
+
+/*!
+    Returns \c true if this instance points to the
+    same location as \a other.
+
+    Two locations are considered equal if both the
+    filePath() and lineNo() are equal, regardless of
+    stack depth.
+ */
+bool Location::operator==(const Location &other) const
+{
+    if (&other == this)
+        return true;
+
+    if (lineNo() != other.lineNo())
+        return false;
+
+    if (filePath() != other.filePath())
+        return false;
+
+    return true;
+}
+
+/*!
+    Returns \c true if this instance does not point to the
+    same location as \a other.
+ */
+bool Location::operator!=(const Location &other) const
+{
+    return !(*this == other);
 }
 
 /*!
@@ -302,6 +339,18 @@ void Location::initialize()
     s_tabSize = config.get(CONFIG_TABSIZE).asInt();
     s_programName = config.programName();
     s_project = config.get(CONFIG_PROJECT).asString();
+
+    // Initialize project root for relative path calculation with priority:
+    // 1. QDOC_PROJECT_ROOT environment variable (highest priority)
+    // 2. projectroot configuration variable (fallback)
+    // 3. Leave empty if neither available (absolute paths)
+    QString qdocProjectRoot = qEnvironmentVariable("QDOC_PROJECT_ROOT");
+    if (qdocProjectRoot.isNull())
+        qdocProjectRoot = config.get(CONFIG_PROJECTROOT).asString();
+
+    if (!qdocProjectRoot.isEmpty() && QDir(qdocProjectRoot).exists())
+        s_projectRoot = QDir::cleanPath(qdocProjectRoot);
+
     if (!config.singleExec())
         s_warningCount = 0;
     if (qEnvironmentVariableIsSet("QDOC_ENABLE_WARNINGLIMIT")
@@ -316,6 +365,113 @@ void Location::initialize()
                 .warning(QStringLiteral("Invalid regular expression '%1'")
                         .arg(regExp.pattern()));
     }
+
+    if (config.get(CONFIG_LOGWARNINGS).asBool())
+        initializeWarningLog(config);
+}
+
+/*!
+    Creates the header for the warning log file.
+*/
+QString Location::warningLogHeader()
+{
+    const auto &config = Config::instance();
+    QStringList lines;
+
+    lines << "# QDoc Warning Log"_L1;
+    lines << "# Project: "_L1 + s_project;
+
+    // Add command line arguments unless disabled
+    if (!config.get(CONFIG_LOGWARNINGSDISABLECLIARGS).asBool()) {
+        const QStringList args = QCoreApplication::arguments();
+        if (!args.isEmpty()) {
+            QStringList quotedArgs;
+            for (const QString &arg : args) {
+                // Quote arguments containing spaces
+                if (arg.contains(QLatin1Char(' '))) {
+                    quotedArgs << '"'_L1 + arg + '"'_L1;
+                } else {
+                    quotedArgs << arg;
+                }
+            }
+            lines << "# Command: "_L1 + quotedArgs.join(QLatin1Char(' '));
+        }
+    }
+
+    if (!s_projectRoot.isEmpty()) {
+        // Indicate which method was used to determine project root
+        if (!qEnvironmentVariable("QDOC_PROJECT_ROOT").isNull()) {
+            lines << "# Root: QDOC_PROJECT_ROOT"_L1;
+        } else {
+            lines << "# Root: projectroot config"_L1;
+        }
+        lines << "# Path-Format: relative"_L1;
+    } else {
+        lines << "# Path-Format: absolute"_L1;
+    }
+
+    lines << "#"_L1;
+    return lines.join('\n'_L1);
+}
+
+/*!
+  Formats a file path for the warning log, converting to relative path
+  if a project root is configured.
+ */
+QString Location::formatPathForWarningLog(const QString &path)
+{
+    if (s_projectRoot.isEmpty())
+        return path;
+
+    QDir projectDir(s_projectRoot);
+    QString relativePath = projectDir.relativeFilePath(path);
+
+    // Only use relative path if it doesn't go outside the project root
+    if (!relativePath.startsWith("../"_L1))
+        return relativePath;
+
+    return path;
+}
+
+/*!
+  Initializes the warning log file, creates the output directory if needed, and
+  adds the command-line arguments to QDoc to the top of the log file.
+
+  This function assumes that log warnings are enabled and should only be
+  called when \c {CONFIG_LOGWARNINGS} is \c {true}.
+ */
+void Location::initializeWarningLog(const Config &config)
+{
+    const QString logFileName = s_project + "-qdoc-warnings.log";
+    const QString &outputDir = config.getOutputDir();
+
+    const OutputDirectory dir =
+            OutputDirectory::ensure(outputDir, Location());
+
+    const QString &logFilePath = dir.absoluteFilePath(logFileName);
+
+    s_warningLogFile = std::make_unique<QFile>(logFilePath);
+    if (s_warningLogFile->open(QIODevice::WriteOnly | QIODevice::Text)) {
+        s_warningLogStream = std::make_unique<QTextStream>(s_warningLogFile.get());
+
+        *s_warningLogStream << warningLogHeader() << Qt::endl;
+        *s_warningLogStream << Qt::endl;
+    } else {
+        Location().warning(QStringLiteral("Failed to open warning log file: %1").arg(logFilePath));
+        s_warningLogFile.reset();
+    }
+}
+
+/*!
+  Writes the message \a formattedMessage to the warning log file if it is
+  enabled and the message type \a type is a warning.
+ */
+void Location::writeToWarningLog(MessageType type, const QString &formattedMessage)
+{
+    if (type != Warning || !s_warningLogStream)
+        return;
+
+    *s_warningLogStream << formattedMessage << Qt::endl;
 }
 
 /*!
@@ -327,6 +483,9 @@ void Location::terminate()
 {
     delete s_spuriousRegExp;
     s_spuriousRegExp = nullptr;
+
+    s_warningLogStream.reset();
+    s_warningLogFile.reset();
 }
 
 /*!
@@ -376,9 +535,9 @@ void Location::emitMessage(MessageType type, const QString &message, const QStri
         }
     } else {
         if (type == Error)
-            result.prepend(QStringLiteral(": (qdoc) error: "));
+            result.prepend(": [%1] (qdoc) error: "_L1.arg(s_project));
         else if (type == Warning) {
-            result.prepend(QStringLiteral(": (qdoc) warning: "));
+            result.prepend(": [%1] (qdoc) warning: "_L1.arg(s_project));
             ++s_warningCount;
         }
     }
@@ -388,6 +547,16 @@ void Location::emitMessage(MessageType type, const QString &message, const QStri
         result.prepend("qdoc: '%1': "_L1.arg(s_project));
     fprintf(stderr, "%s\n", result.toLatin1().data());
     fflush(stderr);
+
+    // Create a version with relative paths for the warning log
+    QString logMessage = std::move(result);
+    if (type == Warning && !s_projectRoot.isEmpty()) {
+        // Replace the absolute path portion with a relative path for log file
+        QString locationString = toString();
+        QString formattedLocationString = formatPathForWarningLog(locationString);
+        logMessage.replace(locationString, formattedLocationString);
+    }
+    writeToWarningLog(type, logMessage);
 }
 
 /*!

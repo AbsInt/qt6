@@ -59,14 +59,14 @@ namespace QtAndroidInput
     void resetSoftwareKeyboard()
     {
         AndroidBackendRegister *reg = QtAndroid::backendRegister();
-        reg->callInterface<QtJniTypes::QtInputInterface, void>("resetSoftwareKeyboard");
+        reg->callInterface<QtJniTypes::QtInputInterface>("resetSoftwareKeyboard");
         qCDebug(lcQpaInputMethods) << "@@@ RESETSOFTWAREKEYBOARD";
     }
 
     void hideSoftwareKeyboard()
     {
         AndroidBackendRegister *reg = QtAndroid::backendRegister();
-        reg->callInterface<QtJniTypes::QtInputInterface, void>("hideSoftwareKeyboard");
+        reg->callInterface<QtJniTypes::QtInputInterface>("hideSoftwareKeyboard");
         qCDebug(lcQpaInputMethods) << "@@@ HIDESOFTWAREKEYBOARD";
     }
 

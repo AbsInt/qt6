@@ -39,9 +39,6 @@ QT_IMPL_METATYPE_EXTERN_TAGGED(QSurface*, QSurface_ptr)
     a software rasterizer like Qt's raster paint engine.
     \value OpenGLSurface The surface is an OpenGL compatible surface and can be used
     in conjunction with QOpenGLContext.
-    \value RasterGLSurface The surface can be rendered to using a software rasterizer,
-    and also supports OpenGL. This surface type is intended for internal Qt use, and
-    requires the use of private API.
     \value OpenVGSurface The surface is an OpenVG compatible surface and can be used
     in conjunction with OpenVG contexts.
     \value VulkanSurface The surface is a Vulkan compatible surface and can be used
@@ -52,6 +49,8 @@ QT_IMPL_METATYPE_EXTERN_TAGGED(QSurface*, QSurface_ptr)
     \value Direct3DSurface The surface is a Direct 3D 11 and 12 compatible
     surface and can be used in conjunction with the DXGI and Direct3D APIs. This
     surface type is only supported on Windows.
+
+    \omitvalue RasterGLSurface
  */
 
 /*!
@@ -69,12 +68,10 @@ QT_IMPL_METATYPE_EXTERN_TAGGED(QSurface*, QSurface_ptr)
 
 bool QSurface::supportsOpenGL() const
 {
-    SurfaceType type = surfaceType();
-    if (type == RasterSurface) {
-        QPlatformIntegration *integ = QGuiApplicationPrivate::instance()->platformIntegration();
-        return integ->hasCapability(QPlatformIntegration::OpenGLOnRasterSurface);
-    }
-    return type == OpenGLSurface || type == RasterGLSurface;
+    static bool openGLOnRasterSurfaceSupported =
+        QGuiApplicationPrivate::instance()->platformIntegration()->hasCapability(QPlatformIntegration::OpenGLOnRasterSurface);
+    return surfaceType() == OpenGLSurface
+           || (surfaceType() == RasterSurface && openGLOnRasterSurfaceSupported);
 }
 
 /*!

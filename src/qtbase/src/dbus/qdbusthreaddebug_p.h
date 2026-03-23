@@ -130,26 +130,6 @@ struct QDBusWriteLocker: QDBusLockerBase
     }
 };
 
-#if QDBUS_THREAD_DEBUG
-# define SEM_ACQUIRE(action, sem)                                       \
-    do {                                                                \
-    QDBusLockerBase::reportThreadAction(action, QDBusLockerBase::BeforeAcquire, this); \
-    sem.acquire();                                                      \
-    QDBusLockerBase::reportThreadAction(action, QDBusLockerBase::AfterAcquire, this); \
-    } while (false)
-
-# define SEM_RELEASE(action, sem)                                       \
-    do {                                                                \
-    QDBusLockerBase::reportThreadAction(action, QDBusLockerBase::BeforeRelease, that); \
-    sem.release();                                                      \
-    QDBusLockerBase::reportThreadAction(action, QDBusLockerBase::AfterRelease, that); \
-    } while (false)
-
-#else
-# define SEM_ACQUIRE(action, sem)       sem.acquire()
-# define SEM_RELEASE(action, sem)       sem.release()
-#endif
-
 QT_END_NAMESPACE
 
 #endif // QT_NO_DBUS

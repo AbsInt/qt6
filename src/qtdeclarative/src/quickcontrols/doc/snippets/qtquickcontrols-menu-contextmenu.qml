@@ -4,24 +4,33 @@
 import QtQuick
 import QtQuick.Controls
 
-//! [root]
-MouseArea {
-    anchors.fill: parent
-    acceptedButtons: Qt.LeftButton | Qt.RightButton
-    onClicked: (mouse) => {
-        if (mouse.button === Qt.RightButton)
-            contextMenu.popup()
+Item {
+//! [children]
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        onPressedChanged: {
+            if (pressed && Application.styleHints.contextMenuTrigger === Qt.ContextMenuTrigger.Press)
+                contextMenu.popup()
+        }
+        onTapped: {
+            if (Application.styleHints.contextMenuTrigger === Qt.ContextMenuTrigger.Release)
+                contextMenu.popup()
+        }
     }
-    onPressAndHold: (mouse) => {
-        if (mouse.source === Qt.MouseEventNotSynthesized)
-            contextMenu.popup()
+    TapHandler {
+        acceptedDevices: PointerDevice.TouchScreen
+        onLongPressed: contextMenu.popup()
     }
 
     Menu {
         id: contextMenu
-        MenuItem { text: "Cut" }
-        MenuItem { text: "Copy" }
-        MenuItem { text: "Paste" }
+
+        MenuItem {
+            text: qsTr("Do stuff")
+        }
+        MenuItem {
+            text: qsTr("Do more stuff")
+        }
     }
+//! [children]
 }
-//! [root]

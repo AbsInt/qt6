@@ -3,10 +3,11 @@
 
 #include "qtgroupboxpropertybrowser_p.h"
 
-#include <QtCore/QHash>
-#include <QtWidgets/QGridLayout>
-#include <QtWidgets/QGroupBox>
-#include <QtWidgets/QLabel>
+#include <QtWidgets/qgridlayout.h>
+#include <QtWidgets/qgroupbox.h>
+#include <QtWidgets/qlabel.h>
+
+#include <QtCore/qhash.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -138,7 +139,7 @@ void QtGroupBoxPropertyBrowserPrivate::propertyInserted(QtBrowserItem *index, Qt
 
     if (!parentItem) {
         layout = m_mainLayout;
-        parentWidget = q_ptr;;
+        parentWidget = q_ptr;
     } else {
         if (!parentItem->groupBox) {
             m_recreateQueue.removeAll(parentItem);

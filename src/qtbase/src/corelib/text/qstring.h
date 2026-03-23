@@ -81,21 +81,57 @@ constexpr bool QtPrivate::isLatin1(QLatin1StringView) noexcept
 // QStringView members that require QLatin1StringView:
 //
 int QStringView::compare(QLatin1StringView s, Qt::CaseSensitivity cs) const noexcept
-{ return QtPrivate::compareStrings(*this, s, cs); }
+{
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+    if (__builtin_constant_p(s.m_size) && s.size() == 1)
+        return compare(s.front(), cs);
+#endif
+    return QtPrivate::compareStrings(*this, s, cs);
+}
 bool QStringView::startsWith(QLatin1StringView s, Qt::CaseSensitivity cs) const noexcept
-{ return QtPrivate::startsWith(*this, s, cs); }
+{
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+    if (__builtin_constant_p(s.m_size) && s.size() == 1)
+        return startsWith(s.front(), cs);
+#endif
+    return QtPrivate::startsWith(*this, s, cs);
+}
 bool QStringView::endsWith(QLatin1StringView s, Qt::CaseSensitivity cs) const noexcept
-{ return QtPrivate::endsWith(*this, s, cs); }
+{
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+    if (__builtin_constant_p(s.m_size) && s.size() == 1)
+        return endsWith(s.front(), cs);
+#endif
+    return QtPrivate::endsWith(*this, s, cs);
+}
 qsizetype QStringView::indexOf(QLatin1StringView s, qsizetype from, Qt::CaseSensitivity cs) const noexcept
-{ return QtPrivate::findString(*this, from, s, cs); }
+{
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+    if (__builtin_constant_p(s.m_size) && s.size() == 1)
+        return indexOf(s.front(), from, cs);
+#endif
+    return QtPrivate::findString(*this, from, s, cs);
+}
 bool QStringView::contains(QLatin1StringView s, Qt::CaseSensitivity cs) const noexcept
 { return indexOf(s, 0, cs) != qsizetype(-1); }
 qsizetype QStringView::lastIndexOf(QLatin1StringView s, Qt::CaseSensitivity cs) const noexcept
-{ return QtPrivate::lastIndexOf(*this, size(), s, cs); }
+{ return lastIndexOf(s, size(), cs); }
 qsizetype QStringView::lastIndexOf(QLatin1StringView s, qsizetype from, Qt::CaseSensitivity cs) const noexcept
-{ return QtPrivate::lastIndexOf(*this, from, s, cs); }
+{
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+    if (__builtin_constant_p(s.m_size) && s.size() == 1)
+        return lastIndexOf(s.front(), from, cs);
+#endif
+    return QtPrivate::lastIndexOf(*this, from, s, cs);
+}
 qsizetype QStringView::count(QLatin1StringView s, Qt::CaseSensitivity cs) const
-{ return QtPrivate::count(*this, s, cs); }
+{
+#if defined(Q_CC_GNU) || __has_builtin(__builtin_constant_p)
+    if (__builtin_constant_p(s.m_size) && s.size() == 1)
+        return count(s.front(), cs);
+#endif
+    return QtPrivate::count(*this, s, cs);
+}
 
 //
 // QAnyStringView members that require QLatin1StringView
@@ -604,7 +640,7 @@ public:
                 d.data()[d.size] = u'\0';
             return *this;
         } else {
-            d.assign(first, last, [](QChar ch) noexcept -> char16_t { return ch.unicode(); });
+            d->assign(first, last, [](QChar ch) noexcept -> char16_t { return ch.unicode(); });
             if (d.constAllocatedCapacity())
                 d.data()[d.size] = u'\0';
             return *this;

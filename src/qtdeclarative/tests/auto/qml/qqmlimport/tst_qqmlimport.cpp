@@ -19,6 +19,11 @@
 #include <QtCore/qscopeguard.h>
 #include <QtCore/qlibraryinfo.h>
 #include <QtCore/private/qlibraryinfo_p.h>
+#include <QtCore/qpluginloader.h>
+
+#include "MyStaticModule/mystaticmoduleplugin.h"
+
+using namespace Qt::StringLiterals;
 
 class TheThing : public QObject
 {
@@ -56,6 +61,7 @@ private slots:
     void interceptQmldir();
     void singletonVersionResolution();
     void removeDynamicPlugin();
+    void removeStaticPlugins();
     void partialImportVersions_data();
     void partialImportVersions();
     void registerModuleImport();
@@ -105,7 +111,7 @@ void tst_QQmlImport::envResourceImportPath()
     qputenv("QML_IMPORT_PATH", envPaths.join(QDir::listSeparator()).toUtf8());
 
     QQmlEngine engine;
-    const QStringList importPaths = QQmlEnginePrivate::get(&engine)->typeLoader.importPathList();
+    const QStringList importPaths = QQmlTypeLoader::get(&engine)->importPathList();
 
     for (const QString &path : envPaths)
         QVERIFY((importPaths.contains(path.startsWith(u':') ? QLatin1String("qrc") + path : path)));
@@ -190,10 +196,10 @@ void tst_QQmlImport::invalidImportUrl()
     const QUrl url = testFileUrl("fileDotSlashImport.qml");
     QQmlComponent component(&engine, url);
     QVERIFY(component.isError());
-    QCOMPARE(
-            component.errorString(),
-            url.toString() + QLatin1String(
-                    ":2 Cannot resolve URL for import \"file://./MyModuleName\"\n"));
+    QCOMPARE(component.errorString(),
+             url.toString()
+                     + QLatin1String(
+                             ":2:1: Cannot resolve URL for import \"file://./MyModuleName\"\n"));
 }
 
 void tst_QQmlImport::registerTypesFromImplicitImport_data()
@@ -425,7 +431,7 @@ public:
     {
         if (type != UrlString && !url.isEmpty() && url.isValid()) {
             QString str = url.toString(QUrl::None);
-            return str.replace(QStringLiteral("$(INTERCEPT)"), QStringLiteral("intercepted"));
+            return QUrl{str.replace("$(INTERCEPT)"_L1, "intercepted"_L1)};
         }
         return url;
     }
@@ -491,20 +497,44 @@ void tst_QQmlImport::singletonVersionResolution()
 void tst_QQmlImport::removeDynamicPlugin()
 {
     qmlClearTypeRegistrations();
+
     QQmlEngine engine;
+    QTest::ignoreMessage(QtWarningMsg, "Registered dynamic plugin!");
     {
         // Load something that adds a dynamic plugin
-        QQmlComponent component(&engine, testFileUrl("importQtQuickTooling.qml"));
-        // Make sure to use something other than QtTest here, since the !plugins.isEmpty()
-        // check will fail if we do.
+        QQmlComponent component(&engine, testFileUrl("importDynamicModule.qml"));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     }
     const QStringList &plugins = QQmlPluginImporter::plugins();
+
+    QTest::ignoreMessage(QtWarningMsg, "Unregistered dynamic plugin!");
     QVERIFY(!plugins.isEmpty());
     for (const QString &plugin : plugins)
         QVERIFY(QQmlPluginImporter::removePlugin(plugin));
     QVERIFY(QQmlPluginImporter::plugins().isEmpty());
+
     qmlClearTypeRegistrations();
+}
+
+void tst_QQmlImport::removeStaticPlugins()
+{
+    qmlClearTypeRegistrations();
+
+    QVERIFY(!MyStaticModulePlugin::s_myStaticModulePluginRegistered);
+    QQmlEngine engine;
+    {
+        // Load something that adds a static plugin
+        QQmlComponent component(&engine, testFileUrl("importStaticModule.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    }
+    QVERIFY(MyStaticModulePlugin::s_myStaticModulePluginRegistered);
+    QVERIFY(QQmlMetaType::qmlType("MyStaticModule/MyCppComponent", QTypeRevision::fromVersion(1, 0))
+                    .isValid());
+    qmlClearTypeRegistrations();
+    QVERIFY(!MyStaticModulePlugin::s_myStaticModulePluginRegistered);
+    QVERIFY(!QQmlMetaType::qmlType("MyStaticModule/MyCppComponent",
+                                   QTypeRevision::fromVersion(1, 0))
+                     .isValid());
 }
 
 void tst_QQmlImport::partialImportVersions_data()

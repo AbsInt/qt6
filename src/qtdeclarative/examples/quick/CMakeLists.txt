@@ -40,7 +40,9 @@ if(TARGET Qt6::QuickWidgets AND TARGET Qt6::Widgets AND (QT_FEATURE_opengl OR QT
 endif()
 add_subdirectory(quickshapes)
 qt_internal_add_example(advancedtext)
-qt_internal_add_example(vectorimage)
+if(TARGET Qt6::Svg)
+    qt_internal_add_example(vectorimage)
+endif()
 
 # qt_examples_build_end() misses at least some of these due to some
 # source subdirectories being added multiple times. See QTBUG-96159.

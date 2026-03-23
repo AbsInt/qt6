@@ -1,19 +1,22 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
-#include <qtest.h>
+
+#include <private/qmlutils_p.h>
+#include <private/qqmlengine_p.h>
+#include <private/qquickworkerscript_p.h>
+
+#include <QtTest/qtest.h>
+
+#include <QtQml/qjsengine.h>
+#include <QtQml/qqmlcomponent.h>
+#include <QtQml/qqmlengine.h>
+#include <QtQml/qqmlnetworkaccessmanagerfactory.h>
+
 #include <QtCore/qdebug.h>
-#include <QtCore/qtimer.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qregularexpression.h>
-#include <QtQml/qjsengine.h>
-
-#include <QtQml/qqmlcomponent.h>
-#include <QtQml/qqmlengine.h>
-
-#include <private/qquickworkerscript_p.h>
-#include <private/qqmlengine_p.h>
-#include <QtQuickTestUtils/private/qmlutils_p.h>
+#include <QtCore/qtimer.h>
 
 class tst_QQuickWorkerScript : public QQmlDataTest
 {
@@ -36,6 +39,7 @@ private slots:
     void script_var();
     void stressDispose();
     void xmlHttpRequest();
+    void remoteScript();
 
 private:
     void waitForEchoMessage(QQuickWorkerScript *worker) {
@@ -317,6 +321,69 @@ void tst_QQuickWorkerScript::xmlHttpRequest()
     QQmlComponent component(&m_engine, testFileUrl("xmlHttpRequest.qml"));
     QScopedPointer<QObject> root{component.create()}; // should not crash
     QVERIFY(root);
+}
+
+
+class DebugStrippingNAM : public QNetworkAccessManager
+{
+public:
+    DebugStrippingNAM(const QString &replacementScheme, QObject *parent = nullptr)
+        : QNetworkAccessManager(parent)
+        , replacementScheme(replacementScheme)
+    {}
+
+protected:
+    QNetworkReply *createRequest(
+            Operation op, const QNetworkRequest &request, QIODevice *outgoingData) final
+    {
+        QUrl url = request.url();
+        if (request.url().scheme() != "debug")
+            return QNetworkAccessManager::createRequest(op, request, outgoingData);
+
+        QNetworkRequest rewritten = request;
+        url.setScheme(replacementScheme);
+        rewritten.setUrl(url);
+        return QNetworkAccessManager::createRequest(op, rewritten, outgoingData);
+    }
+
+private:
+    QString replacementScheme;
+};
+
+class DebugStrippingNAMF : public QQmlNetworkAccessManagerFactory
+{
+public:
+    DebugStrippingNAMF(const QString &replacementScheme)
+        : replacementScheme(replacementScheme)
+    {}
+
+    QNetworkAccessManager *create(QObject *parent) final
+    {
+        return new DebugStrippingNAM(replacementScheme, parent);
+    }
+
+private:
+    QString replacementScheme;
+};
+
+void tst_QQuickWorkerScript::remoteScript()
+{
+    QUrl url = testFileUrl("remoteScript.qml");
+    DebugStrippingNAMF factory(url.scheme());
+
+    QQmlEngine engine;
+    engine.setNetworkAccessManagerFactory(&factory);
+
+    url.setScheme("debug");
+    QQmlComponent c(&engine, url);
+    QTRY_VERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QTest::ignoreMessage(QtDebugMsg, "received");
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QTRY_VERIFY(o->property("ready").toBool());
+    QTRY_COMPARE(o->objectName(), "remote script running");
 }
 
 QTEST_MAIN(tst_QQuickWorkerScript)

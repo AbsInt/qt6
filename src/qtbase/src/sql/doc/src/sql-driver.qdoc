@@ -736,7 +736,7 @@
     INTEGER may contain an integer value in one row and a text value in the
     next. This is due to SQLite associating the type of a value with the value
     itself rather than with the column it is stored in. A consequence of this
-    is that the type returned by QSqlField::type() only indicates the field's
+    is that the type returned by QSqlField::metaType() only indicates the field's
     recommended type. No assumption of the actual type should be made from
     this and the type of the individual values should be checked.
 

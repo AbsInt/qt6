@@ -8,7 +8,14 @@
 #include "qscreen.h"
 #include "qguiapplication.h"
 
+#include <QtCore/qmutex.h>
+
 QT_BEGIN_NAMESPACE
+
+#if QT_REMOVAL_QT7_DEPRECATED_SINCE(6, 11)
+
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
 
 class QColormapPrivate
 {
@@ -43,16 +50,26 @@ void QColormap::initialize()
         screenMap->mode = QColormap::Direct;
         screenMap->numcolors = -1;
     }
+
+    qAddPostRoutine(QColormap::cleanup);
 }
 
 void QColormap::cleanup()
 {
-    delete screenMap;
-    screenMap = nullptr;
+    if (screenMap) {
+        if (!screenMap->ref.deref())
+            delete screenMap;
+        screenMap = nullptr;
+    }
 }
 
 QColormap QColormap::instance(int /*screen*/)
 {
+    static QMutex mutex;
+    QMutexLocker locker(&mutex);
+    if (!screenMap)
+        initialize();
+
     return QColormap();
 }
 
@@ -179,5 +196,9 @@ const QList<QColor> QColormap::colormap() const
 
 QColormap &QColormap::operator=(const QColormap &colormap)
 { qAtomicAssign(d, colormap.d); return *this; }
+
+QT_WARNING_POP
+
+#endif // QT_REMOVAL_QT7_DEPRECATED_SINCE(6, 11)
 
 QT_END_NAMESPACE

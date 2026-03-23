@@ -14,6 +14,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 class QPdfOutputIntentPrivate : public QSharedData
 {
 public:
@@ -27,7 +29,7 @@ public:
 
     QString outputConditionIdentifier = QStringLiteral("sRGB_IEC61966-2-1_black_scaled");
     QString outputCondition = QStringLiteral("sRGB IEC61966 v2.1 with black scaling");
-    QUrl registryName = QStringLiteral("http://www.color.org");
+    QUrl registryName = QUrl{u"http://www.color.org"_s};
     QColorSpace outputProfile;
 };
 

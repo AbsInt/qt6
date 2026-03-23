@@ -25,16 +25,9 @@
 
 #include <QtQuickTemplates2/private/qquicktextfield_p.h>
 
-#if QT_CONFIG(accessibility)
-#include <QtGui/qaccessible.h>
-#endif
-
 QT_BEGIN_NAMESPACE
 
 class QQuickTextFieldPrivate : public QQuickTextInputPrivate, public QQuickItemChangeListener
-#if QT_CONFIG(accessibility)
-    , public QAccessible::ActivationObserver
-#endif
 {
 public:
     Q_DECLARE_PUBLIC(QQuickTextField)
@@ -77,12 +70,10 @@ public:
     void implicitWidthChanged() override;
     void implicitHeightChanged() override;
 
-    void readOnlyChanged(bool isReadOnly);
-    void echoModeChanged(QQuickTextField::EchoMode echoMode);
+    virtual void readOnlyChanged(bool isReadOnly) override;
 
 #if QT_CONFIG(accessibility)
     void accessibilityActiveChanged(bool active) override;
-    QAccessible::Role accessibleRole() const override;
 #endif
 
     void cancelBackground();

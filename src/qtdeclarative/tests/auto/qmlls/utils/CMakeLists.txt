@@ -17,6 +17,7 @@ qt_internal_add_test(tst_qmlls_utils
     tst_qmlls_utils.cpp
     DEFINES
         QT_QMLLS_UTILS_DATADIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+        QT_QMLLS_BIG_FOLDER="${CMAKE_SOURCE_DIR}"
     LIBRARIES
         Qt::Core
         Qt::QmlDomPrivate
@@ -51,6 +52,18 @@ qt_internal_add_test(tst_qmlls_documentationHints
         Qt::Core
         Qt::QmlDomPrivate
         Qt::LanguageServerPrivate
+        Qt::Test
+        Qt::QuickTestUtilsPrivate
+        Qt::QmlLSPrivate
+    TESTDATA ${test_data}
+)
+
+
+qt_internal_add_test(tst_qmlls_differ
+    SOURCES
+    tst_qmlls_differ.h tst_qmlls_differ.cpp
+    LIBRARIES
+        Qt::Core
         Qt::Test
         Qt::QuickTestUtilsPrivate
         Qt::QmlLSPrivate

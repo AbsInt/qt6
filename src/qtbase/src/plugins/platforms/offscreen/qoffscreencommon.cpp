@@ -39,7 +39,7 @@ public:
         const QWindowList wl = QGuiApplication::topLevelWindows();
         QWindow *containing = nullptr;
         for (QWindow *w : wl) {
-            if (w->type() != Qt::Desktop && w->isExposed() && w->geometry().contains(pos)) {
+            if (w->isExposed() && w->geometry().contains(pos)) {
                 containing = w;
                 break;
             }

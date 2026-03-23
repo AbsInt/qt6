@@ -64,7 +64,7 @@ private:
     struct ExpectedWarnings
     {
         QStringList warnings;
-        QStringList extraImportPaths = {};
+        QMap<QString, QStringList> extraImportPathsPerWorkspace = {};
     };
 private slots:
     void warnings_data();

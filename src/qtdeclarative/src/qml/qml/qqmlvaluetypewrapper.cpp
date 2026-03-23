@@ -43,10 +43,7 @@ Heap::QQmlValueTypeWrapper *Heap::QQmlValueTypeWrapper::detached() const
 
 void Heap::QQmlValueTypeWrapper::destroy()
 {
-    if (m_gadgetPtr) {
-        metaType().destruct(m_gadgetPtr);
-        ::operator delete(m_gadgetPtr);
-    }
+    metaType().destroy(m_gadgetPtr);
     ReferenceObject::destroy();
 }
 
@@ -68,10 +65,7 @@ bool Heap::QQmlValueTypeWrapper::setVariant(const QVariant &variant)
         // possible, or return false if it is not a value type.
         if (QQmlMetaType::isValueType(variantReferenceType)) {
             const QMetaObject *mo = QQmlMetaType::metaObjectForValueType(variantReferenceType);
-            if (gadgetPtr()) {
-                metaType().destruct(gadgetPtr());
-                ::operator delete(gadgetPtr());
-            }
+            metaType().destroy(gadgetPtr());
             setGadgetPtr(nullptr);
             setMetaObject(mo);
             setMetaType(variantReferenceType);
@@ -89,8 +83,7 @@ bool Heap::QQmlValueTypeWrapper::setVariant(const QVariant &variant)
 void *Heap::QQmlValueTypeWrapper::storagePointer()
 {
     if (!gadgetPtr()) {
-        setGadgetPtr(::operator new(metaType().sizeOf()));
-        metaType().construct(gadgetPtr(), nullptr);
+        setGadgetPtr(metaType().create(nullptr));
     }
     return gadgetPtr();
 }
@@ -552,14 +545,23 @@ bool QQmlValueTypeWrapper::write(QObject *target, int propertyIndex) const
         }
     });
 
-    Q_ALLOCA_DECLARE(void, gadget);
+    Q_ALLOCA_DECLARE(void, rawPtr);
+
     if (d()->isReference()) {
+        QT_WARNING_PUSH
+        QT_WARNING_DISABLE_GCC("-Walloca-larger-than="); // for size = alignment = 0
         if (!d()->gadgetPtr()) {
-            Q_ALLOCA_ASSIGN(void, gadget, d()->metaType().sizeOf());
-            d()->setGadgetPtr(gadget);
+            const size_t size = d()->metaType().sizeOf();
+            const size_t alignment = d()->metaType().alignOf();
+            size_t space = size + alignment - 1;
+            Q_ALLOCA_ASSIGN(void, rawPtr, space);
+            void *alignedPtr = std::align(alignment, size, rawPtr, space);
+            Q_ASSERT(alignedPtr);
+            d()->setGadgetPtr(alignedPtr);
             d()->metaType().construct(d()->gadgetPtr(), nullptr);
             destructGadgetOnExit = true;
         }
+        QT_WARNING_POP
         if (!readReferenceValue())
             return false;
     }

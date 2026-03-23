@@ -1,5 +1,6 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QWAYLANDNATIVEINTERFACE_P_H
 #define QWAYLANDNATIVEINTERFACE_P_H
@@ -62,6 +63,9 @@ public:
     wl_touch *touch() const override;
     uint lastInputSerial() const override;
     wl_seat *lastInputSeat() const override;
+#if QT_CONFIG(xkbcommon)
+    struct xkb_context *xkbContext() const override;
+#endif
 
 private:
     static void setWindowMargins(QWindow *window, const QMargins &margins);

@@ -45,6 +45,14 @@ class QDataStream;
 #endif
 class QTextStream;
 
+// These macros from math.h conflict with the real functions in the std namespace:
+#ifdef copysign
+#  undef copysign
+#endif
+#ifdef signbit
+#  undef signbit
+#endif
+
 class qfloat16
 {
     struct Wrap
@@ -84,9 +92,14 @@ public:
     Q_CORE_EXPORT int fpClassify() const noexcept;
     // Can't specialize std::copysign() for qfloat16
     qfloat16 copySign(qfloat16 sign) const noexcept
-    { return qfloat16(Wrap((sign.b16 & 0x8000) | (b16 & 0x7fff))); }
-    // Support for std::numeric_limits<qfloat16>
+    { return copysign(*this, sign); }
+    friend qfloat16 copysign(qfloat16 mag, qfloat16 sign) noexcept
+    { return qfloat16(Wrap((sign.b16 & 0x8000) | (mag.b16 & 0x7fff))); }
+    // Can't specialize std::signbit() for qfloat16
+    friend bool signbit(qfloat16 x) noexcept
+    { return x.b16 & 0x8000; }
 
+    // Support for std::numeric_limits<qfloat16>
 #ifdef __STDCPP_FLOAT16_T__
 private:
     using Bounds = std::numeric_limits<NativeType>;
@@ -352,14 +365,14 @@ inline int qIntCast(qfloat16 f) noexcept
 { return int(static_cast<qfloat16::NearestFloat>(f)); }
 
 #if !defined(Q_QDOC) && !QFLOAT16_IS_NATIVE
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_CLANG("-Wc99-extensions")
-QT_WARNING_DISABLE_GCC("-Wold-style-cast")
 inline qfloat16::qfloat16(float f) noexcept
 {
 #if defined(QT_COMPILER_SUPPORTS_F16C) && defined(__F16C__)
     __m128 packsingle = _mm_set_ss(f);
+    QT_WARNING_PUSH
+    QT_WARNING_DISABLE_GCC("-Wold-style-cast") // _mm_cvtps_ph() may be a macro using C-style casts
     __m128i packhalf = _mm_cvtps_ph(packsingle, 0);
+    QT_WARNING_POP
     b16 = quint16(_mm_extract_epi16(packhalf, 0));
 #elif defined (__ARM_FP16_FORMAT_IEEE)
     __fp16 f16 = __fp16(f);
@@ -391,7 +404,6 @@ inline qfloat16::qfloat16(float f) noexcept
     b16 = quint16(base + (mantissa >> shift));
 #endif
 }
-QT_WARNING_POP
 
 inline qfloat16::operator float() const noexcept
 {
@@ -436,7 +448,7 @@ inline auto qHypot(qfloat16 x, qfloat16 y)
 {
 #if defined(QT_COMPILER_SUPPORTS_F16C) && defined(__F16C__) || QFLOAT16_IS_NATIVE
     return QtPrivate::QHypotHelper<qfloat16>(x).add(y).result();
-#else
+#else // NearestFloat is float:
     return qfloat16(qHypot(float(x), float(y)));
 #endif
 }
@@ -447,6 +459,14 @@ template<typename F, typename ...Fs> auto qHypot(F first, Fs... rest);
 template <typename T> typename QtPrivate::QHypotType<T, qfloat16>::type
 qHypot(T x, qfloat16 y)
 {
+    // Two-arg qHypot() delegates to std::hypot(), which has no (T = double,
+    // NearestFloat = __fp16) overload on ARM64 Linux, leading to ambiguity in
+    // (at least) that case. Testing whether we can use it needs C++20 ...
+#ifdef __cpp_concepts
+    if constexpr (requires { std::hypot(x, qfloat16::NearestFloat(y)); })
+        return qHypot(x, qfloat16::NearestFloat(y));
+    else
+#endif
     if constexpr (std::is_floating_point_v<T>)
         return qHypot(x, float(y));
     else
@@ -458,7 +478,7 @@ template <typename T> auto qHypot(qfloat16 x, T y)
 }
 
 #if defined(__cpp_lib_hypot) && __cpp_lib_hypot >= 201603L // Expected to be true
-// If any are not qfloat16, convert each qfloat16 to float:
+// If any are not qfloat16, convert each qfloat16 to qfloat16::NearestFloat:
 /* (The following splits the some-but-not-all-qfloat16 cases up, using
    (X|Y|Z)&~(X&Y&Z) = X ? ~(Y&Z) : Y|Z = X&~(Y&Z) | ~X&Y | ~X&~Y&Z,
    into non-overlapping cases, to avoid ambiguity.) */
@@ -483,7 +503,7 @@ inline auto qHypot(qfloat16 x, qfloat16 y, qfloat16 z)
 {
 #if (defined(QT_COMPILER_SUPPORTS_F16C) && defined(__F16C__)) || QFLOAT16_IS_NATIVE
     return QtPrivate::QHypotHelper<qfloat16>(x).add(y).add(z).result();
-#else
+#else // NearestFloat is float;
     return qfloat16(qHypot(float(x), float(y), float(z)));
 #endif
 }

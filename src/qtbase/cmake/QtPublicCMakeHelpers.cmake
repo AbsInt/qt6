@@ -41,30 +41,41 @@ endfunction()
 
 # Checks if the path points to the cmake directory, like lib/cmake.
 function(__qt_internal_check_path_points_to_cmake_dir result path)
-    string(TOUPPER "${QT_CMAKE_EXPORT_NAMESPACE}" export_namespace_upper)
-    if((INSTALL_LIBDIR AND path MATCHES "/${INSTALL_LIBDIR}/cmake$") OR
-        (${export_namespace_upper}_INSTALL_LIBS AND
-            path MATCHES "/${${export_namespace_upper}_INSTALL_LIBS}/cmake$") OR
-        path MATCHES "/lib/cmake$"
-    )
-        set(${result} TRUE PARENT_SCOPE)
-    else()
-        set(${result} FALSE PARENT_SCOPE)
+    if(INSTALL_CMAKEDIR)
+        _qt_internal_re_escape(re_cmakedir "${INSTALL_CMAKEDIR}")
+        if(path MATCHES "/${re_cmakedir}$")
+            set(${result} TRUE PARENT_SCOPE)
+            return()
+        endif()
     endif()
+
+    string(TOUPPER "${QT_CMAKE_EXPORT_NAMESPACE}" export_namespace_upper)
+    if(${export_namespace_upper}_INSTALL_CMAKEDIR)
+        _qt_internal_re_escape(re_cmakedir "${${export_namespace_upper}_INSTALL_CMAKEDIR}")
+        if(path MATCHES "/${re_cmakedir}$")
+            set(${result} TRUE PARENT_SCOPE)
+            return()
+        endif()
+    endif()
+
+    set(${result} FALSE PARENT_SCOPE)
 endfunction()
 
 # Creates a reverse path to prefix from possible cmake directories. Returns the unchanged path
 # if it doesn't point to cmake directory.
 function(__qt_internal_reverse_prefix_path_from_cmake_dir result cmake_path)
     string(TOUPPER "${QT_CMAKE_EXPORT_NAMESPACE}" export_namespace_upper)
-    if(INSTALL_LIBDIR AND cmake_path MATCHES "(.+)/${INSTALL_LIBDIR}/cmake$")
-        if(CMAKE_MATCH_1)
+    if(INSTALL_CMAKEDIR)
+        _qt_internal_re_escape(re_cmakedir "${INSTALL_CMAKEDIR}")
+        if(cmake_path MATCHES "(.+)/${re_cmakedir}$" AND CMAKE_MATCH_1)
             set(${result} "${CMAKE_MATCH_1}" PARENT_SCOPE)
+            return()
         endif()
-    elseif(${export_namespace_upper}_INSTALL_LIBS AND
-        cmake_path MATCHES "(.+)/${${export_namespace_upper}_INSTALL_LIBS}/cmake$")
-        if(CMAKE_MATCH_1)
+    elseif(${export_namespace_upper}_INSTALL_CMAKEDIR)
+        _qt_internal_re_escape(re_cmakedir "${${export_namespace_upper}_INSTALL_CMAKEDIR}")
+        if(cmake_path MATCHES "(.+)/${re_cmakedir}$" AND CMAKE_MATCH_1)
             set(${result} "${CMAKE_MATCH_1}" PARENT_SCOPE)
+            return()
         endif()
     elseif(result MATCHES "(.+)/lib/cmake$")
         if(CMAKE_MATCH_1)
@@ -79,19 +90,19 @@ endfunction()
 function(__qt_internal_get_possible_cmake_dirs out_paths prefix_path)
     set(${out_paths} "")
 
-    if(EXISTS "${prefix_path}/lib/cmake")
-        list(APPEND ${out_paths} "${prefix_path}/lib/cmake")
+    set(next_path "${prefix_path}/${INSTALL_CMAKEDIR}")
+    if(INSTALL_CMAKEDIR AND EXISTS "${next_path}")
+        list(APPEND ${out_paths} "${next_path}")
     endif()
 
     string(TOUPPER "${QT_CMAKE_EXPORT_NAMESPACE}" export_namespace_upper)
-    set(next_path "${prefix_path}/${${export_namespace_upper}_INSTALL_LIBS}/cmake")
-    if(${export_namespace_upper}_INSTALL_LIBS AND EXISTS "${next_path}")
+    set(next_path "${prefix_path}/${${export_namespace_upper}_INSTALL_CMAKEDIR}")
+    if(${export_namespace_upper}_INSTALL_CMAKEDIR AND EXISTS "${next_path}")
         list(APPEND ${out_paths} "${next_path}")
     endif()
 
-    set(next_path "${prefix_path}/${INSTALL_LIBDIR}/cmake")
-    if(INSTALL_LIBDIR AND EXISTS "${next_path}")
-        list(APPEND ${out_paths} "${next_path}")
+    if(EXISTS "${prefix_path}/lib/cmake")
+        list(APPEND ${out_paths} "${prefix_path}/lib/cmake")
     endif()
 
     list(REMOVE_DUPLICATES ${out_paths})
@@ -385,21 +396,44 @@ function(_qt_internal_add_phony_target_deferred target)
     endif()
 endfunction()
 
+# Equivalent to the auto-generated `*Targets.cmake` multi-inclusion check
+#
 # The helper function that checks if module was included multiple times, and has the inconsistent
 # set of targets that belong to the module. It's expected that either all 'targets' or none of them
 # will be written to the 'targets_not_defined' variable, if the module was not or was
 # searched before accordingly.
-function(_qt_internal_check_multiple_inclusion targets_not_defined targets)
+function(_qt_internal_check_multiple_inclusion targets_not_defined)
+    # Backport for the old syntax
+    if(ARGC EQUAL 2)
+        _qt_internal_check_multiple_inclusion(${targets_not_defined}
+            TARGETS ${ARGN}
+        )
+        set(${targets_not_defined} "${${targets_not_defined}}" PARENT_SCOPE)
+        return()
+    endif()
+
+    set(option_args "")
+    set(single_args
+        NAMESPACE
+    )
+    set(multi_args
+        TARGETS
+    )
+    cmake_parse_arguments(PARSE_ARGV 1 arg "${option_args}" "${single_args}" "${multi_args}")
+
+    if(NOT arg_NAMESPACE)
+        set(arg_NAMESPACE Qt::)
+    endif()
+
     set(targets_defined "")
     set(${targets_not_defined} "")
     set(expected_targets "")
-    foreach(expected_target ${targets})
+    foreach(expected_target ${arg_TARGETS})
         list(APPEND expected_targets ${expected_target})
-        if(NOT TARGET Qt::${expected_target})
-            list(APPEND ${targets_not_defined} ${expected_target})
-        endif()
-        if(TARGET Qt::${expected_target})
+        if(TARGET "${arg_NAMESPACE}${expected_target}")
             list(APPEND targets_defined ${expected_target})
+        else()
+            list(APPEND ${targets_not_defined} ${expected_target})
         endif()
     endforeach()
     if("${targets_defined}" STREQUAL "${expected_targets}")
@@ -995,6 +1029,157 @@ function(_qt_internal_get_moc_compiler_flavor_flags out_var)
     endif()
 
     set(${out_var} "${flags}" PARENT_SCOPE)
+endfunction()
+
+# Check if we should be including the `Targets.cmake` file
+#
+# Synopsis
+#
+#   _qt_internal_should_include_targets(
+#       TARGETS <target1> ...
+#       NAMESPACE <str>
+#       OUT_VAR_SHOULD_SKIP <var>
+#       [PROJECT_NAME <str>]
+#       [TEST_PLUGIN]
+#       [CHECK_QT_NO_CREATE_TARGETS]
+#   )
+#
+# Arguments
+#
+# `TARGETS`
+#   The targets added via `export(TARGETS ...)`
+#
+# `NAMESPACE`
+#   The `NAMESPACE` used in the `export` command. Make sure to include the `::`
+#
+# `OUT_VAR_SHOULD_SKIP`
+#   Output variable indicating if the `include(*Targets.cmake)` should be skipped
+#
+# `PROJECT_NAME`
+#   The original project that defined the current Config.cmake file at the time of the
+#   generation. For now only used for plugins.
+#
+# `TEST_PLUGIN`
+#   If the module is a TEST_PLUGIN, we do additional checks based on
+#   `QT_BUILD_STANDALONE_TESTS`
+#
+# `CHECK_QT_NO_CREATE_TARGETS`
+#   Whether to check `QT_NO_CREATE_TARGETS` as a compatibility step
+function(_qt_internal_should_include_targets)
+    set(option_args
+        TEST_PLUGIN
+        CHECK_QT_NO_CREATE_TARGETS
+    )
+    set(single_args
+        NAMESPACE
+        OUT_VAR_SHOULD_SKIP
+        PROJECT_NAME
+    )
+    set(multi_args
+        TARGETS
+    )
+    cmake_parse_arguments(PARSE_ARGV 0 arg "${option_args}" "${single_args}" "${multi_args}")
+
+    # Check for required inputs
+    foreach(check_arg IN ITEMS NAMESPACE OUT_VAR_SHOULD_SKIP)
+        if(NOT arg_${check_arg})
+            message(FATAL_ERROR "Missing input ${check_arg}")
+        endif()
+    endforeach()
+
+    # Check for inputs that will be required in the future
+    foreach(check_arg IN ITEMS)
+        if(NOT arg_${check_arg})
+            get_property(skip_warning GLOBAL
+                PROPERTY _qt_skip_warning__qt_internal_should_include_targets
+            )
+            if(NOT skip_warning)
+                message(WARNING
+                    "The current module was generated before ${check_arg} was introduced.\n"
+                    "Consider reconfiguring the current module (see backtrace)."
+                )
+                set_property(GLOBAL
+                    PROPERTY _qt_skip_warning__qt_internal_should_include_targets ON
+                )
+            endif()
+        endif()
+    endforeach()
+
+    # Check for deprecated inputs, i.e. the Config.cmake were already created
+    # with a version of qtbase that removed the specific compatibilities
+    foreach(check_arg IN ITEMS )
+        if(arg_${check_arg})
+            get_property(skip_warning GLOBAL
+                PROPERTY _qt_skip_warning__qt_internal_should_include_targets
+            )
+            if(NOT skip_warning)
+                message(WARNING
+                    "The input ${check_arg} is deprecated and has no effect.\n"
+                    "Consider reconfiguring the current module (see backtrace)."
+                )
+                set_property(GLOBAL
+                    PROPERTY _qt_skip_warning__qt_internal_should_include_targets ON
+                )
+            endif()
+        endif()
+    endforeach()
+
+    if(arg_PROJECT_NAME)
+        # Check if we are in a top-level build and which submodules will be included
+        if(NOT QT_INTERNAL_BUILD_STANDALONE_PARTS AND DEFINED Qt_SOURCE_DIR)
+            # All projects will be rebuilt so skip any include targets
+            set(${arg_OUT_VAR_SHOULD_SKIP} ON PARENT_SCOPE)
+            return()
+        endif()
+
+        # Check if we are building the current project
+        if(NOT QT_INTERNAL_BUILD_STANDALONE_PARTS AND
+            PROJECT_NAME STREQUAL arg_PROJECT_NAME)
+            # We are currently building the project, so skip the include targets
+            set(${arg_OUT_VAR_SHOULD_SKIP} ON PARENT_SCOPE)
+            return()
+        endif()
+
+        # Check if we are building the standalone tests
+        if(arg_TEST_PLUGIN AND QT_BUILD_STANDALONE_TESTS AND
+            PROJECT_NAME STREQUAL arg_PROJECT_NAME)
+            set(${arg_OUT_VAR_SHOULD_SKIP} ON PARENT_SCOPE)
+            return()
+        endif()
+    endif()
+
+    # Compatibility using the old global `QT_NO_CREATE_TARGETS`
+    # TODO: Remove these once developers have reconfigured their project.
+    if(arg_CHECK_QT_NO_CREATE_TARGETS AND QT_NO_CREATE_TARGETS)
+        set(${arg_OUT_VAR_SHOULD_SKIP} ON PARENT_SCOPE)
+        return()
+    endif()
+
+    # We might still be generating the Targets.cmake file, so we do the same
+    # checks as in the Targets.cmake, but with the targets that were defined
+    # in the current build tree.
+    _qt_internal_check_multiple_inclusion(tgt_not_defined
+        TARGETS ${arg_TARGETS}
+        NAMESPACE ${arg_NAMESPACE}
+    )
+
+    # In Targets.cmake, if there are no expected targets that are undefined,
+    # the script returns, otherwise it creates all expected targets.
+    if(NOT tgt_not_defined)
+        set(${arg_OUT_VAR_SHOULD_SKIP} ON PARENT_SCOPE)
+        return()
+    endif()
+
+    # If no special setup is detected, use the normal logic, i.e. include
+    # the Targets.cmake
+    set(${arg_OUT_VAR_SHOULD_SKIP} OFF PARENT_SCOPE)
+endfunction()
+
+# Creates a regular expression that exactly matches the given string
+# Found in https://gitlab.kitware.com/cmake/cmake/issues/18580
+function(_qt_internal_re_escape out_var str)
+    string(REGEX REPLACE "([][+.*()^])" "\\\\\\1" regex "${str}")
+    set(${out_var} ${regex} PARENT_SCOPE)
 endfunction()
 
 # Create a non-existent, unique target name.

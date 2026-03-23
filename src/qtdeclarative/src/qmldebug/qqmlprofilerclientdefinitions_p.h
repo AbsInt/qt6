@@ -31,6 +31,7 @@ enum Message {
     SceneGraphFrame,
     MemoryAllocation,
     DebugMessage,
+    Quick3DFrame,
 
     MaximumMessage
 };
@@ -91,6 +92,22 @@ enum MemoryType {
     SmallItem
 };
 
+enum Quick3DFrameType {
+    Quick3DRenderFrame,     // Render Thread
+    Quick3DSynchronizeFrame,
+    Quick3DPrepareFrame,
+    Quick3DMeshLoad,
+    Quick3DCustomMeshLoad,
+    Quick3DTextureLoad,
+    Quick3DGenerateShader,
+    Quick3DLoadShader,
+    Quick3DParticleUpdate,  // GUI Thread
+    Quick3DRenderCall,      // Render Thread
+    Quick3DRenderPass,      // Render Thread
+    Quick3DEventData,       // N/A
+    MaximumQuick3DFrameType,
+};
+
 enum ProfileFeature {
     ProfileJavaScript,
     ProfileMemory,
@@ -104,6 +121,7 @@ enum ProfileFeature {
     ProfileHandlingSignal,
     ProfileInputEvents,
     ProfileDebugMessages,
+    ProfileQuick3D,
 
     MaximumProfileFeature
 };

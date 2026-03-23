@@ -200,8 +200,9 @@ A comment has methods to write it out again (write) and expose it to the Dom
 bool Comment::iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const
 {
     bool cont = true;
-    cont = cont && self.dvValueField(visitor, Fields::rawComment, rawComment());
-    cont = cont && self.dvValueField(visitor, Fields::newlinesBefore, newlinesBefore());
+    cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::rawComment), rawComment());
+    cont = cont && self.invokeVisitorOnValue(visitor, PathEls::Field(Fields::newlinesBefore),
+                                         newlinesBefore());
     return cont;
 }
 
@@ -243,8 +244,8 @@ startRegion/ EndRegion). Region comments keeps a mapping containing them.
 bool CommentedElement::iterateDirectSubpaths(const DomItem &self, DirectVisitor visitor) const
 {
     bool cont = true;
-    cont = cont && self.dvWrapField(visitor, Fields::preComments, m_preComments);
-    cont = cont && self.dvWrapField(visitor, Fields::postComments, m_postComments);
+    cont = cont && self.invokeVisitorOnField(visitor, Fields::preComments, m_preComments);
+    cont = cont && self.invokeVisitorOnField(visitor, Fields::postComments, m_postComments);
     return cont;
 }
 
@@ -393,6 +394,27 @@ public:
         return true;
     }
 
+    bool visit(ArrayPattern *array) override
+    {
+        addSourceLocations(array, array->lbracketToken);
+        addSourceLocations(array, array->commaToken);
+        addSourceLocations(array, array->rbracketToken);
+        return true;
+    }
+
+    bool visit(ObjectPattern *object) override
+    {
+        addSourceLocations(object, object->lbraceToken);
+        addSourceLocations(object, object->rbraceToken);
+        return true;
+    }
+
+    bool visit(Elision *elision) override
+    {
+        addSourceLocations(elision, elision->commaToken);
+        return true;
+    }
+
     bool visit(CaseClause *caseClause) override
     {
         // special case: case clauses can have comments attached to their `:` token
@@ -420,12 +442,6 @@ public:
 
     bool visit(FormalParameterList *list) override
     {
-        if (!list->commaToken.isValid())
-            return true;
-
-        // Comments are first attached to some previous element, if possible. Therefore, attach
-        // comments in FormalParameterList to comments so that they don't "jump over commas" during
-        // formatting.
         addSourceLocations(list, list->commaToken);
         return true;
     }
@@ -442,6 +458,7 @@ public:
     bool visit(FunctionExpression *fExpr) override
     {
         addSourceLocations(fExpr, fExpr->identifierToken);
+        addSourceLocations(fExpr, fExpr->starToken);
         addSourceLocations(fExpr, fExpr->lparenToken);
         addSourceLocations(fExpr, fExpr->rparenToken);
         addSourceLocations(fExpr, fExpr->lbraceToken);
@@ -492,6 +509,27 @@ public:
 
         // need to accept manually, see UiQualifiedId::accept0 implementation
         AST::Node::accept(id->next, this);
+        return true;
+    }
+
+    bool visit(TryStatement *tryStatement) override
+    {
+        addSourceLocations(tryStatement, tryStatement->tryToken);
+        return true;
+    }
+
+    bool visit(Catch *catchStatement) override
+    {
+        addSourceLocations(catchStatement, catchStatement->catchToken);
+        addSourceLocations(catchStatement, catchStatement->lparenToken);
+        addSourceLocations(catchStatement, catchStatement->identifierToken);
+        addSourceLocations(catchStatement, catchStatement->rparenToken);
+        return true;
+    }
+
+    bool visit(Finally *finallyStatement) override
+    {
+        addSourceLocations(finallyStatement, finallyStatement->finallyToken);
         return true;
     }
 
@@ -564,10 +602,6 @@ const QSet<int> AstRangesVisitor::kindsToSkip()
 bool AstRangesVisitor::shouldSkipRegion(const DomItem &item, FileLocationRegion region)
 {
     switch (item.internalKind()) {
-    case DomType::QmlObject: {
-        return (region == FileLocationRegion::RightBraceRegion
-                || region == FileLocationRegion::LeftBraceRegion);
-    }
     case DomType::Import:
     case DomType::ImportScope:
         return region == FileLocationRegion::IdentifierRegion;
@@ -800,9 +834,9 @@ bool AstComments::iterateDirectSubpaths(const DomItem &self, DirectVisitor visit
     auto [pre, post] = collectPreAndPostComments();
 
     if (!pre.isEmpty())
-        self.dvWrapField(visitor, Fields::preComments, pre);
+        self.invokeVisitorOnField(visitor, Fields::preComments, pre);
     if (!post.isEmpty())
-        self.dvWrapField(visitor, Fields::postComments, post);
+        self.invokeVisitorOnField(visitor, Fields::postComments, post);
 
     return false;
 }
@@ -862,9 +896,7 @@ void CommentCollector::collectComments(
         }
 
         if (const auto *const commentNode = std::get_if<NodeRef>(&elementToBeLinked.element)) {
-            auto commentedElement = astComments->ensureCommentForNode(commentNode->node,
-                                                                      commentNode->commentAnchor);
-            commentedElement->addComment(comment);
+            astComments->addComment(commentNode->node, commentNode->commentAnchor, comment);
         } else if (const auto *const regionRef =
                            std::get_if<RegionRef>(&elementToBeLinked.element)) {
             DomItem currentItem = m_rootItem.item().path(regionRef->path);
@@ -892,13 +924,12 @@ bool RegionComments::iterateDirectSubpaths(const DomItem &self, DirectVisitor vi
 {
     bool cont = true;
     if (!m_regionComments.isEmpty()) {
-        cont = cont
-                && self.dvItemField(visitor, Fields::regionComments, [this, &self]() -> DomItem {
-                       const Path pathFromOwner =
-                               self.pathFromOwner().withField(Fields::regionComments);
-                       auto map = Map::fromFileRegionMap(pathFromOwner, m_regionComments);
-                       return self.subMapItem(map);
-                   });
+        cont = cont && visitor(PathEls::Field(Fields::regionComments), [this, &self]() -> DomItem {
+                   const Path pathFromOwner =
+                           self.pathFromOwner().withField(Fields::regionComments);
+                   auto map = Map::fromFileRegionMap(pathFromOwner, m_regionComments);
+                   return self.subMapItem(map);
+               });
     }
     return cont;
 }

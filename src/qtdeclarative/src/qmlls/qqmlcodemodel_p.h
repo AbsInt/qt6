@@ -18,6 +18,9 @@
 
 #include "qlanguageserver_p.h"
 #include "qtextdocument_p.h"
+#include "qprocessscheduler_p.h"
+#include "qqmllshelputils_p.h"
+#include "qqmlsemantictokens_p.h"
 
 #include <QObject>
 #include <QHash>
@@ -50,7 +53,6 @@ public:
     QQmlJS::Dom::DomItem doc;
     std::optional<int> validDocVersion;
     QQmlJS::Dom::DomItem validDoc;
-    std::optional<int> scopeVersion;
     QDateTime scopeDependenciesLoadTime;
     bool scopeDependenciesChanged = false;
     QQmlJSScope::ConstPtr scope;
@@ -69,22 +71,27 @@ public:
 struct RegisteredSemanticTokens
 {
     QByteArray resultId = "0";
-    QList<int> lastTokens;
+    QmlHighlighting::HighlightsContainer highlights;
 };
 
 struct ModuleSetting
 {
     QString sourceFolder;
     QStringList importPaths;
+    QStringList resourceFiles;
 };
+
+enum UpdatePolicy { NormalUpdate, ForceUpdate };
 
 using ModuleSettings = QList<ModuleSetting>;
 class QQmllsBuildInformation
 {
 public:
     QQmllsBuildInformation();
-    void loadSettingsFrom(const QStringList &buildPaths);
+    void loadSettingsFrom(const QStringList &buildPaths, UpdatePolicy policy = NormalUpdate);
     QStringList importPathsFor(const QString &filePath);
+    QStringList resourceFilesFor(const QString &filePath);
+    ModuleSetting settingFor(const QString &filePath);
 
 private:
     QString m_docDir;
@@ -99,46 +106,73 @@ public:
     enum class UrlLookup { Caching, ForceLookup };
     enum class State { Running, Stopping };
 
-    explicit QQmlCodeModel(QObject *parent = nullptr, QQmlToolingSettings *settings = nullptr);
+    static constexpr QLatin1String s_maxCMakeJobs = "max"_L1;
+    static constexpr int s_defaultCMakeJobs = 1;
+
+    explicit QQmlCodeModel(const QByteArray &rootUrl = {}, QObject *parent = nullptr,
+                           QQmlToolingSharedSettings *settings = nullptr);
     ~QQmlCodeModel();
     void prepareForShutdown();
+
     QQmlJS::Dom::DomItem currentEnv() const { return m_currentEnv; };
     QQmlJS::Dom::DomItem validEnv() const { return m_validEnv; };
     OpenDocumentSnapshot snapshotByUrl(const QByteArray &url);
     OpenDocument openDocumentByUrl(const QByteArray &url);
+    bool isEmpty() const;
 
-    void openNeedUpdate();
-    void addOpenToUpdate(const QByteArray &);
-    void removeDirectory(const QString &path);
+    void addOpenToUpdate(const QByteArray &, UpdatePolicy policy);
+    void removeDirectory(const QByteArray &);
     // void updateDocument(const OpenDocument &doc);
-    QString url2Path(const QByteArray &url, UrlLookup options = UrlLookup::Caching);
     void newOpenFile(const QByteArray &url, int version, const QString &docText);
     void closeOpenFile(const QByteArray &url);
-    void setRootUrls(const QList<QByteArray> &urls);
-    QList<QByteArray> rootUrls() const;
-    void addRootUrls(const QList<QByteArray> &urls);
-    QStringList buildPathsForRootUrl(const QByteArray &url);
+    QByteArray rootUrl() const;
+    QStringList buildPaths();
     QStringList buildPathsForFileUrl(const QByteArray &url);
-    void setBuildPathsForRootUrl(QByteArray url, const QStringList &paths);
-    QStringList importPathsForFile(const QString &fileName);
-    QStringList importPaths() const { return m_importPaths; };
-    void setImportPaths(const QStringList &paths) { m_importPaths = paths; };
-    void removeRootUrls(const QList<QByteArray> &urls);
-    QQmlToolingSettings *settings() const { return m_settings; }
-    QStringList findFilePathsFromFileNames(const QStringList &fileNames);
+    void setBuildPaths(const QStringList &paths);
+    QStringList buildPathsForOpenedFiles();
+    QStringList importPathsForUrl(const QByteArray &);
+    QStringList importPaths() const;
+    void setImportPaths(const QStringList &paths);
+    QStringList resourceFiles() const;
+    void setResourceFiles(const QStringList &resourceFiles);
+    QQmlToolingSharedSettings *settings() const { return m_settings; }
+    QStringList findFilePathsFromFileNames(const QStringList &fileNames,
+                                           const QSet<QString> &alreadyWatchedFiles);
     static QStringList fileNamesToWatch(const QQmlJS::Dom::DomItem &qmlFile);
     void disableCMakeCalls();
-    const QFactoryLoader &pluginLoader() const { return m_pluginLoader; }
+    void tryEnableCMakeCalls(QProcessScheduler *scheduler);
 
     RegisteredSemanticTokens &registeredTokens();
     const RegisteredSemanticTokens &registeredTokens() const;
-    QString documentationRootPath() const { return m_documentationRootPath; }
+    QString documentationRootPath() const
+    {
+        QMutexLocker l(&m_mutex);
+        return m_documentationRootPath;
+    }
     void setDocumentationRootPath(const QString &path);
 
-    QSet<QString> ignoreForWatching() const { return m_ignoreForWatching; }
+    QSet<QString> ignoreForWatching() const
+    {
+        QMutexLocker guard(&m_mutex);
+        return m_ignoreForWatching;
+    }
+    HelpManager *helpManager() { return &m_helpManager; }
+
+    void setVerbose(bool verbose)
+    {
+        QMutexLocker guard(&m_mutex);
+        m_verbose = verbose;
+    }
+    bool verbose() const
+    {
+        QMutexLocker guard(&m_mutex);
+        return m_verbose;
+    }
+    void setCMakeJobs(int jobs) { m_cmakeJobs = jobs; }
+    int cmakeJobs() const { return m_cmakeJobs; }
 
 Q_SIGNALS:
-    void updatedSnapshot(const QByteArray &url);
+    void updatedSnapshot(const QByteArray &url, UpdatePolicy policy);
     void documentationRootPathChanged(const QString &path);
     void openUpdateThreadFinished();
 
@@ -146,43 +180,58 @@ private:
     void addDirectory(const QString &path, int leftDepth);
 
     // only to be called from the openUpdateThread
-    void newDocForOpenFile(const QByteArray &url, int version, const QString &docText);
+    void newDocForOpenFile(const QByteArray &url, int version, const QString &docText,
+                           UpdatePolicy policy);
     bool openUpdateSome();
-    void openUpdate(const QByteArray &);
+    void openUpdate(const QByteArray &, UpdatePolicy policy);
 
     void openUpdateStart();
     void openUpdateEnd();
+    void openNeedUpdate();
+    QString url2Path(const QByteArray &url, UrlLookup options = UrlLookup::Caching);
 
-    static bool callCMakeBuild(const QStringList &buildPaths);
+    void callCMakeBuild(QProcessScheduler *scheduler);
+    void onCMakeProcessFinished(const QByteArray &id);
+
     void addFileWatches(const QQmlJS::Dom::DomItem &qmlFile);
+
     enum CMakeStatus { RequiresInitialization, HasCMake, DoesNotHaveCMake };
-    void initializeCMakeStatus(const QString &);
+    CMakeStatus cmakeStatus() const
+    {
+        QMutexLocker guard(&m_mutex);
+        return m_cmakeStatus;
+    }
+    void setCMakeStatus(CMakeStatus status)
+    {
+        QMutexLocker guard(&m_mutex);
+        m_cmakeStatus = status;
+    }
 
     mutable QMutex m_mutex;
-    State m_state = State::Running;
-    int m_nUpdateInProgress = 0;
-    QThread *m_openUpdateThread = nullptr; // needed for asserts
+    const QByteArray m_rootUrl; // note: access without m_mutex, is const
+
+    QQmlJS::Dom::DomItem m_currentEnv; // note: access without m_mutex, has thread-safe API
+    QQmlJS::Dom::DomItem m_validEnv; // note: access without m_mutex, has thread-safe API
+    QQmlToolingSharedSettings *m_settings; // note: access without m_mutex. has thread-safe API
+    HelpManager m_helpManager; // note: access without m_mutex, has thread-safe API
+
+    QThread* m_openUpdateThread = nullptr; // needed for asserts
+    QHash<QByteArray, UpdatePolicy> m_openDocumentsToUpdate;
+    QStringList m_buildPaths;
     QStringList m_importPaths;
-    QQmlJS::Dom::DomItem m_currentEnv;
-    QQmlJS::Dom::DomItem m_validEnv;
-    QByteArray m_lastOpenDocumentUpdated;
-    QSet<QByteArray> m_openDocumentsToUpdate;
-    QHash<QByteArray, QStringList> m_buildPathsForRootUrl;
-    QList<QByteArray> m_rootUrls;
+    QStringList m_resourceFiles;
     QHash<QByteArray, QString> m_url2path;
     QHash<QString, QByteArray> m_path2url;
     QHash<QByteArray, OpenDocument> m_openDocuments;
-    QQmlToolingSettings *m_settings;
-    QQmllsBuildInformation m_buildInformation;
     QFileSystemWatcher m_cppFileWatcher;
-    QFactoryLoader m_pluginLoader;
-    bool m_rebuildRequired = true; // always trigger a rebuild on start
-    CMakeStatus m_cmakeStatus = RequiresInitialization;
     RegisteredSemanticTokens m_tokens;
     QString m_documentationRootPath;
     QSet<QString> m_ignoreForWatching;
-private slots:
-    void onCppFileChanged(const QString &);
+    int m_nUpdateInProgress = 0;
+    CMakeStatus m_cmakeStatus = RequiresInitialization;
+    int m_cmakeJobs = 1;
+    State m_state = QQmlCodeModel::State::Running;
+    bool m_verbose = false;
 };
 
 } // namespace QmlLsp

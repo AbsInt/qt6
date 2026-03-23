@@ -80,7 +80,7 @@ QT_BEGIN_NAMESPACE
 #define Q_SIGNAL QT_ANNOTATE_FUNCTION(qt_signal)
 #define Q_SLOT QT_ANNOTATE_FUNCTION(qt_slot)
 #define Q_MOC_INCLUDE(...) QT_ANNOTATE_CLASS(qt_moc_include, __VA_ARGS__)
-#endif // QT_NO_META_MACROS
+#endif // !QT_NO_META_MACROS
 
 #ifndef QT_NO_TRANSLATION
 // full set of tr functions
@@ -177,7 +177,7 @@ private: \
 #define Q_NAMESPACE Q_NAMESPACE_EXPORT() \
     /*end*/
 
-#endif // QT_NO_META_MACROS
+#endif // !QT_NO_META_MACROS
 
 #else // Q_MOC_RUN
 #define slots slots

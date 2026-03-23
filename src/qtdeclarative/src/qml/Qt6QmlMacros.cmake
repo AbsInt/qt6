@@ -325,6 +325,9 @@ function(qt6_add_qml_module target)
 
         # Give the resource for the qmldir a unique name; TODO: Remove once we can
         __QT_INTERNAL_DISAMBIGUATE_QMLDIR_RESOURCE
+
+        # Don't add this module to qmlls.build.ini
+        __QT_INTERNAL_NO_GENERATE_QMLLS_BUILD_INI
     )
 
     set(args_single
@@ -1164,17 +1167,23 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
             endif()
         endif()
 
-        set_property(GLOBAL APPEND PROPERTY _qmlls_build_ini_targets "${target}")
+        if(NOT arg___QT_INTERNAL_NO_GENERATE_QMLLS_BUILD_INI)
+            set_property(GLOBAL APPEND PROPERTY _qmlls_build_ini_targets "${target}")
 
-        cmake_language(DEFER DIRECTORY "${CMAKE_BINARY_DIR}" GET_CALL qmlls_build_ini_generation_id call)
-        if("${call}" STREQUAL "")
-            cmake_language(EVAL CODE
-                "cmake_language(DEFER DIRECTORY \"${CMAKE_BINARY_DIR}\" "
-                    "ID qmlls_build_ini_generation_id "
-                    "CALL _qt_internal_write_deferred_qmlls_build_ini_file"
-                    "${QT_CMAKE_EXPORT_NAMESPACE}"
-                ")"
+            cmake_language(
+                DEFER
+                DIRECTORY "${CMAKE_BINARY_DIR}"
+                GET_CALL qmlls_build_ini_generation_id call
             )
+            if("${call}" STREQUAL "")
+                cmake_language(EVAL CODE
+                    "cmake_language(DEFER DIRECTORY \"${CMAKE_BINARY_DIR}\" "
+                        "ID qmlls_build_ini_generation_id "
+                        "CALL _qt_internal_write_deferred_qmlls_build_ini_file"
+                        "${QT_CMAKE_EXPORT_NAMESPACE}"
+                    ")"
+                )
+            endif()
         endif()
     else()
         if(QT_QML_GENERATE_QMLLS_INI)
@@ -1395,6 +1404,28 @@ function(_qt_internal_list_to_ini list_var)
     set(${list_var} "${result}" PARENT_SCOPE)
 endfunction()
 
+function(_qt_internal_collect_qmlls_build_ini_part out_var qmlls_build_ini_targets)
+    set(content_to_append "")
+    foreach(current_target IN LISTS qmlls_build_ini_targets)
+        # prepare import paths
+        _qt_internal_collect_qml_import_paths(_import_paths ${current_target})
+
+        # Note that standalone builds will have the installation path twice in _import_paths:
+        # _qt_internal_list_to_ini takes care of removing these duplicates.
+        _qt_internal_list_to_ini(_import_paths)
+
+        # prepare source paths: replace / with <SLASH> as .ini files do not support / in group names
+        get_target_property(source_path "${current_target}" SOURCE_DIR)
+        string(REPLACE "/" "<SLASH>" source_path "${source_path}")
+
+        get_target_property(_qrc_files ${current_target} _qt_generated_qrc_files)
+        _qt_internal_list_to_ini(_qrc_files)
+
+        set(content_to_append "${content_to_append}[${source_path}]\nimportPaths=\"${_import_paths}\"\nresourceFiles=\"${_qrc_files}\"\n")
+    endforeach()
+    set(${out_var} "${content_to_append}" PARENT_SCOPE)
+endfunction()
+
 function(_qt_internal_write_deferred_qmlls_build_ini_file qt_cmake_export_namespace)
     # _qt_internal_write_deferred_qmlls_build_ini_file is deferred to be called in the root
     # CMAKE_BINARY_DIR. If find_package(Qt6) is not called in the root of the project (like in the
@@ -1428,28 +1459,15 @@ function(_qt_internal_write_deferred_qmlls_build_ini_file qt_cmake_export_namesp
         )
     endif()
 
-    foreach(current_target IN LISTS _qmlls_build_ini_targets)
-        # prepare import paths
-        _qt_internal_collect_qml_import_paths(_import_paths ${current_target})
-
-        # Note that standalone builds will have the installation path twice in _import_paths: _qt_internal_list_to_ini
-        # takes care of removing these duplicates.
-        _qt_internal_list_to_ini(_import_paths)
-
-        # prepare source paths: replace / with <SLASH> as .ini files do not support / in group names
-        get_target_property(source_path "${current_target}" SOURCE_DIR)
-        string(REPLACE "/" "<SLASH>" source_path "${source_path}")
-
-        add_custom_command(
-            OUTPUT
-                ${qmlls_build_ini_file}
-            COMMAND ${CMAKE_COMMAND} -E
-                echo "[${source_path}]" >> ${qmlls_build_ini_file}
-            COMMAND ${CMAKE_COMMAND} -E
-                echo "importPaths=\"${_import_paths}\"" >> ${qmlls_build_ini_file}
-            APPEND
-        )
-    endforeach()
+    _qt_internal_collect_qmlls_build_ini_part(content_to_append "${_qmlls_build_ini_targets}")
+    file(CONFIGURE OUTPUT "${qmlls_build_ini_file}.part" CONTENT "${content_to_append}")
+    add_custom_command(
+        OUTPUT
+            "${qmlls_build_ini_file}"
+        COMMAND ${CMAKE_COMMAND}
+            -E cat "${qmlls_build_ini_file}.part" >> "${qmlls_build_ini_file}"
+        APPEND
+    )
 
     add_custom_target(generate_qmlls_build_ini_file
         DEPENDS ${qmlls_build_ini_file}
@@ -1800,6 +1818,46 @@ function(_qt_internal_target_enable_qmllint target)
         all_qmllint_json ${lint_target_json})
     _qt_internal_add_all_qmllint_target(QT_QMLLINT_MODULE_ALL_TARGET
         all_qmllint_module ${lint_target_module})
+
+    if(QT_FEATURE_qmlcontextpropertydump)
+        _qt_internal_add_generate_context_property_dump_target(${lint_target})
+    endif()
+endfunction()
+
+function(_qt_internal_add_generate_context_property_dump_target lint_target)
+    set(global_target_name dump_qml_context_properties)
+    set(global_target_clean_name clean_qml_context_properties)
+
+    if(NOT TARGET ${global_target_name})
+        set(qmlcontextpropertydump_file "${CMAKE_BINARY_DIR}/.qt/contextPropertyDump.ini")
+
+        _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
+        add_custom_command(
+            OUTPUT "${qmlcontextpropertydump_file}"
+            COMMAND
+                "${tool_wrapper}"
+                $<TARGET_FILE:${QT_CMAKE_EXPORT_NAMESPACE}::qmlcontextpropertydump>
+                --cpp-source-directory "${CMAKE_SOURCE_DIR}" --build-directory "${CMAKE_BINARY_DIR}"
+            COMMAND_EXPAND_LISTS
+            DEPENDS
+                ${QT_CMAKE_EXPORT_NAMESPACE}::qmlcontextpropertydump
+            COMMENT "Generating ${qmlcontextpropertydump_file} file for qmllint"
+        )
+
+        add_custom_target(${global_target_name}
+            DEPENDS "${qmlcontextpropertydump_file}"
+        )
+
+        add_custom_target(${global_target_clean_name}
+            COMMAND ${CMAKE_COMMAND} -E rm "${qmlcontextpropertydump_file}"
+            COMMENT "Removing ${qmlcontextpropertydump_file} file"
+        )
+    endif()
+
+    if(QT_QMLLINT_CONTEXT_PROPERTY_DUMP)
+        # make the lint target search for context properties
+        add_dependencies(${lint_target} ${global_target_name})
+    endif()
 endfunction()
 
 # Create an 'all_qmllint' target. The target's name can be user-controlled by ${target_var} with the
@@ -4332,7 +4390,7 @@ endfunction()
 
 function(qt6_qml_type_registration)
     message(FATAL_ERROR
-        "This function, previously available under Technical Preview, has been removed. "
+        "This function, previously available under Technology Preview, has been removed. "
         "Please use qt6_add_qml_module() instead."
     )
 endfunction()
@@ -4340,7 +4398,7 @@ endfunction()
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     function(qt_qml_type_registration)
         message(FATAL_ERROR
-            "This function, previously available under Technical Preview, has been removed. "
+            "This function, previously available under Technology Preview, has been removed. "
             "Please use qt_add_qml_module() instead."
         )
     endfunction()
@@ -4422,12 +4480,16 @@ function(_qt_internal_collect_target_qml_import_paths out_var target)
             string(REGEX REPLACE "(.*)/${target_path}" "\\1" base_dir "${output_dir}")
             list(APPEND qml_import_paths "${base_dir}")
         else()
-            message(WARNING
-                "The ${target} target is a QML module with target path ${target_path}. "
-                "It uses an OUTPUT_DIRECTORY of ${output_dir}, which should end in the "
-                "same target path, but doesn't. Tooling such as qmllint may not work "
-                "correctly."
-            )
+            get_target_property(has_warned ${target} QT_QML_IMPORT_PATH_HAS_WARNED_ALREADY)
+            if(NOT "${has_warned}")
+                message(WARNING
+                    "The ${target} target is a QML module with target path ${target_path}. "
+                    "It uses an OUTPUT_DIRECTORY of ${output_dir}, which should end in the "
+                    "same target path, but doesn't. Tooling such as qmllint may not work "
+                    "correctly."
+                )
+                set_target_properties(${target} PROPERTIES QT_QML_IMPORT_PATH_HAS_WARNED_ALREADY ON)
+            endif()
         endif()
     endif()
 

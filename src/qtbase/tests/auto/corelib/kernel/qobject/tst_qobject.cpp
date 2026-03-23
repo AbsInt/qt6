@@ -160,6 +160,7 @@ private slots:
     void asyncCallbackHelper();
     void disconnectQueuedConnection_pendingEventsAreDelivered();
     void timerWithNegativeInterval();
+    void emptyQueuedMetaCallEvent();
 };
 
 struct QObjectCreatedOnShutdown
@@ -333,7 +334,12 @@ void tst_QObject::disconnect()
     connect(&s, SIGNAL(signal2()), &r1, SLOT(slot2()));
     connect(&s, SIGNAL(signal3()), &r1, SLOT(slot3()));
     connect(&s, SIGNAL(signal4()), &r1, SLOT(slot4()));
+
+    static auto re = QRegularExpression(u"QObject::connect: the SLOT\\(\\) macro is "
+                                        "used with a non-slot function:.*"_s);
+    QTest::ignoreMessage(QtWarningMsg, re);
     connect(&s, SIGNAL(signalInvoke1()), &r1, SLOT(slotInvoke1()));
+    QTest::ignoreMessage(QtWarningMsg, re);
     connect(&s, SIGNAL(signalSinvoke1()), &r1, SLOT(slotSinvoke1()));
 
     s.emitSignal1();
@@ -363,7 +369,11 @@ void tst_QObject::disconnect()
     ret = QObject::disconnect(&s, SIGNAL(signal1()), &r1, SLOT(slot1()));
     QVERIFY(!ret);
 
+    static auto re2 = QRegularExpression(u"QObject::disconnect: the SLOT\\(\\) macro is "
+                                         "used with a non-slot function:.*"_s);
+    QTest::ignoreMessage(QtWarningMsg, re2);
     QObject::disconnect(&s, SIGNAL(signalInvoke1()), &r1, SLOT(slotInvoke1()));
+    QTest::ignoreMessage(QtWarningMsg, re2);
     QObject::disconnect(&s, SIGNAL(signalSinvoke1()), &r1, SLOT(slotSinvoke1()));
 
     s.emitSignalInvoke1();
@@ -8726,6 +8736,9 @@ QT_END_NAMESPACE
 void tst_QObject::emitToDestroyedClass()
 {
     using namespace EmitToDestroyedClass;
+    assertionCallCount = 0;
+    wouldHaveAssertedCount = 0;
+
     std::unique_ptr ptr = std::make_unique<Derived>();
     QObject::connect(ptr.get(), &Base::theSignal, ptr.get(), &Derived::doNothing);
     QCOMPARE(assertionCallCount, 0);
@@ -9098,6 +9111,16 @@ void tst_QObject::timerWithNegativeInterval()
                          "interval will be set to 1ms.");
     int id = obj.startTimer(-100ms);
     QCOMPARE_NE(Qt::TimerId{id}, Qt::TimerId::Invalid);
+}
+
+void tst_QObject::emptyQueuedMetaCallEvent()
+{
+#ifdef QT_BUILD_INTERNAL
+    // don't crash
+    QQueuedMetaCallEvent event(0, nullptr, 0, 0, nullptr, nullptr);
+#else
+    QSKIP("Needs QT_BUILD_INTERNAL");
+#endif
 }
 
 QTEST_MAIN(tst_QObject)

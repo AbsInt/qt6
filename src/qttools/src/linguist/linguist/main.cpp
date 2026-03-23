@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "mainwindow.h"
+#include <helpclient.h>
 
 #include <QtCore/QFile>
 #include <QtCore/QLibraryInfo>
 #include <QtCore/QLocale>
 #include <QtCore/QTranslator>
+#include <QtCore/qcommandlineparser.h>
+#include <QtCore/qcommandlineoption.h>
 
 #include <QtWidgets/QApplication>
 #include <QtGui/QPixmap>
@@ -64,6 +67,8 @@ private:
 int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
+    QCoreApplication::setApplicationVersion(QLatin1StringView(qVersion()));
+    QCoreApplication::setApplicationName(u"Qt Linguist"_s);
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
 #ifdef Q_OS_MAC
@@ -71,22 +76,27 @@ int main(int argc, char **argv)
     app.installEventFilter(&eventFilter);
 #endif // Q_OS_MAC
 
-    QStringList files;
-    QString resourceDir = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
-    QStringList args = app.arguments();
 
-    for (int i = 1; i < args.size(); ++i) {
-        QString argument = args.at(i);
-        if (argument == "-resourcedir"_L1) {
-            if (i + 1 < args.size()) {
-                resourceDir = QFile::decodeName(args.at(++i).toLocal8Bit());
-            } else {
-                // issue a warning
-            }
-        } else if (!files.contains(argument)) {
-            files.append(argument);
-        }
-    }
+    QCommandLineParser parser;
+    parser.setApplicationDescription(QCoreApplication::applicationName() + "\n\n"_L1 + MainWindow::description());
+    parser.addHelpOption();
+    parser.addVersionOption();
+    parser.setSingleDashWordOptionMode(QCommandLineParser::ParseAsLongOptions);
+
+    const QCommandLineOption resourceDirOption(u"resourcedir"_s,
+                                               u"Resource directory"_s,
+                                               u"directory"_s);
+    parser.addOption(resourceDirOption);
+
+    const QCommandLineOption webHelpOption(u"web-help"_s, u"Use the Web documentation"_s);
+    parser.addOption(webHelpOption);
+
+    parser.addPositionalArgument(u"files"_s, u"The .ts files to open."_s);
+
+    parser.process(app);
+
+    QString resourceDir = parser.isSet(resourceDirOption)
+            ? parser.value(resourceDirOption) : QLibraryInfo::path(QLibraryInfo::TranslationsPath);
 
     QTranslator translator;
     QTranslator qtTranslator;
@@ -101,7 +111,7 @@ int main(int argc, char **argv)
     app.setOrganizationName("QtProject"_L1);
     app.setApplicationName("Linguist"_L1);
 
-    MainWindow mw;
+    MainWindow mw(parser.isSet(webHelpOption) ? HelpClientType::Web : HelpClientType::Assistant);
 #ifdef Q_OS_MAC
     eventFilter.setMainWindow(&mw);
 #endif // Q_OS_MAC
@@ -109,7 +119,7 @@ int main(int argc, char **argv)
     mw.show();
     QApplication::restoreOverrideCursor();
 
-    mw.openFiles(files, true);
+    mw.openFiles(parser.positionalArguments());
 
     return app.exec();
 }

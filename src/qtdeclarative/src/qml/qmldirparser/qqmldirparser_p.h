@@ -37,6 +37,7 @@ public:
     void setError(const QQmlJS::DiagnosticMessage &);
     QList<QQmlJS::DiagnosticMessage> errors(const QString &uri) const;
 
+    bool hasTypeNamespace() const { return !_typeNamespace.isEmpty(); }
     QString typeNamespace() const { return _typeNamespace; }
     void setTypeNamespace(const QString &s) { _typeNamespace = s; }
 
@@ -118,10 +119,11 @@ public:
         QTypeRevision version;     // invalid version is latest version, unless Flag::Auto
         Flags flags;
 
-        friend bool operator==(const Import &a, const Import &b)
+        friend bool comparesEqual(const Import &a, const Import &b) noexcept
         {
             return a.module == b.module && a.version == b.version && a.flags == b.flags;
         }
+        Q_DECLARE_EQUALITY_COMPARABLE(Import)
     };
 
     QMultiHash<QString,Component> components() const { return _components; }

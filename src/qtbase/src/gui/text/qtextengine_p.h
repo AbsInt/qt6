@@ -40,6 +40,8 @@
 #include <stdlib.h>
 #include <vector>
 
+struct hb_buffer_t;
+
 QT_BEGIN_NAMESPACE
 
 class QFontPrivate;
@@ -582,6 +584,8 @@ private:
 
     void indexFormats();
     void resolveFormats() const;
+
+    mutable hb_buffer_t *buffer = nullptr;
 
 public:
     bool atWordSeparator(int position) const;

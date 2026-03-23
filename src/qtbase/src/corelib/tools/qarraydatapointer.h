@@ -8,9 +8,6 @@
 #include <QtCore/qarraydataops.h>
 #include <QtCore/qcontainertools_impl.h>
 
-#include <QtCore/q20functional.h>
-#include <QtCore/q20memory.h>
-
 QT_BEGIN_NAMESPACE
 
 template <class T>
@@ -319,102 +316,6 @@ public:
         if (data && QtPrivate::q_points_into_range(*data, *this))
             *data += offset;
         this->ptr = res;
-    }
-
-    template <typename InputIterator, typename Projection = q20::identity>
-    void assign(InputIterator first, InputIterator last, Projection proj = {})
-    {
-        // This function only provides the basic exception guarantee.
-        constexpr bool IsFwdIt = std::is_convertible_v<
-                typename std::iterator_traits<InputIterator>::iterator_category,
-                std::forward_iterator_tag>;
-        constexpr bool IsIdentity = std::is_same_v<Projection, q20::identity>;
-
-        if constexpr (IsFwdIt) {
-            const qsizetype n = std::distance(first, last);
-            if (needsDetach() || n > constAllocatedCapacity()) {
-                QArrayDataPointer allocated(detachCapacity(n));
-                swap(allocated);
-            }
-        } else if (needsDetach()) {
-            QArrayDataPointer allocated(allocatedCapacity());
-            swap(allocated);
-            // We don't want to copy data that we know we'll overwrite
-        }
-
-        auto offset = freeSpaceAtBegin();
-        const auto capacityBegin = begin() - offset;
-        const auto prependBufferEnd = begin();
-
-        if constexpr (!std::is_nothrow_constructible_v<T, decltype(std::invoke(proj, *first))>
-                      || !std::is_nothrow_invocable_v<Projection, decltype(*first)>)
-        {
-            // If construction can throw, and we have freeSpaceAtBegin(),
-            // it's easiest to just clear the container and start fresh.
-            // The alternative would be to keep track of two active, disjoint ranges.
-            if (offset) {
-                (*this)->truncate(0);
-                setBegin(capacityBegin);
-                offset = 0;
-            }
-        }
-
-        auto dst = capacityBegin;
-        const auto dend = end();
-        if (offset) { // avoids dead stores
-            setBegin(capacityBegin); // undo prepend optimization
-
-            // By construction, the following loop is nothrow!
-            // (otherwise, we can't reach here)
-            // Assumes InputIterator operations don't throw.
-            // (but we can't statically assert that, as these operations
-            //  have preconditons, so typically aren't noexcept)
-            while (true) {
-                if (dst == prependBufferEnd) {  // ran out of prepend buffer space
-                    size += offset;
-                    // we now have a contiguous buffer, continue with the main loop:
-                    break;
-                }
-                if (first == last) {            // ran out of elements to assign
-                    std::destroy(prependBufferEnd, dend);
-                    size = dst - begin();
-                    return;
-                }
-                // construct element in prepend buffer
-                q20::construct_at(dst, std::invoke(proj, *first));
-                ++dst;
-                ++first;
-            }
-        }
-
-        while (true) {
-            if (first == last) {    // ran out of elements to assign
-                std::destroy(dst, dend);
-                break;
-            }
-            if (dst == dend) {      // ran out of existing elements to overwrite
-                if constexpr (IsFwdIt && IsIdentity) {
-                    dst = std::uninitialized_copy(first, last, dst);
-                    break;
-                } else if constexpr (IsFwdIt && !IsIdentity
-                           && std::is_nothrow_constructible_v<T, decltype(std::invoke(proj, *first))>
-                           && std::is_nothrow_invocable_v<Projection, decltype(*first)>)
-                {
-                    for (; first != last; ++dst, ++first)   // uninitialized_copy with projection
-                        q20::construct_at(dst, std::invoke(proj, *first));
-                    break;
-                } else {
-                    do {
-                        (*this)->emplace(size, std::invoke(proj, *first));
-                    } while (++first != last);
-                    return;         // size() is already correct (and dst invalidated)!
-                }
-            }
-            *dst = std::invoke(proj, *first);    // overwrite existing element
-            ++dst;
-            ++first;
-        }
-        size = dst - begin();
     }
 
     QArrayDataPointer sliced(qsizetype pos, qsizetype n) const &

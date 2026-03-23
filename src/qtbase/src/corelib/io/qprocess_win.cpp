@@ -215,16 +215,13 @@ bool QProcessPrivate::openChannel(Channel &channel)
             return true;
         }
 
-        if (&channel == &stdoutChannel) {
-            if (!stdoutChannel.reader) {
-                stdoutChannel.reader = new QWindowsPipeReader(q);
-                q->connect(stdoutChannel.reader, SIGNAL(readyRead()), SLOT(_q_canReadStandardOutput()));
-            }
-        } else /* if (&channel == &stderrChannel) */ {
-            if (!stderrChannel.reader) {
-                stderrChannel.reader = new QWindowsPipeReader(q);
-                q->connect(stderrChannel.reader, SIGNAL(readyRead()), SLOT(_q_canReadStandardError()));
-            }
+        // stdout or stderr
+        if (!channel.reader) {
+            auto receiver = &channel == &stdoutChannel ? &QProcessPrivate::_q_canReadStandardOutput
+                                                       : &QProcessPrivate::_q_canReadStandardError;
+            channel.reader = new QWindowsPipeReader(q);
+            QObjectPrivate::connect(channel.reader, &QWindowsPipeReader::readyRead,
+                                    this, receiver);
         }
         if (!qt_create_pipe(channel.pipe, false, FALSE)) {
             setErrorAndEmit(QProcess::FailedToStart, "pipe: "_L1 + qt_error_string(errno));
@@ -604,7 +601,9 @@ void QProcessPrivate::startProcess()
 
     if (threadData.loadRelaxed()->hasEventDispatcher()) {
         processFinishedNotifier = new QWinEventNotifier(pid->hProcess, q);
-        QObject::connect(processFinishedNotifier, SIGNAL(activated(HANDLE)), q, SLOT(_q_processDied()));
+        QObjectPrivate::connect(processFinishedNotifier, &QWinEventNotifier::activated, this,
+                                &QProcessPrivate::_q_processDied);
+
         processFinishedNotifier->setEnabled(true);
     }
 

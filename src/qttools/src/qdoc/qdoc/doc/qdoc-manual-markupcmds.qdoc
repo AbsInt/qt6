@@ -70,7 +70,6 @@
     \li \l {sub-command} {\\sub}
     \li \l {sup-command} {\\sup}
     \li \l {table-command} {\\table}
-    \li \l {tableofcontents-command} {\\tableofcontents}
     \li \l {target-command} {\\target}
     \li \qdoccmd tm
     \li \l {tt-command} {\\tt}
@@ -540,14 +539,17 @@
     \1/
     \endcode
 
+    \warning Avoid using en dash in section and page titles. Linking to a title
+    may fail if it contains special characters such as an en dash.
+
     See also \l {emdash-sequence}{\-\-- (em dash)}.
 
     \target emdash-sequence
     \section1 -\-- (em dash)
 
-    QDoc renders triple hyphens as an en dash. QDoc markup commands
+    QDoc renders triple hyphens as an em dash. QDoc markup commands
     designed to make their input appear verbatim---such as the \\c
-    command---won't replace the triple hyphens with an en dash character.
+    command---won't replace the triple hyphens with an em dash character.
     For example:
 
     \badcode *
@@ -572,6 +574,9 @@
 
     \note The escaped control sequence in this example is for the en dash.
           This avoids a hyphen followed by an en dash in the output.
+
+    \warning Avoid using em dash in section and page titles. Linking to a title
+    may fail if it contains special characters such as an em dash.
 
     See also \l {endash-sequence}{\-- (en dash)}.
 */
@@ -756,7 +761,7 @@
     {quotefromfile-command} {\\quotefromfile} or \l
     {quotefile-command} {\\quotefile} command.
 
-       \code \\endcode *
+       \code [text] \\endcode *
        /*!
            \code
                #include <QApplication>
@@ -789,6 +794,33 @@
     explicitly mark the code snippet as QML, use the \l {qml-command}
     {\\qml} command instead.
 
+    From version 6.11, a language can be specified as an optional
+    case-insensitive argument on the same line as the \\code command.
+    When specified, the language overrides the default language and any
+    other language-specific behavior described above. QDoc also defines
+    the \c text language so that blocks of code can be displayed
+    without any markup or highlighting.
+
+    For example:
+
+    \code [text] \\endcode
+    \code [text]
+        # This is an example of unmarked code.
+        implement MyModule;
+        include "sys.m";
+        sys: Sys;
+    \1
+    \endcode
+
+    This can be useful when quoting a language that QDoc does not have
+    the ability to mark up.
+
+    Alternatively, you can specify a language for a block of code that
+    QDoc doesn't recognize by including the language in the list held
+    by the \l {codelanguages-variable}{codelanguages} configuration
+    variable. This enables metadata to be included in generated HTML
+    that can be used by other tools to syntax highlight the code.
+
     \section2 Code snippet parameters
 
     Since QDoc version 5.12, \\code command accepts also optional
@@ -796,11 +828,12 @@
     strings into the code snippet. To inject a string to a specific
     location in the snippet, add a backslash followed by a digit (1..8).
     The digits correspond with the order of the argument list, where
-    arguments are separated by spaces.
+    arguments are separated by spaces and follow any optional language
+    argument.
 
     For example:
 
-    \badcode 1 2 * endcode
+    \code [text] 1 2 * endcode
     /\3!
         \code * hello
         /\\1 \\2 \\1/
@@ -917,6 +950,21 @@
     \1/
     \endcode
 
+    From version 6.11, a language can be specified as an optional
+    case-insensitive argument on the same line as the \\quotefile
+    command.
+    This influences the quoted text in the same way as for the
+    \l{code-command}{\\code} command.
+
+    For example:
+
+    \code [text]
+    \quotefile [text] examples/main.cpp
+    \endcode
+
+    This can be useful when quoting from a file containing source code
+    that QDoc does not have the ability to mark up.
+
     See also \l {quotefromfile-command} {\\quotefromfile} and
     \l {code-command} {\\code}.
 
@@ -964,6 +1012,25 @@
     QDoc remembers which file it is quoting from, and the current
     position in that file (see \l {file} {\\printline} for more
     information). There is no need to "close" the file.
+
+    From version 6.11, a language can be specified as an optional
+    case-insensitive argument on the same line as the
+    \\quotefromfile command. This influences the quoted text in the
+    same way as for the \l{code-command}{\\code} command.
+
+    For example:
+
+    \code [text]
+    \quotefromfile [text] examples/main.cpp
+    \skipto main
+    \printuntil app(argc, argv)
+    \endcode
+
+    QDoc also remembers which code language it is quoting from, so
+    commands like \l{printline-command}{\\printline},
+    \l{printto-command}{\\printto} and \l{printuntil-command}{\\printuntil}
+    quote from the current file, applying a consistent style of markup
+    until a new file is read.
 
     See also \l {quotefile-command} {\\quotefile}, \l {code-command}
     {\\code} and \l {dots} {\\dots}.
@@ -1329,6 +1396,22 @@
     not tabs or other whitespace. For best results, use consistent space-based
     indentation in source files containing snippets.
 
+    From version 6.11, a language can be specified as an optional
+    case-insensitive argument on the same line as the \\snippet command.
+    This influences the quoted text in the same way as for the
+    \l{code-command}{\\code} command.
+
+    This example use of the command overrides the default C++ markup style
+    and outputs plain text instead:
+
+    \code [text]
+    \snippet [text] code.cpp
+    \endcode
+
+    This can be useful when quoting a language that QDoc does not have
+    the ability to mark up, or when needing to quote from a file with an
+    unconventional file name.
+
     \target codeline-command
     \section1 \\codeline
 
@@ -1569,13 +1652,11 @@
 
     \section2 Fixing Ambiguous Links
 
-    Because of the modularization of Qt beginning with Qt 5.0, The
-    possibility that QDoc will have to deal with ambiguous links has
-    increased. An ambiguous link is one that has a matching target in
-    more than one Qt module, for example, the same section title can appear in
-    more than one Qt module, or the name of a C++ class in one module
-    can also be the name of a QML type in another module. A real
-    example in Qt5 is the name Qt itself. Qt is the name of both a C++
+    An ambiguous link is one that has a matching target in more than one Qt
+    module or documentation set. For example, the same section title can appear
+    in more than one Qt module, or the name of a C++ class in one module
+    can also be the name of a QML type in another module.
+    A real example in Qt is the name Qt itself: it is the name of both a C++
     namespace in QtCore and a QML type in QtQml.
 
     Suppose we want to link to the \l {Qt} {Qt C++ namespace}.  At the
@@ -1610,27 +1691,30 @@
 
     A link command with square bracket argument has the following syntax:
     \list
-    \c {\l [QML|CPP|DOC|QtModuleName] {link target} {link text}}
+    \c {\l [QML|CPP|DOC|attached|QtModuleName] {link target} {link text}}
     \endlist
 
     The \e {square bracket} argument is only allowed in the \c {\l
     (link)} command. The example above shows how \c QML is used as the
     \e {square brackets} argument to force QDoc to match a QML target.
     Most often, this will be a QML type, but it can also be a QML
-    member function of property.
+    member function or property. Additionally, some QML types contain
+    properties and attached properties with the same name. Attached
+    properties can be selected with an \c attached argument.
+    If \c attached is omitted, regular properties will be linked to
+    in preference to attached properties with duplicate names.
 
     In the example, QDoc didn't need a \e {square bracket} argument to
     find the Qt C++ namespace page, because that one was the first
     matching target QDoc found anyway. However, to force QDoc to find
     a C++ target when a matching QML target gets in the way, \c CPP
-    can be used as the \e {square bracket} argument. For example:
+    can be used as the \e {square bracket} argument. For example, the
+    following link will force QDoc to ignore the Qt QML type and continue
+    searching until it matches the Qt C++ namespace.
 
     \list
         \li \c {\l [CPP] {Qt} {Qt C++ namespace}}
     \endlist
-
-    ...will force QDoc to ignore the Qt QML type and continue
-    searching until it matches the Qt C++ namespace.
 
     If the link target is neither a C++ nor a QML entity, \c {DOC} can
     be used as the \e {square bracket} argument to prevent QDoc from
@@ -1749,8 +1833,11 @@
       \li \c {\l {capturing parentheses}}
     \endlist
 
-    \note The brackets in the link example are required because the
-    target name contains spaces.
+    Above, the target name is enclosed in brackets because it contains
+    spaces.
+
+    \note The \\target command does not support \qdocvar macro expansion
+    in its argument.
 
     \section2 \\target in a \\table
     When you use the \\target command in a table, make sure that the
@@ -1837,6 +1924,9 @@
     \endcode
 
     If the keyword text contains spaces, the brackets are required.
+
+    \note The \\keyword command does not support \qdocvar macro expansion
+    in its argument.
 
     See also \l {l-command} {\\l (link)}, \l {sa-command} {\\sa (see
     also)} and \l {target-command} {\\target}.
@@ -2414,15 +2504,6 @@
 
     This command was introduced in QDoc version 6.10.
 
-    \target tableofcontents-command
-    \section1 \\tableofcontents
-
-    The \\tableofcontents command has been disabled because QDoc
-    now generates a table of contents automatically.
-
-    The automatically generated table of contents appears in the upper
-    righthand corner of the page.
-
     \target brief-command
     \section1 \\brief
 
@@ -2737,7 +2818,7 @@
     Use the \\cmaketargetitem command to override the \e {item} part of the
     CMake \c{target_link_libraries} information that's added to classes and
     namespaces. The command must be used in conjunction with the
-    \l{module-command}{\\module} and \l{cmakecomponent}{\\cmakecomponent}}
+    \l{module-command}{\\module} and \l{cmakecomponent}{\\cmakecomponent}
     commands. For example:
 
     \badcode *
@@ -2807,7 +2888,7 @@
     Use the \\qtcmaketargetitem command to override the \e {item} part of the
     CMake \c{target_link_libraries} information that's added to classes and
     namespaces. The command must be used in conjunction with the
-    \l{module-command}{\\module} and \l{qtcmakepackage}{\\qtcmakepackage}}
+    \l{module-command}{\\module} and \l{qtcmakepackage}{\\qtcmakepackage}
     commands.
 
     \e{See also} \l{module-command}{\\module} and
@@ -3345,6 +3426,18 @@
     \endcode
 
     See also \l {Status}{status-related commands}.
+
+    \b {Document metadata}
+
+    A \c keywords argument for the \\meta command adds specified keywords
+    as metadata for the generated document:
+
+    \code [text]
+        \meta {keywords} {reference, internal}
+    \endcode
+
+    In HTML output, these keywords are generated as a
+    \c {<meta name="keywords" content="...">} element.
 
     \target noautolist-command
     \section1 \\noautolist

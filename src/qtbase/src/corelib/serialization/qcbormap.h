@@ -258,7 +258,7 @@ public:
 
     QCborValue toCborValue() const { return *this; }
 
-    qsizetype size() const noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION qsizetype size() const noexcept;
     bool isEmpty() const { return size() == 0; }
     void clear();
     QList<QCborValue> keys() const;
@@ -317,7 +317,7 @@ public:
     bool contains(const QCborValue &key) const
     { const_iterator it = find(key); return !comparesEqual(it, end()); }
 
-    int compare(const QCborMap &other) const noexcept Q_DECL_PURE_FUNCTION;
+    Q_DECL_PURE_FUNCTION int compare(const QCborMap &other) const noexcept;
 #if QT_CORE_REMOVED_SINCE(6, 8)
     bool operator==(const QCborMap &other) const noexcept
     { return compare(other) == 0; }

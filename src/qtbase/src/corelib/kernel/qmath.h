@@ -289,67 +289,16 @@ constexpr inline long double qRadiansToDegrees(long double radians)
 // questionable that someone is manipulating quantities in radians
 // using integral datatypes...
 
-namespace QtPrivate {
-constexpr inline quint32 qConstexprNextPowerOfTwo(quint32 v)
-{
-    v |= v >> 1;
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
-    ++v;
-    return v;
-}
-
-constexpr inline quint64 qConstexprNextPowerOfTwo(quint64 v)
-{
-    v |= v >> 1;
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
-    v |= v >> 32;
-    ++v;
-    return v;
-}
-
-constexpr inline quint32 qConstexprNextPowerOfTwo(qint32 v)
-{
-    return qConstexprNextPowerOfTwo(quint32(v));
-}
-
-constexpr inline quint64 qConstexprNextPowerOfTwo(qint64 v)
-{
-    return qConstexprNextPowerOfTwo(quint64(v));
-}
-} // namespace QtPrivate
-
 constexpr inline quint32 qNextPowerOfTwo(quint32 v)
 {
     Q_ASSERT(static_cast<qint32>(v) >= 0); // There is a next power of two
-#if defined(__cpp_lib_int_pow2) && __cpp_lib_int_pow2 >= 202002L
-    return std::bit_ceil(v + 1);
-#elif defined(QT_HAS_BUILTIN_CLZ)
-    if (v == 0)
-        return 1;
-    return 2U << (31 ^ QAlgorithmsPrivate::qt_builtin_clz(v));
-#else
-    return QtPrivate::qConstexprNextPowerOfTwo(v);
-#endif
+    return q20::bit_ceil(v + 1);
 }
 
 constexpr inline quint64 qNextPowerOfTwo(quint64 v)
 {
     Q_ASSERT(static_cast<qint64>(v) >= 0); // There is a next power of two
-#if defined(__cpp_lib_int_pow2) && __cpp_lib_int_pow2 >= 202002L
-    return std::bit_ceil(v + 1);
-#elif defined(QT_HAS_BUILTIN_CLZLL)
-    if (v == 0)
-        return 1;
-    return Q_UINT64_C(2) << (63 ^ QAlgorithmsPrivate::qt_builtin_clzll(v));
-#else
-    return QtPrivate::qConstexprNextPowerOfTwo(v);
-#endif
+    return q20::bit_ceil(v + 1);
 }
 
 constexpr inline quint32 qNextPowerOfTwo(qint32 v)

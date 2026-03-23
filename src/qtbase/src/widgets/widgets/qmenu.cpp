@@ -40,6 +40,8 @@
 #include <private/qaction_p.h>
 #include <private/qguiapplication_p.h>
 #include <qpa/qplatformtheme.h>
+#include <qpa/qplatformwindow.h>
+#include <qpa/qplatformwindow_p.h>
 #include <private/qstyle_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -701,7 +703,8 @@ void QMenuPrivate::setFirstActionActive()
 }
 
 // popup == -1 means do not popup, 0 means immediately, others mean use a timer
-void QMenuPrivate::setCurrentAction(QAction *action, int popup, SelectionReason reason, bool activateFirst)
+void QMenuPrivate::setCurrentAction(QAction *action, int popup, SelectionReason reason,
+                                    SelectionDirection direction, bool activateFirst)
 {
     Q_Q(QMenu);
     tearoffHighlighted = 0;
@@ -716,7 +719,7 @@ void QMenuPrivate::setCurrentAction(QAction *action, int popup, SelectionReason 
             if (causedPopup.action && menu->d_func()->activeMenu == q)
                 // Reselect parent menu action only if mouse is over a menu and parent menu action is not already selected (QTBUG-47987)
                 if (hasReceievedEnter && menu->d_func()->currentAction != causedPopup.action)
-                    menu->d_func()->setCurrentAction(causedPopup.action, 0, reason, false);
+                    menu->d_func()->setCurrentAction(causedPopup.action, 0, reason, direction, false);
         }
     }
 
@@ -743,7 +746,7 @@ void QMenuPrivate::setCurrentAction(QAction *action, int popup, SelectionReason 
                 QWidget *widget = widgetItems.value(action);
                 if (widget) {
                     if (widget->focusPolicy() != Qt::NoFocus)
-                        widget->setFocus(Qt::TabFocusReason);
+                        widget->setFocus(direction == QMenuPrivate::SelectionDirection::Up ? Qt::BacktabFocusReason : Qt::TabFocusReason);
                 } else {
                     //when the action has no QWidget, the QMenu itself should
                     // get the focus
@@ -768,7 +771,8 @@ void QMenuPrivate::setCurrentAction(QAction *action, int popup, SelectionReason 
 #endif
             hideMenu(hideActiveMenu);
         } else if (!currentAction || !currentAction->menu()) {
-            sloppyState.startTimerIfNotRunning();
+            if (reason != SelectionReason::SelectedFromAPI)
+                sloppyState.startTimerIfNotRunning();
         }
     }
 }
@@ -1240,7 +1244,7 @@ void QMenuPrivate::scrollMenu(QMenuScroller::ScrollLocation location, bool activ
                 if (scroll->scrollFlags & QMenuPrivate::QMenuScroller::ScrollDown)
                     scrollMenu(act, QMenuPrivate::QMenuScroller::ScrollBottom, active);
                 else if (active)
-                    setCurrentAction(act, /*popup*/-1, QMenuPrivate::SelectedFromKeyboard);
+                    setCurrentAction(act, /*popup*/-1, QMenuPrivate::SelectedFromKeyboard, QMenuPrivate::SelectionDirection::Down);
                 break;
             }
         }
@@ -1253,7 +1257,7 @@ void QMenuPrivate::scrollMenu(QMenuScroller::ScrollLocation location, bool activ
                 if (scroll->scrollFlags & QMenuPrivate::QMenuScroller::ScrollUp)
                     scrollMenu(act, QMenuPrivate::QMenuScroller::ScrollTop, active);
                 else if (active)
-                    setCurrentAction(act, /*popup*/-1, QMenuPrivate::SelectedFromKeyboard);
+                    setCurrentAction(act, /*popup*/-1, QMenuPrivate::SelectedFromKeyboard, QMenuPrivate::SelectionDirection::Up);
                 break;
             }
         }
@@ -1311,7 +1315,7 @@ void QMenuPrivate::scrollMenu(QMenuScroller::ScrollDirection direction, bool pag
 bool QMenuPrivate::mouseEventTaken(QMouseEvent *e)
 {
     Q_Q(QMenu);
-    QPoint pos = q->mapFromGlobal(e->globalPosition().toPoint());
+    const QPoint pos = q->mapFromGlobal(e->globalPosition()).toPoint();
 
     QStyle *style = q->style();
     QStyleOption opt(0);
@@ -2173,7 +2177,7 @@ void QMenu::hideTearOffMenu()
 void QMenu::setActiveAction(QAction *act)
 {
     Q_D(QMenu);
-    d->setCurrentAction(act, 0);
+    d->setCurrentAction(act, 0, QMenuPrivate::SelectionReason::SelectedFromAPI);
     if (d->scroll && act)
         d->scrollMenu(act, QMenuPrivate::QMenuScroller::ScrollCenter);
 }
@@ -2326,9 +2330,6 @@ void QMenuPrivate::popup(const QPoint &p, QAction *atAction, PositionFunction po
     q->ensurePolished(); // Get the right font
 
     // Ensure that we get correct sizeHints by placing this window on the correct screen.
-    // However if the QMenu was constructed with a Qt::Desktop widget as its parent,
-    // then initialScreenIndex was set, so we should respect that for the lifetime of this menu.
-    // However if eventLoop exists, then exec() already did this by calling createWinId(); so leave it alone. (QTBUG-76162)
     if (!eventLoop) {
         bool screenSet = false;
         QScreen *screen = topData()->initialScreen;
@@ -2541,6 +2542,25 @@ void QMenuPrivate::popup(const QPoint &p, QAction *atAction, PositionFunction po
     }
     popupScreen = QGuiApplication::screenAt(pos);
     q->setGeometry(QRect(pos, size));
+
+#if QT_CONFIG(wayland)
+    q->create();
+    if (auto waylandWindow = dynamic_cast<QNativeInterface::Private::QWaylandWindow*>(q->windowHandle()->handle())) {
+        if (causedButton) {
+            const QRect controlGeometry(causedButton->mapTo(causedButton->window(), QPoint(0, 0)), causedButton->size());
+            waylandWindow->setParentControlGeometry(controlGeometry);
+            waylandWindow->setExtendedWindowType(QNativeInterface::Private::QWaylandWindow::Menu);
+        } else if (caused) {
+            waylandWindow->setParentControlGeometry(caused->d_func()->actionRect(caused->d_func()->currentAction));
+            waylandWindow->setExtendedWindowType(QNativeInterface::Private::QWaylandWindow::SubMenu);
+        } else if (auto menubar = qobject_cast<QMenuBar*>(causedPopup.widget)) {
+            QPoint menuBarWindowPosition = menubar->mapTo(menubar->window(), QPoint(0, 0));
+            waylandWindow->setParentControlGeometry(menubar->actionGeometry(causedPopup.action).translated(menuBarWindowPosition));
+            waylandWindow->setExtendedWindowType(QNativeInterface::Private::QWaylandWindow::Menu);
+        }
+    }
+#endif
+
 #if QT_CONFIG(effects)
     int hGuess = q->isRightToLeft() ? QEffects::LeftScroll : QEffects::RightScroll;
     int vGuess = QEffects::DownScroll;
@@ -2925,7 +2945,15 @@ void QMenu::mouseReleaseEvent(QMouseEvent *e)
     Q_D(QMenu);
     if (d->aboutToHide || d->mouseEventTaken(e))
         return;
-
+#if QT_CONFIG(menubar)
+    if (e->button() == Qt::LeftButton) {
+        // the QMenu popup steals the mouse release event from the QMenuBar
+        // so we need to inform it for a redraw with the new state
+        QMenuBar *mb = qobject_cast<QMenuBar *>(d->causedPopup.widget);
+        if (mb)
+            mb->d_func()->mouseRelaseEventFromQMenu();
+    }
+#endif
     if (QMenuPrivate::mouseDown && QMenuPrivate::mouseDown != this) {
         QMenuPrivate::mouseDown = nullptr;
         return;
@@ -3240,7 +3268,7 @@ void QMenu::keyPressEvent(QKeyEvent *e)
                 d->scroll->scrollTimer.stop();
                 d->scrollMenu(nextAction, scroll_loc);
             }
-            d->setCurrentAction(nextAction, /*popup*/-1, QMenuPrivate::SelectedFromKeyboard);
+            d->setCurrentAction(nextAction, /*popup*/-1, QMenuPrivate::SelectedFromKeyboard, key == Qt::Key_Up ? QMenuPrivate::SelectionDirection::Up : QMenuPrivate::SelectionDirection::Down);
         }
         break; }
 
@@ -3264,7 +3292,7 @@ void QMenu::keyPressEvent(QKeyEvent *e)
                     nextAction = d->actionAt(QPoint(x, actionR.center().y()));
             }
             if (nextAction) {
-                d->setCurrentAction(nextAction, /*popup*/-1, QMenuPrivate::SelectedFromKeyboard);
+                d->setCurrentAction(nextAction, /*popup*/-1, QMenuPrivate::SelectedFromKeyboard, QMenuPrivate::SelectionDirection::Up);
                 key_consumed = true;
             }
         }
@@ -3421,7 +3449,7 @@ void QMenu::keyPressEvent(QKeyEvent *e)
                 key_consumed = true;
                 if (d->scroll)
                     d->scrollMenu(nextAction, QMenuPrivate::QMenuScroller::ScrollCenter, false);
-                d->setCurrentAction(nextAction, 0, QMenuPrivate::SelectedFromElsewhere, true);
+                d->setCurrentAction(nextAction, 0, QMenuPrivate::SelectedFromElsewhere, QMenuPrivate::SelectionDirection::Down, true);
                 if (!nextAction->menu() && activateAction) {
                     d->setSyncAction();
                     d->activateAction(nextAction, QAction::Trigger);

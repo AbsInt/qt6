@@ -27,6 +27,7 @@ qt_internal_add_module(QmlDomPrivate
         qqmldomexternalitems.cpp qqmldomexternalitems_p.h
         qqmldomfieldfilter.cpp qqmldomfieldfilter_p.h
         qqmldomfilewriter.cpp qqmldomfilewriter_p.h
+        qqmldomformatdirectivescanner.cpp qqmldomformatdirectivescanner_p.h
         qqmldomfunctionref_p.h
         qqmldomindentinglinewriter.cpp qqmldomindentinglinewriter_p.h
         qqmldomitem.cpp qqmldomitem_p.h

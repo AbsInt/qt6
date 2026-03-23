@@ -16,7 +16,6 @@ QT_BEGIN_NAMESPACE
 
 
 class QColor;
-class QColormap;
 class QVariant;
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -206,7 +205,7 @@ private:
 
     void invalidate() noexcept;
 
-    static constexpr bool isRgbaValid(int r, int g, int b, int a = 255) noexcept Q_DECL_CONST_FUNCTION
+    Q_DECL_CONST_FUNCTION static constexpr bool isRgbaValid(int r, int g, int b, int a = 255) noexcept
     {
         return uint(r) <= 255 && uint(g) <= 255 && uint(b) <= 255 && uint(a) <= 255;
     }
@@ -256,7 +255,6 @@ private:
         ushort array[5];
     } ct;
 
-    friend class QColormap;
 #ifndef QT_NO_DATASTREAM
     friend Q_GUI_EXPORT QDataStream &operator<<(QDataStream &, const QColor &);
     friend Q_GUI_EXPORT QDataStream &operator>>(QDataStream &, QColor &);

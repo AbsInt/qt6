@@ -91,7 +91,7 @@
 #include "mysignals.h"
 #include "namespacedtypes.h"
 #include "type.h"
-#if QT_CONFIG(qml_table_model)
+#if QT_CONFIG(qml_labs) && QT_CONFIG(qml_table_model)
 #include "qmltablemodel.h"
 #endif
 #include "stringtourl.h"
@@ -1325,7 +1325,7 @@ void tst_qmltc::propertyAliasAttribute()
     QCOMPARE(fromEngine.property("latestReadAndWrite"), stringB);
 
     // check if metaobject of alias is correct
-    const QVector<const QMetaObject *> metaObjects = {
+    const QList<const QMetaObject *> metaObjects = {
         fromQmltc.metaObject(),
         fromEngine.metaObject(),
     };
@@ -1333,7 +1333,7 @@ void tst_qmltc::propertyAliasAttribute()
     QVERIFY(metaObjects[0]);
     QVERIFY(metaObjects[1]);
 
-    QVector<QHash<QString, QMetaProperty>> metaProperties(2);
+    QList<QHash<QString, QMetaProperty>> metaProperties(2);
     for (int j = 0; j < metaObjects.size(); j++) {
         const QMetaObject *metaObject = metaObjects[j];
         for (int i = metaObject->propertyOffset(); i < metaObject->propertyCount(); ++i) {
@@ -3357,7 +3357,7 @@ void tst_qmltc::checkExportsNoFileName()
     QCOMPARE(w.myString(), u"Hello! I should be exported by qmltc"_s);
 }
 
-#if QT_CONFIG(qml_table_model)
+#if QT_CONFIG(qml_labs) && QT_CONFIG(qml_table_model)
 void tst_qmltc::qmlTableModel()
 {
     QQmlEngine e;

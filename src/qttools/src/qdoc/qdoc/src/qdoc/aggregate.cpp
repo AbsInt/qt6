@@ -3,7 +3,10 @@
 
 #include "aggregate.h"
 
+#include "config.h"
 #include "functionnode.h"
+#include "inclusionfilter.h"
+#include "inclusionpolicy.h"
 #include "parameters.h"
 #include "typedefnode.h"
 #include "qdocdatabase.h"
@@ -153,6 +156,36 @@ FunctionNode *Aggregate::findFunctionChild(const QString &name, const Parameters
     if (map_it == m_functionMap.end())
         return nullptr;
 
+    // If parameters is empty (e.g., from \overload command), don't try exact matching.
+    // Instead, find the best available function based on isPrimaryOverload flag.
+    if (parameters.isEmpty()) {
+        FunctionNode *fallback = nullptr;
+        FunctionNode *lastResort = nullptr;
+
+        for (auto *fn : *map_it) {
+            // Primary overload takes highest priority - return immediately
+            if (fn->isPrimaryOverload() && !fn->isInternal())
+                return fn;
+
+            // Remember first non-deprecated, non-internal as fallback
+            if (!fallback && !fn->isInternal() && !fn->isDeprecated())
+                fallback = fn;
+
+            // Remember first non-internal as last resort
+            if (!lastResort && !fn->isInternal())
+                lastResort = fn;
+        }
+
+        if (fallback)
+            return fallback;
+
+        if (lastResort)
+            return lastResort;
+
+        return nullptr;
+    }
+
+    // Try exact parameter match
     auto match_it = std::find_if((*map_it).begin(), (*map_it).end(),
         [&parameters](const FunctionNode *fn) {
             if (fn->isInternal())
@@ -165,32 +198,7 @@ FunctionNode *Aggregate::findFunctionChild(const QString &name, const Parameters
             return true;
         });
 
-    if (match_it != (*map_it).end())
-        return *match_it;
-
-    // If no exact match was found and parameters are empty (e.g., from \overload command),
-    // try to find the best available function to link to.
-    if (parameters.isEmpty()) {
-        // First, try to find a non-deprecated, non-internal function
-        auto best_it = std::find_if((*map_it).begin(), (*map_it).end(),
-            [](const FunctionNode *fn) {
-                return !fn->isInternal() && !fn->isDeprecated();
-            });
-
-        if (best_it != (*map_it).end())
-            return *best_it;
-
-        // If no non-deprecated function found, fall back to any non-internal function
-        auto fallback_it = std::find_if((*map_it).begin(), (*map_it).end(),
-            [](const FunctionNode *fn) {
-                return !fn->isInternal();
-            });
-
-        if (fallback_it != (*map_it).end())
-            return *fallback_it;
-    }
-
-    return nullptr;
+    return (match_it != (*map_it).end()) ? *match_it : nullptr;
 }
 
 /*!
@@ -214,10 +222,65 @@ FunctionNode *Aggregate::findFunctionChild(const FunctionNode *clone)
     return func_it != (*funcs_it).end() ? *func_it : nullptr;
 }
 
+
+/*!
+    \internal
+    Warn about documented, non-private children under undocumented parents - unless
+    the \a child is explicitly set \internal, or their parent() does not match \a
+    aggregate, indicating that \a child is a related non-member. The latter
+    condition avoids duplicate warnings as the node appears under multiple
+    aggregates.
+
+    The warning is skipped for children of proxy nodes and namespace nodes. Proxies
+    have no documentation as they're automatically generated. For namespaces, this
+    check is done separately after merging potentially multiple namespace nodes
+    referring to the same namespace; see
+    NamespaceNode::reportDocumentedChildrenInUndocumentedNamespace().
+
+    Likewise, the warning is skipped for children of aggregates marked with the
+    \\dontdocument command.
+
+    If either \c {-no-linkerrors} or \c {-showinternal} command-line option is set,
+    these warnings are not generated. \c {-no-linkerrors} avoids false positives
+    in cases where the aggregate is documented outside the current project and was
+    not loaded from index. With \c {-showinternal} set, the warning is not required as
+    internal nodes generate output.
+
+    The warning is also skipped if the file path of the \a child declaration matches with
+    \e internalfilepatterns configuration variable. In this case, the child node is not
+    considered part of the public API.
+*/
+static void warnAboutDocumentedChildInUndocumentedParent(const Node *aggregate, const Node *child)
+{
+    Q_ASSERT(child);
+    const auto *parent{child->parent()};
+    if (parent && parent == aggregate && !child->isPrivate() && child->status() != Node::Internal
+            && !parent->isProxyNode() && !parent->isNamespace() && !parent->isDontDocument()
+            && !parent->hasDoc()) {
+        auto &config{Config::instance()};
+        if (config.get(CONFIG_NOLINKERRORS).asBool())
+            return;
+
+        if (InclusionFilter::processInternalDocs(config.createInclusionPolicy()))
+            return;
+
+        if (child->genus() == Genus::CPP && !child->declLocation().isEmpty())
+            if (Config::matchesInternalFilePattern(
+                    child->declLocation().filePath(),
+                    config.getInternalFilePatternsCompiled()))
+            return;
+
+        child->doc().location().warning(
+                "No output generated for %1 '%2' because '%3' is undocumented"_L1
+                    .arg(child->nodeTypeString(),
+                         child->plainFullName(),
+                         child->parent()->name()));
+    }
+}
+
 /*!
   Mark all child nodes that have no documentation as having
-  private access and internal status. qdoc will then ignore
-  them for documentation purposes.
+  internal status. QDoc will then ignore them for documentation purposes.
  */
 void Aggregate::markUndocumentedChildrenInternal()
 {
@@ -227,13 +290,14 @@ void Aggregate::markUndocumentedChildrenInternal()
                 if (child->isFunction()) {
                     if (static_cast<FunctionNode *>(child)->hasAssociatedProperties())
                         continue;
-                } else if (child->isTypedef()) {
+                } else if (child->isTypedef() && child->isInAPI()) {
                     if (static_cast<TypedefNode *>(child)->hasAssociatedEnum())
                         continue;
                 }
-                child->setAccess(Access::Private);
                 child->setStatus(Node::Internal);
             }
+        } else {
+            warnAboutDocumentedChildInUndocumentedParent(this, child);
         }
         if (child->isAggregate()) {
             static_cast<Aggregate *>(child)->markUndocumentedChildrenInternal();
@@ -247,7 +311,8 @@ void Aggregate::markUndocumentedChildrenInternal()
     the node's documentation using the \\relates command.
 
     If the target Aggregate is not found in the primary tree, creates a new
-    ProxyNode to use as the parent.
+    ProxyNode to use as the parent. If the target Aggregate is not found at all,
+    reports it.
 */
 void Aggregate::resolveRelates()
 {
@@ -266,6 +331,10 @@ void Aggregate::resolveRelates()
 
             auto *aggregate = database->findRelatesNode(relates_args[0].first.split("::"_L1));
             if (!aggregate)
+                Location().report("Failed to find \\relates target '%1' for %2"_L1
+                        .arg(relates_args[0].first, node->fullName()));
+
+            if (!aggregate || aggregate->isIndexNode())
                 aggregate = new ProxyNode(this, relates_args[0].first);
             else if (node->parent() == aggregate)
                 continue;
@@ -285,7 +354,9 @@ void Aggregate::resolveRelates()
   For sorting, active functions take precedence over internal ones, as well
   as ones marked as \\overload - the latter ones typically do not contain
   full documentation, so selecting them as the \e primary function
-  would cause unnecessary warnings to be generated.
+  would cause unnecessary warnings to be generated. However, functions
+  explicitly marked with \\overload primary take precedence over other
+  overloads and will be selected as the primary function.
 
   Otherwise, the order is set as determined by FunctionNode::compare().
  */
@@ -295,10 +366,35 @@ void Aggregate::normalizeOverloads()
         if (map_it.size() == 1) {
             map_it.front()->setOverloadNumber(0);
         } else if (map_it.size() > 1) {
+            // Check for multiple primary overloads before sorting
+            std::vector<const FunctionNode*> primaryOverloads;
+            for (const auto *fn : map_it) {
+                if (!fn->isPrimaryOverload())
+                    continue;
+
+                // Check if we already have a primary from a different location
+                const auto *currentLocation = &(fn->doc().location());
+                for (const auto *existingPrimary : primaryOverloads) {
+                    const auto *existingLocation = &(existingPrimary->doc().location());
+
+                    if (*currentLocation != *existingLocation) {
+                        fn->doc().location().warning(
+                            "Multiple primary overloads for '%1'. The previous primary is here: %2"_L1
+                                .arg(fn->name(), existingPrimary->doc().location().toString()));
+                        break;
+                    }
+                }
+
+                primaryOverloads.push_back(fn);
+            }
+
             std::sort(map_it.begin(), map_it.end(),
                 [](const FunctionNode *f1, const FunctionNode *f2) -> bool {
                     if (f1->isInternal() != f2->isInternal())
                         return f2->isInternal();
+                    // Prioritize functions marked with \overload primary
+                    if (f1->isPrimaryOverload() != f2->isPrimaryOverload())
+                        return f1->isPrimaryOverload();
                     if (f1->isOverload() != f2->isOverload())
                         return f2->isOverload();
                     // Prioritize documented over undocumented

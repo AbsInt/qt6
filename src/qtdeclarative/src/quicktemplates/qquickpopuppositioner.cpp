@@ -135,7 +135,7 @@ void QQuickPopupPositioner::reposition()
 
         // The overlay is assumed to fully cover the window's contents, although the overlay's geometry
         // might not always equal the window's geometry (for example, if the window's contents are rotated).
-        QQuickOverlay *overlay = QQuickOverlay::overlay(p->window);
+        QQuickOverlay *overlay = QQuickOverlay::overlay(p->window, p->parentItem);
         if (overlay) {
             qreal boundsWidth = overlay->width();
             qreal boundsHeight = overlay->height();

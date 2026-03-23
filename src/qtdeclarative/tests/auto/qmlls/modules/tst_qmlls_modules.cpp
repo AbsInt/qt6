@@ -29,6 +29,57 @@ using namespace QLspSpecification;
 
 static constexpr bool enable_debug_output = false;
 
+static QString qmllsBuildIniContent(const QString &qmlFileName,
+                                    const QMap<QString, QStringList> &importPathsPerWorkspace)
+{
+    QString result = "[General]\n"_L1;
+    for (const auto &[workspace, importPaths] : importPathsPerWorkspace.asKeyValueRange()) {
+        const QString groupName =
+                QDir::cleanPath(workspace.isEmpty() ? (qmlFileName + "/.."_L1) : workspace)
+                        .replace("/"_L1, "<SLASH>"_L1);
+        result += "[%1]\nimportPaths=\"%2\"\n"_L1.arg(groupName,
+                                                      importPaths.join(QDir::listSeparator()));
+    }
+    return result;
+}
+
+static void createQmllsBuildIni(const QString &buildFolder, const QString &qmlFileName,
+                                const QMap<QString, QStringList> &importPathsPerWorkspace)
+{
+    QDir dir(buildFolder);
+    QVERIFY(dir.mkdir(".qt"_L1));
+    const QString qmllsBuildIniPath = dir.absoluteFilePath(".qt/.qmlls.build.ini"_L1);
+    QFile qmllsBuildIni(qmllsBuildIniPath);
+    QVERIFY(qmllsBuildIni.open(QFile::WriteOnly));
+    qmllsBuildIni.write(qmllsBuildIniContent(qmlFileName, importPathsPerWorkspace).toUtf8());
+}
+
+static Notifications::AddBuildDirsParams
+addBuildDirsParamsFromMap(const QMap<QString, QStringList> &importPathsPerWorkspace,
+                          const QByteArray &tempDir)
+{
+    Notifications::AddBuildDirsParams params;
+    for (const auto &[workspace, _] : importPathsPerWorkspace.asKeyValueRange()) {
+        UriToBuildDirs uriToBuildDirs;
+        uriToBuildDirs.baseUri = QUrl::fromLocalFile(workspace).toEncoded();
+        uriToBuildDirs.buildDirs.append(tempDir);
+        params.buildDirsToSet.append(uriToBuildDirs);
+    }
+
+    return params;
+}
+
+static DidChangeWorkspaceFoldersParams
+addDidChangeWorkspaceFoldersFromMap(const QMap<QString, QStringList> &importPathsPerWorkspace)
+{
+    DidChangeWorkspaceFoldersParams params;
+    for (const auto &[workspace, _] : importPathsPerWorkspace.asKeyValueRange()) {
+        params.event.added.append(
+                { QUrl::fromLocalFile(workspace).toEncoded(), workspace.toUtf8() });
+    }
+    return params;
+}
+
 tst_qmlls_modules::tst_qmlls_modules() : QQmlDataTest(QT_QMLTEST_DATADIR)
 {
     m_qmllsPath =
@@ -44,7 +95,9 @@ tst_qmlls_modules::tst_qmlls_modules() : QQmlDataTest(QT_QMLTEST_DATADIR)
     qputenv("QT_LOGGING_RULES", "*.debug=true;*.warning=true");
     // when using EditingRecorder
     m_server.setProgram(m_qmllsPath);
-    // m_server.setArguments(QStringList() << u"-v"_s << u"-w"_s << u"7"_s);
+    m_server.setArguments(QStringList{
+            "--no-cmake-calls"_L1,
+    });
 }
 
 void tst_qmlls_modules::init()
@@ -72,7 +125,9 @@ void tst_qmlls_modules::init()
     m_server.start();
 
     InitializeParams clientInfo;
-    clientInfo.rootUri = QUrl::fromLocalFile(dataDirectory() + "/default").toString().toUtf8();
+    clientInfo.workspaceFolders = QList<WorkspaceFolder>{
+        { QUrl::fromLocalFile(dataDirectory()).toEncoded(), "default"_ba },
+    };
 
     TextDocumentClientCapabilities tDoc;
     tDoc.typeDefinition = TypeDefinitionClientCapabilities{ false, false };
@@ -102,6 +157,11 @@ void tst_qmlls_modules::cleanup()
     // note: properly exit the language server
     m_protocol->requestShutdown(nullptr, []() {});
     m_protocol->notifyExit(nullptr);
+
+    m_server.disconnect(this);
+    if constexpr (enable_debug_output) {
+        m_server.disconnect(this);
+    }
 
     m_server.waitForFinished();
     QTRY_COMPARE(m_server.state(), QProcess::NotRunning);
@@ -356,6 +416,16 @@ void tst_qmlls_modules::function_documentations()
 void tst_qmlls_modules::buildDir()
 {
     ignoreDiagnostics();
+
+    const QMap<QString, QStringList> importPathsPerWorkspace{
+        { testFile("completions"),
+          { testFile("buildDir"_L1), QLibraryInfo::path(QLibraryInfo::QmlImportsPath) } },
+    };
+
+    m_protocol->typedRpc()->sendNotification(
+            QByteArray(Notifications::DidChangeWorkspaceFoldersMethod),
+            addDidChangeWorkspaceFoldersFromMap(importPathsPerWorkspace));
+
     const QString filePath = u"completions/fromBuildDir.qml"_s;
     const auto uri = openFile(filePath);
     QVERIFY(uri);
@@ -365,12 +435,14 @@ void tst_qmlls_modules::buildDir()
                     { u"Rectangle"_s, CompletionItemKind::Constructor },
             }),
             QStringList({ u"BuildDirType"_s, u"QtQuick"_s, u"width"_s, u"vector4d"_s })));
-    Notifications::AddBuildDirsParams bDirs;
-    UriToBuildDirs ub;
-    ub.baseUri = *uri;
-    ub.buildDirs.append(testFile("buildDir").toUtf8());
-    bDirs.buildDirsToSet.append(ub);
-    m_protocol->typedRpc()->sendNotification(QByteArray(Notifications::AddBuildDirsMethod), bDirs);
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    createQmllsBuildIni(tempDir.path(), testFile(filePath), importPathsPerWorkspace);
+
+    m_protocol->typedRpc()->sendNotification(
+            QByteArray(Notifications::AddBuildDirsMethod),
+            addBuildDirsParamsFromMap(importPathsPerWorkspace, tempDir.path().toUtf8()));
 
     DidChangeTextDocumentParams didChange;
     didChange.textDocument.uri = *uri;
@@ -785,6 +857,7 @@ void tst_qmlls_modules::documentFormatting_data()
     excludedFiles << u"tests/auto/qml/qmlformat/data/normalizedFunctionsSpacing.qml"_s;
     excludedFiles << u"tests/auto/qml/qmlformat/data/normalizedObjectsSpacing.qml"_s;
     excludedFiles << u"tests/auto/qml/qmlformat/data/sortingImports.qml"_s;
+    excludedFiles << u"tests/auto/qml/qmlformat/data/normalizedGroupAttributesTogether.qml"_s;
     excludedFiles << u"tests/auto/qml/qmlformat/data/normalizedIdAndItem.qml"_s;
     excludedFiles << u"tests/auto/qml/qmlformat/data/normalizedIdAndItemCommented.qml"_s;
 
@@ -1322,29 +1395,103 @@ void tst_qmlls_modules::warnings_data()
                };
     {
         ExpectedWarnings noWarningsExpected;
-        noWarningsExpected.extraImportPaths.append(testFile("warnings/QmllsBuildIni/qml"_L1));
+        noWarningsExpected.extraImportPathsPerWorkspace[{}] = {
+            testFile("warnings/QmllsBuildIni/qml"_L1),
+            QLibraryInfo::path(QLibraryInfo::QmlImportsPath)
+        };
 
         QTest::addRow("WithQmllsBuildIni")
                 << u"warnings/QmllsBuildIni/Main.qml"_s << noWarningsExpected;
     }
-}
 
-static QString qmllsBuildIniContent(const QString &qmlFileName, QStringList importPaths)
-{
-    const QString groupName = QDir::cleanPath(qmlFileName + "/.."_L1).replace("/"_L1, "<SLASH>"_L1);
-    return "[General]\n[%1]\nimportPaths=\"%2\""_L1.arg(groupName,
-                                                        importPaths.join(QDir::listSeparator()));
-}
+    {
+        ExpectedWarnings noWarningsExpected;
+        noWarningsExpected.extraImportPathsPerWorkspace[testFile(u"warnings/QmllsBuildIni"_s)] = {
+            testFile("warnings/QmllsBuildIni/qml"_L1),
+            QLibraryInfo::path(QLibraryInfo::QmlImportsPath)
+        };
 
-static void createQmllsBuildIni(const QString &buildFolder, const QString &qmlFileName,
-                                QStringList importPaths)
-{
-    QDir dir(buildFolder);
-    QVERIFY(dir.mkdir(".qt"_L1));
-    const QString qmllsBuildIniPath = dir.absoluteFilePath(".qt/.qmlls.build.ini"_L1);
-    QFile qmllsBuildIni(qmllsBuildIniPath);
-    QVERIFY(qmllsBuildIni.open(QFile::WriteOnly));
-    qmllsBuildIni.write(qmllsBuildIniContent(qmlFileName, importPaths).toUtf8());
+        QTest::addRow("WithQmllsBuildIniAndWorkspace")
+                << u"warnings/QmllsBuildIni/Main.qml"_s << noWarningsExpected;
+    }
+
+    {
+        ExpectedWarnings noWarningsExpected;
+        noWarningsExpected
+                .extraImportPathsPerWorkspace[testFile("workspaces/twoWorkspaces/WorkspaceA")] = {
+            testFile("workspaces/twoWorkspaces/ImportPathA"_L1),
+            QLibraryInfo::path(QLibraryInfo::QmlImportsPath)
+        };
+        noWarningsExpected
+                .extraImportPathsPerWorkspace[testFile("workspaces/twoWorkspaces/WorkspaceB")] = {
+            testFile("workspaces/twoWorkspaces/ImportPathB"_L1),
+            QLibraryInfo::path(QLibraryInfo::QmlImportsPath)
+        };
+
+        QTest::addRow("TwoWorkspacesA")
+                << u"workspaces/twoWorkspaces/WorkspaceA/UseImportPathA.qml"_s
+                << noWarningsExpected;
+
+        QTest::addRow("TwoWorkspacesB")
+                << u"workspaces/twoWorkspaces/WorkspaceB/UseImportPathB.qml"_s
+                << noWarningsExpected;
+    }
+    {
+        ExpectedWarnings missingWorkspaceB;
+        missingWorkspaceB
+                .extraImportPathsPerWorkspace[testFile("workspaces/twoWorkspaces/WorkspaceA")] = {
+            testFile("workspaces/twoWorkspaces/ImportPathA"_L1),
+            QLibraryInfo::path(QLibraryInfo::QmlImportsPath)
+        };
+
+        QTest::addRow("OneWorkspaceA")
+                << u"workspaces/twoWorkspaces/WorkspaceA/UseImportPathA.qml"_s << missingWorkspaceB;
+
+        missingWorkspaceB.warnings.append(
+                "Warnings occurred while importing module \"MyModule\": [import]"_L1);
+        missingWorkspaceB.warnings.append(
+                "Failed to import MyModule. Are your import paths set up properly? Did you build "
+                "your project? [import]"_L1);
+        missingWorkspaceB.warnings.append(
+                "MyItem was not found. Did you add all imports and dependencies?: Did you mean \"Item\"? [import]"_L1);
+        missingWorkspaceB.warnings.append(
+                "Could not find property \"fromImportPathB\". [missing-property]"_L1);
+
+        QTest::addRow("MissingWorkspaceB")
+                << u"workspaces/twoWorkspaces/WorkspaceB/UseImportPathB.qml"_s << missingWorkspaceB;
+    }
+    {
+        ExpectedWarnings nestedWorkspaces;
+        nestedWorkspaces
+                .extraImportPathsPerWorkspace[testFile("workspaces/twoWorkspaces/WorkspaceA")] = {
+            testFile("workspaces/twoWorkspaces/ImportPathA"_L1),
+            QLibraryInfo::path(QLibraryInfo::QmlImportsPath)
+        };
+        nestedWorkspaces.extraImportPathsPerWorkspace[testFile("workspaces/twoWorkspaces")] = {
+            QLibraryInfo::path(QLibraryInfo::QmlImportsPath)
+        };
+        nestedWorkspaces.extraImportPathsPerWorkspace[testFile("workspaces/")] = {
+            QLibraryInfo::path(QLibraryInfo::QmlImportsPath)
+        };
+
+        // use import paths from WorkspaceA
+        QTest::addRow("NestedWorkspaces")
+                << u"workspaces/twoWorkspaces/WorkspaceA/UseImportPathA.qml"_s << nestedWorkspaces;
+
+        nestedWorkspaces.warnings.append(
+                "Warnings occurred while importing module \"MyModule\": [import]"_L1);
+        nestedWorkspaces.warnings.append(
+                "Failed to import MyModule. Are your import paths set up properly? Did you build "
+                "your project? [import]"_L1);
+        nestedWorkspaces.warnings.append(
+                "MyItem was not found. Did you add all imports and dependencies?: Did you mean \"Item\"? [import]"_L1);
+        nestedWorkspaces.warnings.append(
+                "Could not find property \"fromImportPathA\". [missing-property]"_L1);
+
+        // use import paths from twoWorkspaces and not from WorkspaceA, expect warnings
+        QTest::addRow("NestedWorkspaces2")
+                << u"workspaces/twoWorkspaces/UseImportPathA.qml"_s << nestedWorkspaces;
+    }
 }
 
 void tst_qmlls_modules::warnings()
@@ -1353,18 +1500,19 @@ void tst_qmlls_modules::warnings()
     QFETCH(ExpectedWarnings, expectedWarnings);
 
     std::optional<QTemporaryDir> tempDir;
-    if (!expectedWarnings.extraImportPaths.isEmpty()) {
+    if (!expectedWarnings.extraImportPathsPerWorkspace.isEmpty()) {
         tempDir.emplace();
         QVERIFY(tempDir->isValid());
-        createQmllsBuildIni(tempDir->path(), testFile(filePath), expectedWarnings.extraImportPaths);
+        createQmllsBuildIni(tempDir->path(), testFile(filePath),
+                            expectedWarnings.extraImportPathsPerWorkspace);
 
-        Notifications::AddBuildDirsParams params;
-        UriToBuildDirs uriToBuildDirs;
-        uriToBuildDirs.baseUri = testFileUrl(filePath).toEncoded();
-        uriToBuildDirs.buildDirs.append(tempDir->path().toUtf8());
-        params.buildDirsToSet.append(uriToBuildDirs);
-        m_protocol->typedRpc()->sendNotification(QByteArray(Notifications::AddBuildDirsMethod),
-                                                 params);
+        m_protocol->notifyDidChangeWorkspaceFolders(
+                addDidChangeWorkspaceFoldersFromMap(expectedWarnings.extraImportPathsPerWorkspace));
+
+        m_protocol->typedRpc()->sendNotification(
+                QByteArray(Notifications::AddBuildDirsMethod),
+                addBuildDirsParamsFromMap(expectedWarnings.extraImportPathsPerWorkspace,
+                                          tempDir->path().toUtf8()));
     }
 
     bool diagnosticOk = false;
@@ -1384,10 +1532,11 @@ void tst_qmlls_modules::warnings()
                     return;
                 }
 
-                QCOMPARE(p.diagnostics.size(), expectedWarnings.warnings.size());
-                for (qsizetype i = 0; i < p.diagnostics.size(); ++i) {
+                for (qsizetype i = 0;
+                     i < std::min(p.diagnostics.size(), expectedWarnings.warnings.size()); ++i) {
                     QCOMPARE(p.diagnostics[i].message, expectedWarnings.warnings[i].toUtf8());
                 }
+                QCOMPARE(p.diagnostics.size(), expectedWarnings.warnings.size());
                 diagnosticOk = true;
             });
 
@@ -1512,10 +1661,34 @@ void tst_qmlls_modules::hover_data()
     QTest::addColumn<QLspSpecification::Position>("hoveredPosition");
     QTest::addColumn<QLspSpecification::MarkupContent>("expectedResult");
 
-    const QString filePath = u"hover/test.qml"_s;
     {
+        const QString filePath = u"hover/test.qml"_s;
         QLspSpecification::MarkupContent content{ MarkupKind::PlainText, "should fail" };
+        // note: this test fails if you have built the qttools help engine plugin (the CI doesn't seem to build it)
         QTest::addRow("hover") << filePath << QLspSpecification::Position{ 7, 24 } << content;
+    }
+
+    {
+        const QString filePath = u"hover/importpaths.qml"_s;
+        const QLspSpecification::MarkupContent expected{
+            MarkupKind::Markdown,
+            R"(Library at path %1/QtQuick/qmldir
+
+Import paths:
+
+ * %1)"_L1.arg(QLibraryInfo::path(QLibraryInfo::QmlImportsPath))
+                    .toUtf8(),
+        };
+        QTest::addRow("importpaths-no-version")
+                << filePath << QLspSpecification::Position{ 3, 11 } << expected;
+        QTest::addRow("importpaths2-no-version")
+                << filePath << QLspSpecification::Position{ 3, 3 } << expected;
+        QTest::addRow("importpaths-major-version")
+                << filePath << QLspSpecification::Position{ 4, 15 } << expected;
+        QTest::addRow("importpaths-minor-version")
+                << filePath << QLspSpecification::Position{ 4, 18 } << expected;
+        QTest::addRow("importpaths-with-version")
+                << filePath << QLspSpecification::Position{ 5, 11 } << expected;
     }
 }
 
@@ -1586,17 +1759,24 @@ void tst_qmlls_modules::qmldirImports()
     QFETCH(int, character);
     QFETCH(QString, expectedCompletion);
 
-    const auto uri = openFile(filePath);
-    QVERIFY(uri);
-
+    std::optional<QTemporaryDir> tempDir;
     if (addBuildDirectory == AddBuildDir) {
+        tempDir.emplace();
+        QVERIFY(tempDir->isValid());
+        createQmllsBuildIni(tempDir->path(), testFile(filePath),
+                            { { ""_L1,
+                                { testFile("buildDir"_L1),
+                                  QLibraryInfo::path(QLibraryInfo::QmlImportsPath) } } });
+
         Notifications::AddBuildDirsParams bDirs;
         UriToBuildDirs ub;
-        ub.baseUri = *uri;
-        ub.buildDirs.append(testFile("buildDir").toUtf8());
+        ub.buildDirs.append(tempDir->path().toUtf8());
         bDirs.buildDirsToSet.append(ub);
         m_protocol->typedRpc()->sendNotification(QByteArray(Notifications::AddBuildDirsMethod), bDirs);
     }
+
+    const auto uri = openFile(filePath);
+    QVERIFY(uri);
 
     bool diagnosticOk = false;
     bool completionOk = false;
@@ -1632,7 +1812,7 @@ void tst_qmlls_modules::qmldirImports()
         completionOk = true;
     });
 
-    QTRY_VERIFY_WITH_TIMEOUT(diagnosticOk && completionOk, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(diagnosticOk && completionOk, 10000);
 }
 
 void tst_qmlls_modules::quickFixes_data()
@@ -1792,8 +1972,8 @@ void tst_qmlls_modules::semanticHighlightingFull()
 {
     QFETCH(QString, filePath);
     const auto item = fileObject(testFile(filePath));
-    QmlHighlighting::HighlightsContainer highlights;
-    const auto expectedData = QmlHighlighting::Utils::collectTokens(item, std::nullopt);
+    QmlHighlighting::HighlightsContainer highlights = QmlHighlighting::Utils::visitTokens(item, std::nullopt);
+    const auto expectedData = QmlHighlighting::Utils::encodeSemanticTokens(highlights);
 
     const auto uri = openFile(filePath);
     QVERIFY(uri);
@@ -1835,13 +2015,13 @@ void tst_qmlls_modules::semanticHighlightingRange()
     QFETCH(QLspSpecification::Range, range);
 
     const auto item = fileObject(testFile(filePath));
-    QmlHighlighting::HighlightsContainer highlights;
     const auto qmlFile = item.as<QQmlJS::Dom::QmlFile>();
     const auto code = qmlFile->code();
     const int startOffset = int(QQmlLSUtils::textOffsetFrom(code, range.start.line, range.end.character));
     const int endOffset = int(QQmlLSUtils::textOffsetFrom(code, range.end.line, range.end.character));
-    const auto expectedData = QmlHighlighting::Utils::collectTokens(
+    QmlHighlighting::HighlightsContainer highlights = QmlHighlighting::Utils::visitTokens(
             item, QmlHighlighting::HighlightsRange{ startOffset, endOffset });
+    const auto expectedData = QmlHighlighting::Utils::encodeSemanticTokens(highlights);
 
     const auto uri = openFile(filePath);
     QVERIFY(uri);
@@ -1886,8 +2066,12 @@ void tst_qmlls_modules::semanticHighlightingDelta()
 
     const auto fileItem = fileObject(testFile(filePath));
     const auto deltaFileItem = fileObject(testFile(deltaFilePath));
-    auto fullDocumentSemanticTokensData = QmlHighlighting::Utils::collectTokens(fileItem, std::nullopt);
-    auto editedDocumentSemanticTokensData = QmlHighlighting::Utils::collectTokens(deltaFileItem, std::nullopt);
+    const auto fullDocumentSemanticTokens = QmlHighlighting::Utils::visitTokens(fileItem, std::nullopt);
+    const auto editedDocumentSemanticTokens = QmlHighlighting::Utils::visitTokens(deltaFileItem, std::nullopt);
+    auto fullDocumentSemanticTokensData =
+            QmlHighlighting::Utils::encodeSemanticTokens(fullDocumentSemanticTokens);
+    auto editedDocumentSemanticTokensData =
+            QmlHighlighting::Utils::encodeSemanticTokens(editedDocumentSemanticTokens);
     const auto expectedEdits = QmlHighlighting::Utils::computeDiff(
             fullDocumentSemanticTokensData, editedDocumentSemanticTokensData);
 

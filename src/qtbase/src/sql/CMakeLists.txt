@@ -25,6 +25,7 @@ qt_internal_add_module(Sql
         QT_NO_CAST_FROM_ASCII
         QT_NO_CONTEXTLESS_CONNECT
         QT_NO_FOREACH
+        QT_NO_URL_CAST_FROM_STRING
         QT_NO_USING_NAMESPACE
         QT_USE_NODISCARD_FILE_OPEN
     LIBRARIES
@@ -58,7 +59,7 @@ qt_internal_add_docs(Sql
     doc/qtsql.qdocconf
 )
 
-if(QT_FEATURE_doc_snippets)
+if(QT_BUILD_DOC_SNIPPETS)
     add_subdirectory(doc/snippets/code)
     add_subdirectory(doc/snippets/sqldatabase)
 endif()

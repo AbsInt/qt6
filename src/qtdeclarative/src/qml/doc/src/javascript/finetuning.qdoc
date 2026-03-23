@@ -88,6 +88,12 @@ Running JavaScript code can be influenced by a few environment variables, partic
             management errors, for example the manual deletion of an object belonging to the QML
             engine from C++.
     \row
+        \li \c{QV4_MM_CROSS_VALIDATE_INCREMENTAL_GC}
+        \li Setting this environment variable runs additional debug steps to
+            recognize cases where the incremental garbage collector is
+            misbehaving by comparing its behavior to that of the non-incremetal
+            garbage collector.
+    \row
         \li \c{QV4_PROFILE_WRITE_PERF_MAP}
         \li On Linux, the \c perf utility can be used to profile programs. To analyze JIT-compiled
             JavaScript functions, it needs to know about their names and locations in memory. To

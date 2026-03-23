@@ -1,5 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QSVGGRAPHICS_P_H
 #define QSVGGRAPHICS_P_H
@@ -16,19 +18,19 @@
 //
 
 #include "qsvgnode_p.h"
-#include "qtsvgglobal_p.h"
 
 #include "QtGui/qpainterpath.h"
 #include "QtGui/qimage.h"
 #include "QtGui/qtextlayout.h"
-#include "QtGui/qtextoption.h"
 #include "QtCore/qloggingcategory.h"
-#include "QtCore/qstack.h"
+
+#include <optional>
 
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(lcSvgDraw);
 
+class QSvgGlyph;
 class QTextCharFormat;
 
 class Q_SVG_EXPORT QSvgDummyNode : public QSvgNode
@@ -42,7 +44,7 @@ class Q_SVG_EXPORT QSvgEllipse : public QSvgNode
 {
 public:
     QSvgEllipse(QSvgNode *parent, const QRectF &rect);
-    bool separateFillStroke() const override;
+    bool separateFillStroke(const QPainter *, const QSvgExtraStates &) const override;
     void drawCommand(QPainter *p, QSvgExtraStates &states) override;
     Type type() const override;
     QRectF internalFastBounds(QPainter *p, QSvgExtraStates &states) const override;
@@ -100,7 +102,7 @@ class Q_SVG_EXPORT QSvgPath : public QSvgNode
 {
 public:
     QSvgPath(QSvgNode *parent, const QPainterPath &qpath);
-    bool separateFillStroke() const override;
+    bool separateFillStroke(const QPainter *, const QSvgExtraStates &) const override;
     void drawCommand(QPainter *p, QSvgExtraStates &states) override;
     Type type() const override;
     QRectF internalFastBounds(QPainter *p, QSvgExtraStates &states) const override;
@@ -116,7 +118,7 @@ class Q_SVG_EXPORT QSvgPolygon : public QSvgNode
 {
 public:
     QSvgPolygon(QSvgNode *parent, const QPolygonF &poly);
-    bool separateFillStroke() const override;
+    bool separateFillStroke(const QPainter *, const QSvgExtraStates &) const override;
     void drawCommand(QPainter *p, QSvgExtraStates &states) override;
     Type type() const override;
     QRectF internalFastBounds(QPainter *p, QSvgExtraStates &states) const override;
@@ -133,7 +135,7 @@ class Q_SVG_EXPORT QSvgPolyline : public QSvgNode
 {
 public:
     QSvgPolyline(QSvgNode *parent, const QPolygonF &poly);
-    bool separateFillStroke() const override;
+    bool separateFillStroke(const QPainter *, const QSvgExtraStates &) const override;
     void drawCommand(QPainter *p, QSvgExtraStates &states) override;
     Type type() const override;
     QRectF internalFastBounds(QPainter *p, QSvgExtraStates &states) const override;
@@ -151,7 +153,7 @@ class Q_SVG_EXPORT QSvgRect : public QSvgNode
 public:
     QSvgRect(QSvgNode *paren, const QRectF &rect, qreal rx=0, qreal ry=0);
     Type type() const override;
-    bool separateFillStroke() const override;
+    bool separateFillStroke(const QPainter *, const QSvgExtraStates &) const override;
     void drawCommand(QPainter *p, QSvgExtraStates &states) override;
     QRectF internalFastBounds(QPainter *p, QSvgExtraStates &states) const override;
     QRectF internalBounds(QPainter *p, QSvgExtraStates &states) const override;
@@ -182,7 +184,7 @@ public:
     void drawCommand(QPainter *p, QSvgExtraStates &states) override;
     bool shouldDrawNode(QPainter *p, QSvgExtraStates &states) const override;
     Type type() const override;
-    bool separateFillStroke() const override;
+    bool separateFillStroke(const QPainter *, const QSvgExtraStates &) const override;
 
     void addTspan(QSvgTspan *tspan) {m_tspans.append(tspan);}
     const QList<QSvgTspan *> tspans() const { return m_tspans; }
@@ -203,14 +205,16 @@ private:
     static QSvgTspan * const LINEBREAK;
 
     QPointF m_coord;
+    QSizeF m_size;
 
     // 'm_tspans' is also used to store characters outside tspans and line breaks.
     // If a 'm_tspan' item is null, it indicates a line break.
     QList<QSvgTspan *> m_tspans;
 
     Type m_type;
-    QSizeF m_size;
     WhitespaceMode m_mode;
+
+    mutable std::optional<QList<const QSvgGlyph *> > m_glyphsToDraw;
 };
 
 class Q_SVG_EXPORT QSvgTspan : public QSvgNode

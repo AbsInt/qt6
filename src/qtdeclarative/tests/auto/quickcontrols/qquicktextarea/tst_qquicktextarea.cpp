@@ -5,6 +5,7 @@
 #include <QtTest/qsignalspy.h>
 #include <QtTest/qtesttouch.h>
 
+#include <QtCore/private/qabstractanimation_p.h>
 #include <QtGui/qfontmetrics.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/qpa/qplatformintegration.h>
@@ -13,8 +14,15 @@
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <QtQuickTestUtils/private/viewtestutils_p.h>
 #include <QtQuickTestUtils/private/visualtestutils_p.h>
+#include <QtQuickControlsTestUtils/private/controlstestutils_p.h>
+#include <QtQuickTemplates2/private/qquickmenu_p.h>
+#include <QtQuickTemplates2/private/qquickpopup_p_p.h>
 #include <QtQuickTemplates2/private/qquicktextarea_p.h>
+#include <QtQuickControlsTestUtils/private/controlstestutils_p.h>
 #include <QtQuickControlsTestUtils/private/qtest_quickcontrols_p.h>
+
+using namespace QQuickControlsTestUtils;
+using namespace QQuickVisualTestUtils;
 
 class tst_QQuickTextArea : public QQmlDataTest
 {
@@ -28,9 +36,19 @@ private slots:
     void touchscreenDoesNotSelect_data();
     void touchscreenDoesNotSelect();
     void touchscreenSetsFocusAndMovesCursor();
+    void customContextMenuOnRelease_data();
+    void customContextMenuOnRelease();
+    void testCursorPositionChangedOnDeleteStartWord();
 
 private:
     QScopedPointer<QPointingDevice> touchDevice = QScopedPointer<QPointingDevice>(QTest::createTouchDevice());
+
+    bool hasClipboardSupport =
+#if QT_CONFIG(clipboard)
+        true;
+#else
+        false;
+#endif
 };
 
 tst_QQuickTextArea::tst_QQuickTextArea()
@@ -42,6 +60,10 @@ void tst_QQuickTextArea::initTestCase()
 {
     QQmlDataTest::initTestCase();
     qputenv("QML_NO_TOUCH_COMPRESSION", "1");
+    // Showing a native menu is a blocking call, so the test will timeout.
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuWindows);
+
+    QUnifiedTimer::instance()->setSpeedModifier(10);
 }
 
 void tst_QQuickTextArea::touchscreenDoesNotSelect_data()
@@ -151,6 +173,98 @@ void tst_QQuickTextArea::touchscreenSetsFocusAndMovesCursor()
     QTest::mouseRelease(&window, Qt::LeftButton, {}, p1);
     QCOMPARE(top->cursorPosition(), 0);
     QCOMPARE_GT(top->selectedText().size(), 0);
+}
+
+void tst_QQuickTextArea::customContextMenuOnRelease_data()
+{
+    QTest::addColumn<QUrl>("qmlUrl");
+    QTest::addColumn<QQuickPopup::PopupType>("popupType");
+
+    QTest::newRow("Item menu instead of attached menu, TapHandler")
+            << testFileUrl("customContextMenuNotAttachedOnRelease.qml") << QQuickPopup::Item;
+    QTest::newRow("Item menu instead of attached menu, MouseArea")
+        << testFileUrl("customContextMenuNotAttachedOnReleaseMouseArea.qml") << QQuickPopup::Item;
+    QTest::newRow("Item menu instead of default menu, TapHandler")
+            << testFileUrl("customContextMenuOnRelease.qml") << QQuickPopup::Item;
+    QTest::newRow("Item menu instead of default menu, MouseArea")
+            << testFileUrl("customContextMenuOnReleaseMouseArea.qml") << QQuickPopup::Item;
+    QTest::newRow("Sibling item menu instead of default menu, TapHandler")
+            << testFileUrl("customContextMenuOnReleaseInSibling.qml") << QQuickPopup::Item;
+    QTest::newRow("Sibling item menu instead of default menu, MouseArea")
+            << testFileUrl("customContextMenuOnReleaseSiblingMouseArea.qml") << QQuickPopup::Item;
+    if (arePopupWindowsSupported()) {
+        QTest::newRow("Windowed menu instead of attached menu, TapHandler")
+                << testFileUrl("customContextMenuNotAttachedOnRelease.qml") << QQuickPopup::Window;
+        QTest::newRow("Windowed menu instead of attached menu, MouseArea")
+            << testFileUrl("customContextMenuNotAttachedOnReleaseMouseArea.qml") << QQuickPopup::Window;
+        QTest::newRow("Windowed menu instead of default menu, TapHandler")
+                << testFileUrl("customContextMenuOnRelease.qml") << QQuickPopup::Window;
+        QTest::newRow("Windowed menu instead of default menu, MouseArea")
+            << testFileUrl("customContextMenuOnReleaseMouseArea.qml") << QQuickPopup::Window;
+        QTest::newRow("Sibling item menu instead of default menu, TapHandler")
+                << testFileUrl("customContextMenuOnReleaseInSibling.qml") << QQuickPopup::Window;
+        QTest::newRow("Sibling item menu instead of default menu, MouseArea")
+                << testFileUrl("customContextMenuOnReleaseSiblingMouseArea.qml") << QQuickPopup::Window;
+    }
+}
+
+void tst_QQuickTextArea::customContextMenuOnRelease()
+{
+    QFETCH(QUrl, qmlUrl);
+    QFETCH(QQuickPopup::PopupType, popupType);
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, qmlUrl));
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+
+    auto *ourContextMenu = window.rootObject()->property("ourContextMenu").value<QQuickMenu *>();
+    std::unique_ptr<QSignalSpy> ourMenuOpenedSpy = nullptr;
+    if (ourContextMenu) {
+        ourContextMenu->setPopupType(popupType);
+        ourMenuOpenedSpy = std::make_unique<QSignalSpy>(ourContextMenu, &QQuickMenu::opened);
+    }
+
+    // Right click on the TextArea to open the context menu. The user's custom context menu
+    // should be visible, but not ours (ContextMenu's).
+    auto *textArea = window.rootObject()->property("textArea").value<QQuickTextArea *>();
+    QVERIFY(textArea);
+    QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier, mapCenterToWindow(textArea));
+    auto *userContextMenu = window.rootObject()->property("userContextMenu").value<QQuickMenu *>();
+    QVERIFY(userContextMenu);
+    QTRY_VERIFY(userContextMenu->isOpened());
+
+    // Delivery of the QContextMenuEvent was prevented, so neither the default context menu
+    // nor the attached context menu ever even tried to open.
+    if (ourContextMenu)
+        QCOMPARE(ourMenuOpenedSpy->size(), 0);
+    else
+        QVERIFY(window.rootObject()->findChildren<QQuickMenu *>().size() <= 1);
+}
+
+void tst_QQuickTextArea::testCursorPositionChangedOnDeleteStartWord()
+{
+    const QString initialText = "The quick brown fox jumps over the lazy dog.";
+    const QString expectedText = "The quick brown  jumps over the lazy dog.";
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("mouseselection_default.qml")));
+
+    QQuickTextEdit *textField = qobject_cast<QQuickTextEdit *>(window.rootObject());
+    QVERIFY(textField != nullptr);
+
+    textField->setText(initialText);
+    textField->setCursorPosition(19);
+
+    QSignalSpy spy(textField, &QQuickTextEdit::cursorPositionChanged);
+
+    textField->forceActiveFocus();
+
+    QTest::keySequence(&window, QKeySequence::DeleteStartOfWord);
+
+    QCOMPARE(spy.count(), 1);
+
+    QCOMPARE(textField->text(), expectedText);
+
+    QCOMPARE(textField->cursorPosition(), 16);
 }
 
 QTEST_QUICKCONTROLS_MAIN(tst_QQuickTextArea)

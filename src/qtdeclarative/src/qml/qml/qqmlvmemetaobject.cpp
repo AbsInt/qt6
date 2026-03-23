@@ -24,7 +24,7 @@
 #include <private/qv4variantassociationobject_p.h>
 #include <private/qv4variantobject_p.h>
 
-#include <QtCore/qsequentialiterable.h>
+#include <QtCore/qmetasequence.h>
 
 #include <climits> // for CHAR_BIT
 
@@ -942,10 +942,10 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
                                         type.isSequentialContainer()) {
                                     sequence = QV4::SequencePrototype::fromData(
                                         engine, propType, type.listMetaSequence(), a[0]);
-                                } else if (QSequentialIterable iterable;
+                                } else if (QMetaSequence::Iterable iterable;
                                         QMetaType::convert(
                                                propType, a[0],
-                                               QMetaType::fromType<QSequentialIterable>(),
+                                               QMetaType::fromType<QMetaSequence::Iterable>(),
                                                &iterable)) {
                                     sequence = QV4::SequencePrototype::fromData(
                                         engine, propType, iterable.metaContainer(), a[0]);

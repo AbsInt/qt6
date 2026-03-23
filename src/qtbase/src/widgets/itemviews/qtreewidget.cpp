@@ -523,6 +523,12 @@ bool QTreeModel::setHeaderData(int section, Qt::Orientation orientation,
 }
 
 /*!
+    \class QTreeModel
+    \inmodule QtWidgets
+    \internal
+*/
+
+/*!
   \reimp
 
   Returns the flags for the item referred to the given \a index.
@@ -2286,7 +2292,7 @@ QDataStream &operator>>(QDataStream &in, QTreeWidgetItem &item)
 
 void QTreeWidgetPrivate::clearConnections()
 {
-    for (const QMetaObject::Connection &connection : connections)
+    for (QMetaObject::Connection &connection : connections)
         QObject::disconnect(connection);
 }
 

@@ -410,7 +410,7 @@ public:
     static QMetaMethod findMethod(const QObject *obj, const char *signature);
 
 private:
-    bool invokeTest(int index, QLatin1StringView tag, std::optional<WatchDog> &watchDog) const;
+    void invokeTest(int index, QLatin1StringView tag, std::optional<WatchDog> &watchDog) const;
     void invokeTestOnData(int index) const;
 
     QMetaMethod m_initTestCaseMethod; // might not exist, check isValid().
@@ -1313,11 +1313,8 @@ static void printUnknownDataTagError(QLatin1StringView name, QLatin1StringView t
 
     Call slot_data(), init(), slot(), cleanup(), init(), slot(), cleanup(), ...
     If data is set then it is the only test that is performed
-
-    If the function was successfully called, true is returned, otherwise
-    false.
 */
-bool TestMethods::invokeTest(int index, QLatin1StringView tag, std::optional<WatchDog> &watchDog) const
+void TestMethods::invokeTest(int index, QLatin1StringView tag, std::optional<WatchDog> &watchDog) const
 {
     QBenchmarkTestMethodData benchmarkData;
     QBenchmarkTestMethodData::current = &benchmarkData;
@@ -1420,8 +1417,6 @@ bool TestMethods::invokeTest(int index, QLatin1StringView tag, std::optional<Wat
     QTestResult::finishedCurrentTestFunction();
     QTestResult::setSkipCurrentTest(false);
     QTestResult::setBlacklistCurrentTest(false);
-
-    return true;
 }
 
 void *fetchData(QTestData *data, const char *tagName, int typeId)
@@ -1741,10 +1736,8 @@ void TestMethods::invokeTests(QObject *testObject) const
                 const char *data = nullptr;
                 if (i < QTest::testTags.size() && !QTest::testTags.at(i).isEmpty())
                     data = qstrdup(QTest::testTags.at(i).toLatin1().constData());
-                const bool ok = invokeTest(i, QLatin1StringView(data), watchDog);
+                invokeTest(i, QLatin1StringView(data), watchDog);
                 delete [] data;
-                if (!ok)
-                    break;
             }
         }
 
@@ -1883,11 +1876,9 @@ void QTest::qInit(QObject *testObject, int argc, char **argv)
     if (!appNapDisabler)
         appNapDisabler.emplace();
 
-    if (qApp && (qstrcmp(qApp->metaObject()->className(), "QApplication") == 0)) {
-        IOPMAssertionCreateWithName(kIOPMAssertionTypeNoDisplaySleep,
-            kIOPMAssertionLevelOn, CFSTR("QtTest running tests"),
-            &macPowerSavingDisabled);
-    }
+    IOPMAssertionCreateWithName(kIOPMAssertionTypeNoDisplaySleep,
+                                kIOPMAssertionLevelOn, CFSTR("QtTest running tests"),
+                                &macPowerSavingDisabled);
 #endif
 
     QTestPrivate::parseBlackList();
@@ -2749,6 +2740,17 @@ const char *QTest::currentDataTag()
 }
 
 /*!
+    Returns the name of the current global test data. If the test doesn't
+    have any assigned global testdata, the function returns \nullptr.
+
+    \since 6.11
+*/
+const char *QTest::currentGlobalDataTag()
+{
+    return QTestResult::currentGlobalDataTag();
+}
+
+/*!
     Returns \c true if the current test function has failed, otherwise false.
 
     \sa QTest::currentTestResolved()
@@ -3128,21 +3130,53 @@ TO_STRING_IMPL(bool, %d)
 TO_STRING_IMPL(signed char, %hhd)
 TO_STRING_IMPL(unsigned char, %hhu)
 
+// Merge of ISO C23 getpayload() and issignaling()
+template <typename T> static auto decodeNanPayload(T t)
+{
+    constexpr int Digits = std::numeric_limits<T>::digits;
+    constexpr quint64 MantissaMask = (Q_UINT64_C(1) << (Digits - 1)) - 1;
+    constexpr quint64 IsQuietBit = quint64(QT_CONFIG(signaling_nan)) << (Digits - 2);
+    constexpr quint64 PayloadMask = MantissaMask & ~IsQuietBit;
+
+    struct R {
+        quint64 payload;
+        bool isQuiet;
+    } r;
+    Q_ASSERT(qIsNaN(t));
+    quint64 u = qFromUnaligned<typename QIntegerForSizeof<T>::Unsigned>(&t);
+    r.payload = u & PayloadMask;
+    r.isQuiet = !QT_CONFIG(signaling_nan) || (u & IsQuietBit);
+    return r;
+}
+
 // Be consistent about display of infinities and NaNs (snprintf()'s varies,
 // notably on MinGW, despite POSIX documenting "[-]inf" or "[-]infinity" for %f,
 // %e and %g, uppercasing for their capital versions; similar for "nan"):
-static char *toStringFp(double t, int digits10)
+template <typename T> static char *toStringFp(T t)
 {
+    using std::signbit;
     char *msg = new char[128];
+    bool negative = signbit(t);
+
     switch (qFpClassify(t)) {
     case FP_INFINITE:
-        qstrncpy(msg, (t < 0 ? "-inf" : "inf"), 128);
+        qstrncpy(msg, (negative ? "-inf" : "inf"), 128);
         break;
     case FP_NAN:
-        qstrncpy(msg, "nan", 128);
+        if (auto r = decodeNanPayload(t); r.payload) {
+            std::snprintf(msg, 128, "%s%snan(%#llx)",
+                          negative ? "-" : "", r.isQuiet ? "" : "s", r.payload);
+        } else {
+            Q_ASSERT(r.isQuiet);  // only quiet NaNs can have payload == 0
+            qstrncpy(msg, (negative ? "-nan" : "nan"), 128);
+        }
+        break;
+    case FP_ZERO:
+        qstrncpy(msg, (negative ? "-0 (-0x0p+0)" : "0 (0x0p+0)"), 128);
         break;
     default:
-        std::snprintf(msg, 128, "%.*g (%a)", digits10, t, t);
+        std::snprintf(msg, 128, "%.*g (%a)", std::numeric_limits<T>::digits10 + 1, double(t),
+                      double(t));
         break;
     }
     return msg;
@@ -3151,7 +3185,7 @@ static char *toStringFp(double t, int digits10)
 #define TO_STRING_FLOAT(TYPE) \
 template <> Q_TESTLIB_EXPORT char *QTest::toString<TYPE>(const TYPE &t) \
 { \
-    return toStringFp(t, std::numeric_limits<TYPE>::digits10 + 1); \
+    return toStringFp(t); \
 }
 TO_STRING_FLOAT(qfloat16)
 TO_STRING_FLOAT(float)

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:significant
 
-#ifndef QV8DOMERRORS_P_H
-#define QV8DOMERRORS_P_H
+#ifndef QV4DOMERRORS_P_H
+#define QV4DOMERRORS_P_H
 
 //
 //  W A R N I N G
@@ -55,4 +55,4 @@ void qt_add_domexceptions(QV4::ExecutionEngine *e);
 
 QT_END_NAMESPACE
 
-#endif // QV8DOMERRORS_P_H
+#endif // QV4DOMERRORS_P_H

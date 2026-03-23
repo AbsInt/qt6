@@ -147,6 +147,11 @@ int QAccessibleMenuBar::indexOfChild(const QAccessibleInterface *child) const
 
 #endif // QT_CONFIG(menubar)
 
+/*!
+    \class QAccessibleMenuItem
+    \inmodule QtWidgets
+    \internal
+*/
 QAccessibleMenuItem::QAccessibleMenuItem(QWidget *owner, QAction *action)
 : m_action(action), m_owner(owner)
 {

@@ -12,7 +12,7 @@ Glossary:
 ------------
 - V4: The ECMAScript engine used in Qt (qtdeclarative)
 - gc: abbreviation for garbage collector
-- mutator: the actual user application  (in constrast to the collector)
+- mutator: the actual user application  (in contrast to the collector)
 - roots: A set of pointers from which the gc process starts
 - fast roots: A subset of the roots which are not protected by a barrier
 - write barrier: A set of instructions executed on each write
@@ -55,9 +55,10 @@ To avoid that values that were on the heap during the start of the gc cycle, the
 
 To avoid that unmarked heap-items are moved from one heap item (or the stack) to an already marked heap-item (and consequently end up hidden from the gc), we employ a Dijkstra style write barrier: Any item that becomes reachable from another heap-item is marked grey (unless already black).
 
-While a gc cycle is ongoing, allocations are black, meaning every allocated object is considered to be live (until the next gc cycle is started).
-This is currently required as compilation units linked to the engine while the gc is running are not protected by the write barrier or another mechanism. It also helps to reduce the amount of work to be done when rescanning the JS stack (as it helps to ensure that most items are already black at that point).
-
+While a gc cycle is ongoing, allocations are white. To ensure a correct behavior
+and that newly allocated objects that needs marking are correctly marked, we
+employ the above mentioned write barriers and we make use of stack scanning
+in-between phases.
 
 The gc state machine
 --------------------
@@ -71,7 +72,7 @@ To facilitate incremental garbage collection, the gc algorithm is divided into t
 5. markPersistentValues: An interruptible phase in which all persistent values are marked.
 6. initMarkWeakValues: Atomic phase. If there are weak values, some setup is done for the next phase
 7. markWeakValues: An interruptible phase which takes care of marking the QObjectWrappers
-8. markDrain: An interrupible phase. While the MarkStack is not empty, the marking algorithm runs.
+8. markDrain: An interruptible phase. While the MarkStack is not empty, the marking algorithm runs.
 9.  markReady: An atomic phase which currently does nothing, but could be used for e.g. logging statistics
 10. initCallDestroyObjects: An atomic phase, in which the stack is rescanned, the MarkStack is drained once more. This ensures that all live objects are really marked.
     Afterwards, the iteration over all the QObjectWrappers is prepared.
@@ -89,14 +90,14 @@ Most steps are straight-forward, only the persistent and weak value phases requi
 
 Persistent Values
 -----------------
-As shown in the diagram above, the handling of persistent values is interruptible (both for "real" persistent values, and also for weak vaules which also are stored in a `PersistentValueStorage` data structure.
+As shown in the diagram above, the handling of persistent values is interruptible (both for "real" persistent values, and also for weak values which also are stored in a `PersistentValueStorage` data structure.
 This is done by storing the `PersistentValueStorage::Iterator` in the gc state machine. That in turn raises two questions: Is the iterator safe against invalidation? And do we actually keep track of newly added persistent values?
 
 The latter part is easy to answer: Any newly added weak value is marked when we are in a gc cycle, so the marking part is handled. Sweeping only cares about unmarked values, so that's safe too.
-To answer the question about iterator validity, we have to look at the `PersistentValueStorage` data structure. Conceptionally, it's a forward-list of `Page`s (arrays of `QV4::Value`). Pages are ref-counted, and only unliked from the list if the ref-count reaches zero. Moreover, iterators also increase the ref-count.
+To answer the question about iterator validity, we have to look at the `PersistentValueStorage` data structure. Conceptionally, it's a forward-list of `Page`s (arrays of `QV4::Value`). Pages are ref-counted, and only unlinked from the list if the ref-count reaches zero. Moreover, iterators also increase the ref-count.
 Therefore, as long as we iterate over the list, we don't risk having the pointer point to a deleted `Page` – even if all values in it have been freed. Freeing values is unproblematic for the gc – it will simply encounter `undefined` values, something it is already prepared to handle.
 Pages are also kept in the list while they are not deleted, so iteration works as expected. The only adjustment we need to do is to disable an optimization: When searching for a Page with an empty slot, we have
-to (potentially) travese the whole `PersistentValueStorage`. To avoid that, the first Page with empty slots is normally moved to the front of the list. However, that would mean that we could potentially skip over it during the marking phase. We sidestep that issue by simply disabling the optimization. This area could
+to (potentially) traverse the whole `PersistentValueStorage`. To avoid that, the first Page with empty slots is normally moved to the front of the list. However, that would mean that we could potentially skip over it during the marking phase. We sidestep that issue by simply disabling the optimization. This area could
 easily be improved in the future by keeping track of the first page with free slots in a different way.
 
 Custom marking
@@ -113,7 +114,10 @@ Some parts of the engine have to deviate from the general scheme described in th
 Motivation for using a Dijkstra style barrier:
 ----------------------------------------------
 - Deletion barriers are hard to support with the current PropertyKey design
-- Steele style barriers cause more work (have to revisit more objects), and as long as we have black allocations it doesn't make much sense to optimize for a minimal amount  of floating garbage.
+- Steele style barriers cause more work (have to revisit more
+  objects). Furthermore, allocations were initially black, albeit that
+  was later changed, such that it wouldn't have made sense to optimize for
+  a minimal amount of floating garbage.
 
 Sweep Phase and finalizers:
 ---------------------------

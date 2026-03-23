@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:significant
 
-#ifndef QV8TYPEWRAPPER_P_H
-#define QV8TYPEWRAPPER_P_H
+#ifndef QQMLTYPEWRAPPER_P_H
+#define QQMLTYPEWRAPPER_P_H
 
 //
 //  W A R N I N G
@@ -73,7 +73,7 @@ struct QQmlTypeWrapper : FunctionObject {
     void warnIfUncreatable() const;
 
     QQmlTypeNameCache::Result queryNamespace(
-            const QV4::String *name, QQmlEnginePrivate *enginePrivate) const;
+            const QV4::String *name, QV4::ExecutionEngine *engine) const;
 
     QV4QPointer<QObject> object;
 
@@ -176,5 +176,5 @@ struct Q_QML_EXPORT QQmlEnumWrapper : Object
 
 QT_END_NAMESPACE
 
-#endif // QV8TYPEWRAPPER_P_H
+#endif // QQMLTYPEWRAPPER_P_H
 

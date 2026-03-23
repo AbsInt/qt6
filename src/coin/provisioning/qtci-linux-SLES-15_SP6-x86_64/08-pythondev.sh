@@ -71,6 +71,7 @@ python3 --version | grep -F "$python3Version"
 
 pip3 install --user wheel
 pip3 install --user virtualenv
+pip3 install --user html5lib
 pip3 install --user -r "${BASH_SOURCE%/*}/../common/shared/requirements.txt"
 
 # shellcheck source=../common/unix/SetEnvVar.sh
@@ -81,3 +82,6 @@ SetEnvVar "PYTHON3_PATH" "/usr/local/bin"
 # 'The script sbom2doc is installed in '/home/qt/.local/bin' which is not on PATH.'
 # hence the explicit assignment to SBOM_PYTHON_APPS_PATH.
 SetEnvVar "SBOM_PYTHON_APPS_PATH" "/home/qt/.local/bin"
+
+# Set SBOM_PYTHON_INTERP_PATH to Python3 instance which was used to install SBOM packages from requirements
+SetEnvVar "SBOM_PYTHON_INTERP_PATH" "/usr/local/bin/python3.12"

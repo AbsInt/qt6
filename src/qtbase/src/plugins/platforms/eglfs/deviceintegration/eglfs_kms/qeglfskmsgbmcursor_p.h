@@ -63,6 +63,8 @@ public:
 
     void reevaluateVisibilityForScreens() { setPos(pos()); }
 
+    QEglFSKmsGbmScreen *screen() const { return m_screen; }
+
 private:
     void initCursorAtlas();
 

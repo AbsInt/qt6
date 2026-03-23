@@ -46,6 +46,12 @@ static QString translateDriveName(const QFileInfo &drive)
 }
 
 /*!
+    \class QFileInfoGatherer
+    \inmodule QtGui
+    \internal
+*/
+
+/*!
     Creates thread
 */
 QFileInfoGatherer::QFileInfoGatherer(QObject *parent)
@@ -422,10 +428,10 @@ void QFileInfoGatherer::getFileInfos(const QString &path, const QStringList &fil
 
     QStringList allFiles;
     if (files.isEmpty()) {
-        // Use QDirListing::IteratorFlags when QFileSystemModel is
-        // changed to use them too
-        constexpr auto dirFilters = QDir::AllEntries | QDir::System | QDir::Hidden;
-        for (const auto &dirEntry : QDirListing(path, {}, dirFilters.toInt())) {
+        using F = QDirListing::IteratorFlag;
+        constexpr auto flags = F::ResolveSymlinks | F::IncludeHidden | F::IncludeDotAndDotDot
+                               | F::IncludeBrokenSymlinks;
+        for (const auto &dirEntry : QDirListing(path, flags)) {
             if (isInterruptionRequested())
                 break;
             fileInfo = dirEntry.fileInfo();

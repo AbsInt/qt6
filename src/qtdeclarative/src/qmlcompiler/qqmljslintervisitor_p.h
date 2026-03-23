@@ -32,7 +32,7 @@ namespace QQmlJS {
 class LinterVisitor final : public QQmlJSImportVisitor
 {
 public:
-    LinterVisitor(const QQmlJSScope::Ptr &target, QQmlJSImporter *importer, QQmlJSLogger *logger,
+    LinterVisitor(QQmlJSImporter *importer, QQmlJSLogger *logger,
                   const QString &implicitImportDirectory,
                   const QStringList &qmldirFiles = QStringList(), QQmlJS::Engine *engine = nullptr);
 
@@ -55,6 +55,9 @@ protected:
     bool visit(QQmlJS::AST::UiEnumDeclaration *uied) override;
     bool visit(QQmlJS::AST::CaseBlock *) override;
     bool visit(QQmlJS::AST::ExpressionStatement *ast) override;
+    bool visit(QQmlJS::AST::FunctionDeclaration *fdecl) override;
+    bool visit(QQmlJS::AST::FunctionExpression *fexpr) override;
+    bool visit(QQmlJS::AST::UiPublicMember *publicMember) override;
 
 private:
     struct SeenImport

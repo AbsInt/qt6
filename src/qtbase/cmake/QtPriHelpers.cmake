@@ -930,6 +930,10 @@ function(qt_get_build_parts out_var)
         list(APPEND parts "tools")
     endif()
 
+    if(QT_BUILD_DOC_SNIPPETS)
+        list(APPEND parts "doc-snippets")
+    endif()
+
     set(${out_var} ${parts} PARENT_SCOPE)
 endfunction()
 

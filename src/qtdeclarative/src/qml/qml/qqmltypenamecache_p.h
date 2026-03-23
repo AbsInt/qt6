@@ -32,7 +32,7 @@ struct QQmlImportRef {
         : scriptIndex(-1)
     {}
     // Imported module
-    QVector<QQmlTypeModuleVersion> modules;
+    QList<QQmlTypeModuleVersion> modules;
 
     // Or, imported script
     int scriptIndex;
@@ -223,7 +223,7 @@ private:
     }
 
     template<typename Key>
-    Result typeSearch(const QVector<QQmlTypeModuleVersion> &modules, Key key) const
+    Result typeSearch(const QList<QQmlTypeModuleVersion> &modules, Key key) const
     {
         for (auto it = modules.crbegin(), end = modules.crend(); it != end; ++it) {
             QQmlType type = it->type(key);
@@ -236,7 +236,7 @@ private:
 
     QStringHash<QQmlImportRef> m_namedImports;
     QMap<const QQmlImportRef *, QStringHash<QQmlImportRef> > m_namespacedImports;
-    QVector<QQmlTypeModuleVersion> m_anonymousImports;
+    QList<QQmlTypeModuleVersion> m_anonymousImports;
     QStringHash<QUrl> m_anonymousCompositeSingletons;
     QQmlRefPointer<QQmlImports> m_imports;
 };

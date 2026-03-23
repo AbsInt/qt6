@@ -42,7 +42,7 @@
     diagram below shows the valid iterator positions as red arrows for a list
     containing four items:
 
-    \image javaiterators1.png
+    \image javaiterators1.svg Java-style iterators point between items
 
     Here's a typical loop for iterating through all the elements of a
     QList<QString> in order:
@@ -70,7 +70,7 @@
     \l{QListIterator::next()}{next()} and
     \l{QListIterator::previous()}{previous()} on an iterator:
 
-    \image javaiterators2.png
+    \image javaiterators2.png Iterating to the next and previous items
 
     The following table summarizes the QListIterator API:
 

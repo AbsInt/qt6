@@ -9,6 +9,7 @@
 #include <QtGui/QGuiApplication>
 #include <QtGui/QImage>
 #include <QtCore/QLoggingCategory>
+#include <QtCore/QElapsedTimer>
 
 #include <QtQuick/QQuickView>
 #include <QtQuick/QQuickItem>
@@ -16,6 +17,7 @@
 #include <QQmlApplicationEngine>
 #include <QtQml/qqmlcomponent.h>
 #include <QtQuickTemplates2/private/qquickapplicationwindow_p.h>
+#include <QtQuick/private/qquickscreen_p.h>
 
 #ifdef Q_OS_WIN
 #  include <fcntl.h>
@@ -31,7 +33,7 @@
 // Give up after SCENE_TIMEOUT ms
 #define SCENE_TIMEOUT     6000
 
-//#define GRABBERDEBUG
+#define GRABBERDEBUG qCDebug(lcGrabber()) << (QByteArray::number(runtime.elapsed()) + "ms").constData()
 Q_LOGGING_CATEGORY(lcGrabber, "qt.baseline.scenegrabber")
 
 static const QSize DefaultGrabSize(320, 480);
@@ -42,26 +44,28 @@ class GrabbingView : public QQuickView
 
 public:
     GrabbingView(const QString &outputFile, const bool useAppWindow)
-        : ofile(outputFile), grabNo(0), isGrabbing(false), initDone(false), justShow(outputFile.isEmpty()), preferAppWindow(useAppWindow)
+        : ofile(outputFile), grabNo(0), isGrabbing(false), justShow(outputFile.isEmpty()), preferAppWindow(useAppWindow)
     {
         if (justShow)
             return;
         grabTimer = new QTimer(this);
         grabTimer->setSingleShot(true);
-        grabTimer->setInterval(SCENE_STABLE_TIME);
+        int stableTime = qEnvironmentVariableIntegerValue("LANCELOT_SCENE_STABLE_TIME").value_or(SCENE_STABLE_TIME);
+        grabTimer->setInterval(stableTime);
         connect(grabTimer, &QTimer::timeout, this, &GrabbingView::grab);
 
         if (!preferAppWindow)
-            QObject::connect(this, &QQuickWindow::afterRendering, this, &GrabbingView::startGrabbing);
+            QObject::connect(this, &QQuickWindow::afterRendering, this, &GrabbingView::startGrabbing, Qt::SingleShotConnection);
 
-        int sceneTimeout = qEnvironmentVariableIntValue("LANCELOT_SCENE_TIMEOUT");
-        if (!sceneTimeout)
-            sceneTimeout = SCENE_TIMEOUT;
+        int sceneTimeout = qEnvironmentVariableIntegerValue("LANCELOT_SCENE_TIMEOUT").value_or(SCENE_TIMEOUT);
         QTimer::singleShot(sceneTimeout, this, &GrabbingView::timedOut);
+
+        runtime.start();
+        GRABBERDEBUG << "Starting, scene timeout:" << sceneTimeout << "stableTime:" << stableTime;
     }
 
     void setApplicationWindow(QWindow* window) {
-        qCDebug(lcGrabber) << "Using ApplicationWindow as visual parent" << this;
+        GRABBERDEBUG << "Using ApplicationWindow as visual parent" << this;
 
         appwindow = qobject_cast<QQuickApplicationWindow *>(window);
         if (preferAppWindow && !justShow)
@@ -72,29 +76,28 @@ public:
 private slots:
     void startGrabbing()
     {
-        if (!initDone) {
-            initDone = true;
-            qCDebug(lcGrabber) << "Starting grabbing";
-        }
+        GRABBERDEBUG << "Starting grabbing";
         grab();
     }
 
     void grab()
     {
         if (isGrabbing) {
-            qCDebug(lcGrabber) << "Already grabbing, skipping";
+            GRABBERDEBUG << "Already grabbing, skipping";
             return;
         }
         QScopedValueRollback grabGuard(isGrabbing, true);
 
-        if (grabNo > 0 && grabTimer->remainingTime() > grabTimer->interval() / 10)
+        if (grabNo > 0 && grabTimer->remainingTime() > grabTimer->interval() / 10) {
+            GRABBERDEBUG << "Skipping grab, too soon since last";
             return;
+        }
 
         grabNo++;
-        qCDebug(lcGrabber) << "Starting grab no." << grabNo;
+        GRABBERDEBUG << "Starting grab no." << grabNo;
         QImage img;
         img = appwindow ? appwindow->grabWindow() : grabWindow();
-        qCDebug(lcGrabber) << "Finishing grab no." << grabNo;
+        GRABBERDEBUG << "Finishing grab no." << grabNo;
         if (!img.isNull() && img == lastGrab) {
             sceneStabilized();
         } else {
@@ -105,7 +108,7 @@ private slots:
 
     void sceneStabilized()
     {
-        qCDebug(lcGrabber) << "...sceneStabilized IN";
+        GRABBERDEBUG << "...sceneStabilized IN";
         if (QGuiApplication::platformName() == QLatin1String("eglfs")) {
             QSize grabSize = initialSize().isEmpty() ? DefaultGrabSize : initialSize();
             lastGrab = lastGrab.copy(QRect(QPoint(0, 0), grabSize));
@@ -129,12 +132,13 @@ private slots:
                 return;
             }
         }
+        GRABBERDEBUG << "...sceneStabilized OUT";
         QGuiApplication::exit(0);
-        qCDebug(lcGrabber) << "...sceneStabilized OUT";
     }
 
     void timedOut()
     {
+        GRABBERDEBUG << "Timedout, lastGrab:" << lastGrab << "grabtimer:" << grabTimer->isActive() << grabTimer->remainingTime();
         qWarning() << "Error: timed out waiting for scene to stabilize." << grabNo << "grab(s) done. Last grab was" << (lastGrab.isNull() ? "invalid." : "valid.");
         QGuiApplication::exit(3);
     }
@@ -142,10 +146,10 @@ private slots:
 private:
     QImage lastGrab;
     QTimer *grabTimer = nullptr;
+    QElapsedTimer runtime;
     QString ofile;
     int grabNo;
     bool isGrabbing;
-    bool initDone;
     bool justShow;
     QQuickApplicationWindow *appwindow = nullptr;
     bool preferAppWindow = false;
@@ -213,6 +217,11 @@ int main(int argc, char *argv[])
     }
     // End parsing
 
+    // Enable debugging
+    const QString debugFile = qEnvironmentVariable("QMLSCENEGRABBER_DEBUGFILE");
+    if (!debugFile.isNull() && ifile.contains(debugFile))
+        QLoggingCategory::setFilterRules(lcGrabber().categoryName() + QLatin1String(".debug=true"));
+
     if (!style.isEmpty())
         QQuickStyle::setStyle(style);
 
@@ -272,7 +281,8 @@ int main(int argc, char *argv[])
             itemObject->setParentItem(v.appWindow()->contentItem());
             itemObject->setParent(v.appWindow());
         }
-        v.appWindow()->setScreen(preferredScreen);
+        auto *wrappedScreen = new QQuickScreenInfo(engine, preferredScreen);
+        v.appWindow()->setScreen(wrappedScreen);
         v.appWindow()->setPosition(preferredScreenRect.topLeft());
         v.appWindow()->show();
     } else {

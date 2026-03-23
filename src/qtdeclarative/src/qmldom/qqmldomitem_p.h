@@ -211,15 +211,12 @@ public:
     // minimal overload set:
     virtual DomType kind() const = 0;
     virtual DomKind domKind() const;
-    virtual Path pathFromOwner(const DomItem &self) const = 0;
+    virtual Path pathFromOwner() const = 0;
     virtual Path canonicalPath(const DomItem &self) const = 0;
     virtual bool
     iterateDirectSubpaths(const DomItem &self,
                           DirectVisitor visitor) const = 0; // iterates the *direct* subpaths, returns
                                                             // false if a quick end was requested
-
-    bool iterateDirectSubpathsConst(const DomItem &self, DirectVisitor)
-            const; // iterates the *direct* subpaths, returns false if a quick end was requested
 
     virtual DomItem containingObject(
             const DomItem &self) const; // the DomItem corresponding to the canonicalSource source
@@ -275,7 +272,7 @@ public:
 
     Empty();
     quintptr id() const override { return ~quintptr(0); }
-    Path pathFromOwner(const DomItem &self) const override;
+    Path pathFromOwner() const override;
     Path canonicalPath(const DomItem &self) const override;
     DomItem containingObject(const DomItem &self) const override;
     bool iterateDirectSubpaths(const DomItem &self, DirectVisitor) const override;
@@ -290,8 +287,7 @@ protected:
 public:
     DomElement(const Path &pathFromOwner = Path());
     DomElement(const DomElement &o) = default;
-    Path pathFromOwner(const DomItem &self) const override;
-    Path pathFromOwner() const { return m_pathFromOwner; }
+    Path pathFromOwner() const override { return m_pathFromOwner; }
     Path canonicalPath(const DomItem &self) const override;
     DomItem containingObject(const DomItem &self) const override;
     virtual void updatePathFromOwner(const Path &newPath);
@@ -333,9 +329,6 @@ public:
     template<typename T>
     static Map fromFileRegionMap(
             const Path &pathFromOwner, const QMap<FileLocationRegion, T> &map);
-    template<typename T>
-    static Map fromFileRegionListMap(
-            const Path &pathFromOwner, const QMap<FileLocationRegion, QList<T>> &map);
 
 private:
     template<typename MapT>
@@ -1076,75 +1069,39 @@ public:
     DomItem subDataItem(const PathEls::PathComponent &c, const T &value,
                         ConstantData::Options options = ConstantData::Options::MapIsMap) const;
     template<typename T>
-    DomItem subDataItemField(QStringView f, const T &value,
-                             ConstantData::Options options = ConstantData::Options::MapIsMap) const
-    {
-        return subDataItem(PathEls::Field(f), value, options);
-    }
-    template<typename T>
     DomItem subValueItem(const PathEls::PathComponent &c, const T &value,
                          ConstantData::Options options = ConstantData::Options::MapIsMap) const;
-    template<typename T>
-    bool dvValue(DirectVisitor visitor, const PathEls::PathComponent &c, const T &value,
-                 ConstantData::Options options = ConstantData::Options::MapIsMap) const;
-    template<typename T>
-    bool dvValueField(DirectVisitor visitor, QStringView f, const T &value,
-                      ConstantData::Options options = ConstantData::Options::MapIsMap) const
+    template <typename T>
+    bool invokeVisitorOnValue(DirectVisitor visitor, const PathEls::PathComponent &c, const T &value,
+                         ConstantData::Options options = ConstantData::Options::MapIsMap) const;
+    template <typename F>
+    bool invokeVisitorOnLazyField(DirectVisitor visitor, QStringView f, F valueF,
+                             ConstantData::Options options = ConstantData::Options::MapIsMap) const
     {
-        return this->dvValue<T>(std::move(visitor), PathEls::Field(f), value, options);
+        PathEls::PathComponent c = PathEls::Field(f);
+        auto lazyWrap = [this, &c, &valueF, options]() {
+            return this->subValueItem<decltype(valueF())>(c, valueF(), options);
+        };
+        return visitor(c, lazyWrap);
     }
-    template<typename F>
-    bool dvValueLazy(DirectVisitor visitor, const PathEls::PathComponent &c, F valueF,
-                     ConstantData::Options options = ConstantData::Options::MapIsMap) const;
-    template<typename F>
-    bool dvValueLazyField(DirectVisitor visitor, QStringView f, F valueF,
-                          ConstantData::Options options = ConstantData::Options::MapIsMap) const
-    {
-        return this->dvValueLazy(std::move(visitor), PathEls::Field(f), valueF, options);
-    }
-    DomItem subLocationItem(const PathEls::PathComponent &c, SourceLocation loc) const
-    {
-        return this->subDataItem(c, sourceLocationToQCborValue(loc));
-    }
-    // bool dvSubReference(DirectVisitor visitor, const PathEls::PathComponent &c, Path
-    // referencedObject);
     DomItem subReferencesItem(const PathEls::PathComponent &c, const QList<Path> &paths) const;
     DomItem subReferenceItem(const PathEls::PathComponent &c, const Path &referencedObject) const;
-    bool dvReference(DirectVisitor visitor, const PathEls::PathComponent &c, const Path &referencedObject) const
+    bool invokeVisitorOnReference(DirectVisitor visitor, QStringView f,
+                                  const Path &referencedObject) const
     {
-        return dvItem(std::move(visitor), c, [c, this, referencedObject]() {
+        PathEls::PathComponent c = PathEls::Field(f);
+        return visitor(c, [c, this, referencedObject]() {
             return this->subReferenceItem(c, referencedObject);
         });
     }
-    bool dvReferences(
-            DirectVisitor visitor, const PathEls::PathComponent &c, const QList<Path> &paths) const
+    bool invokeVisitorOnReferences(DirectVisitor visitor, QStringView f,
+                                   const QList<Path> &paths) const
     {
-        return dvItem(std::move(visitor), c, [c, this, paths]() {
-            return this->subReferencesItem(c, paths);
-        });
-    }
-    bool dvReferenceField(DirectVisitor visitor, QStringView f, const Path &referencedObject) const
-    {
-        return dvReference(std::move(visitor), PathEls::Field(f), referencedObject);
-    }
-    bool dvReferencesField(DirectVisitor visitor, QStringView f, const QList<Path> &paths) const
-    {
-        return dvReferences(std::move(visitor), PathEls::Field(f), paths);
-    }
-    bool dvItem(DirectVisitor visitor, const PathEls::PathComponent &c, function_ref<DomItem()> it) const
-    {
-        return visitor(c, it);
-    }
-    bool dvItemField(DirectVisitor visitor, QStringView f, function_ref<DomItem()> it) const
-    {
-        return dvItem(std::move(visitor), PathEls::Field(f), it);
+        PathEls::PathComponent c = PathEls::Field(f);
+        return visitor(c, [c, this, paths]() { return this->subReferencesItem(c, paths); });
     }
     DomItem subListItem(const List &list) const;
     DomItem subMapItem(const Map &map) const;
-    DomItem subObjectWrapItem(SimpleObjectWrap obj) const
-    {
-        return DomItem(m_top, m_owner, m_ownerPath, obj);
-    }
 
     DomItem subScriptElementWrapperItem(const ScriptElementVariant &obj) const
     {
@@ -1160,19 +1117,14 @@ public:
         else
             return DomItem(m_top, o, Path(), o.get());
     }
-    template<typename T>
+    template <typename T>
     DomItem wrap(const PathEls::PathComponent &c, const T &obj) const;
-    template<typename T>
-    DomItem wrapField(QStringView f, const T &obj) const
+    template <typename T>
+    bool invokeVisitorOnField(DirectVisitor visitor, QStringView f, T &obj) const
     {
-        return wrap<T>(PathEls::Field(f), obj);
-    }
-    template<typename T>
-    bool dvWrap(DirectVisitor visitor, const PathEls::PathComponent &c, T &obj) const;
-    template<typename T>
-    bool dvWrapField(DirectVisitor visitor, QStringView f, T &obj) const
-    {
-        return dvWrap<T>(std::move(visitor), PathEls::Field(f), obj);
+        PathEls::PathComponent c = PathEls::Field(f);
+        auto lazyWrap = [this, &c, &obj]() { return this->wrap<T>(c, obj); };
+        return visitor(c, lazyWrap);
     }
 
     DomItem() = default;
@@ -1384,31 +1336,6 @@ Map Map::fromFileRegionMap(const Path &pathFromOwner, const QMap<FileLocationReg
 }
 
 template<typename T>
-Map Map::fromFileRegionListMap(const Path &pathFromOwner,
-                                   const QMap<FileLocationRegion, QList<T>> &map)
-{
-    using namespace Qt::StringLiterals;
-    auto result = Map(
-            pathFromOwner,
-            [&map](const DomItem &mapItem, const QString &key) -> DomItem {
-                const QList<SourceLocation> locations = map.value(fileLocationRegionValue(key));
-                if (locations.empty())
-                    return {};
-
-                auto list = List::fromQList<SourceLocation>(
-                        mapItem.pathFromOwner(), locations,
-                        [](const DomItem &self, const PathEls::PathComponent &path,
-                           const SourceLocation &location) {
-                            return self.subLocationItem(path, location);
-                        });
-                return mapItem.subListItem(list);
-            },
-            [&map](const DomItem &) { return fileRegionKeysFromMap(map); },
-            u"QList<%1>"_s.arg(QString::fromLatin1(typeid(T).name())));
-    return result;
-}
-
-template<typename T>
 List List::fromQList(
         const Path &pathFromOwner, const QList<T> &list,
         const std::function<DomItem(const DomItem &, const PathEls::PathComponent &, const T &)> &elWrapper,
@@ -1481,8 +1408,7 @@ public:
 
     bool iterateDirectSubpaths(const DomItem &self, DirectVisitor) const override;
     std::shared_ptr<OwningItem> makeCopy(const DomItem &self) const { return doCopy(self); }
-    Path pathFromOwner() const { return Path(); }
-    Path pathFromOwner(const DomItem &) const override final { return Path(); }
+    Path pathFromOwner() const override final { return Path(); }
     DomItem containingObject(const DomItem &self) const override;
     int derivedFrom() const;
     virtual int revision() const;
@@ -1589,6 +1515,11 @@ void SimpleObjectWrapT<T>::writeOut(const DomItem &self, OutWriter &lw) const
 
 QMLDOM_EXPORT QDebug operator<<(QDebug debug, const DomItem &c);
 
+// TODO QTBUG-121518 quite some methods are used only in the "examples"
+// Even though MutableDomItem provides some API for modifying internal data,
+// de-facto it's not very helpful / convinient / intuitive to use
+// Moreover it just amplifies and repeats issues of DomItem interface,
+// a.k.a. abuse or misuse of type erasure technique
 class QMLDOM_EXPORT MutableDomItem {
 public:
     using CopyOption = DomItem::CopyOption;
@@ -1731,26 +1662,12 @@ public:
     ErrorHandler errorHandler();
 
     // convenience setters
-    MutableDomItem addPrototypePath(const Path &prototypePath);
-    MutableDomItem setNextScopePath(const Path &nextScopePath);
-    MutableDomItem setPropertyDefs(QMultiMap<QString, PropertyDefinition> propertyDefs);
-    MutableDomItem setBindings(QMultiMap<QString, Binding> bindings);
-    MutableDomItem setMethods(QMultiMap<QString, MethodInfo> functionDefs);
-    MutableDomItem setChildren(const QList<QmlObject> &children);
-    MutableDomItem setAnnotations(const QList<QmlObject> &annotations);
-    MutableDomItem setScript(const std::shared_ptr<ScriptExpression> &exp);
-    MutableDomItem setCode(const QString &code);
     MutableDomItem addPropertyDef(const PropertyDefinition &propertyDef,
                                   AddOption option = AddOption::Overwrite);
     MutableDomItem addBinding(Binding binding, AddOption option = AddOption::Overwrite);
     MutableDomItem addMethod(
             const MethodInfo &functionDef, AddOption option = AddOption::Overwrite);
     MutableDomItem addChild(QmlObject child);
-    MutableDomItem addAnnotation(QmlObject child);
-    MutableDomItem addPreComment(const Comment &comment, FileLocationRegion region);
-    MutableDomItem addPostComment(const Comment &comment, FileLocationRegion region);
-    QQmlJSScope::ConstPtr semanticScope();
-    void setSemanticScope(const QQmlJSScope::ConstPtr &scope);
 
     MutableDomItem() = default;
     MutableDomItem(const DomItem &owner, const Path &pathFromOwner):
@@ -2054,22 +1971,12 @@ DomItem DomItem::subDataItem(const PathEls::PathComponent &c, const T &value,
     }
 }
 
-template<typename T>
-bool DomItem::dvValue(DirectVisitor visitor, const PathEls::PathComponent &c, const T &value,
-                      ConstantData::Options options) const
+template <typename T>
+bool DomItem::invokeVisitorOnValue(DirectVisitor visitor, const PathEls::PathComponent &c,
+                                   const T &value, ConstantData::Options options) const
 {
     auto lazyWrap = [this, &c, &value, options]() {
         return this->subValueItem<T>(c, value, options);
-    };
-    return visitor(c, lazyWrap);
-}
-
-template<typename F>
-bool DomItem::dvValueLazy(DirectVisitor visitor, const PathEls::PathComponent &c, F valueF,
-                          ConstantData::Options options) const
-{
-    auto lazyWrap = [this, &c, &valueF, options]() {
-        return this->subValueItem<decltype(valueF())>(c, valueF(), options);
     };
     return visitor(c, lazyWrap);
 }
@@ -2081,7 +1988,7 @@ DomItem DomItem::wrap(const PathEls::PathComponent &c, const T &obj) const
     if constexpr (std::is_same_v<QString, BaseT> || std::is_arithmetic_v<BaseT>) {
         return this->subDataItem(c, QCborValue(obj));
     } else if constexpr (std::is_same_v<SourceLocation, BaseT>) {
-        return this->subLocationItem(c, obj);
+        return this->subDataItem(c, sourceLocationToQCborValue(obj));
     } else if constexpr (std::is_same_v<BaseT, Reference>) {
         Q_ASSERT_X(false, "DomItem::wrap",
                    "wrapping a reference object, probably an error (wrap the target path instead)");
@@ -2095,10 +2002,11 @@ DomItem DomItem::wrap(const PathEls::PathComponent &c, const T &obj) const
     } else if constexpr (std::is_base_of_v<ListPBase, BaseT>) {
         return this->subListItem(obj);
     } else if constexpr (std::is_same_v<BaseT, SimpleObjectWrap>) {
-        return this->subObjectWrapItem(obj);
+        return DomItem(m_top, m_owner, m_ownerPath, obj);
     } else if constexpr (IsDomObject<BaseT>::value) {
         if constexpr (domTypeIsObjWrap(BaseT::kindValue) || domTypeIsValueWrap(BaseT::kindValue)) {
-            return this->subObjectWrapItem(
+            return DomItem(
+                    m_top, m_owner, m_ownerPath,
                     SimpleObjectWrap::fromObjectRef(this->pathFromOwner().withComponent(c), obj));
         } else if constexpr (domTypeIsDomElement(BaseT::kindValue)) {
             return this->copy(&obj);
@@ -2149,13 +2057,6 @@ DomItem DomItem::wrap(const PathEls::PathComponent &c, const T &obj) const
 }
 
 template<typename T>
-bool DomItem::dvWrap(DirectVisitor visitor, const PathEls::PathComponent &c, T &obj) const
-{
-    auto lazyWrap = [this, &c, &obj]() { return this->wrap<T>(c, obj); };
-    return visitor(c, lazyWrap);
-}
-
-template<typename T>
 bool ListPT<T>::iterateDirectSubpaths(const DomItem &self, DirectVisitor v) const
 {
     index_type len = index_type(m_pList.size());
@@ -2180,15 +2081,9 @@ inline DomKind DomBase::domKind() const
     return kind2domKind(kind());
 }
 
-inline bool DomBase::iterateDirectSubpathsConst(const DomItem &self, DirectVisitor visitor) const
-{
-    Q_ASSERT(self.base() == this);
-    return self.iterateDirectSubpaths(std::move(visitor));
-}
-
 inline DomItem DomBase::containingObject(const DomItem &self) const
 {
-    Path path = pathFromOwner(self);
+    Path path = pathFromOwner();
     DomItem base = self.owner();
     if (!path) {
         path = canonicalPath(self);
@@ -2295,6 +2190,11 @@ inline DomItem DomItem::subMapItem(const Map &map) const
 {
     return DomItem(m_top, m_owner, m_ownerPath, map);
 }
+
+// TODO
+// refactor this workaround. ExternalOWningItem is not recognized as an owning type
+// in ownerAs.
+std::shared_ptr<ExternalOwningItem> getFileItemOwner(const DomItem &fileItem);
 
 } // end namespace Dom
 } // end namespace QQmlJS

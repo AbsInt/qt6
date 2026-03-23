@@ -7,5 +7,6 @@
         <file>qml/images/arrow.png</file>
         <file>qml/images/qt_logo_white_rgb.png</file>
         <file>qml/SettingsComponentButton.qml</file>
+        <file>qml/SettingsComponentCheckBox.qml</file>
     </qresource>
 </RCC>

@@ -646,7 +646,6 @@ function(qt_internal_add_module target)
             QT_DEPRECATED_WARNINGS
             QT_BUILDING_QT
             QT_BUILD_${module_define_infix}_LIB ### FIXME: use QT_BUILD_ADDON for Add-ons or remove if we don't have add-ons anymore
-            ${deprecation_define}
             )
         list(APPEND arg_LIBRARIES Qt::PlatformModuleInternal)
     endif()
@@ -683,7 +682,7 @@ function(qt_internal_add_module target)
         foreach(public_lib IN LISTS arg_PUBLIC_LIBRARIES)
             if("${public_lib}" MATCHES "^(Qt|${QT_CMAKE_EXPORT_NAMESPACE})::(.*)Private$")
                 message(AUTHOR_WARNING
-                    "${target} specfies ${public_lib} in its PUBLIC_LIBRARIES option. "
+                    "${target} specifies ${public_lib} in its PUBLIC_LIBRARIES option. "
                     "Public modules should not link publicly to Private modules, because that "
                     "exposes private module headers to user projects without them opting into it. "
                     "Update the project to use the LIBRARIES keyword instead."
@@ -1117,9 +1116,29 @@ function(qt_internal_write_basic_module_package target target_private)
     if(arg_PRIVATE)
         set(package_name "${INSTALL_CMAKE_NAMESPACE}${target_private}")
         set(module_config_input_file "QtModuleConfigPrivate.cmake.in")
+        qt_configure_file(
+            OUTPUT "${arg_CONFIG_BUILD_DIR}/${package_name}TargetsPrecheck.cmake"
+            CONTENT
+"
+_qt_internal_should_include_targets(
+    TARGETS ${target_private}
+    NAMESPACE ${INSTALL_CMAKE_NAMESPACE}::
+    OUT_VAR_SHOULD_SKIP __qt_${target_private}_skip_include_targets_file
+)
+")
     else()
         set(package_name "${INSTALL_CMAKE_NAMESPACE}${target}")
         set(module_config_input_file "QtModuleConfig.cmake.in")
+        qt_configure_file(
+            OUTPUT "${arg_CONFIG_BUILD_DIR}/${package_name}TargetsPrecheck.cmake"
+            CONTENT
+"
+_qt_internal_should_include_targets(
+    TARGETS ${target}
+    NAMESPACE ${INSTALL_CMAKE_NAMESPACE}::
+    OUT_VAR_SHOULD_SKIP __qt_${target}_skip_include_targets_file
+)
+")
         if(arg_FIND_PRIVATE_MODULE)
             set(always_load_private_module ON)
         endif()
@@ -1163,6 +1182,7 @@ set(__qt_${target}_always_load_private_module ON)
         "${arg_CONFIG_BUILD_DIR}/${package_name}Config.cmake"
         "${arg_CONFIG_BUILD_DIR}/${package_name}ConfigVersion.cmake"
         "${arg_CONFIG_BUILD_DIR}/${package_name}ConfigVersionImpl.cmake"
+        "${arg_CONFIG_BUILD_DIR}/${package_name}TargetsPrecheck.cmake"
         DESTINATION "${arg_CONFIG_INSTALL_DIR}"
         COMPONENT Devel
     )
@@ -1495,6 +1515,7 @@ function(qt_internal_list_to_json_array out_var list_var)
 endfunction()
 
 # Generate a module description file based on the template in ModuleDescription.json.in
+# Keep this in sync with `utils/json_schema/modules.json`
 function(qt_describe_module target)
     set(path_suffix "${INSTALL_DESCRIPTIONSDIR}")
     qt_path_join(build_dir ${QT_BUILD_DIR} ${path_suffix})
@@ -1613,9 +1634,13 @@ ${indent3}\"name\": \"${platform_name}\",")
             string(APPEND platforms_information "
 ${indent3}\"variant\": \"${platform_variant}\",")
         endif()
-        if(NOT "${CMAKE_SYSTEM_VERSION}" STREQUAL "")
+        if(NOT "${CMAKE_SYSTEM_VERSION}" STREQUAL "" AND
+            NOT platform_name STREQUAL "Linux")
             string(APPEND platforms_information "
 ${indent3}\"version\": \"${CMAKE_SYSTEM_VERSION}\",")
+        else()
+            string(APPEND platforms_information "
+${indent3}\"version\": null,")
         endif()
         string(APPEND platforms_information "
 ${indent3}\"compiler_id\": \"${CMAKE_CXX_COMPILER_ID}\",

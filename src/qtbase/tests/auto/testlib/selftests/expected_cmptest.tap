@@ -719,8 +719,30 @@ not ok 72 - tryVerify2()
   line: 0
   ...
 ok 73 - verifyExplicitOperatorBool()
-ok 74 - cleanupTestCase()
-1..74
-# tests 74
-# pass 23
+not ok 74 - defaultTryVerifyTimeout(times-out) # TODO The timeout (std::chrono::milliseconds) is deliberately too short
+  ---
+  extensions:
+    messages:
+    - severity: xfail
+      message: The timeout (std::chrono::milliseconds) is deliberately too short
+      at: tst_Cmptest::defaultTryVerifyTimeout() (qtbase/tests/auto/testlib/selftests/cmptest/tst_cmptest.cpp:0)
+      file: qtbase/tests/auto/testlib/selftests/cmptest/tst_cmptest.cpp
+      line: 0
+  ...
+ok 75 - defaultTryVerifyTimeout(ample-time)
+not ok 76 - defaultTryCompareTimeout(times-out) # TODO The timeout (std::chrono::milliseconds) is deliberately too short
+  ---
+  extensions:
+    messages:
+    - severity: xfail
+      message: The timeout (std::chrono::milliseconds) is deliberately too short
+      at: tst_Cmptest::defaultTryCompareTimeout() (qtbase/tests/auto/testlib/selftests/cmptest/tst_cmptest.cpp:0)
+      file: qtbase/tests/auto/testlib/selftests/cmptest/tst_cmptest.cpp
+      line: 0
+  ...
+ok 77 - defaultTryCompareTimeout(ample-time)
+ok 78 - cleanupTestCase()
+1..78
+# tests 78
+# pass 27
 # fail 51

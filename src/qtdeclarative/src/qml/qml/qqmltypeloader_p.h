@@ -120,34 +120,34 @@ public:
 
         bool loadDependentImports(
                 const QList<QQmlDirParser::Import> &imports, const QString &qualifier,
-                QTypeRevision version, quint16 precedence, QQmlImports::ImportFlags flags,
+                QTypeRevision version, quint8 precedence, QQmlImports::ImportFlags flags,
                 QList<QQmlError> *errors);
         virtual QString stringAt(int) const { return QString(); }
 
         QQmlRefPointer<QQmlImports> m_importCache;
-        QVector<PendingImportPtr> m_unresolvedImports;
-        QVector<QQmlRefPointer<QQmlQmldirData>> m_qmldirs;
+        QList<PendingImportPtr> m_unresolvedImports;
+        QList<QQmlRefPointer<QQmlQmldirData>> m_qmldirs;
         QQmlMetaType::CachedUnitLookupError m_cachedUnitStatus = QQmlMetaType::CachedUnitLookupError::NoError;
     };
 
-    QQmlTypeLoader(QQmlEngine *);
+    QQmlTypeLoader(QV4::ExecutionEngine *engine);
     ~QQmlTypeLoader();
 
     template<
             typename Engine,
             typename EnginePrivate = QQmlEnginePrivate,
-            typename = std::enable_if_t<std::is_same_v<Engine, QQmlEngine>>>
+            typename = std::enable_if_t<std::is_base_of_v<QJSEngine, Engine>>>
     static QQmlTypeLoader *get(Engine *engine)
     {
-        return get(EnginePrivate::get(engine));
+        return engine->handle()->typeLoader();
     }
 
     template<
             typename Engine,
-            typename = std::enable_if_t<std::is_same_v<Engine, QQmlEnginePrivate>>>
+            typename = std::enable_if_t<std::is_base_of_v<QJSEnginePrivate, Engine>>>
     static QQmlTypeLoader *get(Engine *engine)
     {
-        return &engine->typeLoader;
+        return Engine::get(engine)->handle()->typeLoader();
     }
 
     static void sanitizeUNCPath(QString *path)
@@ -179,12 +179,13 @@ public:
                 : QByteArray();
     }
 
-    static QUrl normalize(const QUrl &unNormalizedUrl);
-
     QQmlRefPointer<QQmlTypeData> getType(
             const QUrl &unNormalizedUrl, Mode mode = PreferSynchronous);
     QQmlRefPointer<QQmlTypeData> getType(
             const QByteArray &data, const QUrl &url, Mode mode = PreferSynchronous);
+
+    QQmlRefPointer<QQmlScriptBlob> getScript(
+            const QUrl &unNormalizedUrl, Mode mode = PreferSynchronous);
 
     QQmlRefPointer<QV4::CompiledData::CompilationUnit> injectModule(
             const QUrl &relativeUrl, const QV4::CompiledData::Unit *unit);
@@ -193,7 +194,17 @@ public:
     QQmlRefPointer<QQmlQmldirData> getQmldir(const QUrl &);
 
     QString absoluteFilePath(const QString &path);
-    bool fileExists(const QString &path, const QString &file);
+
+    bool fileExists(const QString &filePath)
+    {
+        Q_ASSERT(!filePath.endsWith(QLatin1Char('/')));
+        const qsizetype pastLastSlash = filePath.lastIndexOf(QLatin1Char('/')) + 1;
+        return fileExists(
+                filePath.left(pastLastSlash - 1),
+                filePath.mid(pastLastSlash, filePath.size() - pastLastSlash));
+    }
+
+    bool fileExists(const QString &dirPath, const QString &file);
     bool directoryExists(const QString &path);
 
     const QQmlTypeLoaderQmldirContent qmldirContent(const QString &filePath);
@@ -301,7 +312,7 @@ private:
     };
 
     QQmlTypeLoaderThread *thread() const { return m_data.thread(); }
-    QQmlEngine *engine() const { return m_data.engine(); }
+    QV4::ExecutionEngine *engine() const { return m_data.engine(); }
 
     void startThread();
     void shutdownThread();
@@ -322,7 +333,8 @@ private:
     void networkReplyProgress(QNetworkReply *, qint64, qint64);
 #endif
 
-    void setData(const QQmlDataBlob::Ptr &, const QByteArray &);
+    enum class DataOrigin { Device, Static };
+    void setData(const QQmlDataBlob::Ptr &, const QByteArray &, DataOrigin);
     void setData(const QQmlDataBlob::Ptr &, const QString &fileName);
     void setData(const QQmlDataBlob::Ptr &, const QQmlDataBlob::SourceCodeData &);
     void setCachedUnit(const QQmlDataBlob::Ptr &blob, const QQmlPrivate::CachedQmlUnit *unit);
@@ -361,6 +373,23 @@ private:
             }
         }
         return true;
+    }
+
+    template<typename Blob>
+    QQmlRefPointer<Blob> finalizeBlob(QQmlRefPointer<Blob> &&blob, QQmlTypeLoader::Mode mode)
+    {
+        QQmlMetaType::CachedUnitLookupError error = QQmlMetaType::CachedUnitLookupError::NoError;
+        const QQmlMetaType::CacheMode cacheMode = aotCacheMode();
+        if (const QQmlPrivate::CachedQmlUnit *cachedUnit = (cacheMode != QQmlMetaType::RejectAll)
+                    ? QQmlMetaType::findCachedCompilationUnit(blob->url(), cacheMode, &error)
+                    : nullptr) {
+            loadWithCachedUnit(QQmlDataBlob::Ptr(blob.data()), cachedUnit, mode);
+        } else {
+            blob->setCachedUnitStatus(error);
+            load(QQmlDataBlob::Ptr(blob.data()), mode);
+        }
+
+        return blob;
     }
 
     QQmlMetaType::CacheMode aotCacheMode();

@@ -161,6 +161,8 @@ public:
 
     static std::unique_ptr<QAbstractFileEngine>
     createLegacyEngine(QFileSystemEntry &entry, QFileSystemMetaData &data);
+    static std::unique_ptr<QAbstractFileEngine>
+    createLegacyEngine(const QString &fileName);
 
 private:
     static QString slowCanonicalized(const QString &path);

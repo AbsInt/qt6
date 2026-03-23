@@ -1381,6 +1381,8 @@ void QQuickComboBox::setValueRole(const QString &role)
     }
     \endcode
 
+    \include delegate-ownership.qdocinc {no-ownership-since-6.11} {ComboBox}
+
     \sa ItemDelegate, {Customizing ComboBox}
 */
 QQmlComponent *QQuickComboBox::delegate() const
@@ -1395,7 +1397,6 @@ void QQuickComboBox::setDelegate(QQmlComponent* delegate)
     if (d->delegate == delegate)
         return;
 
-    delete d->delegate;
     d->delegate = delegate;
     QQmlDelegateModel *delegateModel = qobject_cast<QQmlDelegateModel*>(d->delegateModel);
     if (delegateModel)

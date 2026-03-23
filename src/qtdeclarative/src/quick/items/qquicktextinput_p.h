@@ -38,7 +38,7 @@ class Q_QUICK_EXPORT QQuickTextInput : public QQuickImplicitSizeItem, public QQu
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
     Q_PROPERTY(QColor selectionColor READ selectionColor WRITE setSelectionColor NOTIFY selectionColorChanged)
     Q_PROPERTY(QColor selectedTextColor READ selectedTextColor WRITE setSelectedTextColor NOTIFY selectedTextColorChanged)
-    Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged)
+    Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged VIRTUAL)
     Q_PROPERTY(HAlignment horizontalAlignment READ hAlign WRITE setHAlign RESET resetHAlign NOTIFY horizontalAlignmentChanged)
     Q_PROPERTY(HAlignment effectiveHorizontalAlignment READ effectiveHAlign NOTIFY effectiveHorizontalAlignmentChanged)
     Q_PROPERTY(VAlignment verticalAlignment READ vAlign WRITE setVAlign NOTIFY verticalAlignmentChanged)
@@ -147,7 +147,7 @@ public:
     Q_ENUM(RenderType)
 
     //Auxilliary functions needed to control the TextInput from QML
-    Q_INVOKABLE void positionAt(QQmlV4FunctionPtr args) const;
+    Q_INVOKABLE int positionAt(qreal x, qreal y = 0, QQuickTextInput::CursorPosition position = QQuickTextInput::CursorBetweenCharacters) const;
     Q_INVOKABLE QRectF positionToRectangle(int pos) const;
     Q_INVOKABLE void moveCursorSelection(int pos);
     Q_INVOKABLE void moveCursorSelection(int pos, QQuickTextInput::SelectionMode mode);
@@ -360,6 +360,9 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent* ev) override;
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
+    bool contextMenuEvent(QContextMenuEvent *event) override;
+#endif
 #if QT_CONFIG(im)
     void inputMethodEvent(QInputMethodEvent *) override;
 #endif

@@ -276,6 +276,7 @@
     \value Kwanyama Obsolete, please use Kuanyama
     \value Kwasio
     \value [since 6.0] Kyrgyz
+    \value [since 6.11] Ladin
     \value [since 5.3] Lakota
     \value Langi
     \value Lao
@@ -390,6 +391,7 @@
     \value Sena
     \value Serbian
     \value Shambala
+    \value [since 6.11] Shan
     \value Shona
     \value SichuanYi
     \value [since 5.12] Sicilian

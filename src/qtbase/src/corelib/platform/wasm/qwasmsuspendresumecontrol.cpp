@@ -5,6 +5,8 @@
 #include "qwasmsuspendresumecontrol_p.h"
 #include "qstdweb_p.h"
 
+#include <QtCore/qapplicationstatic.h>
+
 #include <emscripten.h>
 #include <emscripten/val.h>
 #include <emscripten/bind.h>
@@ -50,6 +52,7 @@ void qtSuspendResumeControlClearJs() {
             asyncifyEnabled: false, // asyncify 1 or JSPI enabled
             eventHandlers: {},
             pendingEvents: [],
+            exclusiveEventHandler: 0,
         });
     });
 }
@@ -66,9 +69,40 @@ EM_ASYNC_JS(void, qtSuspendJs, (), {
 // The wasm instance will then call the C++ event after it is resumed.
 void qtRegisterEventHandlerJs(int index) {
     EM_ASM({
+
+        function createNamedFunction(name, parent, obj) {
+            return {
+                [name]: function(...args) {
+                    return obj.call(parent, args);
+                }
+            }[name];
+        }
+
+        function deepShallowClone(obj) {
+            if (obj === null)
+                return obj;
+
+            if (!(obj instanceof Event))
+                return obj;
+
+            const objCopy = {};
+            for (const key in obj) {
+                if (typeof obj[key] === 'function')
+                    objCopy[key] = createNamedFunction(obj[key].name, obj, obj[key]);
+                else
+                    objCopy[key] = obj[key];
+            }
+
+            objCopy['isInstanceOfEvent'] = true;
+            return objCopy;
+        }
+
         let index = $0;
         let control = Module.qtSuspendResumeControl;
         let handler = (arg) => {
+            // Copy the top level object, alias the rest.
+            // functions are copied by creating new forwarding functions.
+            arg = deepShallowClone(arg);
 
             // Add event to event queue
             control.pendingEvents.push({
@@ -77,7 +111,15 @@ void qtRegisterEventHandlerJs(int index) {
             });
 
             // Handle the event based on instance state and asyncify flag
-            if (control.resume) {
+            if (control.exclusiveEventHandler > 0) {
+                // In exclusive mode, resume on exclusive event handler match only
+                if (index != control.exclusiveEventHandler)
+                    return;
+
+                const resume = control.resume;
+                control.resume = null;
+                resume();
+            } else if (control.resume) {
                 // The instance is suspended in processEvents(), resume and process the event
                 const resume = control.resume;
                 control.resume = null;
@@ -107,14 +149,12 @@ QWasmSuspendResumeControl::QWasmSuspendResumeControl()
 #endif
     qtSuspendResumeControlClearJs();
     suspendResumeControlJs().set("asyncifyEnabled", qstdweb::haveAsyncify());
-    Q_ASSERT(!QWasmSuspendResumeControl::s_suspendResumeControl);
     QWasmSuspendResumeControl::s_suspendResumeControl = this;
 }
 
 QWasmSuspendResumeControl::~QWasmSuspendResumeControl()
 {
     qtSuspendResumeControlClearJs();
-    Q_ASSERT(QWasmSuspendResumeControl::s_suspendResumeControl);
     QWasmSuspendResumeControl::s_suspendResumeControl = nullptr;
 }
 
@@ -158,22 +198,47 @@ void QWasmSuspendResumeControl::suspend()
     qtSuspendJs();
 }
 
-// Sends any pending events. Returns true if an event was sent, false otherwise.
+void QWasmSuspendResumeControl::suspendExclusive(QList<uint32_t> eventHandlerIndices)
+{
+    m_eventFilter = [eventHandlerIndices](int handler) {
+        return eventHandlerIndices.contains(handler);
+    };
+
+    suspendResumeControlJs().set("exclusiveEventHandler", eventHandlerIndices.back());
+    qtSuspendJs();
+}
+
+// Sends any pending events. Returns the number of sent events.
 int QWasmSuspendResumeControl::sendPendingEvents()
 {
 #if QT_CONFIG(thread)
     Q_ASSERT(emscripten_is_main_runtime_thread());
 #endif
-    emscripten::val pendingEvents = suspendResumeControlJs()["pendingEvents"];
-    int count = pendingEvents["length"].as<int>();
-    if (count == 0)
-        return false;
-    while (count-- > 0) {
-        // Grab one event (handler and arg), and call it
-        emscripten::val event = pendingEvents.call<val>("shift");
-        auto it = m_eventHandlers.find(event["index"].as<int>());
-        Q_ASSERT(it != m_eventHandlers.end());
-        it->second(event["arg"]);
+    emscripten::val control = suspendResumeControlJs();
+    emscripten::val pendingEvents = control["pendingEvents"];
+
+    int count = 0;
+    for (int i = 0; i < pendingEvents["length"].as<int>();) {
+        if (!m_eventFilter(pendingEvents[i]["index"].as<int>())) {
+            ++i;
+        } else {
+            // Grab one event (handler and arg), and call it
+            emscripten::val event = pendingEvents[i];
+            pendingEvents.call<void>("splice", i, 1);
+
+            auto it = m_eventHandlers.find(event["index"].as<int>());
+            if (it != m_eventHandlers.end()) {
+                setCurrentEvent(event["arg"]);
+                it->second(currentEvent());
+                setCurrentEvent(emscripten::val::undefined());
+            }
+            ++count;
+        }
+    }
+
+    if (control["exclusiveEventHandler"].as<int>() > 0) {
+        control.set("exclusiveEventHandler", 0);
+        m_eventFilter = [](int) { return true;};
     }
     return count;
 }
@@ -245,7 +310,8 @@ QWasmTimer::QWasmTimer(QWasmSuspendResumeControl *suspendResume, std::function<v
 {
     auto wrapper = [handler = std::move(handler), this](val argument) {
         Q_UNUSED(argument); // no argument for timers
-        Q_ASSERT(m_timerId);
+        if (!m_timerId)
+            return; // timer was cancelled
         m_timerId = 0;
         handler();
     };
@@ -279,4 +345,104 @@ void QWasmTimer::clearTimeout()
 {
     val::global("window").call<void>("clearTimeout", double(m_timerId));
     m_timerId = 0;
+}
+
+//
+// QWasmAnimationFrameMultiHandler
+//
+// Multiplexes multiple animate and draw callbacks to a single native requestAnimationFrame call.
+// Animate callbacks are called before draw callbacks to ensure animations are advanced before drawing.
+//
+QWasmAnimationFrameMultiHandler::QWasmAnimationFrameMultiHandler()
+{
+    auto wrapper = [this](val arg) {
+        handleAnimationFrame(arg.as<double>());
+    };
+    m_handlerIndex = QWasmSuspendResumeControl::get()->registerEventHandler(wrapper);
+}
+
+QWasmAnimationFrameMultiHandler::~QWasmAnimationFrameMultiHandler()
+{
+    cancelAnimationFrameRequest();
+    QWasmSuspendResumeControl::get()->removeEventHandler(m_handlerIndex);
+}
+
+Q_APPLICATION_STATIC(QWasmAnimationFrameMultiHandler, s_animationFrameHandler);
+QWasmAnimationFrameMultiHandler *QWasmAnimationFrameMultiHandler::instance()
+{
+    return s_animationFrameHandler();
+}
+
+// Registers a permanent animation callback. Call unregisterAnimateCallback() to unregister
+uint32_t QWasmAnimationFrameMultiHandler::registerAnimateCallback(Callback callback)
+{
+    uint32_t handle = ++m_nextAnimateHandle;
+    m_animateCallbacks[handle] = std::move(callback);
+    ensureAnimationFrameRequested();
+    return handle;
+}
+
+// Registers a single-shot draw callback.
+uint32_t QWasmAnimationFrameMultiHandler::registerDrawCallback(Callback callback)
+{
+    uint32_t handle = ++m_nextDrawHandle;
+    m_drawCallbacks[handle] = std::move(callback);
+    ensureAnimationFrameRequested();
+    return handle;
+}
+
+void QWasmAnimationFrameMultiHandler::unregisterAnimateCallback(uint32_t handle)
+{
+    m_animateCallbacks.erase(handle);
+    if (m_animateCallbacks.empty() && m_drawCallbacks.empty())
+        cancelAnimationFrameRequest();
+}
+
+void QWasmAnimationFrameMultiHandler::unregisterDrawCallback(uint32_t handle)
+{
+    m_drawCallbacks.erase(handle);
+    if (m_animateCallbacks.empty() && m_drawCallbacks.empty())
+        cancelAnimationFrameRequest();
+}
+
+void QWasmAnimationFrameMultiHandler::handleAnimationFrame(double timestamp)
+{
+    m_requestId = -1;
+
+    // Advance animations. Copy the callbacks list in case callbacks are
+    // unregistered during iteration
+    auto animateCallbacksCopy = m_animateCallbacks;
+    for (const auto &pair : animateCallbacksCopy)
+        pair.second(timestamp);
+
+    // Draw the frame. Note that draw callbacks are cleared after each
+    // frame, matching QWindow::requestUpdate() behavior. Copy the callbacks
+    // list in case new callbacks are registered while drawing the frame
+    auto drawCallbacksCopy = m_drawCallbacks;
+    m_drawCallbacks.clear();
+    for (const auto &pair : drawCallbacksCopy)
+        pair.second(timestamp);
+
+    // Request next frame if there are still callbacks registered
+    if (!m_animateCallbacks.empty() || !m_drawCallbacks.empty())
+        ensureAnimationFrameRequested();
+}
+
+void QWasmAnimationFrameMultiHandler::ensureAnimationFrameRequested()
+{
+    if (m_requestId != -1)
+        return;
+
+    using ReturnType = double;
+    val handler = QWasmSuspendResumeControl::get()->jsEventHandlerAt(m_handlerIndex);
+    m_requestId = int64_t(val::global("window").call<ReturnType>("requestAnimationFrame", handler));
+}
+
+void QWasmAnimationFrameMultiHandler::cancelAnimationFrameRequest()
+{
+    if (m_requestId == -1)
+        return;
+
+    val::global("window").call<void>("cancelAnimationFrame", double(m_requestId));
+    m_requestId = -1;
 }

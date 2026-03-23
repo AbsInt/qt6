@@ -11,19 +11,20 @@ QQmlDMObjectData::QQmlDMObjectData(const QQmlRefPointer<QQmlDelegateModelItemMet
         int index, int row, int column,
         QObject *object)
     : QQmlDelegateModelItem(metaType, dataType, index, row, column)
-    , object(object)
+    , m_modelData(object)
 {
     new QQmlDMObjectDataMetaObject(this, dataType);
 }
 
 QQmlRefPointer<QQmlContextData> QQmlDMObjectData::initProxy()
 {
-    QQmlRefPointer<QQmlContextData> ctxt = QQmlContextData::createChild(contextData);
-    incubationTask->proxiedObject = object;
-    incubationTask->proxyContext = ctxt;
+    QQmlRefPointer<QQmlContextData> ctxt = QQmlContextData::createChild(contextData());
+    QQDMIncubationTask *it = incubationTask();
+    it->proxiedObject = m_modelData;
+    it->proxyContext = ctxt;
     ctxt->setContextObject(this);
     // We don't own the proxied object. We need to clear it if it goes away.
-    QObject::connect(object, &QObject::destroyed,
+    QObject::connect(m_modelData, &QObject::destroyed,
                      this, &QQmlDelegateModelItem::childContextObjectDestroyed);
     return ctxt;
 }

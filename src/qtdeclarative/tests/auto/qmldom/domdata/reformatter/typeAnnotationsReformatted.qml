@@ -9,7 +9,4 @@ Item {
         console.debug(w);
         return w;
     }
-    function test(): int {
-        return 53;
-    }
 }

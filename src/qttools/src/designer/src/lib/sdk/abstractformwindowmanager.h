@@ -8,7 +8,6 @@
 #include <QtDesigner/abstractformwindow.h>
 
 #include <QtCore/qobject.h>
-#include <QtCore/qscopedpointer.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -25,7 +24,7 @@ class QDESIGNER_SDK_EXPORT QDesignerFormWindowManagerInterface: public QObject
     Q_OBJECT
 public:
     explicit QDesignerFormWindowManagerInterface(QObject *parent = nullptr);
-    virtual ~QDesignerFormWindowManagerInterface();
+    ~QDesignerFormWindowManagerInterface() override;
 
     enum Action
     {

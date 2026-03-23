@@ -12,9 +12,13 @@
 #include <QtQuick/qquickview.h>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <QtQuickTestUtils/private/viewtestutils_p.h>
+#include <QtQuickControlsTestUtils/private/controlstestutils_p.h>
 #include <QtQuickTemplates2/private/qquicktextfield_p.h>
 #include <QtQuickControlsTestUtils/private/qtest_quickcontrols_p.h>
 #include <QStyleHints>
+
+using namespace QQuickControlsTestUtils;
+using namespace QQuickVisualTestUtils;
 
 class tst_QQuickTextField : public QQmlDataTest
 {
@@ -42,6 +46,8 @@ void tst_QQuickTextField::initTestCase()
 {
     QQmlDataTest::initTestCase();
     qputenv("QML_NO_TOUCH_COMPRESSION", "1");
+    // Showing a native menu is a blocking call, so the test will timeout.
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuWindows);
 }
 
 void tst_QQuickTextField::touchscreenDoesNotSelect_data()

@@ -140,6 +140,7 @@ public:
 
     QV4::PersistentValue v4Value;
     QQmlAnyBinding binding;
+    int none = 0;
 
 private:
     void silentDestroy(QQmlBindEntryKind oldKind)
@@ -1041,8 +1042,7 @@ void QQmlBindPrivate::decodeBinding(
 
             QQmlContext *context = qmlContext(q);
             QObject *attachedObject = qmlAttachedPropertiesObject(
-                    q, attachedType.attachedPropertiesFunction(
-                               QQmlEnginePrivate::get(context->engine())));
+                    q, attachedType.attachedPropertiesFunction(QQmlTypeLoader::get(context->engine())));
             if (!attachedObject) {
                 qmlWarning(q).nospace() <<"Could not create attached properties object '"
                                         << attachedType.typeName() << "'";
@@ -1163,7 +1163,7 @@ void QQmlBindPrivate::decodeBinding(
 
 void QQmlBindPrivate::createDelayedValues()
 {
-    generalizedGroupData.delayedValues = std::make_unique<QQmlPropertyMap>();
+    generalizedGroupData.delayedValues.reset(QQmlPropertyMap::create());
     QQmlPropertyMap *delayedValues = generalizedGroupData.delayedValues.get();
     QObject::connect(
             delayedValues, &QQmlPropertyMap::valueChanged,

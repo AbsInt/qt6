@@ -1614,11 +1614,15 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *st
 {
     uint glyphs_shaped = 0;
 
-    hb_buffer_t *buffer = hb_buffer_create();
-    hb_buffer_set_unicode_funcs(buffer, hb_qt_get_unicode_funcs());
+    if (!buffer) {
+        buffer = hb_buffer_create();
+        hb_buffer_set_unicode_funcs(buffer, hb_qt_get_unicode_funcs());
+    }
+
     hb_buffer_pre_allocate(buffer, itemLength);
     if (Q_UNLIKELY(!hb_buffer_allocation_successful(buffer))) {
         hb_buffer_destroy(buffer);
+        buffer = nullptr;
         return 0;
     }
 
@@ -1703,10 +1707,8 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *st
                                           features.values().constData(),
                                           features.values().size(),
                                           shaper_list);
-            if (Q_UNLIKELY(!shapedOk)) {
-                hb_buffer_destroy(buffer);
+            if (Q_UNLIKELY(!shapedOk))
                 return 0;
-            }
 
             if (Q_UNLIKELY(HB_DIRECTION_IS_BACKWARD(props.direction)))
                 hb_buffer_reverse(buffer);
@@ -1719,10 +1721,8 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *st
             num_glyphs = 1;
 
         // ensure we have enough space for shaped glyphs and metrics
-        if (Q_UNLIKELY(!ensureSpace(glyphs_shaped + num_glyphs))) {
-            hb_buffer_destroy(buffer);
+        if (Q_UNLIKELY(!ensureSpace(glyphs_shaped + num_glyphs)))
             return 0;
-        }
 
         // fetch the shaped glyphs and metrics
         QGlyphLayout g = availableGlyphs(&si).mid(glyphs_shaped, num_glyphs);
@@ -1782,8 +1782,6 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *st
         glyphs_shaped += num_glyphs;
     }
 
-    hb_buffer_destroy(buffer);
-
     return glyphs_shaped;
 }
 
@@ -1827,6 +1825,12 @@ QTextEngine::~QTextEngine()
         delete layoutData;
     delete specialData;
     resetFontEngineCache();
+#if QT_CONFIG(harfbuzz)
+    if (buffer) {
+        hb_buffer_destroy(buffer);
+        buffer = nullptr;
+    }
+#endif
 }
 
 const QCharAttributes *QTextEngine::attributes() const

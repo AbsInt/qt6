@@ -22,11 +22,12 @@
 #include "QtCore/qlist.h"
 #include "QtCore/qtimer.h"
 #include "private/qiodevice_p.h"
-#include "private/qabstractsocketengine_p.h"
+#include "private/qabstractsocketenginereceiver_p.h"
 #include "qnetworkproxy.h"
 
 QT_BEGIN_NAMESPACE
 
+class QAbstractSocketEngine;
 class QHostInfo;
 class QNetworkInterface;
 

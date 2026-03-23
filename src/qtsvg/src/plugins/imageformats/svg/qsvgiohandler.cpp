@@ -1,12 +1,14 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #include "qsvgiohandler.h"
 
 #ifndef QT_NO_SVGRENDERER
 
 #include "qsvgrenderer.h"
-#include "private/qsvgtinydocument_p.h"
+#include "private/qsvgdocument_p.h"
 #include "qimage.h"
 #include "qpixmap.h"
 #include "qpainter.h"
@@ -93,7 +95,7 @@ bool QSvgIOHandler::canRead() const
         return true;        // Will happen if we have been asked for the size
 
     bool isCompressed = false;
-    if (QSvgTinyDocument::isLikelySvg(device(), &isCompressed)) {
+    if (QSvgDocument::isLikelySvg(device(), &isCompressed)) {
         setFormat(isCompressed ? "svgz" : "svg");
         return true;
     }
@@ -219,7 +221,7 @@ bool QSvgIOHandler::supportsOption(ImageOption option) const
 
 bool QSvgIOHandler::canRead(QIODevice *device)
 {
-    return QSvgTinyDocument::isLikelySvg(device);
+    return QSvgDocument::isLikelySvg(device);
 }
 
 QT_END_NAMESPACE

@@ -23,6 +23,7 @@
 #include <QtQmlModels/private/qqmlobjectmodel_p.h>
 #include <QtQmlModels/private/qqmllistmodel_p.h>
 
+#include "delegatechoosermodel.h"
 #include "testmodel.h"
 
 #include <QtQuickTestUtils/private/qmlutils_p.h>
@@ -320,6 +321,8 @@ private slots:
     void checkCellModelIdxAfterReorder();
     void checkEditAfterReorder();
     void checkSelectionAfterReorder();
+
+    void delegateChooserDataChange();
 };
 
 tst_QQuickTableView::tst_QQuickTableView()
@@ -4191,8 +4194,8 @@ void tst_QQuickTableView::positionViewAtCellWithAnimation()
     // Wait for animation to finish
     QVERIFY(tableViewPrivate->positionXAnimation.isRunning());
     QVERIFY(tableViewPrivate->positionYAnimation.isRunning());
-    QTRY_COMPARE(tableViewPrivate->positionXAnimation.isRunning(), false);
-    QTRY_COMPARE(tableViewPrivate->positionYAnimation.isRunning(), false);
+    QTRY_COMPARE_WITH_TIMEOUT(tableViewPrivate->positionXAnimation.isRunning(), false, 3s);
+    QTRY_COMPARE_WITH_TIMEOUT(tableViewPrivate->positionYAnimation.isRunning(), false, 3s);
 
     // Check that the cell is now placed in the top left corner
     QVERIFY(tableViewPrivate->loadedItems.contains(serializedIndex));
@@ -4206,7 +4209,7 @@ void tst_QQuickTableView::positionViewAtCellWithAnimation()
     // Wait for animation to finish
     QVERIFY(tableViewPrivate->positionXAnimation.isRunning());
     QVERIFY(!tableViewPrivate->positionYAnimation.isRunning());
-    QTRY_COMPARE(tableViewPrivate->positionXAnimation.isRunning(), false);
+    QTRY_COMPARE_WITH_TIMEOUT(tableViewPrivate->positionXAnimation.isRunning(), false, 3s);
 
     // Check that the cell is now placed in the top right corner
     QVERIFY(tableViewPrivate->loadedItems.contains(serializedIndex));
@@ -4220,8 +4223,8 @@ void tst_QQuickTableView::positionViewAtCellWithAnimation()
     // Wait for animation to finish
     QVERIFY(tableViewPrivate->positionXAnimation.isRunning());
     QVERIFY(tableViewPrivate->positionYAnimation.isRunning());
-    QTRY_COMPARE(tableViewPrivate->positionXAnimation.isRunning(), false);
-    QTRY_COMPARE(tableViewPrivate->positionYAnimation.isRunning(), false);
+    QTRY_COMPARE_WITH_TIMEOUT(tableViewPrivate->positionXAnimation.isRunning(), false, 3s);
+    QTRY_COMPARE_WITH_TIMEOUT(tableViewPrivate->positionYAnimation.isRunning(), false, 3s);
 
     // Check that the cell is now placed in the bottom left corner
     QVERIFY(tableViewPrivate->loadedItems.contains(serializedIndex));
@@ -4235,7 +4238,7 @@ void tst_QQuickTableView::positionViewAtCellWithAnimation()
     // Wait for animation to finish
     QVERIFY(tableViewPrivate->positionXAnimation.isRunning());
     QVERIFY(!tableViewPrivate->positionYAnimation.isRunning());
-    QTRY_COMPARE(tableViewPrivate->positionXAnimation.isRunning(), false);
+    QTRY_COMPARE_WITH_TIMEOUT(tableViewPrivate->positionXAnimation.isRunning(), false, 3s);
 
     // Check that the cell is now placed in the bottom right corner
     QVERIFY(tableViewPrivate->loadedItems.contains(serializedIndex));
@@ -4850,12 +4853,12 @@ void tst_QQuickTableView::checkContentSize()
 
 void tst_QQuickTableView::checkSelectionModelWithRequiredSelectedProperty_data()
 {
-    QTest::addColumn<QVector<QPoint>>("selected");
+    QTest::addColumn<QList<QPoint>>("selected");
     QTest::addColumn<QPoint>("toggle");
 
-    QTest::newRow("nothing selected") << QVector<QPoint>() << QPoint(0,0);
-    QTest::newRow("one item selected") << (QVector<QPoint>() << QPoint(0, 0)) << QPoint(1, 1);
-    QTest::newRow("two items selected") << (QVector<QPoint>() << QPoint(1, 1) << QPoint(2, 2)) << QPoint(1, 1);
+    QTest::newRow("nothing selected") << QList<QPoint>() << QPoint(0,0);
+    QTest::newRow("one item selected") << (QList<QPoint>() << QPoint(0, 0)) << QPoint(1, 1);
+    QTest::newRow("two items selected") << (QList<QPoint>() << QPoint(1, 1) << QPoint(2, 2)) << QPoint(1, 1);
 }
 
 void tst_QQuickTableView::checkSelectionModelWithRequiredSelectedProperty()
@@ -4863,7 +4866,7 @@ void tst_QQuickTableView::checkSelectionModelWithRequiredSelectedProperty()
     // Check that if you add a "required property selected" to the delegate,
     // TableView will give it a value upon creation that matches the state
     // in the selection model.
-    QFETCH(QVector<QPoint>, selected);
+    QFETCH(QList<QPoint>, selected);
     QFETCH(QPoint, toggle);
 
     LOAD_TABLEVIEW("tableviewwithselected1.qml");
@@ -7151,7 +7154,7 @@ void tst_QQuickTableView::editUsingEditTriggers_data()
         QTest::newRow("DoubleTapped") << QQuickTableView::EditTriggers(QQuickTableView::DoubleTapped) << interactive;
         QTest::newRow("SelectedTapped") << QQuickTableView::EditTriggers(QQuickTableView::SelectedTapped) << interactive;
         QTest::newRow("EditKeyPressed") << QQuickTableView::EditTriggers(QQuickTableView::EditKeyPressed) << interactive;
-        QTest::newRow("AnyKeyPressed") << QQuickTableView::EditTriggers(QQuickTableView::EditKeyPressed) << interactive;
+        QTest::newRow("AnyKeyPressed") << QQuickTableView::EditTriggers(QQuickTableView::AnyKeyPressed) << interactive;
         QTest::newRow("DoubleTapped | EditKeyPressed")
                 << QQuickTableView::EditTriggers(QQuickTableView::DoubleTapped | QQuickTableView::EditKeyPressed) << interactive;
         QTest::newRow("SingleTapped | AnyKeyPressed")
@@ -8742,6 +8745,29 @@ void tst_QQuickTableView::checkSelectionAfterReorder()
 
     tableViewPrivate->clearSelection();
     QCOMPARE(selectionModel.hasSelection(), false);
+}
+
+void tst_QQuickTableView::delegateChooserDataChange()
+{
+    LOAD_TABLEVIEW("delegatechooser.qml");
+
+    const int rows = 2;
+    const int columns = 2;
+    DelegateChooserModel model{ rows, columns };
+    tableView->setModel(QVariant::fromValue(&model));
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(model.choice_delegates_count()[0], rows * columns);
+    QCOMPARE(model.choice_delegates_count()[1], 0);
+
+    model.switchChoice();
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(model.choice_delegates_count()[0], 0);
+    QCOMPARE(model.choice_delegates_count()[1], rows * columns);
+
+    tableView->setModel({ });
 }
 
 QTEST_MAIN(tst_QQuickTableView)

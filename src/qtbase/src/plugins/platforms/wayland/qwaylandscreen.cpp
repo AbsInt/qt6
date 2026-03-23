@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qwaylandscreen_p.h"
 
@@ -357,7 +358,7 @@ void QWaylandScreen::updateOutputProperties()
     QWindowSystemInterface::handleScreenRefreshRateChange(screen(), refreshRate());
 
     if (!zxdg_output_v1::isInitialized())
-        QWindowSystemInterface::handleScreenGeometryChange(screen(), geometry(), geometry());
+        QWindowSystemInterface::handleScreenGeometryChange(screen(), geometry(), availableGeometry());
 }
 
 
@@ -406,7 +407,7 @@ void QWaylandScreen::updateXdgOutputProperties()
 {
     Q_ASSERT(mInitialized);
     Q_ASSERT(zxdg_output_v1::isInitialized());
-    QWindowSystemInterface::handleScreenGeometryChange(screen(), geometry(), geometry());
+    QWindowSystemInterface::handleScreenGeometryChange(screen(), geometry(), availableGeometry());
 }
 
 } // namespace QtWaylandClient

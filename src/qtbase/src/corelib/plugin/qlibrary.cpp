@@ -1,6 +1,8 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // Copyright (C) 2021 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:critical reason:execute-external-code
+
 #include "qlibrary.h"
 #include "qlibrary_p.h"
 
@@ -678,7 +680,7 @@ bool QLibrary::isLibrary(const QString &fileName)
 static bool qt_get_metadata(QLibraryPrivate *priv, QString *errMsg)
 {
     auto error = [=](QString &&explanation) {
-        *errMsg = QLibrary::tr("'%1' is not a Qt plugin (%2)").arg(priv->fileName, std::move(explanation));
+        *errMsg = QLibrary::tr("'%1' is not a Qt plugin (%2)").arg(priv->fileName, explanation);
         return false;
     };
 

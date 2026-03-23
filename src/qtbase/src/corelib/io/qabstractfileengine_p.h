@@ -112,9 +112,6 @@ public:
     virtual bool setSize(qint64 size);
     virtual bool caseSensitive() const;
     virtual bool isRelativePath() const;
-    virtual QStringList entryList(QDir::Filters filters, const QStringList &filterNames) const;
-    virtual QStringList entryList(QDirListing::IteratorFlags filters,
-                                  const QStringList &filterNames) const;
     virtual FileFlags fileFlags(FileFlags type=FileInfoAll) const;
     virtual bool setPermissions(uint perms);
     virtual QByteArray id() const;

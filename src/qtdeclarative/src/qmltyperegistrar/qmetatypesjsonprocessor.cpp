@@ -625,7 +625,7 @@ void MetaTypesJsonProcessor::addRelatedTypes()
     }
 }
 
-void MetaTypesJsonProcessor::sortTypes(QVector<MetaType> &types)
+void MetaTypesJsonProcessor::sortTypes(QList<MetaType> &types)
 {
     std::sort(types.begin(), types.end(), qualifiedClassNameLessThan);
 }
@@ -761,6 +761,8 @@ Property::Property(const QCborMap &cbor)
     , lineNumber(cbor[S_LINENUMBER].toInteger(0))
     , revision(getRevision(cbor))
     , isFinal(cbor[S_FINAL].toBool())
+    , isVirtual(cbor[S_VIRTUAL].toBool())
+    , isOverride(cbor[S_OVERRIDE].toBool())
     , isConstant(cbor[S_CONSTANT].toBool())
     , isRequired(cbor[S_REQUIRED].toBool())
 {

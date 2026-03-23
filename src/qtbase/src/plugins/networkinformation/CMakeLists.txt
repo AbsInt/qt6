@@ -7,6 +7,7 @@ endif()
 
 if(LINUX AND TARGET Qt::DBus)
     add_subdirectory(networkmanager)
+    add_subdirectory(connman)
 endif()
 
 if(APPLE)

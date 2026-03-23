@@ -258,7 +258,8 @@ public:
 
     void setup(const QWizardLayoutInfo &info, const QString &title,
                const QString &subTitle, const QPixmap &logo, const QPixmap &banner,
-               Qt::TextFormat titleFormat, Qt::TextFormat subTitleFormat);
+               Qt::TextFormat titleFormat, Qt::TextFormat subTitleFormat,
+               QWizard::WizardOptions wizardOptions);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -272,6 +273,7 @@ private:
     QLabel *logoLabel;
     QGridLayout *layout;
     QPixmap bannerPixmap;
+    QWizard::WizardOptions wizardOptions;
 };
 
 QWizardHeader::QWizardHeader(QWidget *parent)
@@ -326,14 +328,15 @@ bool QWizardHeader::vistaDisabled() const
 
 void QWizardHeader::setup(const QWizardLayoutInfo &info, const QString &title,
                           const QString &subTitle, const QPixmap &logo, const QPixmap &banner,
-                          Qt::TextFormat titleFormat, Qt::TextFormat subTitleFormat)
+                          Qt::TextFormat titleFormat, Qt::TextFormat subTitleFormat,
+                          QWizard::WizardOptions options)
 {
     bool modern = ((info.wizStyle == QWizard::ModernStyle)
 #if QT_CONFIG(style_windowsvista)
         || vistaDisabled()
 #endif
     );
-
+    wizardOptions = options;
     layout->setRowMinimumHeight(0, modern ? ModernHeaderTopMargin : 0);
     layout->setRowMinimumHeight(1, modern ? info.topLevelMarginTop - ModernHeaderTopMargin - 1 : 0);
     layout->setRowMinimumHeight(6, (modern ? 3 : GapBetweenLogoAndRightEdge) + 2);
@@ -359,7 +362,7 @@ void QWizardHeader::setup(const QWizardLayoutInfo &info, const QString &title,
         bannerPixmap = QPixmap();
     }
 
-    if (bannerPixmap.isNull()) {
+    if (bannerPixmap.isNull() || wizardOptions.testFlag(QWizard::StretchBanner)) {
         /*
             There is no widthForHeight() function, so we simulate it with a loop.
         */
@@ -387,7 +390,12 @@ void QWizardHeader::setup(const QWizardLayoutInfo &info, const QString &title,
 void QWizardHeader::paintEvent(QPaintEvent * /* event */)
 {
     QStylePainter painter(this);
-    painter.drawPixmap(0, 0, bannerPixmap);
+    if (wizardOptions.testFlag(QWizard::StretchBanner)) {
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.drawPixmap(0, 0, width(), height(), bannerPixmap);
+    } else {
+        painter.drawPixmap(0, 0, bannerPixmap);
+    }
 
     int x = width() - 2;
     int y = height() - 2;
@@ -1224,7 +1232,7 @@ void QWizardPrivate::updateLayout()
         Q_ASSERT(page);
         headerWidget->setup(info, page->title(), page->subTitle(),
                             page->pixmap(QWizard::LogoPixmap), page->pixmap(QWizard::BannerPixmap),
-                            titleFmt, subTitleFmt);
+                            titleFmt, subTitleFmt, opts);
     }
 
     if (info.watermark || info.sideWidget) {
@@ -2111,6 +2119,8 @@ void QWizardAntiFlickerWidget::paintEvent(QPaintEvent *)
     \value HaveCustomButton2  Show the second user-defined button (CustomButton2).
     \value HaveCustomButton3  Show the third user-defined button (CustomButton3).
     \value NoCancelButtonOnLastPage   Don't show the \uicontrol Cancel button on the last page.
+    \value StretchBanner    If there is a \l{QWizard::WizardPixmap}{banner}, stretch it across
+                            the entire width of the wizard.
 
     \sa setOptions(), setOption(), testOption()
 */

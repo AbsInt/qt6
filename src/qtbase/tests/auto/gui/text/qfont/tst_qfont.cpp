@@ -50,7 +50,10 @@ private slots:
     void defaultFamily_data();
     void defaultFamily();
     void toAndFromString();
+    void fromStringCompatibility_data();
+    void fromStringCompatibility();
     void fromStringWithoutStyleName();
+    void fromStringWithoutFeaturesOrVariableAxes();
     void fromDegenerateString_data();
     void fromDegenerateString();
 
@@ -645,51 +648,153 @@ void tst_QFont::toAndFromString()
 
         QCOMPARE(result, initial);
     }
+}
 
-    // Since Qt 6.0 it was changed to include more information in the description, so
-    // this checks for compatibility
-    const QString fontStringFrom515(QLatin1String("Times New Roman,18,-1,5,75,1,0,0,1,0,Regular"));
+void tst_QFont::fromStringCompatibility_data()
+{
+    QTest::addColumn<bool>("current");
+    QTest::addColumn<QString>("description");
+    QTest::addColumn<QFont>("font");
+
     QFont fontFrom515("Times New Roman", 18);
     fontFrom515.setBold(true);
     fontFrom515.setItalic(true);
     fontFrom515.setFixedPitch(true);
     fontFrom515.setStyleName("Regular");
-    QFont from515String;
-    from515String.fromString(fontStringFrom515);
-    QCOMPARE(from515String, fontFrom515);
+    QTest::addRow("Times New Roman, Qt 5.15") << false << QStringLiteral("Times New Roman,18,-1,5,75,1,0,0,1,0,Regular") << fontFrom515;
 
-    const QString fontStringFrom60(
-            QLatin1String("Times New Roman,18,-1,5,700,1,0,0,1,0,1,0,150.5,2.5,50,2,Regular"));
     QFont fontFrom60 = fontFrom515;
     fontFrom60.setStyleStrategy(QFont::PreferBitmap);
     fontFrom60.setCapitalization(QFont::AllUppercase);
     fontFrom60.setLetterSpacing(QFont::PercentageSpacing, 150.5);
     fontFrom60.setWordSpacing(2.5);
     fontFrom60.setStretch(50);
-    QFont from60String;
-    from60String.fromString(fontStringFrom60);
-    QCOMPARE(fontFrom60.toString(), fontStringFrom60);
-    QCOMPARE(from60String, fontFrom60);
+    QTest::addRow("Times New Roman, Qt 6.0") << false << QStringLiteral("Times New Roman,18,-1,5,700,1,0,0,1,0,1,0,150.5,2.5,50,2,Regular") << fontFrom60;
+
+    QFont fontFrom611 = fontFrom60;
+    QTest::addRow("Times New Roman (without font features and variable axes), Qt 6.11") << true << QStringLiteral("Times New Roman,18,-1,5,700,1,0,0,1,0,1,0,150.5,2.5,50,2,Regular,0,0") << fontFrom611;
+
+    QFont fontFrom611WithFeatures = fontFrom60;
+    fontFrom611WithFeatures.setFeature("frac", 1);
+    fontFrom611WithFeatures.setFeature("liga", 0);
+    QTest::addRow("Times New Roman (with features), Qt 6.11") << true << QStringLiteral("Times New Roman,18,-1,5,700,1,0,0,1,0,1,0,150.5,2.5,50,2,Regular,2,frac=1,liga=0,0") << fontFrom611WithFeatures;
+
+    QFont fontFrom611WithVariableAxes = fontFrom60;
+    fontFrom611WithVariableAxes.setVariableAxis("wght", 12.34f);
+    QTest::addRow("Times New Roman (with variable axes), Qt 6.11") << true << QStringLiteral("Times New Roman,18,-1,5,700,1,0,0,1,0,1,0,150.5,2.5,50,2,Regular,0,1,wght=12.34") << fontFrom611WithVariableAxes;
+
+    QFont fontFrom611WithFontFeaturesAndVariableAxes = fontFrom60;
+    fontFrom611WithFontFeaturesAndVariableAxes.setFeature("frac", 1);
+    fontFrom611WithFontFeaturesAndVariableAxes.setFeature("liga", 0);
+    fontFrom611WithFontFeaturesAndVariableAxes.setVariableAxis("wght", 12.34f);
+    QTest::addRow("Times New Roman (with font features and variable axes), Qt 6.11") << true << QStringLiteral("Times New Roman,18,-1,5,700,1,0,0,1,0,1,0,150.5,2.5,50,2,Regular,2,frac=1,liga=0,1,wght=12.34") << fontFrom611WithFontFeaturesAndVariableAxes;
+}
+
+void tst_QFont::fromStringCompatibility()
+{
+    // This test verifies that font descriptions from older Qt releases are handled as expected.
+
+    QFETCH(bool, current);
+    QFETCH(QString, description);
+
+    QFont font;
+    font.fromString(description);
+    QTEST(font, "font");
+
+    if (current) {
+        QCOMPARE(font.toString(), description);
+    }
 }
 
 void tst_QFont::fromStringWithoutStyleName()
 {
-    QFont font1;
-    font1.fromString("Noto Sans,12,-1,5,50,0,0,0,0,0,Regular");
+    // This test verifies that the style name will be reset if the from string contains no style.
 
-    QFont font2 = font1;
-    const QString str = "Times,16,-1,5,400,0,0,0,0,0,0,0,0,0,0,1";
-    font2.fromString(str);
+    const QString fontString(QLatin1String("Times,16,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"));
+    {
+        QFont font;
+        font.fromString("Noto Sans,12,-1,5,50,0,0,0,0,0,Regular");
 
-    QCOMPARE(font2.toString(), str);
+        QFont from = font;
+        from.fromString(fontString);
+
+        QFont clean;
+        clean.fromString(fontString);
+
+        QCOMPARE(from, clean);
+    }
 
     const QString fontStringFrom60(
             QLatin1String("Times New Roman,18,-1,5,700,1,0,0,1,0,1,0,150.5,2.5,50,2"));
-    QFont font3;
-    font3.fromString("Noto Sans,12,-1,5,50,0,0,0,0,0,Regular");
-    QFont font4 = font3;
-    font4.fromString(fontStringFrom60);
-    QCOMPARE(font4.toString(), fontStringFrom60);
+    {
+        QFont font;
+        font.fromString("Noto Sans,12,-1,5,50,0,0,0,0,0,Regular");
+
+        QFont from = font;
+        from.fromString(fontStringFrom60);
+
+        QFont clean;
+        clean.fromString(fontStringFrom60);
+
+        QCOMPARE(from, clean);
+    }
+
+    const QString fontStringFrom611(
+            QLatin1String("Times New Roman,18,-1,5,700,1,0,0,1,0,1,0,150.5,2.5,50,2,,0"));
+    {
+        QFont font;
+        font.fromString("Noto Sans,12,-1,5,50,0,0,0,0,0,Regular");
+
+        QFont from = font;
+        from.fromString(fontStringFrom611);
+
+        QFont clean;
+        clean.fromString(fontStringFrom611);
+
+        QCOMPARE(from, clean);
+    }
+}
+
+void tst_QFont::fromStringWithoutFeaturesOrVariableAxes()
+{
+    // This test verifies that the font feature and the variable axis list will be reset if the string
+    // contains no features or variable axes, respectively.
+
+    const QString fontStringWithoutFeaturesAndVariableAxes = QStringLiteral("Noto Sans,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1");
+    const QString fontStringWithFeatures = QStringLiteral("Noto Sans,18,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,2,calt=0,frac=1");
+    const QString fontStringWithVariableAxes = QStringLiteral("Noto Sans,18,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,1,wght=12.34");
+
+    {
+        QFont font;
+        font.fromString(fontStringWithFeatures);
+        font.fromString(fontStringWithoutFeaturesAndVariableAxes);
+        QVERIFY(font.featureTags().isEmpty());
+        QVERIFY(font.variableAxisTags().isEmpty());
+    }
+
+    {
+        QFont font;
+        font.fromString(fontStringWithVariableAxes);
+        font.fromString(fontStringWithoutFeaturesAndVariableAxes);
+        QVERIFY(font.featureTags().isEmpty());
+        QVERIFY(font.variableAxisTags().isEmpty());
+    }
+
+    {
+        QFont font;
+        font.fromString(fontStringWithFeatures);
+        font.fromString(fontStringWithVariableAxes);
+        QVERIFY(font.featureTags().isEmpty());
+        QVERIFY(!font.variableAxisTags().isEmpty());
+    }
+
+    {
+        QFont font;
+        font.fromString(fontStringWithVariableAxes);
+        font.fromString(fontStringWithFeatures);
+        QVERIFY(!font.featureTags().isEmpty());
+        QVERIFY(font.variableAxisTags().isEmpty());
+    }
 }
 
 void tst_QFont::fromDegenerateString_data()

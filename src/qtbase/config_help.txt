@@ -69,6 +69,7 @@ Build options:
                          system generator.
   -cmake-file-api ...... Let CMake store build metadata for loading the build
                          into an IDE. [no; yes if -developer-build]
+  -dry-run ............. Only print the CMake command but don't execute it.
   -no-guess-compiler ... Do not guess the compiler from the target mkspec.
   -release ............. Build Qt with optimizations and without debug
                          symbols [yes]
@@ -193,7 +194,10 @@ Build environment:
 
   -pkg-config .......... Use pkg-config [auto] (Unix only)
 
-  -vcpkg ............... Use vcpkg [no]
+  -vcpkg ............... Use vcpkg for downloading and finding 3rd-party
+                         dependencies [no]
+  -generate-vcpkg-manifest ... Generate a vcpkg.json file in the build directory
+                         [no; yes if -vcpkg]
 
   -D <string> .......... Pass additional preprocessor define
   -I <string> .......... Pass additional include path
@@ -242,10 +246,10 @@ Component selection:
                          to configure.
   -make <part> ......... Add <part> to the list of parts to be built.
                          Specifying this option clears the default list first.
-                         (allowed values: libs, tools, examples, tests,
-                         benchmarks, manual-tests, minimal-static-tests)
-                         [default: libs and examples, also tools if not
-                         cross-building, also tests if -developer-build]
+                         (allowed values: examples, tests,
+                         benchmarks, manual-tests, minimal-static-tests,
+                         doc-snippets)
+                         [default: tests and doc-snippets if -developer-build]
   -nomake <part> ....... Exclude <part> from the list of parts to be built.
   -install-examples-sources Installs examples source code into the Qt prefix
                          Only possible when -make examples is also passed

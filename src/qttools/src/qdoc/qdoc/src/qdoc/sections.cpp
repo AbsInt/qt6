@@ -10,8 +10,11 @@
 #include "functionnode.h"
 #include "generator.h"
 #include "genustypes.h"
+#include "inclusionfilter.h"
+#include "inclusionpolicy.h"
 #include "utilities.h"
 #include "namespacenode.h"
+#include "node.h"
 #include "qmlpropertynode.h"
 #include "qmltypenode.h"
 #include "sharedcommentnode.h"
@@ -59,6 +62,7 @@ QList<Section> Sections::s_stdCppClassSummarySections {
     { "Private Types",            "private type",            "private types",            "", Section::Summary },
     { "Private Functions",        "private function",        "private functions",        "", Section::Summary },
     { "Private Slots",            "private slot",            "private slots",            "", Section::Summary },
+    { "Private Variables",        "private variable",        "private variables",        "", Section::Summary },
     { "Static Private Members",   "static private member",   "static private members",   "", Section::Summary },
     { "Related Non-Members",      "related non-member",      "related non-members",      "", Section::Summary },
     { "Macros",                   "macro",                   "macros",                   "", Section::Summary },
@@ -219,7 +223,10 @@ void Section::insert(Node *node)
         }
     }
 
-    if (node->isPrivate() || node->isInternal()) {
+    const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+    const NodeContext context = node->createContext();
+
+    if (!InclusionFilter::isIncluded(policy, context)) {
         irrelevant = true;
     } else if (node->isFunction()) {
         auto *func = static_cast<FunctionNode *>(node);
@@ -264,7 +271,11 @@ void Section::insert(Node *node)
  */
 bool Section::insertReimplementedMember(Node *node)
 {
-    if (!node->isPrivate() && !node->isRelatedNonmember()) {
+    const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+    const NodeContext context = node->createContext();
+
+    // Use specialized visibility check for documented reimplemented members
+    if (node->isInAPI() && InclusionFilter::isReimplementedMemberVisible(policy, context) && !node->isRelatedNonmember()) {
         const auto *fn = static_cast<const FunctionNode *>(node);
         if (!fn->overridesThis().isEmpty()) {
             if (fn->parent() == m_aggregate) {
@@ -285,7 +296,7 @@ bool Section::insertReimplementedMember(Node *node)
  */
 void Section::reduce()
 {
-    // TODO:TEMPORARY:INTERMEDITATE: Section uses a series of maps
+    // TODO:TEMPORARY:INTERMEDIATE: Section uses a series of maps
     // to internally manage the categorization of the various members
     // of an aggregate. It further uses a secondary "flattened"
     // (usually vector) version that is later used by consumers of a
@@ -320,7 +331,14 @@ void Section::reduce()
     // should be more lightweight and more than offset the
     // multiple-calls.
     static auto node_less_than = [](const Node* left, const Node* right) {
-      return sortName(left) < sortName(right);
+        // For shared comment nodes, compare the names of the first child
+        // nodes instead of the names of the nodes themselves, which are
+        // usually empty.
+        if (left->isSharedCommentNode())
+            left = static_cast<const SharedCommentNode *>(left)->collective().first();
+        if (right->isSharedCommentNode())
+            right = static_cast<const SharedCommentNode *>(right)->collective().first();
+        return sortName(left) < sortName(right);
     };
 
     std::stable_sort(m_members.begin(), m_members.end(), node_less_than);
@@ -447,6 +465,10 @@ Sections::Sections(const NodeMultiMap &nsmap) : m_aggregate(nullptr)
         }
         case NodeType::Property:
             sections[SinceProperties].appendMember(node);
+            break;
+        case NodeType::SharedComment:
+            if (node->isPropertyGroup())
+                sections[SinceQmlProperties].appendMember(node);
             break;
         case NodeType::Variable:
             sections[SinceVariables].appendMember(node);
@@ -704,8 +726,10 @@ void Sections::distributeNodeInSummaryVector(SectionVector &sv, Node *n)
         } else {
             if (n->isPublic())
                 sv[PublicVariables].insert(n);
-            else if (!n->isPrivate())
+            else if (n->isProtected())
                 sv[ProtectedVariables].insert(n);
+            else if (n->isPrivate())
+                sv[PrivateVariables].insert(n);
         }
         return;
     }
@@ -865,12 +889,15 @@ void Sections::buildStdCppClassRefPageSections()
     SectionVector &detailsSections = stdCppClassDetailsSections();
     Section &allMembers = allMembersSection();
 
+    const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+
     for (auto it = m_aggregate->constBegin(); it != m_aggregate->constEnd(); ++it) {
         Node *n = *it;
-        if (!n->isPrivate() && !n->isProperty() && !n->isRelatedNonmember()
-            && !n->isSharedCommentNode())
+        const NodeContext context = n->createContext();
+        if (InclusionFilter::isIncluded(policy, context) && !n->isProperty()
+            && !n->isRelatedNonmember() && !n->isSharedCommentNode()) {
             allMembers.insert(n);
-
+        }
         distributeNodeInSummaryVector(summarySections, n);
         distributeNodeInDetailsVector(detailsSections, n);
     }
@@ -891,9 +918,11 @@ void Sections::buildStdCppClassRefPageSections()
             continue;
         visited.insert(cur);
         for (Node *n : cur->childNodes()) {
-            if (!n->isPrivate() && !n->isProperty() && !n->isRelatedNonmember()
-                && !n->isSharedCommentNode())
+            const NodeContext context = n->createContext();
+            if (InclusionFilter::isIncluded(policy, context) && !n->isProperty()
+                && !n->isRelatedNonmember() && !n->isSharedCommentNode()) {
                 allMembers.insert(n);
+            }
         }
         pushBaseClasses(stack, cur);
     }
@@ -917,8 +946,10 @@ void Sections::buildStdQmlTypeRefPageSections()
     while (qtn) {
         if (!qtn->isAbstract() || !classNodes)
             classNodes = &allMembers.classNodesList().emplace_back(static_cast<const QmlTypeNode*>(qtn), NodeVector{});
+        const InclusionPolicy policy = Config::instance().createInclusionPolicy();
         for (const auto n : qtn->childNodes()) {
-            if (n->isInternal())
+            const NodeContext context = n->createContext();
+            if (!InclusionFilter::isIncluded(policy, context))
                 continue;
 
             // Skip overridden property/function documentation from abstract base type

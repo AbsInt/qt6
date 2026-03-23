@@ -9,7 +9,12 @@
 
 #include <private/qqmljsast_p.h>
 
+#include <QtCore/qstringview.h>
 #include <qdebug.h>
+
+#include <optional>
+
+using namespace Qt::Literals::StringLiterals;
 
 QT_BEGIN_NAMESPACE
 
@@ -40,7 +45,7 @@ QStringList QmlCodeParser::sourceFileNameFilter()
 void QmlCodeParser::parseSourceFile(const Location &location, const QString &filePath, CppCodeParser&)
 {
     static const QSet<QString> topic_commands{
-        COMMAND_VARIABLE, COMMAND_QMLCLASS, COMMAND_QMLTYPE, COMMAND_QMLPROPERTY,
+        COMMAND_VARIABLE, COMMAND_QMLCLASS, COMMAND_QMLTYPE, COMMAND_QMLSINGLETONTYPE, COMMAND_QMLPROPERTY,
         COMMAND_QMLPROPERTYGROUP, COMMAND_QMLATTACHEDPROPERTY, COMMAND_QMLSIGNAL,
         COMMAND_QMLATTACHEDSIGNAL, COMMAND_QMLMETHOD, COMMAND_QMLATTACHEDMETHOD,
         COMMAND_QMLVALUETYPE, COMMAND_QMLBASICTYPE,
@@ -56,7 +61,7 @@ void QmlCodeParser::parseSourceFile(const Location &location, const QString &fil
     in.close();
 
     QString newCode = std::move(document);
-    extractPragmas(newCode);
+    const QStringList pragmas = extractPragmas(newCode);
 
     QQmlJS::Engine engine{};
     QQmlJS::Lexer lexer{&engine};
@@ -68,6 +73,7 @@ void QmlCodeParser::parseSourceFile(const Location &location, const QString &fil
         QQmlJS::AST::UiProgram *ast = parser.ast();
         QmlDocVisitor visitor(filePath, newCode, &engine, topic_commands + CodeParser::common_meta_commands,
                               topic_commands);
+        visitor.setSingletonPragmaFound(pragmas.contains("singleton"_L1));
         QQmlJS::AST::Node::accept(ast, &visitor);
         if (visitor.hasError())
             Location(filePath).warning("Could not analyze QML file, output is incomplete.");
@@ -93,51 +99,139 @@ void replaceWithSpace(QString &str, int idx, int n) // Also used in qmlcodemarke
 }
 
 /*!
-  Copy & paste from src/declarative/qml/qdeclarativescriptparser.cpp,
-  then modified to return no values.
+  \struct PragmaInfo
 
-  Searches for ".pragma <value>" declarations within \a script.
-  Currently supported pragmas are: library
+  \brief Container for the result of processing a pragma declaration.
+
+  \list
+      \li \c value contains the pragma value (e.g., "library", "singleton").
+      \li \c startOffset is the start position in script to replace.
+      \li \c length is the length of text to replace.
+      \li \c nextToken holds the next token after the pragma.
+  \list
 */
-void QmlCodeParser::extractPragmas(QString &script)
+struct PragmaInfo {
+    QString value;
+    qsizetype startOffset;
+    qsizetype length;
+    int nextToken;
+};
+
+/*!
+  Processes a ".pragma <value>" declaration (JavaScript syntax).
+  Returns pragma information if successfully processed, std::nullopt otherwise.
+  Advances the lexer position but does not modify the script content.
+*/
+static std::optional<PragmaInfo> processDotPragma(QQmlJS::Lexer &lexer, const QStringView script)
 {
-    const QString pragma(QLatin1String("pragma"));
+    static constexpr QLatin1StringView pragma{"pragma"_L1};
 
-    QQmlJS::Lexer l(nullptr);
-    l.setCode(script, 0);
+    qsizetype startOffset = lexer.tokenOffset();
+    qsizetype startLine = lexer.tokenStartLine();
 
-    int token = l.lex();
+    int token = lexer.lex();
+
+    if (token != QQmlJSGrammar::T_IDENTIFIER || lexer.tokenStartLine() != startLine
+        || script.mid(lexer.tokenOffset(), lexer.tokenLength()) != pragma)
+        return std::nullopt;
+
+    token = lexer.lex();
+
+    if (token != QQmlJSGrammar::T_IDENTIFIER || lexer.tokenStartLine() != startLine)
+        return std::nullopt;
+
+    const QString pragmaValue{script.mid(lexer.tokenOffset(), lexer.tokenLength()).toString()};
+    const qsizetype endOffset = lexer.tokenLength() + lexer.tokenOffset();
+
+    token = lexer.lex();
+    if (lexer.tokenStartLine() == startLine)
+        return std::nullopt;
+
+    if (pragmaValue == "library"_L1) {
+        return PragmaInfo{
+            pragmaValue,
+            startOffset,
+            endOffset - startOffset,
+            token
+        };
+    }
+
+    return std::nullopt;
+}
+
+/*!
+  Processes a "pragma <value>" declaration (QML syntax).
+  Returns pragma information if successfully processed, std::nullopt otherwise.
+  Advances the lexer position but does not modify the script content.
+*/
+static std::optional<PragmaInfo> processPragma(QQmlJS::Lexer &lexer, const QStringView script)
+{
+    qsizetype startOffset = lexer.tokenOffset();
+    qsizetype startLine = lexer.tokenStartLine();
+
+    int token = lexer.lex();
+
+    if (token != QQmlJSGrammar::T_IDENTIFIER || lexer.tokenStartLine() != startLine)
+        return std::nullopt;
+
+    const QString pragmaValue{script.mid(lexer.tokenOffset(), lexer.tokenLength()).toString()};
+    qsizetype endOffset = lexer.tokenLength() + lexer.tokenOffset();
+
+    token = lexer.lex();
+    if (lexer.tokenStartLine() == startLine)
+        return std::nullopt;
+
+    if (pragmaValue == "library"_L1 || pragmaValue == "singleton"_L1) {
+        return PragmaInfo{
+            pragmaValue,
+            startOffset,
+            endOffset - startOffset,
+            token
+        };
+    }
+
+    return std::nullopt;
+}
+
+/*!
+  Copy & paste from src/declarative/qml/qdeclarativescriptparser.cpp,
+  then modified to return pragma information.
+
+  Searches for ".pragma <value>" (JavaScript) and "pragma <value>" (QML)
+  declarations within \a script.
+
+  Supported pragmas are: \c library, \c singleton.
+*/
+QStringList QmlCodeParser::extractPragmas(QString &script) const
+{
+    QStringList pragmas;
+    QQmlJS::Lexer lexer(nullptr);
+    lexer.setCode(script, 0);
+
+    int token = lexer.lex();
 
     while (true) {
-        if (token != QQmlJSGrammar::T_DOT)
-            return;
+        if (token == QQmlJSGrammar::T_DOT) {
+            auto pragmaInfo = processDotPragma(lexer, script);
+            if (!pragmaInfo)
+                return pragmas;
 
-        int startOffset = l.tokenOffset();
-        int startLine = l.tokenStartLine();
+            pragmas.append(pragmaInfo->value);
+            replaceWithSpace(script, pragmaInfo->startOffset, pragmaInfo->length);
+            token = pragmaInfo->nextToken;
+        } else if (token == QQmlJSGrammar::T_PRAGMA) {
+            auto pragmaInfo = processPragma(lexer, script);
+            if (!pragmaInfo)
+                return pragmas;
 
-        token = l.lex();
-
-        if (token != QQmlJSGrammar::T_IDENTIFIER || l.tokenStartLine() != startLine
-            || script.mid(l.tokenOffset(), l.tokenLength()) != pragma)
-            return;
-
-        token = l.lex();
-
-        if (token != QQmlJSGrammar::T_IDENTIFIER || l.tokenStartLine() != startLine)
-            return;
-
-        QString pragmaValue = script.mid(l.tokenOffset(), l.tokenLength());
-        int endOffset = l.tokenLength() + l.tokenOffset();
-
-        token = l.lex();
-        if (l.tokenStartLine() == startLine)
-            return;
-
-        if (pragmaValue == QLatin1String("library"))
-            replaceWithSpace(script, startOffset, endOffset - startOffset);
-        else
-            return;
+            pragmas.append(pragmaInfo->value);
+            replaceWithSpace(script, pragmaInfo->startOffset, pragmaInfo->length);
+            token = pragmaInfo->nextToken;
+        } else {
+            return pragmas;
+        }
     }
 }
 
 QT_END_NAMESPACE
+

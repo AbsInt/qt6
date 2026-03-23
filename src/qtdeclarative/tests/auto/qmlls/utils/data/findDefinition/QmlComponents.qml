@@ -6,7 +6,7 @@ import findDefinition.MyApplicationWindowModule
 
 MyApplicationWindow {
     Item {
-        property var attachedProperty: MyApplicationWindow.footer
+
         property var justAnEnum: MyApplicationWindow.Kitty
         property var justAnEnum2: MyApplicationWindow.Hello.Kitty
     }

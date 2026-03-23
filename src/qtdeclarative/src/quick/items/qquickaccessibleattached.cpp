@@ -100,13 +100,13 @@ QT_BEGIN_NAMESPACE
             that run on touch-only devices since screen readers often implement a virtual focus that
             can be moved from item to item.
     \row
-        \li Button, CheckBox, RadioButton
+        \li Button, CheckBox, RadioButton, Switch
         \li \l {Accessible::pressAction}{Accessible.pressAction}
         \li A button should have a signal handler with the name \c onPressAction.
             This signal may be emitted by an assistive tool such as a screen-reader.
             The implementation needs to behave the same as a mouse click or tap on the button.
     \row
-       \li CheckBox, RadioButton
+       \li CheckBox, RadioButton, Switch
        \li \l checkable, \l checked, \l {Accessible::toggleAction}{Accessible.toggleAction}
 
        \li The check state of the check box. Updated on Press, Check and Uncheck actions.
@@ -134,8 +134,8 @@ QT_BEGIN_NAMESPACE
     \brief This property holds whether this item is focusable.
 
     By default, this property is \c false except for items where the role is one of
-    \c CheckBox, \c RadioButton, \c Button, \c MenuItem, \c PageTab, \c EditableText, \c SpinBox, \c ComboBox,
-    \c Terminal or \c ScrollBar.
+    \c CheckBox, \c RadioButton, \c Switch, \c Button, \c MenuItem, \c PageTab,
+    \c EditableText, \c SpinBox, \c ComboBox, \c Terminal or \c ScrollBar.
     \sa focused
 */
 /*! \qmlproperty bool QtQuick::Accessible::focused
@@ -409,6 +409,7 @@ void QQuickAccessibleAttached::setRole(QAccessible::Role role)
         switch (role) {
         case QAccessible::CheckBox:
         case QAccessible::RadioButton:
+        case QAccessible::Switch:
             if (!m_stateExplicitlySet.focusable)
                 m_state.focusable = true;
             if (!m_stateExplicitlySet.checkable)

@@ -1,10 +1,9 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 
-ColumnLayout {
-    spacing: 5
+import "../shared"
 
+FlowPane {
     RoundButton {
     }
 
@@ -46,5 +45,45 @@ ColumnLayout {
     RoundButton {
         text: qsTr("9")
         LayoutMirroring.enabled: true
+    }
+
+    // Style's icon color
+    RoundButton {
+        icon.source: "../shared/heart.svg"
+    }
+
+    // Style's icon color (action)
+    RoundButton {
+        action: Action {
+            icon.source: "../shared/heart.svg"
+        }
+    }
+
+    // Green icon color
+    RoundButton {
+        icon.source: "../shared/heart.svg"
+        icon.color: "green"
+    }
+
+    // Green icon color (action)
+    RoundButton {
+        action: Action {
+            icon.source: "../shared/heart.svg"
+            icon.color: "green"
+        }
+    }
+
+    // Original icon color
+    RoundButton {
+        icon.source: "../shared/heart.svg"
+        icon.color: "transparent"
+    }
+
+    // Original icon color (action)
+    RoundButton {
+        action: Action {
+            icon.source: "../shared/heart.svg"
+            icon.color: "transparent"
+        }
     }
 }

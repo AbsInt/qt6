@@ -28,6 +28,10 @@ if(QT_FEATURE_macdeployqt)
     add_subdirectory(macdeployqt)
 endif()
 
+if(QT_FEATURE_wasmdeployqt)
+    add_subdirectory(wasmdeployqt)
+endif()
+
 if(QT_FEATURE_windeployqt)
     add_subdirectory(windeployqt)
 endif()

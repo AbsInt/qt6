@@ -120,30 +120,6 @@ qt_internal_extend_target(XcbQpaPrivate CONDITION CLANG
         -ftemplate-depth=1024
 )
 
-qt_internal_extend_target(XcbQpaPrivate CONDITION QT_FEATURE_xcb_native_painting
-    SOURCES
-        nativepainting/qbackingstore_x11.cpp nativepainting/qbackingstore_x11_p.h
-        nativepainting/qcolormap_x11.cpp nativepainting/qcolormap_x11_p.h
-        nativepainting/qpaintengine_x11.cpp nativepainting/qpaintengine_x11_p.h
-        nativepainting/qpixmap_x11.cpp nativepainting/qpixmap_x11_p.h
-        nativepainting/qpolygonclipper_p.h
-        nativepainting/qt_x11_p.h
-        nativepainting/qtessellator.cpp nativepainting/qtessellator_p.h
-        nativepainting/qxcbnativepainting.cpp nativepainting/qxcbnativepainting.h
-    INCLUDE_DIRECTORIES
-        nativepainting
-)
-
-qt_internal_extend_target(XcbQpaPrivate CONDITION QT_FEATURE_xcb_native_painting AND QT_FEATURE_xrender
-    PUBLIC_LIBRARIES
-        PkgConfig::XRender
-)
-
-qt_internal_extend_target(XcbQpaPrivate CONDITION QT_FEATURE_fontconfig AND QT_FEATURE_xcb_native_painting
-    LIBRARIES
-        WrapFreetype::WrapFreetype
-)
-
 if(QT_FEATURE_system_xcb_xinput)
     qt_internal_extend_target(XcbQpaPrivate LIBRARIES XCB::XINPUT)
 else()

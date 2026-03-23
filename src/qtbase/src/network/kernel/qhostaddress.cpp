@@ -906,6 +906,10 @@ bool QHostAddress::isNull() const
     Returns \c true if this IP is in the subnet described by the network
     prefix \a subnet and netmask \a netmask.
 
+    The \a netmask parameter is the prefix length - the number of leading
+    bits used to identify the network portion of the address. For IPv4,
+    valid values range from 0 to 32; for IPv6, from 0 to 128.
+
     An IP is considered to belong to a subnet if it is contained
     between the lowest and the highest address in that subnet. In the
     case of IP version 4, the lowest address is the network address,
@@ -915,7 +919,7 @@ bool QHostAddress::isNull() const
     address (the lowest address in the subnet). It can be any valid IP
     belonging to that subnet. In particular, if it is equal to the IP
     address held by this object, this function will always return true
-    (provided the netmask is a valid value).
+    (provided the prefix length is a valid value).
 
     \sa parseSubnet()
 */

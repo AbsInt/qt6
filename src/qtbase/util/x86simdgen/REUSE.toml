@@ -10,11 +10,11 @@ SPDX-License-Identifier = "Apache-2.0"
 [[annotations]]
 path = ["Makefile"]
 precedence = "closest"
-SPDX-FileCopyrightText = "Copyright (C) 2024 The Qt Company Ltd."
+SPDX-FileCopyrightText = "Copyright (C) The Qt Company Ltd."
 SPDX-License-Identifier = "BSD-3-Clause"
 
 [[annotations]]
 path = ["README.md"]
 precedence = "closest"
-SPDX-FileCopyrightText = "Copyright (C) 2024 The Qt Company Ltd."
+SPDX-FileCopyrightText = "Copyright (C) The Qt Company Ltd."
 SPDX-License-Identifier = "LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only"

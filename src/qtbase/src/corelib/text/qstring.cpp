@@ -2628,6 +2628,7 @@ QString::QString(QChar ch)
 */
 
 /*! \fn QString::operator std::u16string_view() const
+    \target qstring-operator-std-u16string_view
     \since 6.7
 
     Converts this QString object to a \c{std::u16string_view} object.
@@ -3688,95 +3689,24 @@ QString &QString::remove(QChar ch, Qt::CaseSensitivity cs)
   \sa remove()
 */
 
-
-/*! \internal
-  Instead of detaching, or reallocating if "before" is shorter than "after"
-  and there isn't enough capacity, create a new string, copy characters to it
-  as needed, then swap it with "str".
-*/
-static void replace_with_copy(QString &str, QSpan<size_t> indices, qsizetype blen,
-                              QStringView after)
-{
-    const qsizetype alen = after.size();
-    const char16_t *after_b = after.utf16();
-
-    const QString::DataPointer &str_d = str.data_ptr();
-    auto src_start = str_d.begin();
-    const qsizetype newSize = str_d.size + indices.size() * (alen - blen);
-    QString copy{ newSize, Qt::Uninitialized };
-    QString::DataPointer &copy_d = copy.data_ptr();
-    auto dst = copy_d.begin();
-    for (size_t index : indices) {
-        auto hit = str_d.begin() + index;
-        dst = std::copy(src_start, hit, dst);
-        dst = std::copy_n(after_b, alen, dst);
-        src_start = hit + blen;
-    }
-    dst = std::copy(src_start, str_d.end(), dst);
-    str.swap(copy);
-}
-
-// No detaching or reallocation is needed
-static void replace_in_place(QString &str, QSpan<size_t> indices,
-                             qsizetype blen, QStringView after)
-{
-    const qsizetype alen = after.size();
-    const char16_t *after_b = after.utf16();
-    const char16_t *after_e = after.utf16() + after.size();
-
-    if (blen == alen) { // Replace in place
-        for (size_t index : indices)
-            std::copy_n(after_b, alen, str.data_ptr().begin() + index);
-    } else if (blen > alen) { // Replace from front
-        char16_t *begin = str.data_ptr().begin();
-        char16_t *hit = begin + indices.front();
-        char16_t *to = hit;
-        to = std::copy_n(after_b, alen, to);
-        char16_t *movestart = hit + blen;
-        for (size_t index : indices.sliced(1)) {
-            hit = begin + index;
-            to = std::move(movestart, hit, to);
-            to = std::copy_n(after_b, alen, to);
-            movestart = hit + blen;
-        }
-        to = std::move(movestart, str.data_ptr().end(), to);
-        str.resize(std::distance(begin, to));
-    } else { // blen < alen, Replace from back
-        const qsizetype oldSize = str.data_ptr().size;
-        const qsizetype adjust = indices.size() * (alen - blen);
-        const qsizetype newSize = oldSize + adjust;
-
-        str.resize(newSize);
-        char16_t *begin = str.data_ptr().begin();
-        char16_t *moveend = begin + oldSize;
-        char16_t *to = str.data_ptr().end();
-
-        for (auto it = indices.rbegin(), end = indices.rend(); it != end; ++it) {
-            char16_t *hit = begin + *it;
-            char16_t *movestart = hit + blen;
-            to = std::move_backward(movestart, moveend, to);
-            to = std::copy_backward(after_b, after_e, to);
-            moveend = hit;
-        }
-    }
-}
-
-static void replace_helper(QString &str, QSpan<size_t> indices, qsizetype blen, QStringView after)
+static void replace_helper(QString &str, QSpan<qsizetype> indices, qsizetype blen, QStringView after)
 {
     const qsizetype oldSize = str.data_ptr().size;
     const qsizetype adjust = indices.size() * (after.size() - blen);
     const qsizetype newSize = oldSize + adjust;
+    using A = QStringAlgorithms<QString>;
     if (str.data_ptr().needsDetach() || needsReallocate(str, newSize)) {
-        replace_with_copy(str, indices, blen, after);
+        A::replace_helper(str, blen, after, indices);
         return;
     }
 
-    if (QtPrivate::q_points_into_range(after.begin(), str))
+    if (QtPrivate::q_points_into_range(after.begin(), str)) {
         // Copy after if it lies inside our own d.b area (which we could
         // possibly invalidate via a realloc or modify by replacement)
-        replace_in_place(str, indices, blen, QVarLengthArray(after.begin(), after.end()));
-    else
-        replace_in_place(str, indices, blen, after);
+        A::replace_helper(str, blen, QVarLengthArray(after.begin(), after.end()), indices);
+    } else {
+        A::replace_helper(str, blen, after, indices);
+    }
 }
 
 /*!
@@ -3818,8 +3748,8 @@ QString &QString::replace(qsizetype pos, qsizetype len, const QChar *after, qsiz
     if (len > this->size() - pos)
         len = this->size() - pos;
 
-    size_t index = pos;
-    replace_helper(*this, QSpan(&index, 1), len, QStringView{after, alen});
+    qsizetype indices[] = {pos};
+    replace_helper(*this, indices, len, QStringView{after, alen});
     return *this;
 }
 
@@ -3897,7 +3827,7 @@ QString &QString::replace(const QChar *before, qsizetype blen,
 
     qsizetype index = 0;
 
-    QVarLengthArray<size_t> indices;
+    QVarLengthArray<qsizetype> indices;
     while ((index = matcher.indexIn(*this, index)) != -1) {
         indices.push_back(index);
         if (blen) // Step over before:
@@ -3932,7 +3862,7 @@ QString& QString::replace(QChar ch, const QString &after, Qt::CaseSensitivity cs
 
     const char16_t cc = (cs == Qt::CaseSensitive ? ch.unicode() : ch.toCaseFolded().unicode());
 
-    QVarLengthArray<size_t> indices;
+    QVarLengthArray<qsizetype> indices;
     if (cs == Qt::CaseSensitive) {
         const char16_t *begin = d.begin();
         const char16_t *end = d.end();
@@ -8148,7 +8078,7 @@ QString &QString::setNum(qulonglong n, int base)
     Sets the string to the printed value of \a n, formatted according to the
     given \a format and \a precision, and returns a reference to the string.
 
-    \sa number(), QLocale::FloatingPointPrecisionOption, {Number Formats}
+    \sa number(), QLocale::FloatingPointPrecisionOption, {Number formats}
 */
 
 QString &QString::setNum(double n, char format, int precision)
@@ -8265,7 +8195,7 @@ QString QString::number(qulonglong n, int base)
     For formats with an exponent, the exponent will show its sign and have at
     least two digits, left-padding the exponent with zero if needed.
 
-    \sa setNum(), QLocale::toString(), QLocale::FloatingPointPrecisionOption, {Number Formats}
+    \sa setNum(), QLocale::toString(), QLocale::FloatingPointPrecisionOption, {Number formats}
 */
 QString QString::number(double n, char format, int precision)
 {
@@ -8926,7 +8856,7 @@ QString QString::arg_impl(QAnyStringView a, int fieldWidth, QChar fillChar) cons
   integral types and sometimes incorrectly accepted \c char and \c char16_t
   arguments.
 
-  \sa {Number Formats}
+  \sa {Number formats}
 */
 QString QString::arg_impl(qlonglong a, int fieldWidth, int base, QChar fillChar) const
 {
@@ -9012,7 +8942,7 @@ QString QString::arg_impl(qulonglong a, int fieldWidth, int base, QChar fillChar
   types. A backwards-compatible fix is to cast such types to one of the C++
   floating-point types.
 
-  \sa QLocale::toString(), QLocale::FloatingPointPrecisionOption, {Number Formats}
+  \sa QLocale::toString(), QLocale::FloatingPointPrecisionOption, {Number formats}
 */
 QString QString::arg_impl(double a, int fieldWidth, char format, int precision, QChar fillChar) const
 {

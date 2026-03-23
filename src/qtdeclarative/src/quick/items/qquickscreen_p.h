@@ -50,7 +50,7 @@ class Q_QUICK_EXPORT QQuickScreenInfo : public QObject
     Q_PROPERTY(int virtualY READ virtualY NOTIFY virtualYChanged REVISION(2, 3) FINAL)
     QML_NAMED_ELEMENT(ScreenInfo)
     QML_ADDED_IN_VERSION(2, 3)
-    QML_UNCREATABLE("ScreenInfo can only be used via the attached property.")
+    QML_UNCREATABLE("ScreenInfo can only be used via the attached property, or by retrieving it from Application's screens property.")
 
 public:
     QQuickScreenInfo(QObject *parent = nullptr, QScreen *wrappedScreen = nullptr);

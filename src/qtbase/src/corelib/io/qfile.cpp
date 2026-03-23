@@ -409,10 +409,12 @@ QString QFile::symLinkTarget(const QString &fileName)
 }
 
 /*!
-    Removes the file specified by fileName(). Returns \c true if successful;
-    otherwise returns \c false.
+    Removes the file specified by fileName().
 
-    The file is closed before it is removed.
+    Returns \c true if the file was successfully removed; otherwise returns \c
+    false.
+
+    The file is closed before it is removed, if it was open.
 
     \sa setFileName()
 */
@@ -443,7 +445,8 @@ QFile::remove()
 
     Removes the file specified by the \a fileName given.
 
-    Returns \c true if successful; otherwise returns \c false.
+    Returns \c true if the file was successfully removed; otherwise returns
+    \c false.
 
     \sa remove()
 */
@@ -592,6 +595,10 @@ QFile::rename(const QString &newName)
         return false;
     }
 
+    // Keep engine for target alive during the operation
+    // FIXME: Involve the target engine in the operation
+    auto targetEngine = QFileSystemEngine::createLegacyEngine(newName);
+
     // If the file exists and it is a case-changing rename ("foo" -> "Foo"),
     // compare Ids to make sure it really is a different file.
     // Note: this does not take file engines into account.
@@ -738,6 +745,11 @@ QFile::link(const QString &linkName)
         qWarning("QFile::link: Empty or null file name");
         return false;
     }
+
+    // Keep engine for target alive during the operation
+    // FIXME: Involve the target engine in the operation
+    auto targetEngine = QFileSystemEngine::createLegacyEngine(linkName);
+
     QFileInfo fi(linkName);
     if (d->engine()->link(fi.absoluteFilePath())) {
         unsetError();
@@ -771,6 +783,10 @@ bool QFilePrivate::copy(const QString &newName)
     Q_ASSERT(error == QFile::NoError);
     Q_ASSERT(!q->isOpen());
 
+    // Keep engine for target alive during the operation
+    // FIXME: Involve the target engine in the operation
+    auto targetEngine = QFileSystemEngine::createLegacyEngine(newName);
+
     // Some file engines can perform this copy more efficiently (e.g., Windows
     // calling CopyFile).
     if (engine()->copy(newName))
@@ -800,6 +816,7 @@ bool QFilePrivate::copy(const QString &newName)
 
     while (r == QAbstractFileEngine::TriStateResult::NotSupported) {
         // OS couldn't do it, so do a block-level copy
+        Q_DECL_UNINITIALIZED
         char block[4096];
         qint64 in = q->read(block, sizeof(block));
         if (in == 0)
@@ -1370,6 +1387,15 @@ qint64 QFile::size() const
     \note The thread-safety of this function holds only as long as there are no
     concurrent updates to \l qt_ntfs_permission_lookup.
 */
+
+#ifndef QT_NO_DEBUG_STREAM
+void QFilePrivate::writeToDebugStream(QDebug &dbg) const
+{
+    Q_Q(const QFile);
+    dbg.nospace();
+    dbg << "QFile(" << q->fileName() << ')';
+}
+#endif
 
 QT_END_NAMESPACE
 

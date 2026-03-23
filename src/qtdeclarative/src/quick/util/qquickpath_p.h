@@ -558,7 +558,7 @@ public:
 
     QVariant path() const;
     void setPath(const QVariant &path);
-    void setPath(const QVector<QPointF> &path);
+    void setPath(const QList<QPointF> &path);
     QPointF start() const;
     void addToPath(QPainterPath &path, const QQuickPathData &data) override;
 
@@ -567,7 +567,7 @@ Q_SIGNALS:
     void startChanged();
 
 private:
-    QVector<QPointF> m_path;
+    QList<QPointF> m_path;
 };
 
 class Q_QUICK_EXPORT QQuickPathMultiline : public QQuickCurve
@@ -582,7 +582,7 @@ public:
 
     QVariant paths() const;
     void setPaths(const QVariant &paths);
-    void setPaths(const QVector<QVector<QPointF>> &paths);
+    void setPaths(const QList<QList<QPointF>> &paths);
     QPointF start() const;
     void addToPath(QPainterPath &path, const QQuickPathData &) override;
 
@@ -593,7 +593,7 @@ Q_SIGNALS:
 private:
     QPointF absolute(const QPointF &relative) const;
 
-    QVector<QVector<QPointF>> m_paths;
+    QList<QList<QPointF>> m_paths;
 };
 
 struct QQuickCachedBezier
@@ -618,7 +618,7 @@ class Q_QUICK_EXPORT QQuickPath : public QObject, public QQmlParserStatus
     Q_PROPERTY(qreal startY READ startY WRITE setStartY NOTIFY startYChanged)
     Q_PROPERTY(bool closed READ isClosed NOTIFY changed)
     Q_PROPERTY(bool simplify READ simplify WRITE setSimplify NOTIFY simplifyChanged REVISION(6, 6) FINAL)
-    Q_PROPERTY(QSizeF scale READ scale WRITE setScale NOTIFY scaleChanged REVISION(2, 14))
+    Q_PROPERTY(QSizeF scale READ scale WRITE setScale NOTIFY scaleChanged VIRTUAL REVISION(2, 14))
     Q_PROPERTY(bool asynchronous READ isAsynchronous WRITE setAsynchronous NOTIFY asynchronousChanged REVISION(6, 9))
     Q_CLASSINFO("DefaultProperty", "pathElements")
     QML_NAMED_ELEMENT(Path)
@@ -657,6 +657,11 @@ public:
     bool isAsynchronous() const;
     void setAsynchronous(bool a);
 
+public Q_SLOTS:
+    // This is public in order to allow types from DesignHelpers to create and add path
+    // elements and process the path once at the end rather than after each element.
+    void processPath();
+
 Q_SIGNALS:
     void changed();
     void startXChanged();
@@ -681,9 +686,6 @@ protected:
     static void pathElements_replace(
             QQmlListProperty<QQuickPathElement> *, qsizetype, QQuickPathElement *);
     static void pathElements_removeLast(QQmlListProperty<QQuickPathElement> *);
-
-private Q_SLOTS:
-    void processPath();
 
 private:
     struct AttributePoint {

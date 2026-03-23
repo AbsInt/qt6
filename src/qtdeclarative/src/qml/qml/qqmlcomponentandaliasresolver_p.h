@@ -23,6 +23,7 @@
 #include <QtCore/qhash.h>
 
 #include <private/qqmltypeloader_p.h>
+#include <private/qqmlpropertyresolver_p.h>
 #include <private/qqmlpropertycachecreator_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -134,9 +135,9 @@ private:
     QQmlPropertyCacheVector *m_propertyCaches = nullptr;
 
     // indices of the objects that are actually Component {}
-    QVector<quint32> m_componentRoots;
-    QVector<int> m_objectsWithAliases;
-    QVector<CompiledBinding *> m_generalizedGroupProperties;
+    QList<quint32> m_componentRoots;
+    QList<int> m_objectsWithAliases;
+    QList<CompiledBinding *> m_generalizedGroupProperties;
     QSet<const QV4::CompiledData::Alias *> resolvedAliases;
     typename ObjectContainer::IdToObjectMap m_idToObjectIndex;
 };
@@ -171,11 +172,8 @@ QQmlError QQmlComponentAndAliasResolver<ObjectContainer>::findAndRegisterImplici
         Q_ASSERT(typeReference);
 
         const QMetaObject *firstMetaObject = nullptr;
-        const auto type = typeReference->type();
-        if (type.isValid())
-            firstMetaObject = type.metaObject();
-        else if (const auto compilationUnit = typeReference->compilationUnit())
-            firstMetaObject = compilationUnit->rootPropertyCache()->firstCppMetaObject();
+        if (const auto propCache = typeReference->typePropertyCache())
+            firstMetaObject = propCache->firstCppMetaObject();
         if (isUsableComponent(firstMetaObject))
             continue;
 
@@ -445,7 +443,7 @@ QQmlError QQmlComponentAndAliasResolver<ObjectContainer>::resolveAliases(int com
     bool atLeastOneAliasResolved;
     do {
         atLeastOneAliasResolved = false;
-        QVector<int> pendingObjects;
+        QList<int> pendingObjects;
 
         for (int objectIndex: std::as_const(m_objectsWithAliases)) {
 
@@ -472,7 +470,7 @@ QQmlError QQmlComponentAndAliasResolver<ObjectContainer>::resolveAliases(int com
         const CompiledObject *obj = m_compiler->objectAt(m_objectsWithAliases.first());
         for (auto alias = obj->aliasesBegin(), end = obj->aliasesEnd(); alias != end; ++alias) {
             if (!resolvedAliases.contains(alias))
-                return error(alias->location, QQmlComponentAndAliasResolverBase::tr("Circular alias reference detected"));
+                return error(alias->location, QQmlComponentAndAliasResolverBase::tr("Cyclic alias"));
         }
     }
 

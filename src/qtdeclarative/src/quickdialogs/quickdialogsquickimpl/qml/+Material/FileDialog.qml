@@ -51,6 +51,7 @@ FileDialogImpl {
         footer: DialogButtonBox {
             alignment: Qt.AlignHCenter
             standardButtons: DialogButtonBox.Yes | DialogButtonBox.No
+            defaultStandardButton: DialogButtonBox.Yes
         }
     }
 
@@ -80,6 +81,7 @@ FileDialogImpl {
         spacing: 12
 
         Label {
+            objectName: "dialogTitleBarLabel"
             text: control.title
             visible: parent.parent?.parent === Overlay.overlay && control.title.length > 0
             elide: Label.ElideRight

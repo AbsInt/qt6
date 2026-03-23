@@ -138,9 +138,9 @@ QString QSystemError::windowsString(int errorCode)
 QString QSystemError::windowsComString(HRESULT hr)
 {
     const _com_error comError(hr);
-    QString result = "COM error 0x"_L1 + QString::number(ulong(hr), 16);
+    QString result = u"COM error 0x"_s + QString::number(ulong(hr), 16);
     if (const wchar_t *msg = comError.ErrorMessage())
-        result += ": "_L1 + QString::fromWCharArray(msg);
+        result += u": "_s + QString::fromWCharArray(msg);
     return result;
 }
 

@@ -87,6 +87,14 @@ public:
     void markNoexcept(QString expression = "") { m_noexcept = expression; }
     const std::optional<QString>& getNoexcept() const { return m_noexcept; }
 
+    void setTrailingRequiresClause(const QString &clause) {
+        if (clause.isEmpty())
+            m_trailingRequiresClause.reset();
+        else
+            m_trailingRequiresClause = clause;
+    }
+    const std::optional<QString>& trailingRequiresClause() const { return m_trailingRequiresClause; }
+
     [[nodiscard]] bool isCppFunction() const { return m_metaness == Plain; } // Is this correct?
     [[nodiscard]] bool isSignal() const { return (m_metaness == Signal); }
     [[nodiscard]] bool isSlot() const { return (m_metaness == Slot); }
@@ -107,7 +115,7 @@ public:
     }
     [[nodiscard]] bool isNonvirtual() const { return (m_virtualness == NonVirtual); }
     [[nodiscard]] bool isVirtual() const { return (m_virtualness == NormalVirtual); }
-    [[nodiscard]] bool isPureVirtual() const { return (m_virtualness == PureVirtual); }
+    [[nodiscard]] bool isPureVirtual() const override { return (m_virtualness == PureVirtual); }
     [[nodiscard]] bool returnsBool() const { return (m_returnType.first == QLatin1String("bool")); }
 
     Parameters &parameters() { return m_parameters; }
@@ -162,8 +170,12 @@ public:
     void setOverloadFlag() { m_overloadFlag = true; }
     void setOverloadNumber(signed short number);
     [[nodiscard]] signed short overloadNumber() const { return m_overloadNumber; }
+    void setPrimaryOverloadFlag() { m_primaryOverloadFlag = true; }
+    [[nodiscard]] bool isPrimaryOverload() const { return m_primaryOverloadFlag; }
 
     friend int compare(const FunctionNode *f1, const FunctionNode *f2);
+
+    [[nodiscard]] virtual Status status() const override;
 
 private:
     void addAssociatedProperty(PropertyNode *property);
@@ -177,6 +189,7 @@ private:
     bool m_reimpFlag : 1;
     bool m_attached : 1;
     bool m_overloadFlag : 1;
+    bool m_primaryOverloadFlag : 1;
     bool m_isFinal : 1;
     bool m_isOverride : 1;
     bool m_isRef : 1;
@@ -186,6 +199,7 @@ private:
     bool m_constexpr;
 
     std::optional<QString> m_noexcept;
+    std::optional<QString> m_trailingRequiresClause;
 
     Metaness m_metaness {};
     Virtualness m_virtualness{ NonVirtual };

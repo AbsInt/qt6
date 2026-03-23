@@ -33,6 +33,7 @@ qt_add_qml_module(neumorphicpanelexample
     "qml/SettingsView.qml"
     "qml/SettingsComponentSlider.qml"
     "qml/SettingsComponentButton.qml"
+    "qml/SettingsComponentCheckBox.qml"
     "qml/CloudyRectMaterial/CloudyRectMaterial.qml"
     RESOURCES
     "qml/images/arrow.png"

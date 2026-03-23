@@ -53,12 +53,15 @@ set REDO_FILE_PATH=%TOPQTDIR%\config.redo.last
 set REDO_TMP_FILE_PATH=%TOPQTDIR%\config.redo.in
 set FRESH_REQUESTED_ARG=
 if not defined redoing (
+    copy "%script_dir_path%\@__GlobalConfig_relative_path_from_bin_dir_to_cmake_config_dir@\@side_car_file_name@" "%OPT_TMP_FILE_PATH%"
+
     rem "The '.' in 'echo.%*' ensures we don't print "echo is off" when no arguments are passed"
     rem "https://devblogs.microsoft.com/oldnewthing/20170802-00/?p=96735"
     rem "The space before the '>' makes sure that when we have a digit at the end of the args, we"
     rem "don't accidentally concatenate it with the '>' resulting in '0>' or '2>' which redirects"
     rem "into the file from a stream different than stdout, leading to broken or empty content."
-    echo.%* >"%OPT_TMP_FILE_PATH%"
+    echo.%* >>"%OPT_TMP_FILE_PATH%"
+    echo.@__extra_configure_args@ >>"%OPT_TMP_FILE_PATH%"
 
     rem "The SKIP_ARGS option makes sure not to write the repo path into the config.opt file"
     call "%script_dir_path%\qt-cmake-private.bat" -DSKIP_ARGS=1 -DIN_FILE="%OPT_TMP_FILE_PATH%" ^

@@ -33,10 +33,16 @@ namespace QQuickVectorImageGenerator
         CurveRenderer = 0x02,
         OutlineStrokeMode = 0x04,
         AssumeTrustedSource = 0x08,
+        AsyncShapes = 0x10
     };
 
     Q_DECLARE_FLAGS(GeneratorFlags, GeneratorFlag);
     Q_DECLARE_OPERATORS_FOR_FLAGS(GeneratorFlags);
+
+    enum ErrorState {
+        NoError = 0,
+        SanityLimitsExceeded
+    };
 }
 
 QT_END_NAMESPACE

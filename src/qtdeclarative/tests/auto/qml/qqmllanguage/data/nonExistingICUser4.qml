@@ -2,5 +2,5 @@ import QtQuick 2.0
 import "singleton" as MySingleton
 
 Item {
-    property MySingleton.SingletonTypeWithIC.NonExisting singletonIC
+    property MySingleton.SingletonTypeWithIC.NonExisting singletonIC: MySingleton.SingletonTypeWithIC.NonExisting {}
 }

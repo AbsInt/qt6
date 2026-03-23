@@ -278,8 +278,6 @@
     \snippet customstyle/customstyle.h 0
     \codeline
     \snippet customstyle/customstyle.cpp 2
-    \snippet customstyle/customstyle.cpp 3
-    \snippet customstyle/customstyle.cpp 4
 
     \section2 QStyle Functions
 

@@ -1,5 +1,7 @@
 // Copyright (C) 2025 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
+
 
 #ifndef QSVGCSSPROPERTIES_P_H
 #define QSVGCSSPROPERTIES_P_H
@@ -20,6 +22,9 @@
 #include <QtCore/qregularexpression.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qstringview.h>
+#include <QtGui/qpainterpath.h>
+#include <QtSvg/private/qtsvgglobal_p.h>
+#include <QtSvg/private/qsvgcssvalues_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -30,13 +35,24 @@ struct QSvgAnimationProperty
     int duration = 0;
     int delay = 0;
     int iteration = 1;
+    QSvgCssValues::EasingFunction easingFunction = QSvgCssValues::EasingFunction::Ease;
+    QSvgCssValues::EasingValues easingValues;
 };
 
-class QSvgCssAnimationProperties
+struct QSvgOffsetProperty
+{
+    std::optional<QPainterPath> path;
+    qreal distance = 0;
+    qreal angle = 0;
+    QtSvg::OffsetRotateType rotateType = QtSvg::OffsetRotateType::Auto;
+};
+
+class QSvgCssProperties
 {
 public:
-    QSvgCssAnimationProperties(const QXmlStreamAttributes &attributes);
-    QList<QSvgAnimationProperty> parse() const;
+    QSvgCssProperties(const QXmlStreamAttributes &attributes);
+    QList<QSvgAnimationProperty> animations() const;
+    QSvgOffsetProperty offset() const;
 
 private:
     void shortHandtoLonghandForm(QStringView value);
@@ -50,6 +66,10 @@ private:
     QList<QStringView> m_timingFunctions;
     QList<QStringView> m_fillModes;
     QList<QStringView> m_playStates;
+
+    QStringView m_offsetPath;
+    QStringView m_offsetDistance;
+    QStringView m_offsetRotate;
 };
 
 QT_END_NAMESPACE

@@ -140,7 +140,10 @@ QT_BEGIN_NAMESPACE
     horizontally, leaving the rectangle's left edge at the given x
     coordinate and its size unchanged.
 
-    \image qrect-coordinates.png
+    \image qrect-coordinates.png {Diagram of a rectangle showing QRect
+           methods for positions: x(), y(), center(), corners (topLeft(),
+           topRight(), bottomLeft(), bottomRight()), and edges (top(),
+           bottom(), left(), right()).}
 
     Note that for historical reasons the values returned by the
     bottom() and right() functions deviate from the true bottom-right
@@ -1056,7 +1059,11 @@ QRect QRect::operator&(const QRect &r) const noexcept
     Returns the intersection of this rectangle and the given \a
     rectangle. Note that \c{r.intersected(s)} is equivalent to \c{r & s}.
 
-    \image qrect-intersect.png
+    \image qrect-intersect.png {Diagram showing intersection of two
+           rectangles r and s with the overlapping area highlighted.
+           It also shows how the width and height of the highlighted area
+           is determined with r.intersect(s).width and
+           r.intersect(s).height().}
 
     \sa intersects(), united(), operator&=()
 */
@@ -1415,7 +1422,10 @@ QDebug operator<<(QDebug dbg, const QRect &r)
     vertically, leaving the rectangle's bottom edge at the given y
     coordinate and its size unchanged.
 
-    \image qrectf-coordinates.png
+    \image qrectf-coordinates.png {Diagram of a rectangle showing QRect
+           methods for positions: x(), y(), center(), corners (topLeft(),
+           topRight(), bottomLeft(), bottomRight()), and edges (top(),
+           bottom(), left(), right()).}
 
     It is also possible to add offsets to this rectangle's coordinates
     using the adjust() function, as well as retrieve a new rectangle
@@ -2265,7 +2275,11 @@ QRectF QRectF::operator&(const QRectF &r) const noexcept
     rectangle. Note that \c {r.intersected(s)} is equivalent to \c
     {r & s}.
 
-    \image qrect-intersect.png
+    \image qrect-intersect.png {Diagram showing intersection of two
+           rectangles r and s with the overlapping area highlighted.
+           It's also showing how the width and height of the
+           highlighted area is determined with r.intersect(s).width
+           and r.intersect(s).height().}
 
     \sa intersects(), united(), operator&=()
 */

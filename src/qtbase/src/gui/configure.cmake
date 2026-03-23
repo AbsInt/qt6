@@ -33,6 +33,7 @@ if(LINUX OR HPUX OR FREEBSD OR NETBSD OR OPENBSD OR SOLARIS OR HURD)
 else()
     set(X11_SUPPORTED 0)
 endif()
+qt_feature_vcpkg_scope(gui)
 qt_find_package(ATSPI2 MODULE PROVIDED_TARGETS PkgConfig::ATSPI2 MODULE_NAME gui QMAKE_LIB atspi)
 qt_find_package(DirectFB PROVIDED_TARGETS PkgConfig::DirectFB MODULE_NAME gui QMAKE_LIB directfb)
 qt_find_package(Libdrm MODULE PROVIDED_TARGETS Libdrm::Libdrm MODULE_NAME gui QMAKE_LIB drm)
@@ -42,15 +43,26 @@ qt_find_package(PlatformGraphics
 qt_find_package(EGL MODULE PROVIDED_TARGETS EGL::EGL MODULE_NAME gui QMAKE_LIB egl)
 
 qt_find_package(WrapSystemFreetype 2.2.0 MODULE
-    PROVIDED_TARGETS WrapSystemFreetype::WrapSystemFreetype MODULE_NAME gui QMAKE_LIB freetype)
+    PROVIDED_TARGETS WrapSystemFreetype::WrapSystemFreetype MODULE_NAME gui QMAKE_LIB freetype
+    VCPKG_PORT freetype
+    VCPKG_ADD_TO_FEATURE freetype
+)
 if(QT_FEATURE_system_zlib)
     qt_add_qmake_lib_dependency(freetype zlib)
 endif()
-qt_find_package(Fontconfig PROVIDED_TARGETS Fontconfig::Fontconfig MODULE_NAME gui QMAKE_LIB fontconfig)
+qt_find_package(Fontconfig PROVIDED_TARGETS Fontconfig::Fontconfig MODULE_NAME gui
+    QMAKE_LIB fontconfig
+    VCPKG_PORT fontconfig
+    VCPKG_ADD_TO_FEATURE fontconfig
+    VCPKG_PLATFORM "linux"
+)
 qt_add_qmake_lib_dependency(fontconfig freetype)
 qt_find_package(gbm MODULE PROVIDED_TARGETS gbm::gbm MODULE_NAME gui QMAKE_LIB gbm)
 qt_find_package(WrapSystemHarfbuzz 2.6.0 MODULE
-    PROVIDED_TARGETS WrapSystemHarfbuzz::WrapSystemHarfbuzz MODULE_NAME gui QMAKE_LIB harfbuzz)
+    PROVIDED_TARGETS WrapSystemHarfbuzz::WrapSystemHarfbuzz MODULE_NAME gui QMAKE_LIB harfbuzz
+    VCPKG_PORT harfbuzz
+    VCPKG_ADD_TO_FEATURE harfbuzz
+)
 qt_find_package(Libinput MODULE
     PROVIDED_TARGETS Libinput::Libinput MODULE_NAME gui QMAKE_LIB libinput)
 qt_find_package_extend_sbom(TARGETS Libinput::Libinput
@@ -64,11 +76,20 @@ qt_find_package_extend_sbom(TARGETS Libinput::Libinput
         "Copyright © 2013-2015 Red Hat, Inc."
 )
 qt_find_package(WrapSystemJpeg MODULE
-    PROVIDED_TARGETS WrapSystemJpeg::WrapSystemJpeg MODULE_NAME gui QMAKE_LIB libjpeg)
+    PROVIDED_TARGETS WrapSystemJpeg::WrapSystemJpeg MODULE_NAME gui QMAKE_LIB libjpeg
+    VCPKG_PORT libjpeg-turbo
+    VCPKG_ADD_TO_FEATURE jpeg
+)
 qt_find_package(WrapSystemMd4c MODULE
-    PROVIDED_TARGETS WrapSystemMd4c::WrapSystemMd4c MODULE_NAME gui QMAKE_LIB libmd4c)
+    PROVIDED_TARGETS WrapSystemMd4c::WrapSystemMd4c MODULE_NAME gui QMAKE_LIB libmd4c
+    VCPKG_PORT md4c
+    VCPKG_ADD_TO_FEATURE textmarkdownreader
+)
 qt_find_package(WrapSystemPNG MODULE
-    PROVIDED_TARGETS WrapSystemPNG::WrapSystemPNG MODULE_NAME gui QMAKE_LIB libpng)
+    PROVIDED_TARGETS WrapSystemPNG::WrapSystemPNG MODULE_NAME gui QMAKE_LIB libpng
+    VCPKG_PORT libpng
+    VCPKG_ADD_TO_FEATURE png
+)
 if(QT_FEATURE_system_zlib)
     qt_add_qmake_lib_dependency(libpng zlib)
 endif()
@@ -101,34 +122,35 @@ if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
     qt_find_package(X11 MODULE PROVIDED_TARGETS X11::SM X11::ICE MODULE_NAME gui QMAKE_LIB x11sm)
 endif()
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
-    qt_find_package(XCB 1.11 MODULE PROVIDED_TARGETS XCB::XCB MODULE_NAME gui QMAKE_LIB xcb)
+    qt_find_package(XCB 1.11 MODULE
+        COMPONENTS XCB PROVIDED_TARGETS XCB::XCB MODULE_NAME gui QMAKE_LIB xcb)
 endif()
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
-    qt_find_package(XCB 0.1.1 MODULE
+    qt_find_package(XCB MODULE
         COMPONENTS CURSOR PROVIDED_TARGETS XCB::CURSOR MODULE_NAME gui QMAKE_LIB xcb_cursor)
 endif()
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
-    qt_find_package(XCB 0.3.9 MODULE
+    qt_find_package(XCB MODULE
         COMPONENTS ICCCM PROVIDED_TARGETS XCB::ICCCM MODULE_NAME gui QMAKE_LIB xcb_icccm)
 endif()
 qt_add_qmake_lib_dependency(xcb_icccm xcb)
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
-    qt_find_package(XCB 0.3.8 MODULE
+    qt_find_package(XCB MODULE
         COMPONENTS UTIL PROVIDED_TARGETS XCB::UTIL MODULE_NAME gui QMAKE_LIB xcb_util)
 endif()
 qt_add_qmake_lib_dependency(xcb_util xcb)
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
-    qt_find_package(XCB 0.3.9 MODULE
+    qt_find_package(XCB MODULE
         COMPONENTS IMAGE PROVIDED_TARGETS XCB::IMAGE MODULE_NAME gui QMAKE_LIB xcb_image)
 endif()
 qt_add_qmake_lib_dependency(xcb_image xcb_shm xcb_util xcb)
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
-    qt_find_package(XCB 0.3.9 MODULE
+    qt_find_package(XCB MODULE
         COMPONENTS KEYSYMS PROVIDED_TARGETS XCB::KEYSYMS MODULE_NAME gui QMAKE_LIB xcb_keysyms)
 endif()
 qt_add_qmake_lib_dependency(xcb_keysyms xcb)
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
-    qt_find_package(XCB 0.3.9 MODULE
+    qt_find_package(XCB MODULE
         COMPONENTS RENDERUTIL PROVIDED_TARGETS XCB::RENDERUTIL MODULE_NAME gui QMAKE_LIB xcb_renderutil)
 endif()
 qt_add_qmake_lib_dependency(xcb_renderutil xcb xcb_render)
@@ -1220,17 +1242,6 @@ qt_feature("xcb-egl-plugin" PRIVATE
     CONDITION QT_FEATURE_egl AND QT_FEATURE_opengl
     EMIT_IF QT_FEATURE_xcb
 )
-qt_feature("xcb-native-painting" PRIVATE
-    LABEL "Native painting (experimental)"
-    AUTODETECT OFF
-    CONDITION QT_FEATURE_xcb_xlib AND QT_FEATURE_fontconfig AND XRender_FOUND
-    EMIT_IF QT_FEATURE_xcb
-)
-qt_feature("xrender" PRIVATE
-    LABEL "XRender for native painting"
-    CONDITION QT_FEATURE_xcb_native_painting
-    EMIT_IF QT_FEATURE_xcb AND QT_FEATURE_xcb_native_painting
-)
 qt_feature("xcb-xlib" PRIVATE
     LABEL "XCB Xlib"
     CONDITION QT_FEATURE_xlib AND X11_XCB_FOUND
@@ -1248,7 +1259,7 @@ qt_feature("system-xcb-xinput" PRIVATE SYSTEM_LIBRARY
     DISABLE INPUT_bundled_xcb_xinput STREQUAL 'yes'
     EMIT_IF QT_FEATURE_xcb
 )
-qt_feature("xkbcommon" PRIVATE
+qt_feature("xkbcommon" PUBLIC
     LABEL "xkbcommon"
     CONDITION XKB_FOUND
 )

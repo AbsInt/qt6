@@ -258,10 +258,11 @@ class QQuickRotationPrivate : public QQuickTransformPrivate
 {
 public:
     QQuickRotationPrivate()
-        : angle(0), axis(0, 0, 1) {}
+        : origin(), axis(0, 0, 1), angle(0), distanceToPlane(1024.0) {}
     QVector3D origin;
-    qreal angle;
     QVector3D axis;
+    qreal angle;
+    qreal distanceToPlane;
 };
 
 /*!
@@ -395,6 +396,43 @@ void QQuickRotation::setAxis(Qt::Axis axis)
     }
 }
 
+/*!
+    \qmlproperty real QtQuick::Rotation::distanceToPlane
+    \since 6.11
+
+    This property defines the distance between the view plane (the virtual screen)
+    and the observer in the perspective projection model.
+
+    A smaller distance produces a stronger perspective effect, making the object
+    appear to recede or advance more dramatically during rotation. A larger value
+    results in a flatter, more orthographic appearance with less visible
+    perspective distortion.
+
+    The default value is \c 1024.0, which provides a moderate perspective suitable
+    for most use cases.
+
+    When this property is set to \c 0, no perspective projection is applied.
+    In this case, the rotation is performed directly in 3D space using the
+    transformation defined by \l QMatrix4x4::rotate().
+
+    This property only affects rotations around the x and y axes. Rotations around
+    the z axis (2D rotations) are not influenced by this property.
+*/
+qreal QQuickRotation::distanceToPlane() const
+{
+    Q_D(const QQuickRotation);
+    return d->distanceToPlane;
+}
+
+void QQuickRotation::setDistanceToPlane(qreal newDistanceToPlane)
+{
+    Q_D(QQuickRotation);
+    if (qFuzzyCompare(d->distanceToPlane, newDistanceToPlane))
+        return;
+    d->distanceToPlane = newDistanceToPlane;
+    emit distanceToPlaneChanged();
+}
+
 void QQuickRotation::applyTo(QMatrix4x4 *matrix) const
 {
     Q_D(const QQuickRotation);
@@ -403,7 +441,7 @@ void QQuickRotation::applyTo(QMatrix4x4 *matrix) const
         return;
 
     matrix->translate(d->origin);
-    matrix->projectedRotate(d->angle, d->axis.x(), d->axis.y(), d->axis.z());
+    matrix->projectedRotate(d->angle, d->axis.x(), d->axis.y(), d->axis.z(), d->distanceToPlane);
     matrix->translate(-d->origin);
 }
 

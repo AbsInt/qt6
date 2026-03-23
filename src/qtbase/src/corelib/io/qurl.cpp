@@ -1944,7 +1944,8 @@ void QUrl::setUrl(const QString &url, ParsingMode parsingMode)
 
     The following example shows a URL where the scheme is "ftp":
 
-    \image qurl-authority2.png
+    \image qurl-authority2.png {Illustration highlighting 'ftp' as scheme
+           of an example URL starting with 'ftp://'.}
 
     To set the scheme, the following call is used:
     \snippet code/src_corelib_io_qurl.cpp 11
@@ -1999,7 +2000,8 @@ QString QUrl::scheme() const
 
     The following example shows a valid authority string:
 
-    \image qurl-authority.png
+    \image qurl-authority.png {Screenshot of a URL with parts labeled: scheme,
+           authority, user info (user and password), host, and port.}
 
     The \a authority data is interpreted according to \a mode: in StrictMode,
     any '%' characters must be followed by exactly two hexadecimal characters
@@ -2066,7 +2068,7 @@ QString QUrl::authority(ComponentFormattingOptions options) const
     separated by a ':'. If the password is empty, the colon must be
     omitted. The following example shows a valid user info string:
 
-    \image qurl-authority3.png
+    \image qurl-authority3.png {Screenshot of a URL with user info highlighted}
 
     The \a userInfo data is interpreted according to \a mode: in StrictMode,
     any '%' characters must be followed by exactly two hexadecimal characters
@@ -2368,12 +2370,13 @@ int QUrl::port(int defaultPort) const
     Sets the path of the URL to \a path. The path is the part of the
     URL that comes after the authority but before the query string.
 
-    \image qurl-ftppath.png
+    \image qurl-ftppath.png {Screenshot showing a URL with the path highlighted}
 
     For non-hierarchical schemes, the path will be everything
     following the scheme declaration, as in the following example:
 
-    \image qurl-mailtopath.png
+    \image qurl-mailtopath.png {Screenshot of a URL with the mail path
+           highlighted}
 
     The \a path data is interpreted according to \a mode: in StrictMode,
     any '%' characters must be followed by exactly two hexadecimal characters
@@ -2589,7 +2592,7 @@ QString QUrl::query(ComponentFormattingOptions options) const
     characters. It is typically used in HTTP for referring to a
     certain link or point on a page:
 
-    \image qurl-fragment.png
+    \image qurl-fragment.png {Screenshot of a URL with the fragment highlighted}
 
     The fragment is sometimes also referred to as the URL "reference".
 
@@ -3230,7 +3233,13 @@ QUrl &QUrl::operator =(const QUrl &url) noexcept
 
 /*!
     Assigns the specified \a url to this object.
+
+    This operator isn't available when the \l {QT_NO_URL_CAST_FROM_STRING} macro
+    is defined.
 */
+#ifdef QT_NO_URL_CAST_FROM_STRING
+#error You cannot define QT_NO_URL_CAST_FROM_STRING in QtCore, for ABI reasons
+#endif
 QUrl &QUrl::operator =(const QString &url)
 {
     detachToClear();

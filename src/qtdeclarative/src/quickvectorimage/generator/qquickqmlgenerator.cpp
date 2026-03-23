@@ -26,6 +26,30 @@ static QString sanitizeString(const QString &input)
     return s;
 }
 
+
+QQuickAnimatedProperty::PropertyAnimation QQuickAnimatedProperty::PropertyAnimation::simplified() const
+{
+    QQuickAnimatedProperty::PropertyAnimation res = *this;
+    int consecutiveEquals = 0;
+    int prevTimePoint = -1;
+    QVariant prevValue;
+    for (const auto &[timePoint, value] : frames.asKeyValueRange()) {
+        if (value != prevValue) {
+            consecutiveEquals = 1;
+            prevValue = value;
+        } else if (consecutiveEquals < 2) {
+            consecutiveEquals++;
+        } else {
+            // Third consecutive equal value found, remove the redundant middle one
+            res.frames.remove(prevTimePoint);
+            res.easingPerFrame.remove(prevTimePoint);
+        }
+        prevTimePoint = timePoint;
+    }
+
+    return res;
+}
+
 QQuickQmlGenerator::QQuickQmlGenerator(const QString fileName, QQuickVectorImageGenerator::GeneratorFlags flags, const QString &outFileName)
     : QQuickGenerator(fileName, flags)
     , outputFileName(outFileName)
@@ -39,6 +63,9 @@ QQuickQmlGenerator::~QQuickQmlGenerator()
 
 bool QQuickQmlGenerator::save()
 {
+    if (Q_UNLIKELY(errorState()))
+        return false;
+
     bool res = true;
     if (!outputFileName.isEmpty()) {
         QFileInfo fileInfo(outputFileName);
@@ -86,90 +113,179 @@ QString QQuickQmlGenerator::commentString() const
 
 QString QQuickQmlGenerator::generateNodeBase(const NodeInfo &info)
 {
-    auto layerIdString = [](int layerId) {
-        return QStringLiteral("_qt_layer%1").arg(layerId);
-    };
+    static qint64 maxNodes = qEnvironmentVariableIntegerValue("QT_QUICKVECTORIMAGE_MAX_NODES").value_or(10000);
+    if (Q_UNLIKELY(!checkSanityLimit(++m_nodeCounter, maxNodes, "nodes"_L1)))
+        return {};
 
     if (!info.nodeId.isEmpty())
         stream() << "objectName: \"" << info.nodeId << "\"";
 
-    static int counter = 0;
-    QString idString;
-    if (info.layerNum >= 0)
-        idString = layerIdString(info.layerNum);
-    else
-        idString = QStringLiteral("_qt_node%1").arg(counter++);
-    stream() << "id: " << idString;
+    QString idString = info.id;
+    if (!idString.isEmpty()) {
+        // If input contains multiple items with the same id, then this is invalid. However we
+        // shouldn't generate invalid QML from it. So we add a suffix if this is detected.
+        if (m_generatedIds.contains(idString))
+            idString += QStringLiteral("_%1").arg(m_generatedIds.size());
 
-    if (!info.isDefaultOpacity)
-        stream() << "opacity: " << info.opacity.defaultValue().toReal();
+        m_generatedIds.insert(idString);
 
-    const bool hasTransformReference = (info.transformReferenceLayerNum >= 0);
-    const bool hasTransform = info.transform.isAnimated() || !info.isDefaultTransform || hasTransformReference;
+        stream() << "id: " << idString;
+    }
+
+    if (!info.bounds.isNull()) {
+        stream() << "property var originalBounds: Qt.rect("
+                 << info.bounds.x() << ", "
+                 << info.bounds.y() << ", "
+                 << info.bounds.width() << ", "
+                 << info.bounds.height() << ")";
+        stream() << "implicitWidth: originalBounds.width";
+        stream() << "implicitHeight: originalBounds.height";
+    }
+
+    stream() << "transformOrigin: Item.TopLeft";
+
+    if (info.filterId.isEmpty() && info.maskId.isEmpty()) {
+        if (!info.isDefaultOpacity)
+            stream() << "opacity: " << info.opacity.defaultValue().toReal();
+        generateItemAnimations(idString, info);
+    }
+
+    return idString;
+}
+
+void QQuickQmlGenerator::generateNodeEnd(const NodeInfo &info)
+{
+    if (Q_UNLIKELY(errorState()))
+        return;
+    m_indentLevel--;
+    stream() << "}";
+    generateShaderUse(info);
+}
+
+void QQuickQmlGenerator::generateItemAnimations(const QString &idString, const NodeInfo &info)
+{
+    const bool hasTransform = info.transform.isAnimated()
+                              || !info.maskId.isEmpty()
+                              || !info.filterId.isEmpty()
+                              || !info.isDefaultTransform
+                              || !info.transformReferenceId.isEmpty()
+                              || info.motionPath.isAnimated();
+
     if (hasTransform) {
         stream() << "transform: TransformGroup {";
         m_indentLevel++;
-        stream() << "id: " << idString << "_transform_base_group";
 
-        if (info.transform.isAnimated()) {
-            for (int groupIndex = 0; groupIndex < info.transform.animationGroupCount(); ++groupIndex) {
-                stream() << "TransformGroup {";
-                m_indentLevel++;
-                stream() << "id: " << idString << "_transform_group_" << groupIndex;
+        bool hasNonConstantTransform = false;
+        int earliestOverrideGroup = -1;
 
-                int animationStart = info.transform.animationGroup(groupIndex);
-                int nextAnimationStart = groupIndex + 1 < info.transform.animationGroupCount()
-                    ? info.transform.animationGroup(groupIndex + 1)
-                    : info.transform.animationCount();
+        if (!idString.isEmpty()) {
+            stream() << "id: " << idString << "_transform_base_group";
 
-                for (int i = nextAnimationStart - 1; i >= animationStart; --i) {
-                    const QQuickAnimatedProperty::PropertyAnimation &animation = info.transform.animation(i);
-                    if (animation.frames.isEmpty())
-                        continue;
+            if (!info.maskId.isEmpty() || !info.filterId.isEmpty())
+                stream() << "Translate { x: " << idString << ".sourceX; y: " << idString << ".sourceY }";
 
-                    const QVariantList &parameters = animation.frames.first().value<QVariantList>();
-                    switch (animation.subtype) {
-                    case QTransform::TxTranslate:
-                        if (animation.isConstant()) {
-                            const QPointF translation = parameters.value(0).value<QPointF>();
-                            if (!translation.isNull())
-                                stream() << "Translate { x: " << translation.x() << "; y: " << translation.y() << " }";
-                        } else {
-                            stream() << "Translate { id: " << idString << "_transform_" << groupIndex << "_" << i << " }";
+            if (info.transform.isAnimated()) {
+                for (int groupIndex = 0; groupIndex < info.transform.animationGroupCount(); ++groupIndex) {
+                    stream() << "TransformGroup {";
+                    m_indentLevel++;
+
+                    if (!idString.isEmpty())
+                        stream() << "id: " << idString << "_transform_group_" << groupIndex;
+
+                    int animationStart = info.transform.animationGroup(groupIndex);
+                    int nextAnimationStart = groupIndex + 1 < info.transform.animationGroupCount()
+                                                 ? info.transform.animationGroup(groupIndex + 1)
+                                                 : info.transform.animationCount();
+
+                    const QQuickAnimatedProperty::PropertyAnimation &firstAnimation = info.transform.animation(animationStart);
+                    const bool replace = firstAnimation.flags & QQuickAnimatedProperty::PropertyAnimation::ReplacePreviousAnimations;
+                    if (replace && earliestOverrideGroup < 0)
+                        earliestOverrideGroup = groupIndex;
+
+                    for (int i = nextAnimationStart - 1; i >= animationStart; --i) {
+                        const QQuickAnimatedProperty::PropertyAnimation &animation = info.transform.animation(i);
+                        if (animation.frames.isEmpty())
+                            continue;
+
+                        const QVariantList &parameters = animation.frames.first().value<QVariantList>();
+                        switch (animation.subtype) {
+                        case QTransform::TxTranslate:
+                            if (animation.isConstant()) {
+                                const QPointF translation = parameters.value(0).value<QPointF>();
+                                if (!translation.isNull())
+                                    stream() << "Translate { x: " << translation.x() << "; y: " << translation.y() << " }";
+                            } else {
+                                hasNonConstantTransform = true;
+                                stream() << "Translate { id: " << idString << "_transform_" << groupIndex << "_" << i << " }";
+                            }
+                            break;
+                        case QTransform::TxScale:
+                            if (animation.isConstant()) {
+                                const QPointF scale = parameters.value(0).value<QPointF>();
+                                if (scale != QPointF(1, 1))
+                                    stream() << "Scale { xScale: " << scale.x() << "; yScale: " << scale.y() << " }";
+                            } else {
+                                hasNonConstantTransform = true;
+                                stream() << "Scale { id: " << idString << "_transform_" << groupIndex << "_" << i << "}";
+                            }
+                            break;
+                        case QTransform::TxRotate:
+                            if (animation.isConstant()) {
+                                const QPointF center = parameters.value(0).value<QPointF>();
+                                const qreal angle = parameters.value(1).toReal();
+                                if (!qFuzzyIsNull(angle))
+                                    stream() << "Rotation { angle: " << angle << "; origin.x: " << center.x() << "; origin.y: " << center.y() << " }"; //### center relative to what?
+                            } else {
+                                hasNonConstantTransform = true;
+                                stream() << "Rotation { id: " << idString << "_transform_" << groupIndex << "_" << i << " }";
+                            }
+                            break;
+                        case QTransform::TxShear:
+                            if (animation.isConstant()) {
+                                const QPointF skew = parameters.value(0).value<QPointF>();
+                                if (!skew.isNull())
+                                    stream() << "Shear { xAngle: " << skew.x() << "; yAngle: " << skew.y() << " }";
+                            } else {
+                                hasNonConstantTransform = true;
+                                stream() << "Shear { id: " << idString << "_transform_" << groupIndex << "_" << i << " }";
+                            }
+                            break;
+                        default:
+                            Q_UNREACHABLE();
                         }
-                        break;
-                    case QTransform::TxScale:
-                        if (animation.isConstant()) {
-                            const QPointF scale = parameters.value(0).value<QPointF>();
-                            if (scale != QPointF(1, 1))
-                                stream() << "Scale { xScale: " << scale.x() << "; yScale: " << scale.y() << " }";
-                        } else {
-                            stream() << "Scale { id: " << idString << "_transform_" << groupIndex << "_" << i << "}";
-                        }
-                        break;
-                    case QTransform::TxRotate:
-                        if (animation.isConstant()) {
-                            const QPointF center = parameters.value(0).value<QPointF>();
-                            const qreal angle = parameters.value(1).toReal();
-                            if (!qFuzzyIsNull(angle))
-                                stream() << "Rotation { angle: " << angle << "; origin.x: " << center.x() << "; origin.y: " << center.y() << " }"; //### center relative to what?
-                        } else {
-                            stream() << "Rotation { id: " << idString << "_transform_" << groupIndex << "_" << i << " }";
-                        }
-                        break;
-                    case QTransform::TxShear:
-                        if (animation.isConstant()) {
-                            const QPointF skew = parameters.value(0).value<QPointF>();
-                            if (!skew.isNull())
-                                stream() << "Shear { xAngle: " << skew.x() << "; yAngle: " << skew.y() << " }";
-                        } else {
-                            stream() << "Shear { id: " << idString << "_transform_" << groupIndex << "_" << i << " }";
-                        }
-                        break;
-                    default:
-                        Q_UNREACHABLE();
                     }
+
+                    m_indentLevel--;
+                    stream() << "}";
                 }
+            }
+
+            if (info.motionPath.isAnimated()) {
+                QVariantPair defaultProps = info.motionPath.defaultValue().value<QVariantPair>();
+                const bool adaptAngle = defaultProps.first.toBool();
+                const qreal baseRotation = defaultProps.second.toReal();
+                if (adaptAngle || !qFuzzyIsNull(baseRotation)) {
+                    stream() << "Rotation {";
+                    m_indentLevel++;
+
+                    if (adaptAngle) {
+                        stream() << "angle: " << idString
+                                 << "_motion_animation.currentInterpolator.angle";
+                        if (!qFuzzyIsNull(baseRotation))
+                            stream(SameLine) << " + " << baseRotation;
+                    } else {
+                        stream() << "angle: " << baseRotation;
+                    }
+
+                    m_indentLevel--;
+                    stream() << "}";
+                }
+
+                stream() << "Translate {";
+                m_indentLevel++;
+
+                stream() << "x: " << idString << "_motion_animation.currentInterpolator.x";
+                stream() << "y: " << idString << "_motion_animation.currentInterpolator.y";
 
                 m_indentLevel--;
                 stream() << "}";
@@ -187,23 +303,193 @@ QString QQuickQmlGenerator::generateNodeBase(const NodeInfo &info)
             }
         }
 
-        if (hasTransformReference) {
-            stream() << "Matrix4x4 { matrix: " << layerIdString(info.transformReferenceLayerNum)
-                     << ".transformMatrix }";
-        }
+        if (!info.transformReferenceId.isEmpty())
+            stream() << "Matrix4x4 { matrix: " << info.transformReferenceId << ".transformMatrix }";
 
         m_indentLevel--;
         stream() << "}";
 
-        generateAnimateTransform(idString, info);
+        if (hasNonConstantTransform) {
+            generateAnimateTransform(idString, info);
+        } else if (info.transform.isAnimated() && earliestOverrideGroup >= 0) {
+            // We have animations, but they are all constant? Then we still need to respect the
+            // override flag of the animations
+            stream() << "Component.onCompleted: {";
+            m_indentLevel++;
+
+            stream() << idString << "_transform_base_group.activateOverride("
+                     << idString << "_transform_group_" << earliestOverrideGroup << ")";
+
+            m_indentLevel--;
+            stream() << "}";
+        }
     }
 
-    if (info.opacity.isAnimated())
-        generatePropertyAnimation(info.opacity, idString, QStringLiteral("opacity"));
+    generateAnimateMotionPath(idString, info.motionPath);
 
+    generatePropertyAnimation(info.opacity, idString, QStringLiteral("opacity"));
     generatePropertyAnimation(info.visibility, idString, QStringLiteral("visible"));
+}
 
-    return idString;
+void QQuickQmlGenerator::generateShaderUse(const NodeInfo &info)
+{
+    const bool hasMask = !info.maskId.isEmpty();
+    const bool hasFilters = !info.filterId.isEmpty();
+    if (!hasMask && !hasFilters)
+        return;
+
+    const QString effectId = hasFilters
+        ? info.filterId + QStringLiteral("_") + info.id + QStringLiteral("_effect")
+        : QString{};
+
+    QString animatedItemId;
+    if (hasFilters) {
+        stream() << "ShaderEffectSource {";
+        m_indentLevel++;
+
+        const QString seId = info.id + QStringLiteral("_se");
+        stream() << "id: " << seId;
+
+        stream() << "ItemSpy {";
+        m_indentLevel++;
+        stream() << "id: " << info.id << "_itemspy";
+        stream() << "anchors.fill: parent";
+        m_indentLevel--;
+        stream() << "}";
+
+        stream() << "hideSource: true";
+        stream() << "wrapMode: " << info.filterId << "_filterParameters.wrapMode";
+        stream() << "sourceItem: " << info.id;
+        stream() << "sourceRect: " << info.filterId
+                 << "_filterParameters.adaptToFilterRect("
+                 << info.id << ".originalBounds.x, "
+                 << info.id << ".originalBounds.y, "
+                 << info.id << ".originalBounds.width, "
+                 << info.id << ".originalBounds.height)";
+        stream() << "textureSize: " << info.id << "_itemspy.requiredTextureSize";
+        stream() << "width: sourceRect.width";
+        stream() << "height: sourceRect.height";
+        stream() << "visible: false";
+
+        m_indentLevel--;
+        stream() << "}";
+
+        stream() << "Loader {";
+        m_indentLevel++;
+
+        animatedItemId = effectId;
+        stream() << "id: " << effectId;
+
+        stream() << "property var filterSourceItem: " << seId;
+        stream() << "sourceComponent: " << info.filterId << "_container";
+        stream() << "property real sourceX: " << info.id << ".originalBounds.x";
+        stream() << "property real sourceY: " << info.id << ".originalBounds.y";
+        stream() << "width: " << info.id << ".originalBounds.width";
+        stream() << "height: " << info.id << ".originalBounds.height";
+
+        if (hasMask) {
+            m_indentLevel--;
+            stream() << "}";
+        }
+    }
+
+    if (hasMask) {
+        // Shader effect source for the mask itself
+        stream() << "ShaderEffectSource {";
+        m_indentLevel++;
+
+        const QString maskId = info.maskId + QStringLiteral("_") + info.id + QStringLiteral("_mask");
+        stream() << "id: " << maskId;
+        stream() << "sourceItem: " << info.maskId;
+        stream() << "visible: false";
+        stream() << "hideSource: true";
+
+        stream() << "ItemSpy {";
+        m_indentLevel++;
+        stream() << "id: " << maskId << "_itemspy";
+        stream() << "anchors.fill: parent";
+        m_indentLevel--;
+        stream() << "}";
+        stream() << "textureSize: " << maskId << "_itemspy.requiredTextureSize";
+
+        stream() << "sourceRect: " << info.maskId << ".maskRect("
+                 << info.id << ".originalBounds.x,"
+                 << info.id << ".originalBounds.y,"
+                 << info.id << ".originalBounds.width,"
+                 << info.id << ".originalBounds.height)";
+
+        stream() << "width: sourceRect.width";
+        stream() << "height: sourceRect.height";
+
+        m_indentLevel--;
+        stream() << "}";
+
+        // Shader effect source of the masked item
+        stream() << "ShaderEffectSource {";
+        m_indentLevel++;
+
+        const QString seId = info.id + QStringLiteral("_masked_se");
+        stream() << "id: " << seId;
+
+        stream() << "ItemSpy {";
+        m_indentLevel++;
+        stream() << "id: " << info.id << "_masked_se_itemspy";
+        stream() << "anchors.fill: parent";
+        m_indentLevel--;
+        stream() << "}";
+
+        stream() << "hideSource: true";
+        if (hasFilters)
+            stream() << "sourceItem: " << effectId;
+        else
+            stream() << "sourceItem: " << info.id;
+        stream() << "textureSize: " << info.id << "_masked_se_itemspy.requiredTextureSize";
+        if (!hasFilters) {
+            stream() << "sourceRect: " << info.maskId << ".maskRect("
+                     << info.id << ".originalBounds.x,"
+                     << info.id << ".originalBounds.y,"
+                     << info.id << ".originalBounds.width,"
+                     << info.id << ".originalBounds.height)";
+        } else {
+            stream() << "sourceRect: " << info.maskId << ".maskRect(0, 0,"
+                     << info.id << ".originalBounds.width,"
+                     << info.id << ".originalBounds.height)";
+        }
+        stream() << "width: sourceRect.width";
+        stream() << "height: sourceRect.height";
+        stream() << "smooth: false";
+        stream() << "visible: false";
+
+        m_indentLevel--;
+        stream() << "}";
+
+        stream() << "ShaderEffect {";
+        m_indentLevel++;
+
+        const QString maskShaderId = maskId + QStringLiteral("_se");
+        animatedItemId = maskShaderId;
+
+        stream() << "id:" << maskShaderId;
+
+        stream() << "property real sourceX: " << maskId << ".sourceRect.x";
+        stream() << "property real sourceY: " << maskId << ".sourceRect.y";
+        stream() << "width: " << maskId << ".sourceRect.width";
+        stream() << "height: " << maskId << ".sourceRect.height";
+
+        stream() << "fragmentShader: \"qrc:/qt-project.org/quickvectorimage/helpers/shaders_ng/genericmask.frag.qsb\"";
+        stream() << "property var source: " << seId;
+        stream() << "property var maskSource: " << maskId;
+        stream() << "property bool isAlpha: " << (info.isMaskAlpha ? "true" : "false");
+        stream() << "property bool isInverted: " << (info.isMaskInverted ? "true" : "false");
+    }
+
+    if (!info.isDefaultOpacity)
+        stream() << "opacity: " << info.opacity.defaultValue().toReal();
+
+    generateItemAnimations(animatedItemId, info);
+
+    m_indentLevel--;
+    stream() << "}";
 }
 
 bool QQuickQmlGenerator::generateDefsNode(const NodeInfo &info)
@@ -215,7 +501,7 @@ bool QQuickQmlGenerator::generateDefsNode(const NodeInfo &info)
 
 void QQuickQmlGenerator::generateImageNode(const ImageNodeInfo &info)
 {
-    if (!isNodeVisible(info))
+    if (Q_UNLIKELY(errorState() || !isNodeVisible(info)))
         return;
 
     const QFileInfo outputFileInfo(outputFileName);
@@ -260,15 +546,12 @@ void QQuickQmlGenerator::generateImageNode(const ImageNodeInfo &info)
     stream() << "width: " << info.rect.width();
     stream() << "height: " << info.rect.height();
     stream() << "source: \"" << m_urlPrefix << outputDir.relativeFilePath(assetFileInfo.absoluteFilePath()) <<"\"";
-
-    m_indentLevel--;
-
-    stream() << "}";
+    generateNodeEnd(info);
 }
 
 void QQuickQmlGenerator::generatePath(const PathNodeInfo &info, const QRectF &overrideBoundingRect)
 {
-    if (!isNodeVisible(info))
+    if (Q_UNLIKELY(errorState() || !isNodeVisible(info)))
         return;
 
     if (m_inShapeItemLevel > 0) {
@@ -284,10 +567,11 @@ void QQuickQmlGenerator::generatePath(const PathNodeInfo &info, const QRectF &ov
 
         if (m_flags.testFlag(QQuickVectorImageGenerator::GeneratorFlag::CurveRenderer))
             stream() << "preferredRendererType: Shape.CurveRenderer";
+        if (m_flags.testFlag(QQuickVectorImageGenerator::GeneratorFlag::AsyncShapes))
+            stream() << "asynchronous: true";
         optimizePaths(info, overrideBoundingRect);
         //qCDebug(lcQuickVectorGraphics) << *node->qpath();
-        m_indentLevel--;
-        stream() << "}";
+        generateNodeEnd(info);
         m_inShapeItemLevel--;
     }
 }
@@ -351,11 +635,20 @@ void QQuickQmlGenerator::generateEasing(const QQuickAnimatedProperty::PropertyAn
 
         bool isLinear = (c1 == c1.transposed() && c2 == c2.transposed());
         if (!isLinear) {
-            stream() << "easing.type: Easing.BezierSpline";
-            stream() << "easing.bezierCurve: [ " << c1.x() << ", " << c1.y()
-                     << ", " << c2.x() << ", " << c2.y() << ", 1, 1 ]";
+            int nextIdx = m_easings.size();
+            QString &id = m_easings[{c1.x(), c1.y(), c2.x(), c2.y()}];
+            if (id.isNull())
+                id = QString(QLatin1String("easing_%1")).arg(nextIdx, 2, 10, QLatin1Char('0'));
+            stream() << "easing: " << m_topLevelIdString << "." << id;
         }
     }
+}
+
+static int processAnimationTime(int time)
+{
+    static qreal multiplier = qreal(qEnvironmentVariable("QT_QUICKVECTORIMAGE_TIME_DILATION", QStringLiteral("1.0"))
+                                        .toDouble());
+    return std::round(multiplier * time);
 }
 
 void QQuickQmlGenerator::generatePropertyAnimation(const QQuickAnimatedProperty &property,
@@ -391,7 +684,7 @@ void QQuickQmlGenerator::generatePropertyAnimation(const QQuickAnimatedProperty 
         stream() << "SequentialAnimation {";
         m_indentLevel++;
 
-        const int startOffset = animation.startOffset;
+        const int startOffset = processAnimationTime(animation.startOffset);
         if (startOffset > 0)
             stream() << "PauseAnimation { duration: " << startOffset << " }";
 
@@ -408,7 +701,7 @@ void QQuickQmlGenerator::generatePropertyAnimation(const QQuickAnimatedProperty 
         QVariant previousValue;
         for (auto it = animation.frames.constBegin(); it != animation.frames.constEnd(); ++it) {
             const int time = it.key();
-            const int frameTime = time - previousTime;
+            const int frameTime = processAnimationTime(time - previousTime);
             const QVariant &value = it.value();
 
             if (previousValue.isValid() && previousValue == value) {
@@ -501,7 +794,8 @@ void QQuickQmlGenerator::outputShapePath(const PathNodeInfo &info, const QPainte
     Q_UNUSED(pathSelector)
     Q_ASSERT(painterPath || quadPath);
 
-    static int counter = 0;
+    if (Q_UNLIKELY(errorState()))
+        return;
 
     const QColor strokeColor = info.strokeStyle.color.defaultValue().value<QColor>();
     const bool noPen = strokeColor == QColorConstants::Transparent
@@ -525,7 +819,12 @@ void QQuickQmlGenerator::outputShapePath(const PathNodeInfo &info, const QPainte
     stream() << "ShapePath {";
     m_indentLevel++;
 
-    const QString shapePathId = QStringLiteral("_qt_shapePath_%1").arg(counter);
+    QString shapePathId = info.id;
+    if (pathSelector & QQuickVectorImageGenerator::FillPath)
+        shapePathId += QStringLiteral("_fill");
+    if (pathSelector & QQuickVectorImageGenerator::StrokePath)
+        shapePathId += QStringLiteral("_stroke");
+
     stream() << "id: " << shapePathId;
 
     if (!info.nodeId.isEmpty()) {
@@ -550,6 +849,8 @@ void QQuickQmlGenerator::outputShapePath(const PathNodeInfo &info, const QPainte
         stream() << "capStyle: " << QQuickVectorImageGenerator::Utils::strokeCapStyleString(info.strokeStyle.lineCapStyle);
         stream() << "joinStyle: " << QQuickVectorImageGenerator::Utils::strokeJoinStyleString(info.strokeStyle.lineJoinStyle);
         stream() << "miterLimit: " << info.strokeStyle.miterLimit;
+        if (info.strokeStyle.cosmetic)
+            stream() << "cosmeticStroke: true";
         if (info.strokeStyle.dashArray.length() != 0) {
             stream() << "strokeStyle: " << "ShapePath.DashLine";
             stream() << "dashPattern: " << QQuickVectorImageGenerator::Utils::listString(info.strokeStyle.dashArray);
@@ -601,11 +902,44 @@ void QQuickQmlGenerator::outputShapePath(const PathNodeInfo &info, const QPainte
     if (!hintStr.isEmpty())
         stream() << hintStr;
 
-    QString svgPathString = painterPath ? QQuickVectorImageGenerator::Utils::toSvgString(*painterPath) : QQuickVectorImageGenerator::Utils::toSvgString(*quadPath);
-    stream() <<   "PathSvg { path: \"" << svgPathString << "\" }";
+    QQuickAnimatedProperty pathFactor(QVariant::fromValue(0));
+    QString pathId = shapePathId + "_ip"_L1;
+    if (!info.path.isAnimated() || (info.path.animation(0).startOffset == 0 && info.path.animation(0).isConstant())) {
+        QString svgPathString = painterPath ? QQuickVectorImageGenerator::Utils::toSvgString(*painterPath) : QQuickVectorImageGenerator::Utils::toSvgString(*quadPath);
+        stream() <<   "PathSvg { path: \"" << svgPathString << "\" }";
+    } else {
+        stream() << "PathInterpolated {";
+        m_indentLevel++;
+        stream() << "id: " << pathId;
+        stream() << "svgPaths: [";
+        m_indentLevel++;
+        QQuickAnimatedProperty::PropertyAnimation pathFactorAnim = info.path.animation(0);
+        auto &frames = pathFactorAnim.frames;
+        int pathIdx = -1;
+        QString lastSvg;
+        for (auto it = frames.begin(); it != frames.end(); ++it) {
+            QString svg = QQuickVectorImageGenerator::Utils::toSvgString(it->value<QPainterPath>());
+            if (svg != lastSvg) {
+                if (pathIdx >= 0)
+                    stream(SameLine) << ",";
+                stream() << "\"" << svg << "\"";
+                ++pathIdx;
+                lastSvg = svg;
+            }
+            *it = QVariant::fromValue(pathIdx);
+        }
+        pathFactor.addAnimation(pathFactorAnim);
+        m_indentLevel--;
+        stream() << "]";
+        m_indentLevel--;
+        stream() << "}";
+    }
 
     m_indentLevel--;
     stream() << "}";
+
+    if (pathFactor.isAnimated())
+        generatePropertyAnimation(pathFactor, pathId, "factor"_L1);
 
     if (info.trim.enabled) {
         generatePropertyAnimation(info.trim.start, shapePathId + QStringLiteral(".trim"), QStringLiteral("start"));
@@ -617,13 +951,11 @@ void QQuickQmlGenerator::outputShapePath(const PathNodeInfo &info, const QPainte
     generatePropertyAnimation(info.strokeStyle.opacity, shapePathId, QStringLiteral("strokeColor"), AnimationType::ColorOpacity);
     generatePropertyAnimation(info.fillColor, shapePathId, QStringLiteral("fillColor"));
     generatePropertyAnimation(info.fillOpacity, shapePathId, QStringLiteral("fillColor"), AnimationType::ColorOpacity);
-
-    counter++;
 }
 
 void QQuickQmlGenerator::generateNode(const NodeInfo &info)
 {
-    if (!isNodeVisible(info))
+    if (Q_UNLIKELY(errorState() || !isNodeVisible(info)))
         return;
 
     stream() << "// Missing Implementation for SVG Node: " << info.typeName;
@@ -631,13 +963,12 @@ void QQuickQmlGenerator::generateNode(const NodeInfo &info)
     stream() << "Item {";
     m_indentLevel++;
     generateNodeBase(info);
-    m_indentLevel--;
-    stream() << "}";
+    generateNodeEnd(info);
 }
 
 void QQuickQmlGenerator::generateTextNode(const TextNodeInfo &info)
 {
-    if (!isNodeVisible(info))
+    if (Q_UNLIKELY(errorState() || !isNodeVisible(info)))
         return;
 
     static int counter = 0;
@@ -728,13 +1059,12 @@ void QQuickQmlGenerator::generateTextNode(const TextNodeInfo &info)
     m_indentLevel--;
     stream() << "}";
 
-    m_indentLevel--;
-    stream() << "}";
+    generateNodeEnd(info);
 }
 
 void QQuickQmlGenerator::generateUseNode(const UseNodeInfo &info)
 {
-    if (!isNodeVisible(info))
+    if (Q_UNLIKELY(errorState() || !isNodeVisible(info)))
         return;
 
     if (info.stage == StructureNodeStage::Start) {
@@ -742,8 +1072,7 @@ void QQuickQmlGenerator::generateUseNode(const UseNodeInfo &info)
         m_indentLevel++;
         generateNodeBase(info);
     } else {
-        m_indentLevel--;
-        stream() << "}";
+        generateNodeEnd(info);
     }
 }
 
@@ -754,9 +1083,132 @@ void QQuickQmlGenerator::generatePathContainer(const StructureNodeInfo &info)
     m_indentLevel++;
     if (m_flags.testFlag(QQuickVectorImageGenerator::GeneratorFlag::CurveRenderer))
         stream() << "preferredRendererType: Shape.CurveRenderer";
+    if (m_flags.testFlag(QQuickVectorImageGenerator::GeneratorFlag::AsyncShapes))
+        stream() << "asynchronous: true";
     m_indentLevel--;
 
     m_inShapeItemLevel++;
+}
+
+void QQuickQmlGenerator::generateAnimateMotionPath(const QString &targetName,
+                                                   const QQuickAnimatedProperty &property)
+{
+    if (!property.isAnimated())
+        return;
+
+    Q_ASSERT(property.animationCount() == 1);
+    const auto &animation = property.animation(0);
+
+    qsizetype count = 0;
+    for (auto it = animation.frames.constBegin(); it != animation.frames.constEnd(); ++it, ++count) {
+        QPainterPath path = it.value().value<QPainterPath>();
+
+        // If the animation starts with an empty path (a pause animation), then we get the first
+        // valid path and use this, just to get the correct position and angle at the beginning.
+        // This path is never actually interpolated over, because we use a PauseAnimation later
+        // instead of a PropertyAnimation, but it is used as the default start position
+        qreal angle = 0.0;
+        QPointF position;
+        if (path.isEmpty() && it == animation.frames.constBegin()) {
+            for (auto jt = std::next(it); jt != animation.frames.constEnd(); ++jt) {
+                const QPainterPath &nextPath = jt.value().value<QPainterPath>();
+                if (!nextPath.isEmpty()) {
+                    position = nextPath.pointAtPercent(0.0);
+                    angle = -nextPath.angleAtPercent(0.0);
+                    break;
+                }
+            }
+
+            stream() << "QtObject {";
+            m_indentLevel++;
+
+            stream() << "id: " << targetName << "_pathInterpolator_" << count;
+            stream() << "property real x: " << position.x();
+            stream() << "property real y: " << position.y();
+            stream() << "property real angle: " << angle;
+
+            m_indentLevel--;
+            stream() << "}";
+
+        } else if (!path.isEmpty()) {
+            stream() << "PathInterpolator {";
+            m_indentLevel++;
+
+            stream() << "id: " << targetName << "_pathInterpolator_" << count;
+            const QString svgPathString = QQuickVectorImageGenerator::Utils::toSvgString(path);
+
+            stream() << "path: Path { PathSvg { path: \"" << svgPathString << "\" } }";
+
+            m_indentLevel--;
+            stream() << "}";
+        }
+    }
+
+    const QString mainAnimationId = targetName + QStringLiteral("_motion_animation");
+
+    QString prefix;
+    if (Q_UNLIKELY(!isRuntimeGenerator()))
+        prefix = QStringLiteral(".animations");
+    stream() << "Connections { target: " << m_topLevelIdString << prefix << "; function onRestart() {" << mainAnimationId << ".restart() } }";
+
+    stream() << "SequentialAnimation {";
+    m_indentLevel++;
+
+    stream() << "id: " << mainAnimationId;
+    stream() << "property var currentInterpolator: " << targetName << "_pathInterpolator_0";
+
+    generateAnimationBindings();
+
+    Q_ASSERT(property.animationCount() == 1);
+
+    int previousTime = 0;
+    count = 0;
+    for (auto it = animation.frames.constBegin(); it != animation.frames.constEnd(); ++it, ++count) {
+        const int time = it.key();
+        const int frameTime = processAnimationTime(time - previousTime);
+        const QPainterPath path = it.value().value<QPainterPath>();
+        if (frameTime > 0) {
+            if (path.isEmpty()) {
+                stream() << "PauseAnimation { duration: " << frameTime << " }";
+            } else {
+                stream() << "ScriptAction {";
+                m_indentLevel++;
+
+                stream() << "script: {";
+                m_indentLevel++;
+
+                stream() << mainAnimationId << ".currentInterpolator = "
+                         << targetName << "_pathInterpolator_" << count;
+
+                m_indentLevel--;
+                stream() << "}";
+
+                m_indentLevel--;
+                stream() << "}";
+
+                stream() << "PropertyAnimation {";
+                m_indentLevel++;
+
+                stream() << "id: " << targetName << "_motionAnimation_" << count;
+
+                stream() << "duration: " << frameTime;
+                stream() << "target: " << targetName << "_pathInterpolator_" << count;
+                stream() << "property: \"progress\"";
+                stream() << "from: 0; to: 1";
+
+                generateEasing(animation, time);
+
+                m_indentLevel--;
+                stream() << "}";
+            }
+        }
+
+        previousTime = time;
+    }
+
+    m_indentLevel--;
+    stream() << "}";
+
 }
 
 void QQuickQmlGenerator::generateAnimatedPropertySetter(const QString &targetName,
@@ -850,7 +1302,7 @@ void QQuickQmlGenerator::generateAnimateTransform(const QString &targetName, con
         stream() << "SequentialAnimation {";
         m_indentLevel++;
 
-        const int startOffset = firstAnimation.startOffset;
+        const int startOffset = processAnimationTime(firstAnimation.startOffset);
         if (startOffset > 0)
             stream() << "PauseAnimation { duration: " << startOffset << " }";
 
@@ -896,7 +1348,7 @@ void QQuickQmlGenerator::generateAnimateTransform(const QString &targetName, con
             QVariantList previousParameters;
             for (auto it = animation.frames.constBegin(); it != animation.frames.constEnd(); ++it) {
                 const int time = it.key();
-                const int frameTime = time - previousTime;
+                const int frameTime = processAnimationTime(time - previousTime);
                 const QVariantList &parameters = it.value().value<QVariantList>();
                 if (parameters.isEmpty())
                     continue;
@@ -1043,21 +1495,30 @@ void QQuickQmlGenerator::generateAnimateTransform(const QString &targetName, con
 
 bool QQuickQmlGenerator::generateStructureNode(const StructureNodeInfo &info)
 {
-    if (!isNodeVisible(info))
+    if (Q_UNLIKELY(errorState() || !isNodeVisible(info)))
         return false;
 
     const bool isPathContainer = !info.forceSeparatePaths && info.isPathContainer;
     if (info.stage == StructureNodeStage::Start) {
+        if (!info.clipBox.isEmpty()) {
+            stream() << "Item { // Clip";
+
+            m_indentLevel++;
+            stream() << "width: " << info.clipBox.width();
+            stream() << "height: " << info.clipBox.height();
+            stream() << "clip: true";
+        }
+
         if (isPathContainer) {
             generatePathContainer(info);
-        } else  if (info.layerNum >= 0) {
-            stream() << "LayerItem {";
+        } else if (!info.customItemType.isEmpty()) {
+            stream() << info.customItemType << " {";
         } else {
             stream() << "Item { // Structure node";
         }
 
+        m_indentLevel++;
         if (!info.viewBox.isEmpty()) {
-            m_indentLevel++;
             stream() << "transform: [";
             m_indentLevel++;
             bool translate = !qFuzzyIsNull(info.viewBox.x()) || !qFuzzyIsNull(info.viewBox.y());
@@ -1066,23 +1527,468 @@ bool QQuickQmlGenerator::generateStructureNode(const StructureNodeInfo &info)
             stream() << "Scale { xScale: width / " << info.viewBox.width() << "; yScale: height / " << info.viewBox.height() << " }";
             m_indentLevel--;
             stream() << "]";
-            m_indentLevel--;
         }
 
-        m_indentLevel++;
         generateNodeBase(info);
     } else {
-        m_indentLevel--;
-        stream() << "}";
+        generateNodeEnd(info);
         if (isPathContainer)
             m_inShapeItemLevel--;
+
+        if (!info.clipBox.isEmpty()) {
+            m_indentLevel--;
+            stream() << "}";
+        }
     }
 
     return true;
 }
 
+bool QQuickQmlGenerator::generateMaskNode(const MaskNodeInfo &info)
+{
+    if (Q_UNLIKELY(errorState()))
+        return false;
+
+    // Generate an invisible item subtree which can be used in ShaderEffectSource
+    if (info.stage == StructureNodeStage::Start) {
+        stream() << "Item {";
+        m_indentLevel++;
+
+        generateNodeBase(info);
+
+        stream() << "width: originalBounds.width";
+        stream() << "height: originalBounds.height";
+
+        stream() << "property real maskX: " << info.maskRect.left();
+        stream() << "property real maskY: " << info.maskRect.top();
+        stream() << "property real maskWidth: " << info.maskRect.width();
+        stream() << "property real maskHeight: " << info.maskRect.height();
+
+        stream() << "function maskRect(otherX, otherY, otherWidth, otherHeight) {";
+        m_indentLevel++;
+
+        stream() << "return ";
+        if (info.isMaskRectRelativeCoordinates) {
+            stream(SameLine)
+                << "Qt.rect("
+                << info.id << ".maskX * otherWidth + otherX,"
+                << info.id << ".maskY * otherHeight + otherY,"
+                << info.id << ".maskWidth * otherWidth,"
+                << info.id << ".maskHeight * otherHeight)";
+        } else {
+            stream(SameLine)
+                << "Qt.rect("
+                << info.id << ".maskX, "
+                << info.id << ".maskY, "
+                << info.id << ".maskWidth, "
+                << info.id << ".maskHeight)";
+        }
+
+        m_indentLevel--;
+        stream() << "}";
+
+    } else {
+        generateNodeEnd(info);
+    }
+
+    return true;
+}
+
+void QQuickQmlGenerator::generateFilterNode(const FilterNodeInfo &info)
+{
+    if (Q_UNLIKELY(errorState()))
+        return;
+
+    stream() << "QtObject {";
+    m_indentLevel++;
+
+    stream() << "id: " << info.id << "_filterParameters";
+
+    stream() << "property int wrapMode: ";
+    if (info.wrapMode == QSGTexture::Repeat)
+        stream(SameLine) << "ShaderEffectSource.Repeat";
+    else
+        stream(SameLine) << "ShaderEffectSource.ClampToEdge";
+
+    stream() << "property rect filterRect: Qt.rect("
+             << info.filterRect.x() << ", "
+             << info.filterRect.y() << ", "
+             << info.filterRect.width() << ", "
+             << info.filterRect.height() << ")";
+
+    stream() << "function adaptToFilterRect(sx, sy, sw, sh) {";
+    m_indentLevel++;
+
+    // If the shader requires an offset to the source rect, we apply that here
+    if (info.csFilterRect == FilterNodeInfo::CoordinateSystem::Absolute) {
+        stream() << "return Qt.rect(filterRect.x, filterRect.y, filterRect.width, filterRect.height)";
+    } else {
+        stream() << "return Qt.rect("
+                 << "sx + sw * filterRect.x, sy + sh * filterRect.y,"
+                 << "sw * filterRect.width, sh * filterRect.height)";
+    }
+
+    m_indentLevel--;
+    stream() << "}";
+
+    m_indentLevel--;
+    stream() << "}";
+
+    stream() << "Component {";
+    m_indentLevel++;
+
+    stream() << "id: " << info.id << "_container";
+
+    // Container for transform and effects
+    stream() << "Item {";
+    m_indentLevel++;
+
+    stream() << "property real originalWidth: filterSourceItem.sourceItem.originalBounds.width";
+    stream() << "property real originalHeight: filterSourceItem.sourceItem.originalBounds.height";
+    stream() << "property rect filterRect: " << info.id << "_filterParameters"
+             << ".adaptToFilterRect(0, 0, originalWidth, originalHeight)";
+
+    generateNodeBase(info);
+
+    for (qsizetype i = 0; i < info.steps.size();)
+        i = generateFilterStep(info, i);
+
+    generateNodeEnd(info);
+
+    m_indentLevel--;
+    stream() << "}"; // End of Component
+}
+
+qsizetype QQuickQmlGenerator::generateFilterStep(const FilterNodeInfo &info,
+                                                 qsizetype stepIndex)
+{
+    const FilterNodeInfo::FilterStep &step = info.steps.at(stepIndex);
+    const QString primitiveId = info.id + QStringLiteral("_primitive") + QString::number(stepIndex);
+
+    stepIndex++;
+
+    QString inputId = step.input1 != FilterNodeInfo::FilterInput::SourceColor
+        ? step.namedInput1
+        : QStringLiteral("filterSourceItem");
+
+    bool isComposite = false;
+    switch (step.filterType) {
+    case FilterNodeInfo::Type::Merge:
+    {
+        const int maxNodeCount = 8;
+
+        // Find all nodes for this merge
+        QList<QPair<FilterNodeInfo::FilterInput, QString> > inputs;
+        for (; stepIndex < info.steps.size(); ++stepIndex) {
+            const FilterNodeInfo::FilterStep &nodeStep = info.steps.at(stepIndex);
+            if (nodeStep.filterType != FilterNodeInfo::Type::MergeNode)
+                break;
+
+            inputs.append(qMakePair(nodeStep.input1, nodeStep.namedInput1));
+        }
+
+        if (inputs.size() > maxNodeCount) {
+            qCWarning(lcQuickVectorImage) << "Maximum of" << maxNodeCount
+                                          << "nodes exceeded in merge effect.";
+        }
+
+        if (inputs.isEmpty()) {
+            qCWarning(lcQuickVectorImage) << "Merge effect requires at least one node.";
+            break;
+        }
+
+        stream() << "ShaderEffect {";
+        m_indentLevel++;
+
+        stream() << "id: " << primitiveId;
+        stream() << "visible: false";
+
+        stream() << "fragmentShader: \"qrc:/qt-project.org/quickvectorimage/helpers/shaders_ng/femerge.frag.qsb\"";
+        stream() << "width: source1.width";
+        stream() << "height: source1.height";
+        stream() << "property int sourceCount: " << std::min(qsizetype(8), inputs.size());
+
+        for (int i = 0; i < maxNodeCount; ++i) {
+            auto input = i < inputs.size()
+                ? inputs.at(i)
+                : qMakePair(FilterNodeInfo::FilterInput::None, QStringLiteral("null"));
+
+            QString inputId = input.first != FilterNodeInfo::FilterInput::SourceColor
+                                  ? input.second
+                                  : QStringLiteral("filterSourceItem");
+
+            stream() << "property var source" << (i + 1) << ": " << inputId;
+        }
+
+        m_indentLevel--;
+        stream() << "}";
+
+        break;
+    }
+    case FilterNodeInfo::Type::CompositeOver:
+    case FilterNodeInfo::Type::CompositeOut:
+    case FilterNodeInfo::Type::CompositeIn:
+    case FilterNodeInfo::Type::CompositeXor:
+    case FilterNodeInfo::Type::CompositeAtop:
+    case FilterNodeInfo::Type::CompositeArithmetic:
+    case FilterNodeInfo::Type::CompositeLighter:
+        isComposite = true;
+        Q_FALLTHROUGH();
+
+    case FilterNodeInfo::Type::BlendNormal:
+    case FilterNodeInfo::Type::BlendMultiply:
+    case FilterNodeInfo::Type::BlendScreen:
+    case FilterNodeInfo::Type::BlendDarken:
+    case FilterNodeInfo::Type::BlendLighten:
+    {
+        stream() << "ShaderEffect {";
+        m_indentLevel++;
+
+        QString input2Id = step.input2 != FilterNodeInfo::FilterInput::SourceColor
+              ? step.namedInput2
+              : QStringLiteral("filterSourceItem");
+
+        stream() << "id: " << primitiveId;
+        stream() << "visible: false";
+
+        QString shader;
+        switch (step.filterType) {
+        case FilterNodeInfo::Type::CompositeOver:
+            shader = QStringLiteral("fecompositeover");
+            break;
+        case FilterNodeInfo::Type::CompositeOut:
+            shader = QStringLiteral("fecompositeout");
+            break;
+        case FilterNodeInfo::Type::CompositeIn:
+            shader = QStringLiteral("fecompositein");
+            break;
+        case FilterNodeInfo::Type::CompositeXor:
+            shader = QStringLiteral("fecompositexor");
+            break;
+        case FilterNodeInfo::Type::CompositeAtop:
+            shader = QStringLiteral("fecompositeatop");
+            break;
+        case FilterNodeInfo::Type::CompositeArithmetic:
+            shader = QStringLiteral("fecompositearithmetic");
+            break;
+        case FilterNodeInfo::Type::CompositeLighter:
+            shader = QStringLiteral("fecompositelighter");
+            break;
+        case FilterNodeInfo::Type::BlendNormal:
+            shader = QStringLiteral("feblendnormal");
+            break;
+        case FilterNodeInfo::Type::BlendMultiply:
+            shader = QStringLiteral("feblendmultiply");
+            break;
+        case FilterNodeInfo::Type::BlendScreen:
+            shader = QStringLiteral("feblendscreen");
+            break;
+        case FilterNodeInfo::Type::BlendDarken:
+            shader = QStringLiteral("feblenddarken");
+            break;
+        case FilterNodeInfo::Type::BlendLighten:
+            shader = QStringLiteral("feblendlighten");
+            break;
+        default:
+            Q_UNREACHABLE();
+        }
+
+        stream() << "fragmentShader: \"qrc:/qt-project.org/quickvectorimage/helpers/shaders_ng/"
+                 << shader << ".frag.qsb\"";
+        stream() << "property var source: " << inputId;
+        stream() << "property var source2: " << input2Id;
+        stream() << "width: source.width";
+        stream() << "height: source.height";
+
+        if (isComposite) {
+            QVector4D k = step.filterParameter.value<QVector4D>();
+            stream() << "property var k: Qt.vector4d("
+                     << k.x() << ", "
+                     << k.y() << ", "
+                     << k.z() << ", "
+                     << k.w() << ")";
+        }
+
+        m_indentLevel--;
+        stream() << "}";
+
+        break;
+
+    }
+    case FilterNodeInfo::Type::Flood:
+    {
+        stream() << "Rectangle {";
+        m_indentLevel++;
+
+        stream() << "id: " << primitiveId;
+        stream() << "visible: false";
+
+        stream() << "width: " << inputId << ".width";
+        stream() << "height: " << inputId << ".height";
+
+        QColor floodColor = step.filterParameter.value<QColor>();
+        stream() << "color: \"" << floodColor.name(QColor::HexArgb) << "\"";
+
+        m_indentLevel--;
+        stream() << "}";
+
+        break;
+    }
+    case FilterNodeInfo::Type::ColorMatrix:
+    {
+        stream() << "ShaderEffect {";
+        m_indentLevel++;
+
+        stream() << "id: " << primitiveId;
+        stream() << "visible: false";
+
+        stream() << "fragmentShader: \"qrc:/qt-project.org/quickvectorimage/helpers/shaders_ng/fecolormatrix.frag.qsb\"";
+        stream() << "property var source: " << inputId;
+        stream() << "width: source.width";
+        stream() << "height: source.height";
+
+        QGenericMatrix<5, 5, qreal> matrix = step.filterParameter.value<QGenericMatrix<5, 5, qreal> >();
+        for (int row = 0; row < 4; ++row) { // Last row is ignored
+
+            // Qt SVG stores rows as columns, so we flip the coordinates
+            for (int col = 0; col < 5; ++col)
+                stream() << "property real m_" << row << "_" << col << ": " << matrix(col, row);
+        }
+
+        m_indentLevel--;
+        stream() << "}";
+
+        break;
+    }
+
+    case FilterNodeInfo::Type::Offset:
+    {
+        stream() << "ShaderEffectSource {";
+        m_indentLevel++;
+
+        stream() << "id: " << primitiveId;
+        stream() << "visible: false";
+        stream() << "sourceItem: " << inputId;
+        stream() << "width: sourceItem.width + offset.x";
+        stream() << "height: sourceItem.height + offset.y";
+
+        QVector2D offset = step.filterParameter.value<QVector2D>();
+        stream() << "property vector2d offset: Qt.vector2d(";
+        if (step.csFilterParameter == FilterNodeInfo::CoordinateSystem::Absolute)
+            stream(SameLine) << offset.x() << " / width, " << offset.y() << " / height)";
+        else
+            stream(SameLine) << offset.x() << ", " << offset.y() << ")";
+
+        stream() << "sourceRect: Qt.rect(-offset.x, -offset.y, width, height)";
+
+        stream() << "ItemSpy {";
+        m_indentLevel++;
+        stream() << "id: " << primitiveId << "_offset_itemspy";
+        stream() << "anchors.fill: parent";
+
+        m_indentLevel--;
+        stream() << "}";
+        stream() << "textureSize: " << primitiveId << "_offset_itemspy.requiredTextureSize";
+
+
+        m_indentLevel--;
+        stream() << "}";
+
+        break;
+    }
+
+    case FilterNodeInfo::Type::GaussianBlur:
+    {
+        // Approximate blur effect with fast blur
+        stream() << "MultiEffect {";
+        m_indentLevel++;
+
+        stream() << "id: " << primitiveId;
+        stream() << "visible: false";
+
+        stream() << "source: " << inputId;
+        stream() << "blurEnabled: true";
+        stream() << "width: source.width";
+        stream() << "height: source.height";
+
+        const qreal maxDeviation(12.0); // Decided experimentally
+        const qreal deviation = step.filterParameter.toReal();
+        if (step.csFilterParameter == FilterNodeInfo::CoordinateSystem::Relative)
+            stream() << "blur: Math.min(1.0, " << deviation << " * filterSourceItem.width / " << maxDeviation << ")";
+        else
+            stream() << "blur: " << std::min(qreal(1.0), deviation / maxDeviation);
+        stream() << "blurMax: 64";
+
+        m_indentLevel--;
+        stream() << "}";
+
+        break;
+    }
+    default:
+        qCWarning(lcQuickVectorImage) << "Unhandled filter type: " << int(step.filterType);
+        // Dummy item to avoid empty component
+        stream() << "Item { id: " << primitiveId << " }";
+        break;
+    }
+
+    // Sample correct part of primitive
+    stream() << "ShaderEffectSource {";
+    m_indentLevel++;
+
+    stream() << "id: " << step.outputName;
+    if (stepIndex < info.steps.size())
+        stream() << "visible: false";
+
+    qreal x1, x2, y1, y2;
+    step.filterPrimitiveRect.getCoords(&x1, &y1, &x2, &y2);
+    if (step.csFilterParameter == FilterNodeInfo::CoordinateSystem::Absolute) {
+        stream() << "property real fpx1: " << x1;
+        stream() << "property real fpy1: " << y1;
+        stream() << "property real fpx2: " << x2;
+        stream() << "property real fpy2: " << y2;
+    } else if (step.csFilterParameter == FilterNodeInfo::CoordinateSystem::Relative) {
+        // If they are relative, they are actually in the coordinate system
+        // of the original bounds of the filtered item. This means we first have to convert
+        // them to the filter's coordinate system first.
+        stream() << "property real fpx1: " << x1 << " * filterSourceItem.sourceItem.originalBounds.width";
+        stream() << "property real fpy1: " << y1 << " * filterSourceItem.sourceItem.originalBounds.height";
+        stream() << "property real fpx2: " << x2 << " * filterSourceItem.sourceItem.originalBounds.width";
+        stream() << "property real fpy2: " << y2 << " * filterSourceItem.sourceItem.originalBounds.height";
+    } else { // Just match filter rect
+        stream() << "property real fpx1: filterRect.x";
+        stream() << "property real fpy1: filterRect.y";
+        stream() << "property real fpx2: filterRect.x + filterRect.width";
+        stream() << "property real fpy2: filterRect.y + filterRect.height";
+    }
+
+    stream() << "sourceItem: " << primitiveId;
+    stream() << "sourceRect: Qt.rect(fpx1 - filterRect.x, fpy1 - filterRect.y, width, height)";
+
+    stream() << "x: fpx1";
+    stream() << "y: fpy1";
+    stream() << "width: " << "fpx2 - fpx1";
+    stream() << "height: " << "fpy2 - fpy1";
+
+    stream() << "ItemSpy {";
+    m_indentLevel++;
+    stream() << "id: " << primitiveId << "_itemspy";
+    stream() << "anchors.fill: parent";
+
+    m_indentLevel--;
+    stream() << "}";
+    stream() << "textureSize: " << primitiveId << "_itemspy.requiredTextureSize";
+
+    m_indentLevel--;
+    stream() << "}";
+
+    return stepIndex;
+}
+
 bool QQuickQmlGenerator::generateRootNode(const StructureNodeInfo &info)
 {
+    if (Q_UNLIKELY(errorState()))
+        return false;
+
     const QStringList comments = m_commentString.split(u'\n');
 
     if (!isNodeVisible(info)) {
@@ -1126,6 +2032,8 @@ bool QQuickQmlGenerator::generateRootNode(const StructureNodeInfo &info)
         stream() << "import QtQuick.VectorImage";
         stream() << "import QtQuick.VectorImage.Helpers";
         stream() << "import QtQuick.Shapes";
+        stream() << "import QtQuick.Effects";
+
         for (const auto &import : std::as_const(m_extraImports))
             stream() << "import " << import;
 
@@ -1176,6 +2084,8 @@ bool QQuickQmlGenerator::generateRootNode(const StructureNodeInfo &info)
             generateNodeBase(info);
         } else {
             m_topLevelIdString = generateNodeBase(info);
+            if (m_topLevelIdString.isEmpty())
+                qCWarning(lcQuickVectorImage) << "No ID specified for top level item";
         }
     } else {
         if (m_inShapeItemLevel > 0) {
@@ -1184,8 +2094,14 @@ bool QQuickQmlGenerator::generateRootNode(const StructureNodeInfo &info)
             stream() << "}";
         }
 
-        m_indentLevel--;
-        stream() << "}";
+        for (const auto [coords, id] : m_easings.asKeyValueRange()) {
+            stream() << "readonly property easingCurve " << id << ": ({ type: Easing.BezierSpline, bezierCurve: [ ";
+            for (auto coord : coords)
+                stream(SameLine) << coord << ", ";
+            stream(SameLine) << "1, 1 ] })";
+        }
+
+        generateNodeEnd(info);
         stream().flush();
     }
 
@@ -1207,6 +2123,16 @@ QTextStream &QQuickQmlGenerator::stream(int flags)
         m_stream.setDevice(&m_result);
     else if (!(flags & StreamFlags::SameLine))
         m_stream << Qt::endl << indent();
+
+    static qint64 maxBufferSize = qEnvironmentVariableIntegerValue("QT_QUICKVECTORIMAGE_MAX_BUFFER").value_or(64 << 20); // 64MB
+    if (m_stream.device()) {
+        if (Q_UNLIKELY(!checkSanityLimit(m_stream.device()->size(), maxBufferSize, "buffer size"_L1)))
+            m_stream.device()->reset();
+    } else {
+        if (Q_UNLIKELY(!checkSanityLimit(m_stream.string()->size(), maxBufferSize, "buffer string size"_L1)))
+            m_stream.string()->clear();
+    }
+
     return m_stream;
 }
 

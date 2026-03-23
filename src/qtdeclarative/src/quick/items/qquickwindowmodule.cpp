@@ -539,7 +539,7 @@ qreal QQuickWindowQmlImpl::z() const
 
 // --------------------------------------------------------------------
 
-QObject *QQuickWindowQmlImpl::screen() const
+QQuickScreenInfo *QQuickWindowQmlImpl::screen() const
 {
     Q_D(const QQuickWindowQmlImpl);
     if (!d->screenInfo)
@@ -547,10 +547,9 @@ QObject *QQuickWindowQmlImpl::screen() const
     return d->screenInfo;
 }
 
-void QQuickWindowQmlImpl::setScreen(QObject *screen)
+void QQuickWindowQmlImpl::setScreen(QQuickScreenInfo *screen)
 {
-    QQuickScreenInfo *screenWrapper = qobject_cast<QQuickScreenInfo *>(screen);
-    QWindow::setScreen(screenWrapper ? screenWrapper->wrappedScreen() : nullptr);
+    QWindow::setScreen(screen ? screen->wrappedScreen() : nullptr);
 }
 
 QQuickWindowAttached *QQuickWindowQmlImpl::qmlAttachedProperties(QObject *object)

@@ -48,7 +48,7 @@
     string, for example:
 
     \badcode
-    HTML.postheader = "<a href=\"index.html\">Home</a>"
+    HTML.postheader = "<ul class=\"breadcrumbs\">"
     \endcode
 
     If an entry spans many lines, use a backslash at the end of every
@@ -158,14 +158,18 @@
     \li \l {headers.fileextensions-variable} {headers.fileextensions}
     \li \l {HTML.footer-variable} {HTML.footer}
     \li \l {HTML.postheader-variable} {HTML.postheader}
+    \li \l {HTML.postpostheader-variable} {HTML.postpostheader}
     \li \l {HTML.style-variable} {HTML.style}
     \li \l {includepaths-variable} {includepaths}
+    \li \l {includeprivate-variable} {includeprivate}
     \li \l {ignorewords-variable} {ignorewords}
     \li \l {ignoresince-variable} {ignoresince}
     \li \l {imagedirs-variable} {imagedirs}
+    \li \l {imagesoutputdir-variable} {imagesoutputdir}
     \li \l {indexes-variable} {indexes}
     \li \l {language-variable} {language}
     \li \l {locationinfo-variable} {locationinfo}
+    \li \l {logwarnings-variable} {logwarnings}
     \li \l {macro-variable} {macro}
     \li \l {manifestmeta-variable} {manifestmeta}
     \li \l {moduleheader-variable} {moduleheader}
@@ -176,6 +180,7 @@
     \li \l {outputsuffixes-variable} {outputsuffixes}
     \li \l {productname-variable} {productname}
     \li \l {project-variable} {project}
+    \li \l {projectroot-variable} {projectroot}
     \li \l {sourcedirs-variable} {sourcedirs}
     \li \l {sources-variable} {sources}
     \li \l {sources.fileextensions-variable} {sources.fileextensions}
@@ -231,6 +236,30 @@
     Specific Configuration Variables#HTML.stylesheets} {stylesheets}
     to adjust the appearance of certain types of HTML elements, this
     level of indentation is not always required.
+
+    \target codelanguages-variable
+    \section1 codelanguages
+
+    The \c codelanguages variable specifies a list of source code languages
+    not recognized by QDoc that can be used within \\code ... \\endcode
+    blocks. This enables blocks of code to be written in languages that
+    QDoc cannot parse, and HTML to be generated that can be highlighted
+    or processed by other tools.
+
+    \code [text]
+    codelanguages = Python Rust Java Swift "C#"
+    \endcode
+
+    Since QDoc can handle C++ (Cpp), QML and text, these languages do
+    not need to be specified in this list. Language names containing
+    special characters, such as C#, need to be quoted with double quotes
+    when included in this list.
+
+    The \c codelanguages variable was introduced in QDoc 6.11 to enable
+    online Qt documentation to use syntax highlighting for a subset of
+    the \l{languages supported by highlight.js}.
+
+    See also \l {code-command}{\\code}.
 
     \target codeprefix-variable
     \target codesuffix-variable
@@ -581,9 +610,6 @@
 
     The general syntax is \tt {\e{format}.extraimages = \e image}.
 
-    For a contextualized example, refer to the description of the
-    \l {HTML.postheader-variable}{HTML.postheader} variable.
-
     Example:
     \badcode
         HTML.extraimages = images/qt-logo.png
@@ -754,6 +780,121 @@
 
     See also \l moduleheader.
 
+    \target includeprivate-variable
+    \section1 includeprivate
+
+    Use \c includeprivate to include private C++ class members in your
+    documentation. QDoc normally excludes private functions, types, and
+    variables from generated documentation.
+
+    To include all private members, set \c includeprivate to \c true:
+
+    \badcode
+    includeprivate = true
+    \endcode
+
+    You can also enable specific member types:
+
+    \badcode
+    # Include only private functions
+    includeprivate.functions = true
+
+    # Include only private types (classes, enums, typedefs)
+    includeprivate.types = true
+
+    # Include only private variables
+    includeprivate.variables = true
+    \endcode
+
+    Specific settings override the global setting. For example:
+
+    \badcode
+    includeprivate = true
+    includeprivate.types = false
+    \endcode
+
+    This configuration includes private functions and variables but
+    excludes private types.
+
+    \note Document private members only when you need to explain internal
+          APIs and implementation details. Avoid exposing implementation
+          details that users don't need.
+
+    QDoc introduced \c includeprivate in Qt 6.11.
+
+    \target internalfilepatterns-variable
+    \section1 internalfilepatterns
+
+    The \c internalfilepatterns variable specifies file path patterns that
+    identify internal implementation files. \b{Classes} declared in files
+    matching these patterns are automatically marked as Internal, along with all
+    their members (properties, functions, enums, nested types). Free functions,
+    enums, and typedefs at file scope are not affected by this setting.
+
+    When showinternal is \c false (the default), these entities are excluded
+    from documentation validation. When \c showinternal is \c true, they are
+    included in the documentation but retain their Internal status, allowing
+    generators to style them differently (such as adding visual indicators for
+    internal APIs).
+
+    This is useful for private implementation headers that contain classes not
+    part of the documented public interface. In Qt, this includes private
+    headers ending with \c {_p.h}.
+
+    \section2 Pattern Syntax
+    The patterns support two syntaxes:
+
+    \list
+    \li \b{Shell-style glob patterns}: Simple wildcards where \c{*} matches any
+        characters and \c{?} matches exactly one character. \b{Glob patterns are
+        matched against the filename only}, not the full path, making them ideal
+        for patterns such as \c{*_p.h}.
+    \li \b{Regular expressions}: For path-based matching, use regex syntax. Any
+        pattern containing regex metacharacters (\c{^$[]{}()|+\\.}) is treated
+        as a regular expression and matched against the full normalized file
+        path.
+    \endlist
+
+    Patterns are matched with forward slashes (\c{/}) as directory separators.
+    QDoc normalizes path separators internally, so always use \c{/} in patterns
+    regardless of platform.
+
+    When a class is marked as Internal due to its file location, the Internal
+    status automatically propagates to all its members through the node
+    hierarchy.
+
+    \b{Example - Qt Convention (glob):}
+    \badcode
+        internalfilepatterns = *_p.h
+    \endcode
+    Matches any file ending with \c{_p.h} at any directory depth.
+
+    \b{Example - Multiple Filename Patterns (glob):}
+    \badcode
+        internalfilepatterns = *_p.h *_impl.h *_pch.h
+    \endcode
+    Matches files ending with \c{_p.h}, \c{_impl.h}, or \c{_pch.h}.
+
+    \note Glob patterns will \b{not} work for directory matching, as globs only
+          see the filename. For directory-based patterns, use regex instead.
+
+    \b{Example - Directory-Based Match (regex):}
+    \badcode *
+        internalfilepatterns = .\1/internal/.\1\.h
+    \endcode
+    Matches any \c{.h} file in any \c{internal} directory at any depth.
+
+    \b{Example - Multiple Patterns:}
+    \badcode *
+        internalfilepatterns = *_p.h .\1/private/.\1\.h
+    \endcode
+    Combines glob patterns for simple cases with regex for complex paths.
+
+    QDoc introduced \c internalfilepatterns in Qt 6.11.
+
+    \b{See also:} \l{excludedirs-variable}{excludedirs} and
+                  \l{excludefiles-variable}{excludefiles}.
+
     \target ignorewords-variable
     \section1 ignorewords
 
@@ -862,6 +1003,32 @@
         $QTDIR/examples/calculator-example.png
     \endcode
 
+    \target imagesoutputdir-variable
+    \section1 imagesoutputdir
+
+    The \c imagesoutputdir variable controls the name of the subdirectory,
+    under the output directory, that QDoc uses to store images.
+
+    The default value for \c imagesoutputdir is \e images.
+
+    Image files passed as an argument to \qdoccmd {image} and
+    \qdoccmd {inlineimage} commands are copied to this directory.
+
+    Setting a custom output directory for images is useful for multi-module
+    documentation builds where multiple documentation projects are configured
+    to use a shared output directory. For example, with the following (shared)
+    configuration:
+
+    \badcode
+    imagesoutputdir = images/${project}
+    \endcode
+
+    Each documentation project in the build uses
+    \c {<outputdir>/images/<project name>} to store images, thus avoiding
+    identically-named image files overwriting each other.
+
+    This variable was introduced to QDoc with Qt 6.11.
+
     \target language-variable
     \section1 language
 
@@ -882,7 +1049,7 @@
     language = QML
     \endcode
 
-    See also \l {code-command}[\\code}.
+    See also \l {code-command}{\\code}.
 
     \target locationinfo-variable
     \section1 locationinfo
@@ -905,6 +1072,52 @@
     The default value is \c true.
 
     The \c locationinfo variable was introduced in QDoc 5.15.
+
+    \target logwarnings-variable
+    \section1 logwarnings
+
+    The \c logwarnings boolean variable determines whether QDoc writes
+    warning messages to a log file in addition to stderr.
+
+    When set to \c true, QDoc creates a log file named
+    \c {<project>-qdoc-warnings.log} in the output directory and writes
+    all warning messages to this file. Warnings are still also written
+    to stderr as usual.
+
+    The log file includes a header with project information and, by default,
+    the command-line arguments used to invoke QDoc for reproducibility.
+
+    Setting this to \c true enables warning logging:
+
+    \badcode
+        logwarnings = true
+    \endcode
+
+    The default value is \c false.
+
+    This feature is useful for large documentation sets or CI environments
+    where warnings can be numerous and scroll by too quickly to be analyzed
+    systematically.
+
+    The \c logwarnings variable was introduced in QDoc 6.11.
+
+    \section2 logwarnings.disablecliargs
+
+    The \c logwarnings.disablecliargs boolean sub-variable controls whether
+    CLI arguments are omitted from warning log file headers.
+
+    \badcode
+    logwarnings.disablecliargs = true
+    \endcode
+
+    When set to \c true, the command-line arguments are omitted from the log
+    file header, making the log files portable across different environments.
+    This is useful for test suites and CI systems where command-line arguments
+    contain environment-specific paths and temporary directories.
+
+    The default value is \c false.
+    The \c {logwarnings.disablecliargs} variable was introduced in QDoc 6.11.
+
 
     \target macro-variable
     \section1 macro
@@ -1823,25 +2036,37 @@
     generated HTML documentation's postheader.
 
     The header is rendered at the top of the generated documentation
-    page.
+    page, immediately after the opening \c {<body>} element.
 
     The variable's value is given as raw HTML enclosed by quotation
     marks. Note that if the value spans several lines, each line needs
     to be enclosed by quotation marks.
 
+    After rendering the content of \c HTML.postheader, QDoc outputs the
+    page's breadcrumb navigation as set of \c {<li>} elements. Therefore,
+    postheader must end with a valid parent element for \c {<li>}, such
+    as \c {<ul>}. The default value for \c HTML.postheader is
+
     \badcode
-     HTML.postheader = "<table border=\"0\"..." \
-                       ...
-                       "<img src=\"images/qt-logo.png\" \
-                       "align=\"right\" width=\"203\" height=\"32\""\
-                      "border=\"0\" />" \
-                       "</td></tr>" \
-                       "</table>"
+     HTML.postheader = "<ul class=\"breadcrumb\">\n"
     \endcode
 
-    The complete variable entry in \l qtgui.qdocconf provides the
-    standard header of the \l {http://doc.qt.io/qt-5/qtgui-index.html}
-    {Qt GUI Documentation}.
+    See also \qdocvar {HTML.postpostheader}.
+
+    \target HTML.postpostheader-variable
+    \section1 HTML.postpostheader
+
+    The \c HTML.postpostheader variable defines the content that
+    closes the HTML document's postheader and its enclosed list of
+    navigation breadcrumb items. Its value must include the
+    matching closing tag for the list element opened in
+    \qdocvar {HTML.postheader}.
+
+    The default value for \c HTML.postpostheader is
+
+    \badcode
+    HTML.postpostheader = "</ul>\n"
+    \endcode
 
     \target FORMAT.quotinginformation
     \section1 <FORMAT>.quotinginformation
@@ -1993,6 +2218,42 @@
     name.
 
     See also \l depends, \l indexes, and \l description.
+
+    \target projectroot-variable
+    \section1 projectroot
+
+    The \c projectroot variable sets the project root directory for relative
+    path calculation in warning logs.
+
+    \badcode
+    projectroot = /path/to/project/root
+    \endcode
+
+    QDoc uses the following priority order to determine the project root:
+
+    \list 1
+        \li \c QDOC_PROJECT_ROOT environment variable
+        \li \c projectroot configuration variable
+        \li If neither is set, absolute paths are used
+    \endlist
+
+    When a project root is set, QDoc converts absolute file paths to relative
+    paths in warning log files. This makes logs portable across different
+    build environments.
+
+    Qt's build system automatically sets \c QDOC_PROJECT_ROOT, so you
+    typically don't need to set \c projectroot manually.
+
+    For standalone QDoc usage, setting \c projectroot enables portable
+    warning logs:
+
+    \badcode
+    projectroot = /home/user/myproject
+    logwarnings = true
+    \endcode
+
+    The \c projectroot variable was introduced in QDoc 6.11.
+    See also \l logwarnings.
 
     \target url-variable
     \section1 url
@@ -2248,4 +2509,9 @@
     \title qtgui.qdocconf
 
     \quotefile files/qtgui.qdocconf
+*/
+
+/*!
+    \externalpage https://highlightjs.readthedocs.io/en/latest/supported-languages.html
+    \title languages supported by highlight.js
 */

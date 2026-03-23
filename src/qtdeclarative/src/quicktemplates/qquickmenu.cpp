@@ -12,6 +12,8 @@
 #endif
 #include "qquickmenuseparator_p.h"
 #include "qquicknativemenuitem_p.h"
+#include "qquickoverlay_p.h"
+#include "qquickoverlay_p_p.h"
 #include "qquickpopupitem_p_p.h"
 #include "qquickpopuppositioner_p_p.h"
 #include "qquickaction_p.h"
@@ -67,7 +69,7 @@ static const int SUBMENU_DELAY = 225;
           \li \image qtquickcontrols-menu.png
                      {Menu with New, Open, Save in Material style}
              \caption Non-native \l {Material Style}{Material style} menu.
-   \endtable
+    \endtable
 
     Menu has two main use cases:
     \list
@@ -75,12 +77,7 @@ static const int SUBMENU_DELAY = 225;
         \li Popup menus; for example, a menu that is shown after clicking a button
     \endlist
 
-    When used as a context menu, the recommended way of opening the menu is to call
-    \l popup(). Unless a position is explicitly specified, the menu is positioned at
-    the mouse cursor on desktop platforms that have a mouse cursor available, and
-    otherwise centered over its parent item.
-
-    \snippet qtquickcontrols-menu-contextmenu.qml root
+    For context menus, see \l {Context Menus}.
 
     When used as a popup menu, it is easiest to specify the position by specifying
     the desired \l {Popup::}{x} and \l {Popup::}{y} coordinates using the respective
@@ -109,6 +106,26 @@ static const int SUBMENU_DELAY = 225;
 
     Although \l {MenuItem}{MenuItems} are most commonly used with Menu, it can
     contain any type of item.
+
+    \section1 Context Menus
+
+    For context menus, it is easier to use the \l ContextMenu attached type,
+    which creates a menu upon a platform-specific event. In addition, text
+    editing controls such as \l TextField, \l TextArea, \l SpinBox, and
+    \l DoubleSpinBox provide their own context menus by default.
+
+    If not using \c ContextMenu, the recommended way of opening the menu is to
+    call \l popup(). Unless a position is explicitly specified, the menu is
+    positioned at the mouse cursor on desktop platforms that have a mouse
+    cursor available, and otherwise centered over its parent item:
+
+    \snippet qtquickcontrols-menu-contextmenu.qml children
+
+    Note that if you are implementing your own context menu for text editing
+    controls, you only need to show it on desktop platforms, as iOS and Android
+    have their own native context menus:
+
+    \snippet qtquickcontrols-menu-text-editing-contextmenu.qml children
 
     \section1 Margins
 
@@ -573,6 +590,12 @@ void QQuickMenuPrivate::setNativeMenuVisible(bool visible)
     } else {
         handle->dismiss();
     }
+}
+
+// Used by QQuickContextMenu when it's opened on a text-editing control.
+void QQuickMenuPrivate::makeEditMenu()
+{
+    handle->setMenuType(QPlatformMenu::EditMenu);
 }
 
 QQuickItem *QQuickMenuPrivate::itemAt(int index) const
@@ -1716,6 +1739,20 @@ void QQuickMenu::setVisible(bool visible)
         // If a right mouse button event opens a menu, don't synthesize QContextMenuEvent
         // (avoid opening redundant menus, e.g. in parent items).
         QQuickWindowPrivate::get(window)->rmbContextMenuEventEnabled = false;
+        // Also, if users have their own custom non-ContextMenu-based text editing context menus,
+        // we want those to take priority over our own. The check above handles that when
+        // the user opens their menu on press, but not on release. For that, we close all
+        // other menus that are open, assuming that we're not a sub-menu.
+        if (!d->parentMenu) {
+            QQuickOverlay *overlay = QQuickOverlay::overlay(window, parentItem());
+            if (overlay) {
+                const QList<QQuickPopup *> allPopups = QQuickOverlayPrivate::get(overlay)->allPopups;
+                for (auto *popup : allPopups) {
+                    if (popup != this && qobject_cast<QQuickMenu *>(popup))
+                        popup->close();
+                }
+            }
+        }
     }
 
     if (visible && ((d->useNativeMenu() && !d->maybeNativeHandle())
@@ -1825,7 +1862,7 @@ void QQuickMenu::setTitle(const QString &title)
     \qmlproperty color QtQuick.Controls::Menu::icon.color
     \qmlproperty bool QtQuick.Controls::Menu::icon.cache
 
-    This property group was added in QtQuick.Controls 6.5.
+    \since QtQuick.Controls 6.5
 
     \include qquickicon.qdocinc grouped-properties
 
@@ -1940,6 +1977,8 @@ void QQuickMenu::setOverlap(qreal overlap)
 
     \note delegates will only be visible when using a \l {Menu types}
     {non-native Menu}.
+
+    \include delegate-ownership.qdocinc {no-ownership} {Menu}
 
     \sa Action
 */

@@ -86,20 +86,42 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
+static QDirListing::IteratorFlags toDirListingFlags(QDir::Filters filters,
+                                                    QDirIterator::IteratorFlags flags)
+{
+    using F = QDirListing::IteratorFlag;
+    QDirListing::IteratorFlags listerFlags = QDirPrivate::toDirListingFlags(filters);
+
+    if (flags & QDirIterator::FollowSymlinks)
+        listerFlags |= F::FollowDirSymlinks;
+    if (flags & QDirIterator::Subdirectories)
+        listerFlags |= F::Recursive;
+    return listerFlags;
+}
+
 class QDirIteratorPrivate
 {
 public:
     QDirIteratorPrivate(const QString &path, const QStringList &nameFilters = {},
-                        QDir::Filters filters = QDir::NoFilter,
+                        QDir::Filters dirFilters = QDir::NoFilter,
                         QDirIterator::IteratorFlags flags = QDirIterator::NoIteratorFlags)
-        : lister(path, nameFilters, filters.toInt(), flags.toInt())
-    { init(); }
-
-    void init()
+        : lister(path, nameFilters, toDirListingFlags(dirFilters, flags)),
+          filters(dirFilters == QDir::NoFilter ? QDir::AllEntries : dirFilters)
     {
         it = lister.begin();
-        if (it != lister.end())
-            nextFileInfo = it->fileInfo();
+        skipToNextMatch(it);
+    }
+
+    void skipToNextMatch(QDirListing::const_iterator &iter)
+    {
+        while (iter != lister.end()) {
+            const QDirListing::DirEntry &dirEntry = *iter;
+            if (QDirPrivate::checkNonDirListingFlags(dirEntry, filters)) {
+                nextFileInfo = dirEntry.fileInfo();
+                break;
+            }
+            ++iter;
+        }
     }
 
     void advance()
@@ -112,15 +134,14 @@ public:
             return;
         }
         currentFileInfo = nextFileInfo;
-        if (++it != lister.end()) {
-            nextFileInfo = it->fileInfo();
-        }
+        skipToNextMatch(++it);
     }
 
     QDirListing lister;
     QDirListing::const_iterator it = {};
     QFileInfo currentFileInfo;
     QFileInfo nextFileInfo;
+    QDir::Filters filters;
 };
 
 /*!

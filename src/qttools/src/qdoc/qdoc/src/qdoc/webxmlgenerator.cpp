@@ -7,7 +7,9 @@
 #include "collectionnode.h"
 #include "config.h"
 #include "helpprojectwriter.h"
+#include "inclusionfilter.h"
 #include "node.h"
+#include "nodecontext.h"
 #include "propertynode.h"
 #include "qdocdatabase.h"
 #include "quoter.h"
@@ -33,7 +35,7 @@ void WebXMLGenerator::terminateGenerator()
     HtmlGenerator::terminateGenerator();
 }
 
-QString WebXMLGenerator::format()
+QString WebXMLGenerator::format() const
 {
     return "WebXML";
 }
@@ -234,7 +236,9 @@ void WebXMLGenerator::generateDocumentation(Node *node)
     if (!node->url().isNull() || node->isExternalPage() || node->isIndexNode())
         return;
 
-    if (node->isInternal() && !m_showInternal)
+    const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+    const NodeContext context = node->createContext();
+    if (!InclusionFilter::isIncluded(policy, context))
         return;
 
     if (node->parent()) {
@@ -477,28 +481,7 @@ const Atom *WebXMLGenerator::addAtomElements(QXmlStreamWriter &writer, const Ato
     // repeating the code.
 
     // TODO: [generator-insufficient-structural-abstraction]
-    case Atom::Image: {
-        auto maybe_resolved_file{file_resolver.resolve(atom->string())};
-        if (!maybe_resolved_file) {
-            // TODO: [uncentralized-admonition][failed-resolve-file]
-            relative->location().warning(QStringLiteral("Missing image: %1").arg(atom->string()));
-        } else {
-            ResolvedFile file{*maybe_resolved_file};
-            QString file_name{QFileInfo{file.get_path()}.fileName()};
-
-            // TODO: [uncentralized-output-directory-structure]
-            Config::copyFile(relative->doc().location(), file.get_path(), file_name, outputDir() + QLatin1String("/images"));
-
-            writer.writeStartElement("image");
-            // TODO: [uncentralized-output-directory-structure]
-            writer.writeAttribute("href", "images/" + file_name);
-            writer.writeEndElement();
-            // TODO: [uncentralized-output-directory-structure]
-            setImageFileName(relative, "images/" + file_name);
-        }
-        break;
-    }
-    // TODO: [generator-insufficient-structural-abstraction]
+    case Atom::Image:
     case Atom::InlineImage: {
         auto maybe_resolved_file{file_resolver.resolve(atom->string())};
         if (!maybe_resolved_file) {
@@ -509,14 +492,16 @@ const Atom *WebXMLGenerator::addAtomElements(QXmlStreamWriter &writer, const Ato
             QString file_name{QFileInfo{file.get_path()}.fileName()};
 
             // TODO: [uncentralized-output-directory-structure]
-            Config::copyFile(relative->doc().location(), file.get_path(), file_name, outputDir() + QLatin1String("/images"));
+            Config::copyFile(relative->doc().location(), file.get_path(), file_name,
+                             "%1/%2"_L1.arg(outputDir(), imagesOutputDir()));
 
-            writer.writeStartElement("inlineimage");
+            writer.writeStartElement(atom->typeString().toLower());
+            const auto &imgPath = "%1/%2"_L1.arg(imagesOutputDir(), file_name);
             // TODO: [uncentralized-output-directory-structure]
-            writer.writeAttribute("href", "images/" + file_name);
+            writer.writeAttribute("href", imgPath);
             writer.writeEndElement();
             // TODO: [uncentralized-output-directory-structure]
-            setImageFileName(relative, "images/" + file_name);
+            setImageFileName(relative, imgPath);
         }
         break;
     }
@@ -741,6 +726,12 @@ const Atom *WebXMLGenerator::addAtomElements(QXmlStreamWriter &writer, const Ato
     } break;
     case Atom::TableItemRight:
         writer.writeEndElement(); // item
+        break;
+
+    case Atom::TableOfContentsLeft:
+        // Skip to the closing \endtoc atom
+        if (const auto *endtoc = atom->find(Atom::TableOfContentsRight))
+            atom = endtoc;
         break;
 
     case Atom::Target:

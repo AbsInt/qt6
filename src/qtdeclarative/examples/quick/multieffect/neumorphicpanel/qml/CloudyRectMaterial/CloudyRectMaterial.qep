@@ -1,6 +1,6 @@
 {
     "QEP": {
-        "QQEM": "0.43",
+        "QQEM": "0.44",
         "connections": [
             {
                 "fromId": 5,
@@ -20,7 +20,7 @@
             }
         ],
         "exportDirectory": ".",
-        "exportFlags": 11,
+        "exportFlags": 3,
         "exportName": "CloudyRectMaterial",
         "nodes": [
             {
@@ -43,15 +43,15 @@
                     "    gl_Position = qt_Matrix * vec4(vertCoord, 0.0, 1.0);",
                     "}"
                 ],
-                "x": 216.04998779296875,
-                "y": 45.20000076293945
+                "x": 140,
+                "y": 35.400001525878906
             },
             {
                 "name": "Output",
                 "nodeId": 1,
                 "type": 1,
-                "x": 216.04998779296875,
-                "y": 778.7999877929688
+                "x": 140,
+                "y": 592.5999755859375
             },
             {
                 "description": "Generates electric clouds type of effect for the source item.",
@@ -96,8 +96,8 @@
                     }
                 ],
                 "type": 2,
-                "x": 181.04998779296875,
-                "y": 617.8999633789062
+                "x": 105,
+                "y": 528.4400024414062
             },
             {
                 "description": "This node contains noise / hash helper functions which other nodes can utilize.",
@@ -183,8 +183,8 @@
                 "name": "NoiseHelper",
                 "nodeId": 6,
                 "type": 2,
-                "x": 181.04998779296875,
-                "y": 236.09999084472656
+                "x": 105,
+                "y": 211.23138427734375
             },
             {
                 "description": "Creates a rounded rectangle with blur radius. The properties match with the RectangularShadow QtQuick.Effects element, so this node provides a starting point for the custom RectangularShadow materials.",
@@ -193,9 +193,19 @@
                     "    return length(max(abs(centerPos) - size + radii, 0.0)) - radii;",
                     "}",
                     "",
+                    "float roundedBox4R(vec2 centerPos, vec2 size, vec4 radii) {",
+                    "    // Get corner index [0..3] from centerPos",
+                    "    int i = int(2.0 + (0.5 * sign(centerPos.x)) + sign(centerPos.y));",
+                    "    return length(max(abs(centerPos) - size + radii[i], 0.0)) - radii[i];",
+                    "}",
+                    "",
                     "@main",
                     "{",
-                    "    float box = roundedBox(fragCoord - iResolution.xy * 0.5, rectSize, radius);",
+                    "    float box;",
+                    "    if (radius < 0)",
+                    "        box = roundedBox4R(fragCoord - iResolution.xy * 0.5, rectSize, radius4);",
+                    "    else",
+                    "        box = roundedBox(fragCoord - iResolution.xy * 0.5, rectSize, radius);",
                     "    float a = 1.0 - smoothstep(0.0, blur, box);",
                     "    fragColor = color * a * a;",
                     "}",
@@ -224,7 +234,7 @@
                         "defaultValue": "0",
                         "description": "Corner radius amount of the shadow rectangle.",
                         "maxValue": "50",
-                        "minValue": "0",
+                        "minValue": "-1",
                         "name": "radius",
                         "type": "float",
                         "value": "0"
@@ -237,11 +247,19 @@
                         "name": "blur",
                         "type": "float",
                         "value": "10"
+                    },
+                    {
+                        "defaultValue": "0, 0, 0, 0",
+                        "maxValue": "50, 50, 50, 50",
+                        "minValue": "0, 0, 0, 0",
+                        "name": "radius4",
+                        "type": "vec4",
+                        "value": "0, 0, 0, 0"
                     }
                 ],
                 "type": 2,
-                "x": 181.04998779296875,
-                "y": 427
+                "x": 105,
+                "y": 382.02374267578125
             }
         ],
         "settings": {

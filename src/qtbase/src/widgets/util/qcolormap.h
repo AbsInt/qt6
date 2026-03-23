@@ -13,11 +13,11 @@
 
 QT_BEGIN_NAMESPACE
 
-
 class QColor;
 class QColormapPrivate;
 
-class Q_WIDGETS_EXPORT QColormap
+#if QT_REMOVAL_QT7_DEPRECATED_SINCE(6, 11)
+class Q_WIDGETS_EXPORT QT_DEPRECATED_VERSION_6_11 QColormap
 {
 public:
     enum Mode { Direct, Indexed, Gray };
@@ -46,6 +46,7 @@ private:
     QColormap();
     QColormapPrivate *d;
 };
+#endif // QT_REMOVAL_QT7_DEPRECATED_SINCE(6, 11)
 
 QT_END_NAMESPACE
 

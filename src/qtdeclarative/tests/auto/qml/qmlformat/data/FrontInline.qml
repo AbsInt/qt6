@@ -1,2 +1,2 @@
-Item { // This comment should be directly above Item after formatting
+Item { // This comment should **NOT** move: It could be a qmlformat or qmllint disable comment, for example.
 }

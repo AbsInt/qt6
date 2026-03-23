@@ -41,25 +41,29 @@ QT_BEGIN_NAMESPACE
             assign_and_return \
         }
 
-class Q_CORE_EXPORT QMetaTypeModuleHelper
+struct QMetaTypeModuleHelper
 {
-    Q_DISABLE_COPY_MOVE(QMetaTypeModuleHelper)
-protected:
-    QMetaTypeModuleHelper() = default;
-    ~QMetaTypeModuleHelper() = default;
-public:
-    Q_WEAK_OVERLOAD // prevent it from entering the ABI and rendering constexpr useless
     static constexpr auto makePair(int from, int to) -> quint64
     {
         return (quint64(from) << 32) + quint64(to);
     }
 
-    virtual const QtPrivate::QMetaTypeInterface *interfaceForType(int) const = 0;
-    virtual bool convert(const void *, int, void *, int) const;
+    static const QtPrivate::QMetaTypeInterface *interfaceForType_dummy(int)
+    {
+        return nullptr;
+    }
+
+    static bool convert_dummy(const void *, int, void *, int)
+    {
+        return false;
+    }
+
+    decltype(&interfaceForType_dummy) interfaceForType = &interfaceForType_dummy;
+    decltype(&convert_dummy) convert = &convert_dummy;
 };
 
-extern Q_CORE_EXPORT const QMetaTypeModuleHelper *qMetaTypeGuiHelper;
-extern Q_CORE_EXPORT const QMetaTypeModuleHelper *qMetaTypeWidgetsHelper;
+extern Q_CORE_EXPORT QMetaTypeModuleHelper qMetaTypeGuiHelper;
+extern Q_CORE_EXPORT QMetaTypeModuleHelper qMetaTypeWidgetsHelper;
 
 namespace QtMetaTypePrivate {
 template<typename T>

@@ -32,13 +32,13 @@ Q_STATIC_LOGGING_CATEGORY(lcQuickEffect, "qt.quick.effects")
     \ingroup qtquick-effects
     \brief Applies post-processing effect to an item.
 
-    The MultiEffect type, the successor to the deprecated Qt Graphical Effects
-    from Qt 5, applies a post-processing effect to the \l source item. Compared
-    to the Qt Graphical Effects module, MultiEffect combines multiple
-    effects (blur, shadow, colorization etc.) into a single item and shader
-    which makes it better for multiple effects. There are several shader
-    variations and the most optimal one gets selected based on the features
-    used.
+    The MultiEffect type, the successor to the \l{Qt 5 Compatibility APIs: Graphical Effects}{Qt Graphical Effects}
+    from Qt 5, applies a post-processing effect to the \l source item. In contrast to the
+    \l{Qt 5 Compatibility APIs: Graphical Effects}{Qt Graphical Effects} module, MultiEffect makes
+    it possible to combine multiple effects (blur, shadow, colorization etc.) into a single item and
+    shader. You can use \l{MultiEffect} if you only need a single effect at no additional overhead,
+    but you can also use it to apply multiple effects to an item without the cost of multiple render
+    passes.
 
     MultiEffect is designed specifically for most common effects and can be easily animated.
     If the MultiEffect doesn't contain the effect you need, consider implementing a custom
@@ -67,6 +67,7 @@ Q_STATIC_LOGGING_CATEGORY(lcQuickEffect, "qt.quick.effects")
     \table 70%
     \row
     \li \image multieffect-example1.png
+               {Qt logo in grayscale showing full desaturation effect}
     \li \qml
         import QtQuick
         import QtQuick.Effects
@@ -97,6 +98,7 @@ Q_STATIC_LOGGING_CATEGORY(lcQuickEffect, "qt.quick.effects")
     \table 70%
     \row
     \li \image multieffect-example1.png
+               {Qt logo in grayscale showing full desaturation effect}
     \li \qml
         import QtQuick
         import QtQuick.Effects
@@ -120,6 +122,8 @@ Q_STATIC_LOGGING_CATEGORY(lcQuickEffect, "qt.quick.effects")
     \table 70%
     \row
     \li \image multieffect-example2.png
+               {Qt logo with green glow showing brightness, saturation, and
+               blur effects combined}
     \li \qml
         import QtQuick
         import QtQuick.Effects
@@ -145,6 +149,8 @@ Q_STATIC_LOGGING_CATEGORY(lcQuickEffect, "qt.quick.effects")
     \table 70%
     \row
     \li \image multieffect-example3.png
+               {Four stages of Qt logo fading with mask and colorization,
+               from visible green to dissolved pink particles}
     \li \qml
         import QtQuick
         import QtQuick.Effects
@@ -250,6 +256,8 @@ void QQuickMultiEffect::setSource(QQuickItem *item)
     Note that \l paddingRect is always added to the size.
 
     \image multieffect-example4.png
+           {Blurred images comparing autoPaddingEnabled true with extra
+           space versus false with clipped edges}
 
     \sa paddingRect
 
@@ -282,6 +290,8 @@ void QQuickMultiEffect::setAutoPaddingEnabled(bool enabled)
     false so that the shadow fits inside the MultiEffect item.
 
     \image multieffect-example5.png
+           {Two Qt logos with shadows comparing paddingRect values, showing
+           clipped shadow at zero versus full shadow with padding}
 
     \sa autoPaddingEnabled
 

@@ -25,7 +25,6 @@
 #include <QtCore/private/qtools_p.h>
 
 #include "qnetworkcookiejar.h"
-#include "qnetconmonitor_p.h"
 
 #include "qnetworkreplyimpl_p.h"
 
@@ -139,6 +138,28 @@ static QHash<QByteArray, QByteArray> parseHttpOptionHeader(QByteArrayView header
     }
 }
 
+// If the user specified CustomOperation we try to remap the operation to a known
+// operation. This is useful because we treat the operations differently,
+// ie for caching or redirection
+static auto remapCustom(QNetworkAccessManager::Operation operation, const QNetworkRequest &req)
+{
+    if (operation == QNetworkAccessManager::CustomOperation) {
+        const QByteArray customVerb = req.attribute(QNetworkRequest::CustomVerbAttribute)
+                                              .toByteArray();
+        if (customVerb.compare("get", Qt::CaseInsensitive) == 0)
+            return QNetworkAccessManager::GetOperation;
+        if (customVerb.compare("head", Qt::CaseInsensitive) == 0)
+            return QNetworkAccessManager::HeadOperation;
+        if (customVerb.compare("delete", Qt::CaseInsensitive) == 0)
+            return QNetworkAccessManager::DeleteOperation;
+        if (customVerb.compare("put", Qt::CaseInsensitive) == 0)
+            return QNetworkAccessManager::PutOperation;
+        if (customVerb.compare("post", Qt::CaseInsensitive) == 0)
+            return QNetworkAccessManager::PostOperation;
+    }
+    return operation;
+}
+
 QNetworkReplyHttpImpl::QNetworkReplyHttpImpl(QNetworkAccessManager* const manager,
                                              const QNetworkRequest& request,
                                              QNetworkAccessManager::Operation& operation,
@@ -151,7 +172,7 @@ QNetworkReplyHttpImpl::QNetworkReplyHttpImpl(QNetworkAccessManager* const manage
     d->managerPrivate = manager->d_func();
     d->request = request;
     d->originalRequest = request;
-    d->operation = operation;
+    d->operation = remapCustom(operation, request);
     d->outgoingData = outgoingData;
     d->url = request.url();
 #ifndef QT_NO_SSL
@@ -436,7 +457,7 @@ void QNetworkReplyHttpImpl::setSslConfigurationImplementation(const QSslConfigur
 void QNetworkReplyHttpImpl::sslConfigurationImplementation(QSslConfiguration &configuration) const
 {
     Q_D(const QNetworkReplyHttpImpl);
-    if (d->sslConfiguration.data())
+    if (d->sslConfiguration)
         configuration = *d->sslConfiguration;
     else
         configuration = request().sslConfiguration();
@@ -643,12 +664,8 @@ void QNetworkReplyHttpImplPrivate::maybeDropUploadDevice(const QNetworkRequest &
         case QNetworkAccessManager::CustomOperation: {
             const QByteArray customVerb = newHttpRequest.attribute(QNetworkRequest::CustomVerbAttribute)
                                                 .toByteArray();
-            if (customVerb.compare("get", Qt::CaseInsensitive) != 0
-                && customVerb.compare("head", Qt::CaseInsensitive) != 0
-                && customVerb.compare("connect", Qt::CaseInsensitive) != 0
-                && customVerb.compare("delete", Qt::CaseInsensitive) != 0) {
+            if (customVerb.compare("connect", Qt::CaseInsensitive) != 0)
                 return true; // Trust user => content-length 0 is presumably okay!
-            }
             // else:
             [[fallthrough]];
         }
@@ -879,6 +896,9 @@ void QNetworkReplyHttpImplPrivate::postRequest(const QNetworkRequest &newHttpReq
     // Propagate Http/2 settings:
     delegate->http2Parameters = request.http2Configuration();
     delegate->http1Parameters = request.http1Configuration();
+    delegate->tcpKeepAliveParameters.idleTimeBeforeProbes = request.tcpKeepAliveIdleTimeBeforeProbes();
+    delegate->tcpKeepAliveParameters.intervalBetweenProbes = request.tcpKeepAliveIntervalBetweenProbes();
+    delegate->tcpKeepAliveParameters.probeCount = request.tcpKeepAliveProbeCount();
 
     if (request.attribute(QNetworkRequest::ConnectionCacheExpiryTimeoutSecondsAttribute).isValid())
         delegate->connectionCacheExpiryTimeoutSeconds = request.attribute(QNetworkRequest::ConnectionCacheExpiryTimeoutSecondsAttribute).toInt();
@@ -892,7 +912,8 @@ void QNetworkReplyHttpImplPrivate::postRequest(const QNetworkRequest &newHttpReq
     // connections list. This orphaned list will be cleaned up next time 'thread' emits a signal,
     // unfortunately that's the finished signal. It leads to a soft-leak so we do this to disconnect
     // it on deletion so that it cleans up the orphan immediately.
-    QObject::connect(delegate, &QObject::destroyed, delegate, [threadFinishedConnection]() {
+    QObject::connect(delegate, &QObject::destroyed,
+                     delegate, [threadFinishedConnection] () mutable {
         if (bool(threadFinishedConnection))
             QObject::disconnect(threadFinishedConnection);
     });
@@ -1615,7 +1636,7 @@ void QNetworkReplyHttpImplPrivate::replySslErrors(
 void QNetworkReplyHttpImplPrivate::replySslConfigurationChanged(const QSslConfiguration &newSslConfiguration)
 {
     // Receiving the used SSL configuration from the HTTP thread
-    if (sslConfiguration.data())
+    if (sslConfiguration)
         *sslConfiguration = newSslConfiguration;
     else
         sslConfiguration.reset(new QSslConfiguration(newSslConfiguration));

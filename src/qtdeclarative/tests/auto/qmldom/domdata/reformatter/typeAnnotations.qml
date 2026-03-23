@@ -9,6 +9,4 @@ var w = object.width / 3
 console.debug(w)
 return w
 }
-
-function test() : int {return 53;}
 }

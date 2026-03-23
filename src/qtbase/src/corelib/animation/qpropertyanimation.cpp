@@ -21,7 +21,12 @@
     makes it possible to animate many of Qt's widgets. Let's look at
     an example:
 
-    \snippet code/src_corelib_animation_qpropertyanimation.cpp 0
+    \snippet code/src_corelib_animation_qpropertyanimation.cpp includes
+    \snippet code/src_corelib_animation_qpropertyanimation.cpp class_decl
+    \snippet code/src_corelib_animation_qpropertyanimation.cpp ctor_impl
+    \snippet code/src_corelib_animation_qpropertyanimation.cpp first_example
+    \snippet code/src_corelib_animation_qpropertyanimation.cpp ctor_close
+    \snippet code/src_corelib_animation_qpropertyanimation.cpp main
 
     \note You can also control an animation's lifespan by choosing a
     \l{QAbstractAnimation::DeletionPolicy}{delete policy} while starting the

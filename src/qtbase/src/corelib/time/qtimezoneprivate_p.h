@@ -163,9 +163,13 @@ public:
         QByteArray ianaId;
         qsizetype nameLength = 0;
         QTimeZone::TimeType timeType = QTimeZone::GenericTime;
+        operator bool() const { return nameLength > 0; }
     };
     static NamePrefixMatch findLongNamePrefix(QStringView text, const QLocale &locale,
                                               std::optional<qint64> atEpochMillis = std::nullopt);
+    static NamePrefixMatch findNarrowOffsetPrefix(QStringView text, const QLocale &locale);
+    // Match the unlocalized long form of QUtcTimeZonePrivate:
+    static NamePrefixMatch findLongUtcPrefix(QStringView text);
 
     // returns "UTC" QString and QByteArray
     [[nodiscard]] static inline QString utcQString()

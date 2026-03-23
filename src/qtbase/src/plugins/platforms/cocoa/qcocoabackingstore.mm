@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include <AppKit/AppKit.h>
 
@@ -202,6 +203,7 @@ bool QCALayerBackingStore::recreateBackBufferIfNeeded()
 
         static auto pixelFormat = QImage::toPixelFormat(QImage::Format_ARGB32_Premultiplied);
         auto *newBackBuffer = new GraphicsBuffer(requestedBufferSize, devicePixelRatio, pixelFormat, colorSpace());
+        newBackBuffer->setObjectName("Qt Raster Backingstore");
 
         if (!m_staticContents.isEmpty() && m_buffers.back()) {
             // We implicitly support static backingstore content as a result of

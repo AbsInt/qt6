@@ -41,6 +41,7 @@ macro(qt_find_apple_system_frameworks)
         qt_internal_find_apple_system_framework(FWUniformTypeIdentifiers UniformTypeIdentifiers)
         qt_internal_find_apple_system_framework(FWNetwork Network)
         qt_internal_find_apple_system_framework(FWOpenGL OpenGL)
+        qt_internal_find_apple_system_framework(FWAccelerate Accelerate)
     endif()
 endmacro()
 
@@ -155,6 +156,20 @@ function(qt_copy_framework_headers target)
         "${CMAKE_COMMAND}" -E touch "${copy_fw_sync_headers_marker_file}"
     )
 
+    if(NOT UIKIT)
+        # Create the framework's basic layout at configure time already. This is necessary, because
+        # we don't rely on the PUBLIC_HEADER property to create the QtFoo.framework/Headers symlink.
+        # See QTBUG-142119 for details.
+        file(MAKE_DIRECTORY "${output_dir}/${fw_dir}/Versions/${fw_version}/Headers")
+        file(CREATE_LINK "${fw_version}" "${output_dir}/${fw_dir}/Versions/Current" SYMBOLIC)
+        file(CREATE_LINK "Versions/Current/Headers" "${output_dir}/${fw_header_dir}" SYMBOLIC)
+
+        # Make "ninja clean" work.
+        set_property(TARGET ${target} APPEND PROPERTY ADDITIONAL_CLEAN_FILES
+            "${output_dir}/${fw_dir}/Versions/${fw_version}/Headers"
+        )
+    endif()
+
     if(CMAKE_GENERATOR MATCHES "^Ninja")
         add_custom_command(
             OUTPUT
@@ -190,19 +205,6 @@ function(qt_copy_framework_headers target)
     endif()
 endfunction()
 
-function(qt_internal_generate_fake_framework_header target)
-    # Hack to create the "Headers" symlink in the framework:
-    # Create a fake header file and copy it into the framework by marking it as PUBLIC_HEADER.
-    # CMake now takes care of creating the symlink.
-    set(fake_header "${CMAKE_CURRENT_BINARY_DIR}/${target}_fake_header.h")
-    qt_internal_get_main_cmake_configuration(main_config)
-    file(GENERATE OUTPUT "${fake_header}" CONTENT "// ignore this file\n"
-        CONDITION "$<CONFIG:${main_config}>")
-    target_sources(${target} PRIVATE "${fake_header}")
-    _qt_internal_set_source_file_generated(SOURCES "${fake_header}")
-    set_property(TARGET ${target} APPEND PROPERTY PUBLIC_HEADER "${fake_header}")
-endfunction()
-
 function(qt_finalize_framework_headers_copy target)
     get_target_property(target_type ${target} TYPE)
     if(${target_type} STREQUAL "INTERFACE_LIBRARY")
@@ -214,8 +216,6 @@ function(qt_finalize_framework_headers_copy target)
     endif()
     get_target_property(headers ${target} QT_COPIED_FRAMEWORK_HEADERS)
     if(headers)
-        qt_internal_generate_fake_framework_header(${target})
-
         # Add a target, e.g. Core_framework_headers, that triggers the header copy.
         add_custom_target(${target}_framework_headers DEPENDS ${headers})
         add_dependencies(${target} ${target}_framework_headers)

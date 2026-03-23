@@ -456,12 +456,7 @@ void tst_qqmlconnections::invalidTarget()
     QVERIFY(root);
     QCOMPARE(root->objectName(), QStringLiteral("button"));
 
-    QTest::ignoreMessage(
-                QtWarningMsg,
-                qPrintable(
-                    url.toString()
-                    + QLatin1String(":5:5: TypeError: Cannot read property 'objectName' of null")));
-    QTRY_VERIFY(root->objectName().isEmpty());
+    QTRY_VERIFY2(root->objectName().isEmpty(), qPrintable(root->objectName()));
 }
 
 void tst_qqmlconnections::badSignalHandlerName()

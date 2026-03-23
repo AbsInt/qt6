@@ -50,6 +50,14 @@ public:
     void setToolTip(const QString &toolTip) { m_toolTip = toolTip; }
 
 private:
+    friend inline bool comparesEqual(const Item &lhs, const Item &rhs) noexcept
+    {
+        return lhs.m_display == rhs.m_display
+            && lhs.m_decoration == rhs.m_decoration
+            && lhs.m_toolTip == rhs.m_toolTip;
+    }
+    Q_DECLARE_EQUALITY_COMPARABLE(Item);
+
     QString m_display;
     QColor m_decoration;
     QString m_toolTip;
@@ -70,6 +78,17 @@ public:
     QColor m_decoration;
     QVariant m_user;
     int m_number = 0;
+
+private:
+    friend inline bool comparesEqual(const MultiRoleGadget &lhs,
+                                     const MultiRoleGadget &rhs) noexcept
+    {
+        return lhs.m_display == rhs.m_display
+            && lhs.m_decoration == rhs.m_decoration
+            && lhs.m_user == rhs.m_user
+            && lhs.m_number == rhs.m_number;
+    }
+    Q_DECLARE_EQUALITY_COMPARABLE(MultiRoleGadget);
 };
 
 template <>
@@ -78,24 +97,88 @@ struct QRangeModel::RowOptions<MultiRoleGadget>
     static constexpr auto rowCategory = QRangeModel::RowCategory::MultiRoleItem;
 };
 
+struct ItemAccessType
+{
+    int display = 0;
+};
+
+template <>
+struct QRangeModel::ItemAccess<ItemAccessType>
+{
+    static QVariant readRole(const ItemAccessType &item, int role)
+    {
+        switch (role) {
+        case Qt::DisplayRole:
+        case Qt::EditRole:
+            return item.display;
+        }
+        return {};
+    }
+
+    static bool writeRole(ItemAccessType &item, const QVariant &data, int role)
+    {
+        bool ok = false;
+        switch (role) {
+        case Qt::DisplayRole:
+        case Qt::EditRole:
+            item.display = data.toInt(&ok);
+            break;
+        }
+
+        return ok;
+    }
+};
+
 class Object : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QString string READ string WRITE setString)
-    Q_PROPERTY(int number READ number WRITE setNumber)
+    Q_PROPERTY(QString string READ string WRITE setString NOTIFY stringChanged)
+    Q_PROPERTY(int number READ number WRITE setNumber NOTIFY numberChanged)
 public:
-    using QObject::QObject;
+    Object() = default;
+    explicit Object(const QString &string, int number)
+        : m_string(string), m_number(number)
+    {}
 
     QString string() const { return m_string; }
-    void setString(const QString &string) { m_string = string; }
+    void setString(const QString &string)
+    {
+        if (m_string == string)
+            return;
+        m_string = string;
+        Q_EMIT stringChanged();
+    }
     int number() const { return m_number; }
-    void setNumber(int number) { m_number = number; }
+    void setNumber(int number)
+    {
+        if (m_number == number)
+            return;
+        m_number = number;
+        Q_EMIT numberChanged(m_number);
+    }
+
+Q_SIGNALS:
+    void stringChanged();
+    void numberChanged(int number);
 
 private:
     // note: default values need to be convertible to each other
     QString m_string = "1234";
-    int m_number = 42;
+    int m_number = -1;
 };
+
+struct ObjectRow
+{
+    std::array<Object *, 5> m_objects = {};
+
+    template <std::size_t I> // read-only is enough for this
+    friend decltype(auto) get(const ObjectRow &row) { return row.m_objects[I]; }
+};
+
+namespace std {
+    template <> struct tuple_size<ObjectRow> : std::integral_constant<std::size_t, 5> {};
+    template <std::size_t I> struct tuple_element<I, ObjectRow> { using type = Object *; };
+}
 
 // a class that can be both and requires disambiguation
 class MetaObjectTuple : public QObject
@@ -411,6 +494,10 @@ struct Data {
         std::make_unique<MultiRoleGadget>(MultiRoleGadget{u"red"_s, Qt::red, {}}),
         std::make_unique<MultiRoleGadget>(MultiRoleGadget{u"green"_s, Qt::green, {}}),
         std::make_unique<MultiRoleGadget>(MultiRoleGadget{u"blue"_s, Qt::blue, {}}),
+    };
+
+    std::vector<ItemAccessType> vectorOfItemAccess = {
+        {1}, {2}, {42}
     };
 
     std::vector<Row> vectorOfStructs = {

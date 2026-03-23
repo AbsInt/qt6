@@ -1372,14 +1372,35 @@ size_t qHash(double key, size_t seed) noexcept
 */
 size_t qHash(long double key, size_t seed) noexcept
 {
-    // ensure -0 gets mapped to 0
-    key += static_cast<long double>(0.0);
-    if constexpr (sizeof(long double) == sizeof(size_t)) {
-        size_t k;
-        memcpy(&k, &key, sizeof(long double));
-        return QHashPrivate::hash(k, seed);
+    // detect the actual size of long double's payload, not the space it
+    // occupies in memory
+    using Limits = std::numeric_limits<long double>;
+    constexpr size_t SignSize = Limits::is_signed;
+    constexpr quint64 ExponentRange = Limits::max_exponent - Limits::min_exponent;
+    constexpr size_t ExponentSize = 64 - qCountLeadingZeroBits(ExponentRange);
+    constexpr size_t Size = (Limits::digits + SignSize + ExponentSize) / 8;
+
+    if constexpr (sizeof(long double) == sizeof(double) || !Limits::is_iec559) {
+        return qHash(double(key));
     } else {
-        return murmurhash(&key, sizeof(key), seed);
+#if defined(Q_PROCESSOR_X86) && defined(Q_CC_GNU_ONLY) && !defined(__LONG_DOUBLE_128__)
+        // Check our calculation was right. long double is either:
+        //  8 (matches the block above)
+        // 10 (standard x87's IEEE 754 extended precision)
+        // 16 (-mlong-double-128; Clang doesn't define __LONG_DOUBLE_128__)
+        static_assert(Size == 10);
+#endif
+        alignas(long double) quint8 buffer[sizeof(long double)];
+
+        // ensure -0 gets mapped to 0
+        key += static_cast<long double>(0.0);
+        qToUnaligned(key, buffer);
+
+        if constexpr (QSysInfo::ByteOrder == QSysInfo::BigEndian)
+            memset(buffer, 0, sizeof(long double) - Size);
+        else
+            memset(buffer + Size, 0, sizeof(long double) - Size);
+        return murmurhash(buffer, sizeof(long double), seed);
     }
 }
 
@@ -1608,7 +1629,9 @@ size_t qHash(long double key, size_t seed) noexcept
     both a one-argument and a two-arguments overload are defined for a
     key type, the latter is used by QHash (note that you can simply
     define a two-arguments version, and use a default value for the
-    seed parameter).
+    seed parameter). In Qt 6 it is possible to disable support for the
+    single argument qHash overload by defining the
+    \c{QT_NO_SINGLE_ARGUMENT_QHASH_OVERLOAD} macro.
 
     The second way to provide a hashing function is by specializing
     the \c{std::hash} class for the key type \c{K}, and providing a
@@ -2299,6 +2322,14 @@ size_t qHash(long double key, size_t seed) noexcept
     Returns an iterator pointing to the new/updated element.
 
     \include qhash.cpp qhash-iterator-invalidation-func-desc
+*/
+
+/*!
+    \fn template <class Key, class T> QHash<Key, T>::iterator QHash<Key, T>::insert(const Key &key, T &&value)
+    \fn template <class Key, class T> QHash<Key, T>::iterator QHash<Key, T>::insert(Key &&key, const T &value)
+    \fn template <class Key, class T> QHash<Key, T>::iterator QHash<Key, T>::insert(Key &&key, T &&value)
+    \since 6.11
+    \overload
 */
 
 /*!
@@ -3139,6 +3170,14 @@ size_t qHash(long double key, size_t seed) noexcept
     \include qhash.cpp qhash-iterator-invalidation-func-desc
 
     \sa replace()
+*/
+
+/*!
+    \fn template <class Key, class T> QMultiHash<Key, T>::iterator QMultiHash<Key, T>::insert(const Key &key, T &&value)
+    \fn template <class Key, class T> QMultiHash<Key, T>::iterator QMultiHash<Key, T>::insert(Key &&key, const T &value)
+    \fn template <class Key, class T> QMultiHash<Key, T>::iterator QMultiHash<Key, T>::insert(Key &&key, T &&value)
+    \since 6.11
+    \overload
 */
 
 /*!
@@ -4091,6 +4130,18 @@ size_t qHash(long double key, size_t seed) noexcept
     \c{std::pair<const Key &, T &>}.
 
     Returns the number of elements removed, if any.
+*/
+
+/*! \macro QT_NO_SINGLE_ARGUMENT_QHASH_OVERLOAD
+    \relates QHash
+    \since 6.11
+
+    Defining this macro disables the support for qHash overloads that only take
+    one argument; in other words, for qHash overloads that do not also accept
+    a seed. Support for the single-argument overloads of qHash is deprecated
+    and will be removed in Qt 7.
+
+    \sa qHash
 */
 
 #ifdef QT_HAS_CONSTEXPR_BITOPS

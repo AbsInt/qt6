@@ -26,12 +26,16 @@ class Q_QUICKSHAPESDESIGNHELPERS_EXPORT QQuickRectangleShape : public QQuickShap
 {
     Q_OBJECT
 
-    Q_PROPERTY(int radius READ radius WRITE setRadius NOTIFY radiusChanged)
+    Q_PROPERTY(bool drawTop READ drawTop WRITE setDrawTop NOTIFY drawTopChanged RESET resetDrawTop FINAL REVISION(6, 11))
+    Q_PROPERTY(bool drawRight READ drawRight WRITE setDrawRight NOTIFY drawRightChanged RESET resetDrawRight FINAL REVISION(6, 11))
+    Q_PROPERTY(bool drawBottom READ drawBottom WRITE setDrawBottom NOTIFY drawBottomChanged RESET resetDrawBottom FINAL REVISION(6, 11))
+    Q_PROPERTY(bool drawLeft READ drawLeft WRITE setDrawLeft NOTIFY drawLeftChanged RESET resetDrawLeft FINAL REVISION(6, 11))
+    Q_PROPERTY(int radius READ radius WRITE setRadius NOTIFY radiusChanged FINAL)
     Q_PROPERTY(int topLeftRadius READ topLeftRadius WRITE setTopLeftRadius NOTIFY topLeftRadiusChanged RESET resetTopLeftRadius FINAL)
     Q_PROPERTY(int topRightRadius READ topRightRadius WRITE setTopRightRadius NOTIFY topRightRadiusChanged RESET resetTopRightRadius FINAL)
     Q_PROPERTY(int bottomLeftRadius READ bottomLeftRadius WRITE setBottomLeftRadius NOTIFY bottomLeftRadiusChanged RESET resetBottomLeftRadius FINAL)
     Q_PROPERTY(int bottomRightRadius READ bottomRightRadius WRITE setBottomRightRadius NOTIFY bottomRightRadiusChanged RESET resetBottomRightRadius FINAL)
-    Q_PROPERTY(bool bevel READ hasBevel WRITE setBevel NOTIFY bevelChanged FINAL)
+    Q_PROPERTY(bool bevel READ hasBevel WRITE setBevel NOTIFY bevelChanged RESET resetBevel FINAL)
     Q_PROPERTY(bool topLeftBevel READ hasTopLeftBevel WRITE setTopLeftBevel NOTIFY topLeftBevelChanged RESET resetTopLeftBevel FINAL)
     Q_PROPERTY(bool topRightBevel READ hasTopRightBevel WRITE setTopRightBevel NOTIFY topRightBevelChanged RESET resetTopRightBevel FINAL)
     Q_PROPERTY(bool bottomLeftBevel READ hasBottomLeftBevel WRITE setBottomLeftBevel NOTIFY bottomLeftBevelChanged RESET resetBottomLeftBevel FINAL)
@@ -43,9 +47,9 @@ class Q_QUICKSHAPESDESIGNHELPERS_EXPORT QQuickRectangleShape : public QQuickShap
     Q_PROPERTY(QQuickShapePath::CapStyle capStyle READ capStyle WRITE setCapStyle NOTIFY capStyleChanged FINAL)
     Q_PROPERTY(QQuickShapePath::StrokeStyle strokeStyle READ strokeStyle WRITE setStrokeStyle NOTIFY strokeStyleChanged FINAL)
     Q_PROPERTY(qreal dashOffset READ dashOffset WRITE setDashOffset NOTIFY dashOffsetChanged FINAL)
-    Q_PROPERTY(QVector<qreal> dashPattern READ dashPattern WRITE setDashPattern NOTIFY dashPatternChanged FINAL)
-    Q_PROPERTY(QQuickShapeGradient *fillGradient READ fillGradient WRITE setFillGradient RESET resetFillGradient FINAL)
-    Q_PROPERTY(BorderMode borderMode READ borderMode WRITE setBorderMode RESET resetBorderMode FINAL)
+    Q_PROPERTY(QList<qreal> dashPattern READ dashPattern WRITE setDashPattern NOTIFY dashPatternChanged FINAL)
+    Q_PROPERTY(QQuickShapeGradient *fillGradient READ fillGradient WRITE setFillGradient NOTIFY fillGradientChanged RESET resetFillGradient FINAL)
+    Q_PROPERTY(BorderMode borderMode READ borderMode WRITE setBorderMode NOTIFY borderModeChanged RESET resetBorderMode FINAL)
 
     QML_NAMED_ELEMENT(RectangleShape)
     QML_ADDED_IN_VERSION(6, 10)
@@ -54,8 +58,25 @@ public:
     QQuickRectangleShape(QQuickItem *parent = nullptr);
     ~QQuickRectangleShape();
 
+    bool drawTop() const;
+    void setDrawTop(bool drawTop);
+    void resetDrawTop();
+
+    bool drawRight() const;
+    void setDrawRight(bool drawRight);
+    void resetDrawRight();
+
+    bool drawBottom() const;
+    void setDrawBottom(bool drawBottom);
+    void resetDrawBottom();
+
+    bool drawLeft() const;
+    void setDrawLeft(bool drawLeft);
+    void resetDrawLeft();
+
     int radius() const;
     void setRadius(int radius);
+    void resetRadius();
 
     int topLeftRadius() const;
     void setTopLeftRadius(int topLeftRadius);
@@ -75,6 +96,7 @@ public:
 
     bool hasBevel() const;
     void setBevel(bool bevel);
+    void resetBevel();
 
     bool hasTopLeftBevel() const;
     void setTopLeftBevel(bool topLeftBevel);
@@ -107,6 +129,9 @@ public:
     QQuickShapePath::JoinStyle joinStyle() const;
     void setJoinStyle(QQuickShapePath::JoinStyle style);
 
+    int miterLimit() const;
+    void setMiterLimit(int limit);
+
     QQuickShapePath::CapStyle capStyle() const;
     void setCapStyle(QQuickShapePath::CapStyle style);
 
@@ -116,14 +141,14 @@ public:
     qreal dashOffset() const;
     void setDashOffset(qreal offset);
 
-    QVector<qreal> dashPattern() const;
-    void setDashPattern(const QVector<qreal> &array);
+    QList<qreal> dashPattern() const;
+    void setDashPattern(const QList<qreal> &array);
 
     QQuickShapeGradient *fillGradient() const;
     void setFillGradient(QQuickShapeGradient *fillGradient);
     void resetFillGradient();
 
-    enum BorderMode {
+    enum class BorderMode {
         Inside,
         Middle,
         Outside
@@ -134,6 +159,11 @@ public:
     void resetBorderMode();
 
 Q_SIGNALS:
+    Q_REVISION(6, 11) void drawTopChanged();
+    Q_REVISION(6, 11) void drawRightChanged();
+    Q_REVISION(6, 11) void drawBottomChanged();
+    Q_REVISION(6, 11) void drawLeftChanged();
+    Q_REVISION(6, 11) void fillGradientChanged();
     void radiusChanged();
     void topLeftRadiusChanged();
     void topRightRadiusChanged();
@@ -150,17 +180,20 @@ Q_SIGNALS:
     void fillColorChanged();
     void fillRuleChanged();
     void joinStyleChanged();
+    void miterLimitChanged();
     void capStyleChanged();
     void strokeStyleChanged();
     void dashOffsetChanged();
     void dashPatternChanged();
-    void gradientChanged();
     void borderModeChanged();
 
 protected:
-    void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
+    void componentComplete() override;
+    void itemChange(ItemChange change, const ItemChangeData &value) override;
 
 private:
+    void updatePolish() override;
+
     Q_DISABLE_COPY(QQuickRectangleShape)
     Q_DECLARE_PRIVATE(QQuickRectangleShape)
 };

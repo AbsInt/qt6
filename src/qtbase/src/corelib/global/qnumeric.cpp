@@ -6,6 +6,8 @@
 #include "qnumeric_p.h"
 #include <string.h>
 
+#include <q20bit.h>
+
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -458,5 +460,21 @@ Q_CORE_EXPORT quint64 qFloatDistance(double a, double b)
 
     Returns true if the absolute value of \a f is within 0.00001f of 0.0.
 */
+
+namespace q20 {
+static_assert(rotl(1U, 1) == 2);
+static_assert(rotl(0x8000'0000U, 1) == 1);
+static_assert(rotl(0x8000'0001U, 1) == 3);
+static_assert(rotl(1U, -1) == 0x8000'0000U);
+static_assert(rotl(0x8000'0000U, -1) == 0x4000'0000U);
+static_assert(rotl(0x8000'0001U, -1) == 0xc000'0000U);
+
+static_assert(rotr(1U, 1) == 0x8000'0000U);
+static_assert(rotr(0x8000'0000U, 1) == 0x4000'0000U);
+static_assert(rotr(0x8000'0001U, 1) == 0xc000'0000U);
+static_assert(rotr(1U, -1) == 2);
+static_assert(rotr(0x8000'0000U, -1) == 1);
+static_assert(rotr(0x8000'0001U, -1) == 3);
+}
 
 QT_END_NAMESPACE

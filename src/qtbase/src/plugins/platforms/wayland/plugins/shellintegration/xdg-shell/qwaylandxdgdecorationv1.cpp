@@ -1,5 +1,6 @@
 // Copyright (C) 2018 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qwaylandxdgdecorationv1_p.h"
 #include "qwaylandxdgshell_p.h"
@@ -9,7 +10,7 @@ QT_BEGIN_NAMESPACE
 namespace QtWaylandClient {
 
 QWaylandXdgDecorationManagerV1::QWaylandXdgDecorationManagerV1(wl_registry *registry, uint32_t id, uint32_t availableVersion)
-    : QtWayland::zxdg_decoration_manager_v1(registry, id, qMin(availableVersion, 1u))
+    : QtWayland::zxdg_decoration_manager_v1(registry, id, qMin(availableVersion, 2u))
 {
 }
 

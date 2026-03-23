@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:critical reason:data-parser
 
-//#define QIMAGEREADER_DEBUG
-
 /*!
     \class QImageReader
     \brief The QImageReader class provides a format independent interface
@@ -98,9 +96,7 @@
 #include "qimagereader.h"
 
 #include <qbytearray.h>
-#ifdef QIMAGEREADER_DEBUG
 #include <qdebug.h>
-#endif
 #include <qfile.h>
 #include <qfileinfo.h>
 #include <qimage.h>
@@ -110,6 +106,7 @@
 #include <qsize.h>
 #include <qcolor.h>
 #include <qvariant.h>
+#include <qloggingcategory.h>
 
 // factory loader
 #include <qcoreapplication.h>
@@ -135,6 +132,8 @@
 
 QT_BEGIN_NAMESPACE
 
+Q_STATIC_LOGGING_CATEGORY(lcImageReader, "qt.gui.imageio.reader")
+
 using namespace QImageReaderWriterHelpers;
 using namespace Qt::StringLiterals;
 
@@ -153,6 +152,8 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
     QImageIOHandler *handler = nullptr;
     QByteArray suffix;
 
+    qCDebug(lcImageReader) << "Finding read handler for" << device << "and format" << format;
+
 #if QT_CONFIG(imageformatplugin)
     Q_CONSTINIT static QBasicMutex mutex;
     const auto locker = qt_scoped_lock(mutex);
@@ -163,10 +164,7 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
     auto l = QImageReaderWriterHelpers::pluginLoader();
     const PluginKeyMap keyMap = l->keyMap();
 
-#ifdef QIMAGEREADER_DEBUG
-    qDebug() << "QImageReader::createReadHandler( device =" << (void *)device << ", format =" << format << "),"
-             << keyMap.uniqueKeys().size() << "plugins available: " << keyMap;
-#endif
+    qCDebug(lcImageReader) << keyMap.uniqueKeys().size() << "plugins available:" << keyMap.values();
 
     int testFormatPluginIndex = -1;
 #endif // QT_CONFIG(imageformatplugin)
@@ -175,9 +173,7 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
         // if there's no format, see if \a device is a file, and if so, find the file suffix
         if (QFile *file = qobject_cast<QFile *>(device)) {
             suffix = QFileInfo(file->fileName()).suffix().toLower().toLatin1();
-#ifdef QIMAGEREADER_DEBUG
-            qDebug() << "QImageReader::createReadHandler: device file suffix:" << suffix;
-#endif
+            qCDebug(lcImageReader) << "Resolved format" << suffix << "from file name suffix";
         }
     }
 
@@ -189,14 +185,13 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
     if (!testFormat.isEmpty()) {
         // Check first support for the given format name or suffix among our plugins' registered
         // formats. This allows plugins to override our built-in handlers.
+        qCDebug(lcImageReader) << "Checking if any plugins have explicitly declared support"
+                               << "for the format" << testFormat;
         const qint64 pos = device ? device->pos() : 0;
         for (int testIndex : keyMap.keys(QLatin1StringView(testFormat))) {
             QImageIOPlugin *plugin = qobject_cast<QImageIOPlugin *>(l->instance(testIndex));
             if (plugin && plugin->capabilities(device, testFormat) & QImageIOPlugin::CanRead) {
-#ifdef QIMAGEREADER_DEBUG
-                qDebug() << "QImageReader::createReadHandler: format" << testFormat
-                         << "recognized, the" << keyMap.values(testIndex) << "plugin can read this format.";
-#endif
+                qCDebug(lcImageReader) << plugin << "can read the format" << testFormat;
                 handler = plugin->create(device, testFormat);
                 testFormatPluginIndex = testIndex;
                 break;
@@ -210,6 +205,8 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
     // if we don't have a handler yet, check if we have built-in support for
     // the format
     if (!handler && !testFormat.isEmpty()) {
+        qCDebug(lcImageReader) << "Checking if any built in handlers recognize the format"
+                               << testFormat;
         if (false) {
 #ifndef QT_NO_IMAGEFORMAT_PNG
         } else if (testFormat == "png") {
@@ -238,16 +235,16 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
 #endif
         }
 
-#ifdef QIMAGEREADER_DEBUG
         if (handler)
-            qDebug() << "QImageReader::createReadHandler: using the built-in handler for" << testFormat;
-#endif
+            qCDebug(lcImageReader) << "Using the built-in handler for format" << testFormat;
     }
 
 #if QT_CONFIG(imageformatplugin)
     if (!handler && !testFormat.isEmpty() && autoDetectImageFormat) {
         // check if any other plugin supports the format name (they are not allowed to
         // read from the device yet).
+        qCDebug(lcImageReader) << "Checking if any plugins recognize the format" << testFormat;
+
         const qint64 pos = device ? device->pos() : 0;
 
         const int keyCount = keyMap.size();
@@ -255,9 +252,7 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
             if (i != testFormatPluginIndex) {
                 QImageIOPlugin *plugin = qobject_cast<QImageIOPlugin *>(l->instance(i));
                 if (plugin && plugin->capabilities(device, testFormat) & QImageIOPlugin::CanRead) {
-#ifdef QIMAGEREADER_DEBUG
-                    qDebug() << "QImageReader::createReadHandler: the" << keyMap.values(i) << "plugin can read this format";
-#endif
+                    qCDebug(lcImageReader) << plugin << "can read the format" << testFormat;
                     handler = plugin->create(device, testFormat);
                     break;
                 }
@@ -282,9 +277,8 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
             // ok, we're done.
             return handler;
         }
-#ifdef QIMAGEREADER_DEBUG
-        qDebug() << "QImageReader::createReadHandler: the" << suffix << "handler can not read this file";
-#endif
+        qCDebug(lcImageReader) << handler << "claimed support for" << suffix
+                               << "but could not read the file";
         // File may still be valid, just with wrong suffix, so fall back to
         // finding a handler based on contents, below.
         delete handler;
@@ -294,6 +288,8 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
 #if QT_CONFIG(imageformatplugin)
     if (!handler && (autoDetectImageFormat || ignoresFormatAndExtension)) {
         // check if any of our plugins recognize the file from its contents.
+        qCDebug(lcImageReader) << "Checking if any plugins recognize the format"
+                               << "based on the contents in" << device;
         const qint64 pos = device ? device->pos() : 0;
         const int keyCount = keyMap.size();
         for (int i = 0; i < keyCount; ++i) {
@@ -301,9 +297,7 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
                 QImageIOPlugin *plugin = qobject_cast<QImageIOPlugin *>(l->instance(i));
                 if (plugin && plugin->capabilities(device, QByteArray()) & QImageIOPlugin::CanRead) {
                     handler = plugin->create(device, testFormat);
-#ifdef QIMAGEREADER_DEBUG
-                    qDebug() << "QImageReader::createReadHandler: the" << keyMap.values(i) << "plugin can read this data";
-#endif
+                    qCDebug(lcImageReader) << plugin << "can read the data in" << device;
                     break;
                 }
             }
@@ -316,6 +310,8 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
     if (!handler && (autoDetectImageFormat || ignoresFormatAndExtension)) {
         // check if any of our built-in handlers recognize the file from its
         // contents.
+        qCDebug(lcImageReader) << "Checking if any built in handlers recognize the format"
+                               << "based on the contents in" << device;
         int currentFormat = 0;
         if (!suffix.isEmpty()) {
             // If reading from a file with a suffix, start testing our
@@ -374,10 +370,8 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
                 device->seek(pos);
 
             if (handler) {
-#ifdef QIMAGEREADER_DEBUG
-                qDebug("QImageReader::createReadHandler: the %s built-in handler can read this data",
+                qCDebug(lcImageReader, "The %s built-in handler can read this data",
                        _qt_BuiltInFormats[currentFormat].extension);
-#endif
                 break;
             }
 
@@ -389,9 +383,7 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
     }
 
     if (!handler) {
-#ifdef QIMAGEREADER_DEBUG
-        qDebug("QImageReader::createReadHandler: no handlers found. giving up.");
-#endif
+        qCDebug(lcImageReader, "No handlers found. Giving up.");
         // no handler: give up.
         return nullptr;
     }

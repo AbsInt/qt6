@@ -23,7 +23,6 @@
 #include "QtCore/qpointer.h"
 #include "QtCore/qdatetime.h"
 #include "QtCore/qsharedpointer.h"
-#include "QtCore/qscopedpointer.h"
 #include "QtCore/qtimer.h"
 #include "qatomic.h"
 
@@ -34,6 +33,8 @@
 
 #ifndef QT_NO_SSL
 #include <QtNetwork/QSslConfiguration>
+
+#include <memory>
 #endif
 
 Q_MOC_INCLUDE(<QtNetwork/QAuthenticator>)
@@ -223,7 +224,7 @@ public:
 
 
 #ifndef QT_NO_SSL
-    QScopedPointer<QSslConfiguration> sslConfiguration;
+    std::unique_ptr<QSslConfiguration> sslConfiguration;
     bool pendingIgnoreAllSslErrors;
     QList<QSslError> pendingIgnoreSslErrorsList;
 #endif

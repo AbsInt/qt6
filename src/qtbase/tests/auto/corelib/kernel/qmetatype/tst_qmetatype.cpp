@@ -528,11 +528,25 @@ void tst_QMetaType::qMetaTypeId()
     QCOMPARE(::qMetaTypeId<qint8>(), QMetaType::fromType<qint8>().id());
 }
 
+class QPropObject : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QList<QVariant> prop READ prop WRITE setProp)
+
+public:
+    QPropObject() { propList << 42 << "Hello"; }
+
+    QList<QVariant> prop() const { return propList; }
+    void setProp(const QList<QVariant> &list) { propList = list; }
+    QList<QVariant> propList;
+};
+
 void tst_QMetaType::properties()
 {
     qRegisterMetaType<QList<QVariant> >("QList<QVariant>");
+    QPropObject sut;
 
-    QVariant v = property("prop");
+    QVariant v = sut.property("prop");
 
     QCOMPARE(v.typeName(), "QVariantList");
 
@@ -542,8 +556,8 @@ void tst_QMetaType::properties()
 
     values << 43 << "world";
 
-    QVERIFY(setProperty("prop", values));
-    v = property("prop");
+    QVERIFY(sut.setProperty("prop", values));
+    v = sut.property("prop");
     QCOMPARE(v.toList().size(), 4);
 }
 
@@ -1450,6 +1464,11 @@ void tst_QMetaType::defaultConstructTrivial_QTBUG_109594()
 
 void tst_QMetaType::typedConstruct()
 {
+    static bool calledOnce = false;
+    if (calledOnce)
+        QSKIP("tst_QMetaType::typedConstruct can only run once");
+    calledOnce = true;
+
     auto testMetaObjectWriteOnGadget = [](QVariant &gadget, const QList<GadgetPropertyType> &properties)
     {
         auto metaObject = QMetaType(gadget.userType()).metaObject();

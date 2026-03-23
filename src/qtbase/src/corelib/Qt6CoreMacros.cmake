@@ -757,6 +757,9 @@ function(_qt_internal_create_executable target)
         )
 
         qt6_android_apply_arch_suffix("${target}")
+        if(QT_USE_ANDROID_MODERN_BUNDLE)
+            _qt_internal_set_android_application_gradle_defaults(${target})
+        endif()
     else()
         cmake_policy(PUSH)
         __qt_internal_set_cmp0156()
@@ -828,6 +831,8 @@ function(_qt_internal_finalize_executable target)
         else()
             _qt_internal_finalize_uikit_app("${target}")
         endif()
+    elseif(WIN32)
+        _qt_internal_finalize_windows_app("${target}")
     endif()
 
     # For finalizer mode of plugin importing to work safely, we need to know the list of Qt
@@ -1569,9 +1574,22 @@ function(qt6_extract_metatypes target)
         VERBATIM
     )
 
-    if(CMAKE_GENERATOR MATCHES " Makefiles")
-        # Work around https://gitlab.kitware.com/cmake/cmake/-/issues/19005 to trigger the command
-        # that generates ${metatypes_file}.
+    if(CMAKE_GENERATOR MATCHES "Visual Studio")
+        # MSBuild cannot track BYPRODUCTS for dependency ordering between
+        # CustomBuild items. Without an explicit OUTPUT rule, MSBuild may run
+        # qmltyperegistrar (which depends on metatypes.json) before
+        # moc --collect-json (which produces metatypes.json as a BYPRODUCT).
+        # Use 'touch' instead of 'true' because MSBuild needs the output file's
+        # timestamp to be updated, otherwise the rule re-fires on every build.
+        add_custom_command(
+            OUTPUT ${metatypes_file}
+            DEPENDS ${metatypes_file_gen}
+            COMMAND ${CMAKE_COMMAND} -E touch ${metatypes_file}
+            VERBATIM
+        )
+    elseif(CMAKE_GENERATOR MATCHES " Makefiles")
+        # Work around https://gitlab.kitware.com/cmake/cmake/-/issues/19005
+        # to trigger the command that generates ${metatypes_file}.
         add_custom_command(
             OUTPUT ${metatypes_file}
             DEPENDS ${metatypes_file_gen}
@@ -3275,7 +3293,8 @@ function(_qt_internal_setup_deploy_support)
 
     list(JOIN candidate_paths "\n    " candidate_paths_joined)
 
-    if(WIN32 AND NOT QT_NO_QTPATHS_DEPLOYMENT_WARNING AND NOT target_qtpaths_path)
+    if(WIN32 AND NOT QT_BUILDING_QT AND NOT QT_NO_QTPATHS_DEPLOYMENT_WARNING
+        AND NOT target_qtpaths_path)
         message(WARNING
             "No qtpaths executable found for deployment purposes. Candidates searched: \n    "
             "${candidate_paths_joined}"

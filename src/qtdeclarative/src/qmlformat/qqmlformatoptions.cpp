@@ -16,6 +16,7 @@ QQmlFormatOptions::QQmlFormatOptions()
     setNormalizeEnabled(false);
     setObjectsSpacing(false);
     setFunctionsSpacing(false);
+    setSingleLineEmptyObjects(false);
     setIndentWidth(4);
 }
 
@@ -115,9 +116,21 @@ void QQmlFormatOptions::applySettings(const QQmlFormatSettings &settings)
         setFunctionsSpacing(settings.value(QQmlFormatSettings::s_functionsSpacingSetting).toBool());
     }
 
+    // Needs to be set after normalize since it can set NormalizeOrder to true.
+    if (!isMarked(Settings::GroupAttributesTogether)
+        && settings.isSet(QQmlFormatSettings::s_groupAttributesTogetherSetting)) {
+        setGroupAttributesTogether(
+                settings.value(QQmlFormatSettings::s_groupAttributesTogetherSetting).toBool());
+    }
+
     if (!isMarked(Settings::SortImports)
         && settings.isSet(QQmlFormatSettings::s_sortImportsSetting)) {
         setSortImports(settings.value(QQmlFormatSettings::s_sortImportsSetting).toBool());
+    }
+
+    if (!isMarked(Settings::SingleLineEmptyObjects)
+        && settings.isSet(QQmlFormatSettings::s_singleLineEmptyObjectsSetting)) {
+        setSingleLineEmptyObjects(settings.value(QQmlFormatSettings::s_singleLineEmptyObjectsSetting).toBool());
     }
 
     if (!isMarked(Settings::SemicolonRule)
@@ -156,6 +169,11 @@ QQmlFormatOptions QQmlFormatOptions::buildCommandLineOptions(const QStringList &
             QLatin1String("Writes defaults settings to .qmlformat.ini and exits (Warning: This "
                           "will overwrite any existing settings and comments!)"_L1));
     parser.addOption(writeDefaultsOption);
+
+    QCommandLineOption outputOptionsOption(
+            QStringList() << "output-options"_L1,
+            QLatin1String("Output available options and their defaults values in JSON format."_L1));
+    parser.addOption(outputOptionsOption);
 
     QCommandLineOption ignoreSettings(QStringList() << "ignore-settings"_L1,
                                       QLatin1String("Ignores all settings files and only takes "
@@ -231,10 +249,21 @@ QQmlFormatOptions QQmlFormatOptions::buildCommandLineOptions(const QStringList &
             QStringLiteral("Ensure spaces between functions (only works with normalize option).")));
 
     parser.addOption(
+            QCommandLineOption(QStringList() << "group-attributes-together"_L1,
+                               QStringLiteral("Reorders and groups the attributes of the objects "
+                                              "according to the QML Coding Guidelines. "
+                                              "Implies --normalize.")));
+
+    parser.addOption(
             QCommandLineOption({ "S"_L1, "sort-imports"_L1 },
                                QStringLiteral("Sort imports alphabetically "
                                               "(Warning: this might change semantics if a given "
                                               "name identifies types in multiple modules!).")));
+
+    parser.addOption(QCommandLineOption(
+            QStringList() << "single-line-empty-objects"_L1,
+            QStringLiteral("Write empty objects on a single line (only works with normalize option).")));
+
     QCommandLineOption semicolonRuleOption(
             QStringList() << "semicolon-rule"_L1,
             QStringLiteral("Specify the semicolon rule to use (always, essential).\n"
@@ -249,6 +278,11 @@ QQmlFormatOptions QQmlFormatOptions::buildCommandLineOptions(const QStringList &
 
     if (parser.isSet(writeDefaultsOption)) {
         options.setWriteDefaultSettingsEnabled(true);
+        return options;
+    }
+
+    if (parser.isSet(outputOptionsOption)) {
+        options.setOutputOptionsEnabled(true);
         return options;
     }
 
@@ -305,6 +339,7 @@ QQmlFormatOptions QQmlFormatOptions::buildCommandLineOptions(const QStringList &
         }
     }
 
+    options.setDryRun(parser.isSet(dryrunOption));
     options.setIsVerbose(parser.isSet("verbose"_L1));
     options.setIsInplace(parser.isSet("inplace"_L1));
     options.setForceEnabled(parser.isSet("force"_L1));
@@ -326,9 +361,18 @@ QQmlFormatOptions QQmlFormatOptions::buildCommandLineOptions(const QStringList &
         options.mark(Settings::FunctionsSpacing);
         options.setFunctionsSpacing(true);
     }
+    // Needs to be set after normalize since it can set NormalizeOrder to true.
+    if (parser.isSet("group-attributes-together"_L1)) {
+        options.mark(Settings::GroupAttributesTogether);
+        options.setGroupAttributesTogether(true);
+    }
     if (parser.isSet("sort-imports"_L1)) {
         options.mark(Settings::SortImports);
         options.setSortImports(true);
+    }
+    if (parser.isSet("single-line-empty-objects"_L1)) {
+        options.mark(Settings::SingleLineEmptyObjects);
+        options.setSingleLineEmptyObjects(true);
     }
     if (parser.isSet("indent-width"_L1)) {
         options.mark(Settings::IndentWidth);
@@ -338,6 +382,20 @@ QQmlFormatOptions QQmlFormatOptions::buildCommandLineOptions(const QStringList &
     if (parser.isSet("newline"_L1)) {
         options.mark(Settings::NewlineType);
         options.setNewline(QQmlFormatOptions::parseEndings(parser.value("newline"_L1)));
+    }
+
+    if (parser.isSet(settingsOption)) {
+        options.mark(Settings::SettingsFile);
+        const auto value = parser.value(settingsOption);
+        if (value.isEmpty()) {
+            options.addError("Error: No settings file specified for option -s."_L1);
+            return options;
+        }
+        if (!QFile::exists(value)) {
+            options.addError("Error: Could not find file \""_L1 + value + "\"."_L1);
+            return options;
+        }
+        options.setSettingsFile(value);
     }
 
     if (parser.isSet(semicolonRuleOption)) {
@@ -375,7 +433,8 @@ QQmlFormatOptions QQmlFormatOptions::optionsForFile(const QString &fileName,
     if (hasFiles)
         perFileOptions.setIsInplace(true);
 
-    if (!ignoreSettingsEnabled() && settings->search(fileName))
+    if (!ignoreSettingsEnabled()
+        && settings->search(fileName, { m_settingsFile, m_verbose }).isValid())
         perFileOptions.applySettings(*settings);
 
     return perFileOptions;

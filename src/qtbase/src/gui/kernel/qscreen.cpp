@@ -763,6 +763,10 @@ void *QScreen::resolveInterface(const char *name, int revision) const
     QT_NATIVE_INTERFACE_RETURN_IF(QWaylandScreen, platformScreen);
 #endif
 
+#if defined(Q_OS_MACOS)
+    QT_NATIVE_INTERFACE_RETURN_IF(QCocoaScreen, platformScreen);
+#endif
+
     return nullptr;
 }
 

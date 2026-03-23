@@ -19,7 +19,8 @@ public:
     virtual void terminateMarker();
     virtual bool recognizeCode(const QString & /*code*/) { return true; }
     virtual bool recognizeExtension(const QString & /*extension*/) { return true; }
-    virtual bool recognizeLanguage(const QString & /*language*/) { return false; }
+    virtual bool recognizeFileName(const QString &name);
+    virtual bool recognizeLanguage(const QString &language);
     [[nodiscard]] virtual Atom::AtomType atomType() const { return Atom::Code; }
     virtual QString markedUpCode(const QString &code, const Node * /*relative*/,
                                  const Location & /*location*/)

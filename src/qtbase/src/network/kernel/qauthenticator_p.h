@@ -19,10 +19,11 @@
 #include <QtNetwork/private/qtnetworkglobal_p.h>
 #include <qhash.h>
 #include <qbytearray.h>
-#include <qscopedpointer.h>
 #include <qstring.h>
 #include <qauthenticator.h>
 #include <qvariant.h>
+
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 
@@ -39,6 +40,30 @@ class Q_NETWORK_EXPORT QAuthenticatorPrivate
 public:
     enum Method { None, Basic, Negotiate, Ntlm, DigestMd5, };
     QAuthenticatorPrivate();
+
+    QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QAuthenticatorPrivate)
+    void swap(QAuthenticatorPrivate &other) noexcept
+    {
+        user.swap(other.user);
+        extractedUser.swap(other.extractedUser);
+        password.swap(other.password);
+        options.swap(other.options);
+        std::swap(method, other.method);
+        realm.swap(other.realm);
+        challenge.swap(other.challenge);
+#if QT_CONFIG(sspi) // SSPI
+        sspiWindowsHandles.swap(other.sspiWindowsHandles);
+#elif QT_CONFIG(gssapi) // GSSAPI
+        gssApiHandles.swap(other.gssApiHandles);
+#endif
+        std::swap(hasFailed, other.hasFailed);
+        std::swap(phase, other.phase);
+        cnonce.swap(other.cnonce);
+        std::swap(nonceCount, other.nonceCount);
+        workstation.swap(other.workstation);
+        userDomain.swap(other.userDomain);
+    }
+
     ~QAuthenticatorPrivate();
 
     QString user;
@@ -49,9 +74,9 @@ public:
     QString realm;
     QByteArray challenge;
 #if QT_CONFIG(sspi) // SSPI
-    QScopedPointer<QSSPIWindowsHandles> sspiWindowsHandles;
+    std::unique_ptr<QSSPIWindowsHandles> sspiWindowsHandles;
 #elif QT_CONFIG(gssapi) // GSSAPI
-    QScopedPointer<QGssApiHandles> gssApiHandles;
+    std::unique_ptr<QGssApiHandles> gssApiHandles;
 #endif
     bool hasFailed; //credentials have been tried but rejected by server.
 

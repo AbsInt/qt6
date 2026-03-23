@@ -10,6 +10,8 @@
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtQuick/private/qquickitem_p.h>
 #include <QtQuick/private/qquicktext_p.h>
+#include <QtQuickTemplates2/private/qquickicon_p.h>
+#include <QtQuickTemplates2/private/qquickicon_p_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -50,7 +52,8 @@ bool QQuickIconLabelPrivate::createImage()
     image->setName(icon.name());
     image->setSource(icon.resolvedSource());
     image->setSourceSize(QSize(icon.width(), icon.height()));
-    image->setColor(icon.color());
+    const bool explicitColor = QQuickIconPrivate::isResolved(icon, QQuickIconPrivate::ColorResolved);
+    image->setColor(explicitColor ? icon.color() : defaultIconColor);
     image->setCache(icon.cache());
     QQmlEngine::setContextForObject(image, qmlContext(q));
     if (componentComplete)
@@ -84,7 +87,8 @@ void QQuickIconLabelPrivate::syncImage()
     image->setName(icon.name());
     image->setSource(icon.resolvedSource());
     image->setSourceSize(QSize(icon.width(), icon.height()));
-    image->setColor(icon.color());
+    const bool explicitColor = QQuickIconPrivate::isResolved(icon, QQuickIconPrivate::ColorResolved);
+    image->setColor(explicitColor ? icon.color() : defaultIconColor);
     image->setCache(icon.cache());
     const int valign = alignment & Qt::AlignVertical_Mask;
     image->setVerticalAlignment(static_cast<QQuickImage::VAlignment>(valign));
@@ -371,6 +375,39 @@ void QQuickIconLabel::setIcon(const QQuickIcon &icon)
     d->icon = icon;
     d->icon.ensureRelativeSourceResolved(this);
     d->updateOrSyncImage();
+}
+
+/*!
+    \internal
+
+    The icon property of the control always takes precedence over that of an
+    action's (see 146bc9517c56feda4eba34282d3cc53bd47b6267). However, styles
+    also need to be able to set their default icon color.
+
+    This property allows styles to specify a color for the image without
+    overriding any potential action's icon:
+
+    \code
+    contentItem: IconLabel {
+        icon: control.icon
+        defaultIconColor: "tomato
+    }
+    \endcode
+
+    If icon.color was explicitly set, it is used instead.
+*/
+QColor QQuickIconLabel::defaultIconColor() const
+{
+    Q_D(const QQuickIconLabel);
+    return d->defaultIconColor;
+}
+
+void QQuickIconLabel::setDefaultIconColor(const QColor &defaultIconColor)
+{
+    Q_D(QQuickIconLabel);
+    d->defaultIconColor = defaultIconColor;
+    d->syncImage();
+    emit defaultIconColorChanged();
 }
 
 QString QQuickIconLabel::text() const

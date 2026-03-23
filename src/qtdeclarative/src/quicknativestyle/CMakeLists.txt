@@ -12,6 +12,7 @@ set(qml_files
     "controls/DefaultCheckBox.qml"
     "controls/DefaultComboBox.qml"
     "controls/DefaultDial.qml"
+    "controls/DefaultDoubleSpinBox.qml"
     "controls/DefaultFrame.qml"
     "controls/DefaultGroupBox.qml"
     "controls/DefaultItemDelegate.qml"
@@ -58,6 +59,7 @@ qt_internal_add_qml_module(qtquickcontrols2nativestyleplugin
         items/qquickstyleitembutton.cpp items/qquickstyleitembutton.h
         items/qquickstyleitemcheckbox.cpp items/qquickstyleitemcheckbox.h
         items/qquickstyleitemdelaybutton.cpp items/qquickstyleitemdelaybutton.h
+        items/qquickstyleitemdoublespinbox.cpp items/qquickstyleitemdoublespinbox.h
         items/qquickstyleitemcheckdelegate.cpp items/qquickstyleitemcheckdelegate.h
         items/qquickstyleitemdial.cpp items/qquickstyleitemdial.h
         items/qquickstyleitemframe.cpp items/qquickstyleitemframe.h

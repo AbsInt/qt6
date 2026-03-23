@@ -1860,4 +1860,40 @@ TestCase {
 
         compare(rightClickSpy.count, 1)
     }
+
+    Component {
+        id: iconColorSetInActionComponent
+
+        SwipeDelegate {
+            action: Action {
+                icon.source: "images/heart.svg"
+                icon.color: "tomato"
+            }
+        }
+    }
+
+    Component {
+        id: iconColorSetInControlComponent
+
+        SwipeDelegate {
+            icon.source: "images/heart.svg"
+            icon.color: "wheat"
+        }
+    }
+
+    function test_iconColor_data() {
+        return [
+            { tag: "icon color set in action", component: iconColorSetInActionComponent,
+                expectedIconColor: "#ff6347" },
+            { tag: "icon color set in control", component: iconColorSetInControlComponent,
+                expectedIconColor: "#f5deb3"}
+        ]
+    }
+
+    function test_iconColor(data) {
+        let control = createTemporaryObject(data.component, testCase)
+        let iconImage = findChild(control.contentItem, "image")
+        verify(iconImage)
+        compare(iconImage.color, data.expectedIconColor)
+    }
 }

@@ -143,12 +143,24 @@ void QQmlPropertyMapMetaObject::propertyCreated(int, QMetaPropertyBuilder &b)
     care to explicitly synchronize access to the meta object.
 */
 
+#if QT_DEPRECATED_SINCE(6, 11)
 /*!
+    \deprecated [6.11] Use the factory or the protected two-argument constructor instead.
+
     Constructs a bindable map with parent object \a parent.
 */
 QQmlPropertyMap::QQmlPropertyMap(QObject *parent)
 : QQmlPropertyMap(&staticMetaObject, parent)
 {
+}
+#endif // QT_DEPRECATED_SINCE(6, 11)
+
+/*!
+    Creates a bindable map with parent object \a parent.
+*/
+QQmlPropertyMap *QQmlPropertyMap::create(QObject *parent)
+{
+    return new QQmlPropertyMap(&staticMetaObject, parent);
 }
 
 /*!

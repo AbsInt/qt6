@@ -90,7 +90,7 @@ template <unsigned b, typename Int,
                            bool> = true>
 constexpr auto qDivMod(Int a)
 {
-    constexpr unsigned w = QtPrivate::qConstexprCountTrailingZeroBits(b);
+    constexpr unsigned w = qCountTrailingZeroBits(b);
     struct R { Int quotient; Int remainder; };
     if constexpr (std::is_signed_v<Int>) {
         if (a < 0)

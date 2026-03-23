@@ -10,6 +10,7 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.ResultReceiver;
 import android.text.method.MetaKeyKeyListener;
 import android.util.DisplayMetrics;
@@ -96,35 +97,35 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             View rootView = activity.getWindow().getDecorView();
-            rootView.setOnApplyWindowInsetsListener((view, insets) -> {
-                    WindowInsets windowInsets = view.onApplyWindowInsets(insets);
-                    if (m_keyboardIsVisible != windowInsets.isVisible(WindowInsets.Type.ime()))
-                        setKeyboardVisibility_internal(!m_keyboardIsVisible, System.nanoTime());
-                    return windowInsets;
+            ViewTreeObserver observer = rootView.getViewTreeObserver();
+            observer.addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                private boolean m_lastImeVisibility = false;
+
+                @Override
+                public void onGlobalLayout() {
+                    WindowInsets windowInsets = rootView.getRootWindowInsets();
+                    if (windowInsets == null)
+                        return;
+
+                    boolean imeVisible = windowInsets.isVisible(WindowInsets.Type.ime());
+                    if (m_lastImeVisibility != imeVisible) {
+                        m_lastImeVisibility = imeVisible;
+                        setKeyboardVisibility_internal(imeVisible, System.nanoTime());
+                    }
+
+                    if (!isKeyboardHidden())
+                        setKeyboardTransitionInProgress(false);
+                }
             });
         }
     }
 
-    private final ViewTreeObserver.OnGlobalLayoutListener keyboardListener =
-                                                new ViewTreeObserver.OnGlobalLayoutListener() {
-        @Override
-        public void onGlobalLayout() {
-            if (!isKeyboardHidden())
-                setKeyboardTransitionInProgress(false);
-        }
-    };
-
     private void setKeyboardTransitionInProgress(boolean state)
     {
-        if (m_keyboardTransitionInProgress == state || m_currentEditText == null)
+        if (m_currentEditText == null || m_keyboardTransitionInProgress == state)
             return;
 
         m_keyboardTransitionInProgress = state;
-        ViewTreeObserver observer = m_currentEditText.getViewTreeObserver();
-        if (state)
-            observer.addOnGlobalLayoutListener(keyboardListener);
-        else
-            observer.removeOnGlobalLayoutListener(keyboardListener);
     }
 
     // QtInputInterface implementation begin
@@ -173,7 +174,7 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
         } else {
             if (m_imm == null)
                 return;
-            m_imm.showSoftInput(m_currentEditText, 0, new ResultReceiver(new Handler()) {
+            m_imm.showSoftInput(m_currentEditText, 0, new ResultReceiver(new Handler(Looper.getMainLooper())) {
                 @Override
                 @SuppressWarnings("fallthrough")
                 protected void onReceiveResult(int resultCode, Bundle resultData) {
@@ -285,7 +286,7 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
                 activity.getWindow().getInsetsController().hide(Type.ime());
             } else {
                 m_imm.hideSoftInputFromWindow(m_currentEditText.getWindowToken(), 0,
-                        new ResultReceiver(new Handler()) {
+                        new ResultReceiver(new Handler(Looper.getMainLooper())) {
                             @Override
                             protected void onReceiveResult(int resultCode, Bundle resultData) {
                                 switch (resultCode) {
@@ -384,8 +385,8 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
 
     void setKeyboardVisibility(boolean visibility, long timeStamp)
     {
-        // Since API 30 keyboard visibility changes are tracked by OnApplyWindowInsetsListener.
-        // There are no manual changes anymore
+        // Since API 30 keyboard visibility changes are tracked by the global layout listener
+        // observing root window insets. There are no manual changes anymore
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
             setKeyboardVisibility_internal(visibility, timeStamp);
     }

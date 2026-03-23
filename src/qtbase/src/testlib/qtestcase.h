@@ -214,7 +214,8 @@ do { \
     QVERIFY(expr); \
 } while (false)
 
-#define QTRY_VERIFY(expr) QTRY_VERIFY_WITH_TIMEOUT(expr, QTest::Internal::defaultTryTimeout)
+#define QTRY_VERIFY(expr) QTRY_VERIFY_WITH_TIMEOUT( \
+    expr, QTest::defaultTryTimeout.load(std::memory_order_relaxed))
 
 // Will try to wait for the expression to become true while allowing event processing
 #define QTRY_VERIFY2_WITH_TIMEOUT(expr, messageExpression, timeout) \
@@ -224,7 +225,8 @@ do { \
 } while (false)
 
 #define QTRY_VERIFY2(expr, messageExpression) \
-    QTRY_VERIFY2_WITH_TIMEOUT(expr, messageExpression, QTest::Internal::defaultTryTimeout)
+    QTRY_VERIFY2_WITH_TIMEOUT(expr, messageExpression, \
+        QTest::defaultTryTimeout.load(std::memory_order_relaxed))
 
 // Will try to wait for the comparison to become successful while allowing event processing
 #define QTRY_COMPARE_WITH_TIMEOUT(expr, expected, timeout) \
@@ -234,7 +236,8 @@ do { \
 } while (false)
 
 #define QTRY_COMPARE(expr, expected) \
-    QTRY_COMPARE_WITH_TIMEOUT(expr, expected, QTest::Internal::defaultTryTimeout)
+    QTRY_COMPARE_WITH_TIMEOUT(expr, expected, \
+        QTest::defaultTryTimeout.load(std::memory_order_relaxed))
 
 #define QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, op, opId, timeout) \
 do { \
@@ -247,37 +250,43 @@ do { \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, ==, Equal, timeout)
 
 #define QTRY_COMPARE_EQ(computed, baseline) \
-    QTRY_COMPARE_EQ_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
+    QTRY_COMPARE_EQ_WITH_TIMEOUT(computed, baseline, \
+        QTest::defaultTryTimeout.load(std::memory_order_relaxed))
 
 #define QTRY_COMPARE_NE_WITH_TIMEOUT(computed, baseline, timeout) \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, !=, NotEqual, timeout)
 
 #define QTRY_COMPARE_NE(computed, baseline) \
-    QTRY_COMPARE_NE_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
+    QTRY_COMPARE_NE_WITH_TIMEOUT(computed, baseline, \
+        QTest::defaultTryTimeout.load(std::memory_order_relaxed))
 
 #define QTRY_COMPARE_LT_WITH_TIMEOUT(computed, baseline, timeout) \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, <, LessThan, timeout)
 
 #define QTRY_COMPARE_LT(computed, baseline) \
-    QTRY_COMPARE_LT_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
+    QTRY_COMPARE_LT_WITH_TIMEOUT(computed, baseline, \
+        QTest::defaultTryTimeout.load(std::memory_order_relaxed))
 
 #define QTRY_COMPARE_LE_WITH_TIMEOUT(computed, baseline, timeout) \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, <=, LessThanOrEqual, timeout)
 
 #define QTRY_COMPARE_LE(computed, baseline) \
-    QTRY_COMPARE_LE_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
+    QTRY_COMPARE_LE_WITH_TIMEOUT(computed, baseline, \
+        QTest::defaultTryTimeout.load(std::memory_order_relaxed))
 
 #define QTRY_COMPARE_GT_WITH_TIMEOUT(computed, baseline, timeout) \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, >, GreaterThan, timeout)
 
 #define QTRY_COMPARE_GT(computed, baseline) \
-    QTRY_COMPARE_GT_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
+    QTRY_COMPARE_GT_WITH_TIMEOUT(computed, baseline, \
+        QTest::defaultTryTimeout.load(std::memory_order_relaxed))
 
 #define QTRY_COMPARE_GE_WITH_TIMEOUT(computed, baseline, timeout) \
     QTRY_COMPARE_OP_WITH_TIMEOUT_IMPL(computed, baseline, >=, GreaterThanOrEqual, timeout)
 
 #define QTRY_COMPARE_GE(computed, baseline) \
-    QTRY_COMPARE_GE_WITH_TIMEOUT(computed, baseline, QTest::Internal::defaultTryTimeout)
+    QTRY_COMPARE_GE_WITH_TIMEOUT(computed, baseline, \
+        QTest::defaultTryTimeout.load(std::memory_order_relaxed))
 
 #define QSKIP_INTERNAL(statement) \
 do {\
@@ -422,7 +431,7 @@ namespace QTest
     Q_TESTLIB_EXPORT int qExec(QObject *testObject, const QStringList &arguments);
 
 #if QT_CONFIG(batch_test_support) || defined(Q_QDOC)
-    using TestEntryFunction = int (*)(int, char **);
+    using TestEntryFunction = std::function<int(int, char **)>;
     Q_TESTLIB_EXPORT void qRegisterTestCase(const QString &name, TestEntryFunction entryFunction);
 #endif  // QT_CONFIG(batch_test_support)
 
@@ -498,6 +507,7 @@ namespace QTest
 
     Q_TESTLIB_EXPORT const char *currentTestFunction();
     Q_TESTLIB_EXPORT const char *currentDataTag();
+    Q_TESTLIB_EXPORT const char *currentGlobalDataTag();
     Q_TESTLIB_EXPORT bool currentTestFailed();
     Q_TESTLIB_EXPORT bool currentTestResolved();
     Q_TESTLIB_EXPORT bool runningTest(); // Internal, for use by macros and QTestEventLoop.

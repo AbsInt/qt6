@@ -307,6 +307,7 @@ macro(_qt_internal_test_expect_pass _dir)
       GENERATOR
       MAKE_PROGRAM
       BUILD_TYPE
+      BUILD_TARGET
     )
     set(_test_multi_args
       BUILD_OPTIONS
@@ -362,6 +363,12 @@ macro(_qt_internal_test_expect_pass _dir)
     endif()
     if(build_type)
         set(build_type "--build-config" "${build_type}")
+    endif()
+
+    if(_ARGS_BUILD_TARGET)
+        set(build_target "--build-target" "${_ARGS_BUILD_TARGET}")
+    else()
+        set(build_target "")
     endif()
 
     # Allow skipping clean step.
@@ -468,6 +475,7 @@ macro(_qt_internal_test_expect_pass _dir)
         ${build_project}
         --build-options "${option_list}"
                         "${_ARGS_BUILD_OPTIONS}" ${additional_configure_args}
+        ${build_target}
         ${test_command}
     )
 

@@ -246,6 +246,7 @@ private slots:
 
     void QTBUG14614_gradientCacheRaceCondition();
     void drawTextOpacity();
+    void drawPathOpacity();
 
     void QTBUG17053_zeroDashPattern();
 
@@ -4833,6 +4834,48 @@ void tst_QPainter::drawTextOpacity()
     p.end();
 
     QCOMPARE(image, copy);
+}
+
+void tst_QPainter::drawPathOpacity()
+{
+    // make sure that drawing a non-opaque QPainterPath will yield the same
+    // result as drawing its fill and outline separately, i.e. that the fill's
+    // edge can be seen through the translucent outline
+    // qtsvg relies on this behavior, so please inform its developers in
+    // case you change it
+
+    QImage image(32, 32, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    QPainter p(&image);
+    p.setOpacity(0.5);
+
+    QPainterPath pp;
+    pp.moveTo(5, 5);
+    pp.lineTo(27, 5);
+    pp.lineTo(5, 27);
+    pp.closeSubpath();
+
+    // only fill
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor("blue"));
+    p.drawPath(pp);
+
+    // only outline
+    QPen pen;
+    pen.setColor(QColor("yellow"));
+    pen.setWidthF(8.);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+    p.drawPath(pp);
+    const QImage drawnInTwoPasses = image;
+
+    // draw in one pass
+    image.fill(Qt::white);
+    p.setPen(pen);
+    p.setBrush(QColor("blue"));
+    p.drawPath(pp);
+
+    QCOMPARE(image, drawnInTwoPasses);
 }
 
 void tst_QPainter::QTBUG17053_zeroDashPattern()

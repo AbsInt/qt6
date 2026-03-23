@@ -18,7 +18,7 @@ qt_internal_add_module(QmlCompiler
         qqmljscompiler.cpp qqmljscompiler_p.h
         qqmljscompilerstats.cpp qqmljscompilerstats_p.h
         qqmljscompilerstatsreporter.cpp qqmljscompilerstatsreporter_p.h
-        qqmljscontextualtypes_p.h
+        qqmljscontextualtypes_p.h qqmljscontextualtypes.cpp
         qqmljsfunctioninitializer.cpp qqmljsfunctioninitializer_p.h
         qqmljsimporter.cpp qqmljsimporter_p.h
         qqmljsimportvisitor.cpp qqmljsimportvisitor_p.h
@@ -49,6 +49,7 @@ qt_internal_add_module(QmlCompiler
         qqmlsasourcelocation.cpp qqmlsasourcelocation.h qqmlsasourcelocation_p.h
         qresourcerelocater.cpp qresourcerelocater_p.h
         qqmljscontextproperties_p.h qqmljscontextproperties.cpp
+        qqmljsusercontextproperties_p.h qqmljsusercontextproperties.cpp
     NO_UNITY_BUILD_SOURCES
         qqmljsoptimizations.cpp
     PUBLIC_LIBRARIES

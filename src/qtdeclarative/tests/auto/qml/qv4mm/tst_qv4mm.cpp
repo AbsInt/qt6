@@ -5,6 +5,7 @@
 #include <QQmlEngine>
 #include <QLoggingCategory>
 #include <QQmlComponent>
+#include <QRandomGenerator>
 
 #include <private/qv4mm_p.h>
 #include <private/qv4qobjectwrapper_p.h>
@@ -52,6 +53,11 @@ private slots:
     void constObjectWrapperOnlyConstInSingleEngine();
     void markObjectWrappersAfterMarkWeakValues();
     void variantAssociationObjectMarksMember();
+
+#ifdef QT_BUILD_INTERNAL
+    void validateIncrementalMarkPhase_data();
+    void validateIncrementalMarkPhase();
+#endif
 
     void trackObjectDoesNotAccessGarbageOnTheStackOnAllocation();
     void spreadArgumentDoesNotAccessGarbageOnTheStackOnAllocation();
@@ -252,7 +258,7 @@ void tst_qv4mm::accessParentOnDestruction()
     QVERIFY(obj);
     QPointer<QObject> timer = qvariant_cast<QObject *>(obj->property("timer"));
     QVERIFY(timer);
-    QTRY_VERIFY(!timer->property("running").toBool());
+    QTRY_VERIFY_WITH_TIMEOUT(!timer->property("running").toBool(), 2s);
     QCOMPARE(obj->property("iterations").toInt(), 100);
     QCOMPARE(obj->property("creations").toInt(), 100);
     gc(engine); // ensure incremental gc has finished, and collected all objects
@@ -905,20 +911,199 @@ void tst_qv4mm::variantAssociationObjectMarksMember()
     QVERIFY(mapping->inUse());
 }
 
+#ifdef QT_BUILD_INTERNAL
+void tst_qv4mm::validateIncrementalMarkPhase_data() {
+    QTest::addColumn<void>("");
+    for (quint8 i = 1; i <= 100; ++i)
+        QTest::addRow("Randomized Sample %d", i);
+}
+
+void tst_qv4mm::validateIncrementalMarkPhase() {
+    QRandomGenerator& generator = *QRandomGenerator::global();
+
+    auto undefined = [](QQmlEngine&) {
+        return QJSValue();
+    };
+
+    auto null = [](QQmlEngine&) {
+        return QJSValue(QJSValue::NullValue);
+    };
+
+    auto boolean = [&generator](QQmlEngine& engine) {
+        return engine.toScriptValue(generator.bounded(2) == 0);
+    };
+
+    auto number = [&generator](QQmlEngine& engine) {
+        return engine.toScriptValue(generator.bounded(std::numeric_limits<double>::max()));
+    };
+
+    auto qstring = [&generator]() {
+        // We don't really care much about the actual content, just
+        // that we have randomized objects on the heap that might or
+        // might not be hit by the random mutations, thus the naive
+        // and limited randomization.
+        int length = generator.bounded(1, 10);
+
+        QString new_string(length, 'a');
+        std::generate_n(new_string.begin(), length, [&generator](){
+            return QChar(generator.bounded('a', 'z'));
+        });
+
+        return new_string;
+    };
+
+    auto string = [&qstring](QQmlEngine& engine) {
+        return engine.toScriptValue(qstring());
+    };
+
+    auto symbol = [&qstring](QQmlEngine& engine) {
+        return engine.newSymbol(qstring());
+    };
+
+    auto regex = [&qstring](QQmlEngine& engine) {
+        return engine.toScriptValue(qstring());
+    };
+
+    auto date = [&generator](QQmlEngine& engine) {
+        return engine.toScriptValue(QTime(
+            generator.bounded(24),
+            generator.bounded(60),
+            generator.bounded(60),
+            generator.bounded(1000)
+        ));
+    };
+
+    auto array = [&generator](QQmlEngine& engine, quint8 max_depth, auto value) {
+        int length = generator.bounded(10);
+        auto new_array = engine.newArray(length);
+
+        for (int i = 0; i < length; ++i)
+            new_array.setProperty(i, value(engine, max_depth - 1, value));
+
+        return new_array;
+    };
+
+    auto object = [&qstring, &generator](QQmlEngine& engine, quint8 max_depth, auto value) {
+        auto new_object = engine.newObject();
+
+        int max_count = generator.bounded(10);
+        for (int i = 0; i < max_count; ++i) {
+            auto prop = qstring();
+            if (new_object.hasProperty(prop)) continue;
+            new_object.setProperty(prop, value(engine, max_depth - 1, value));
+        }
+
+        return new_object;
+    };
+
+    auto value = [&](QQmlEngine& engine, quint8 max_depth, auto value) {
+        bool generate_leaf = max_depth == 0;
+
+        switch (generator.bounded(generate_leaf ? 8 : 10)) {
+            case 0: return undefined(engine);
+            case 1: return null(engine);
+            case 2: return boolean(engine);
+            case 3: return number(engine);
+            case 4: return string(engine);
+            case 5: return symbol(engine);
+            case 6: return regex(engine);
+            case 7: return date(engine);
+            case 8: return array(engine, max_depth, value);
+            case 9: return object(engine, max_depth, value);
+            default: Q_UNREACHABLE();
+        };
+    };
+
+    QQmlEngine engine;
+    auto handle = engine.handle();
+    handle->memoryManager->crossValidateIncrementalGC = true;
+
+    std::vector<QJSValue> values;
+    {
+        int object_count = generator.bounded(30,100);
+        values.reserve(object_count);
+
+        while (object_count > 0) {
+            values.emplace_back(value(engine, 5, value));
+            --object_count;
+        }
+    }
+
+    engine.collectGarbage();
+
+    auto state_machine = handle->memoryManager->gcStateMachine.get();
+    QCOMPARE(handle->memoryManager->gcBlocked, QV4::MemoryManager::Unblocked);
+    state_machine->reset();
+    handle->memoryManager->gcBlocked = QV4::MemoryManager::NormalBlocked;
+    while (state_machine->state != QV4::GCState::CrossValidateIncrementalMarkPhase) {
+        QV4::GCStateInfo& stateInfo = state_machine->stateInfoMap[int(state_machine->state)];
+        state_machine->state = stateInfo.execute(state_machine, state_machine->stateData);
+    }
+
+    std::vector<QV4::GCStateMachine::BitmapError> block_mutations;
+    {
+        std::size_t mutations_count = generator.bounded(30);
+        block_mutations.reserve(mutations_count);
+
+        std::size_t fuel = 100;
+
+        auto& chunks = handle->memoryManager->blockAllocator.chunks;
+
+        while (mutations_count > 0 && fuel > 0) {
+            std::size_t chunk_index = generator.bounded(quint64(chunks.size()));
+            QV4::Chunk* chunk = chunks[chunk_index];
+
+            std::size_t bitmap_index = generator.bounded(quint64(QV4::Chunk::EntriesInBitmap));
+            auto& bitmap = chunk->blackBitmap[bitmap_index];
+
+            if (bitmap) {
+                std::vector<quintptr> object_aligned_masks{};
+
+                quintptr copy = bitmap;
+                for (quintptr mask{1}; copy; mask <<= 1) {
+                    if (copy & mask) {
+                        object_aligned_masks.push_back(mask);
+                        copy ^= mask;
+                    }
+                }
+
+                quintptr choice = object_aligned_masks[generator.bounded(quint64(object_aligned_masks.size()))];
+
+                bitmap ^= choice;
+
+                block_mutations.emplace_back(chunk_index, bitmap_index, std::log2(choice));
+
+                --mutations_count;
+            } else {
+                --fuel;
+            }
+        }
+    }
+    std::sort(block_mutations.begin(), block_mutations.end());
+
+    QCOMPARE(state_machine->state, QV4::GCState::CrossValidateIncrementalMarkPhase);
+    QV4::GCStateInfo& stateInfo = state_machine->stateInfoMap[int(state_machine->state)];
+    state_machine->state = stateInfo.execute(state_machine, state_machine->stateData);
+
+    QCOMPARE(state_machine->bitmapErrors.size(), block_mutations.size());
+
+    for (std::size_t i = 0; i < block_mutations.size(); ++i)
+        QCOMPARE(state_machine->bitmapErrors[i], block_mutations[i]);
+}
+#endif
+
 void tst_qv4mm::trackObjectDoesNotAccessGarbageOnTheStackOnAllocation()
 {
 #if defined(QT_NO_DEBUG) && !defined(QT_FORCE_ASSERTS)
     QSKIP("Our main visibility tool for this test is an assertion. Thus the test needs assertions to be enabled.");
 #endif
 
-    qputenv("QV4_MM_AGGRESSIVE_GC", "1");
-    QScopeGuard env_guard([](){ qunsetenv("QV4_MM_AGGRESSIVE_GC"); });
-
-    qputenv("QV4_GC_TIMELIMIT", "0");
-    QScopeGuard env_guard2([](){ qunsetenv("QV4_GC_TIMELIMIT"); });
-
     QJSEngine jsengine;
     QV4::ExecutionEngine* engine = jsengine.handle();
+
+    engine->memoryManager->aggressiveGC = true;
+    engine->memoryManager->setGCTimeLimit(0);
+
     *engine->jsStackTop = QV4::Value::fromHeapObject(engine->memoryManager->allocManaged<QV4::String>());
 
     jsengine.collectGarbage();
@@ -936,14 +1121,11 @@ void tst_qv4mm::spreadArgumentDoesNotAccessGarbageOnTheStackOnAllocation()
     QSKIP("Our main visibility tool for this test is an assertion. Thus the test needs assertions to be enabled.");
 #endif
 
-    qputenv("QV4_MM_AGGRESSIVE_GC", "1");
-    QScopeGuard env_guard([](){ qunsetenv("QV4_MM_AGGRESSIVE_GC"); });
-
-    qputenv("QV4_GC_TIMELIMIT", "0");
-    QScopeGuard env_guard2([](){ qunsetenv("QV4_GC_TIMELIMIT"); });
-
     QJSEngine jsengine;
     QV4::ExecutionEngine* engine = jsengine.handle();
+
+    engine->memoryManager->aggressiveGC = true;
+    engine->memoryManager->setGCTimeLimit(0);
 
     QJSValue function = jsengine.evaluate("function foo(){}; foo");
     QV4::Value* function_value = QJSValuePrivate::takeManagedValue(&function);
@@ -970,14 +1152,12 @@ void tst_qv4mm::scopedConvertToStringFromReturnedValueDoesNotAccessGarbageOnTheS
     QSKIP("Our main visibility tool for this test is an assertion. Thus the test needs assertions to be enabled.");
 #endif
 
-    qputenv("QV4_MM_AGGRESSIVE_GC", "1");
-    QScopeGuard env_guard([](){ qunsetenv("QV4_MM_AGGRESSIVE_GC"); });
-
-    qputenv("QV4_GC_TIMELIMIT", "0");
-    QScopeGuard env_guard2([](){ qunsetenv("QV4_GC_TIMELIMIT"); });
-
     QJSEngine jsengine;
     QV4::ExecutionEngine* engine = jsengine.handle();
+
+    engine->memoryManager->aggressiveGC = true;
+    engine->memoryManager->setGCTimeLimit(0);
+
     *engine->jsStackTop = QV4::Value::fromHeapObject(engine->memoryManager->allocManaged<QV4::String>());
 
     jsengine.collectGarbage();
@@ -992,14 +1172,12 @@ void tst_qv4mm::scopedConvertToObjectFromReturnedValueDoesNotAccessGarbageOnTheS
     QSKIP("Our main visibility tool for this test is an assertion. Thus the test needs assertions to be enabled.");
 #endif
 
-    qputenv("QV4_MM_AGGRESSIVE_GC", "1");
-    QScopeGuard env_guard([](){ qunsetenv("QV4_MM_AGGRESSIVE_GC"); });
-
-    qputenv("QV4_GC_TIMELIMIT", "0");
-    QScopeGuard env_guard2([](){ qunsetenv("QV4_GC_TIMELIMIT"); });
-
     QJSEngine jsengine;
     QV4::ExecutionEngine* engine = jsengine.handle();
+
+    engine->memoryManager->aggressiveGC = true;
+    engine->memoryManager->setGCTimeLimit(0);
+
     *engine->jsStackTop = QV4::Value::fromHeapObject(engine->memoryManager->allocManaged<QV4::String>());
 
     jsengine.collectGarbage();
@@ -1014,14 +1192,12 @@ void tst_qv4mm::scopedConvertToStringFromValueDoesNotAccessGarbageOnTheStackOnAl
     QSKIP("Our main visibility tool for this test is an assertion. Thus the test needs assertions to be enabled.");
 #endif
 
-    qputenv("QV4_MM_AGGRESSIVE_GC", "1");
-    QScopeGuard env_guard([](){ qunsetenv("QV4_MM_AGGRESSIVE_GC"); });
-
-    qputenv("QV4_GC_TIMELIMIT", "0");
-    QScopeGuard env_guard2([](){ qunsetenv("QV4_GC_TIMELIMIT"); });
-
     QJSEngine jsengine;
     QV4::ExecutionEngine* engine = jsengine.handle();
+
+    engine->memoryManager->aggressiveGC = true;
+    engine->memoryManager->setGCTimeLimit(0);
+
     *engine->jsStackTop = QV4::Value::fromHeapObject(engine->memoryManager->allocManaged<QV4::String>());
 
     jsengine.collectGarbage();
@@ -1037,14 +1213,12 @@ void tst_qv4mm::scopedConvertToObjectFromValueDoesNotAccessGarbageOnTheStackOnAl
     QSKIP("Our main visibility tool for this test is an assertion. Thus the test needs assertions to be enabled.");
 #endif
 
-    qputenv("QV4_MM_AGGRESSIVE_GC", "1");
-    QScopeGuard env_guard([](){ qunsetenv("QV4_MM_AGGRESSIVE_GC"); });
-
-    qputenv("QV4_GC_TIMELIMIT", "0");
-    QScopeGuard env_guard2([](){ qunsetenv("QV4_GC_TIMELIMIT"); });
-
     QJSEngine jsengine;
     QV4::ExecutionEngine* engine = jsengine.handle();
+
+    engine->memoryManager->aggressiveGC = true;
+    engine->memoryManager->setGCTimeLimit(0);
+
     *engine->jsStackTop = QV4::Value::fromHeapObject(engine->memoryManager->allocManaged<QV4::String>());
 
     jsengine.collectGarbage();

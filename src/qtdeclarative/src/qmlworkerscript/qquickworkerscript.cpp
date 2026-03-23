@@ -4,9 +4,12 @@
 
 #include "qtqmlworkerscriptglobal_p.h"
 #include "qquickworkerscript_p.h"
+
 #include <private/qqmlengine_p.h>
 #include <private/qqmlexpression_p.h>
 #include <private/qjsvalue_p.h>
+#include <private/qqmlscriptblob_p.h>
+#include <private/qqmlscriptdata_p.h>
 
 #include <QtCore/qcoreevent.h>
 #include <QtCore/qcoreapplication.h>
@@ -33,74 +36,105 @@
 
 QT_BEGIN_NAMESPACE
 
-class WorkerDataEvent : public QEvent
+enum class WorkerEventType
+{
+    Data = QEvent::User,
+    Load,
+    Remove,
+    Error,
+    Ready,
+    Destroy = QEvent::User + 100,
+};
+
+class WorkerIdEvent : public QEvent
 {
 public:
-    enum Type { WorkerData = QEvent::User };
+    WorkerIdEvent(int workerId, WorkerEventType type)
+        : QEvent(QEvent::Type(type)), m_workerId(workerId)
+    {}
 
-    WorkerDataEvent(int workerId, const QByteArray &data);
-    virtual ~WorkerDataEvent();
-
-    int workerId() const;
-    QByteArray data() const;
+    int workerId() const { return m_workerId; }
 
 private:
-    int m_id;
+    int m_workerId = -1;
+};
+
+class WorkerDataEvent : public WorkerIdEvent
+{
+public:
+    WorkerDataEvent(int workerId, const QByteArray &data)
+        : WorkerIdEvent(workerId, WorkerEventType::Data), m_data(data)
+    {}
+
+    QByteArray data() const { return m_data; }
+
+private:
     QByteArray m_data;
 };
 
-class WorkerLoadEvent : public QEvent
+class WorkerLoadEvent : public WorkerIdEvent
 {
 public:
-    enum Type { WorkerLoad = WorkerDataEvent::WorkerData + 1 };
+    WorkerLoadEvent(int workerId, const QUrl &url)
+        : WorkerIdEvent(workerId, WorkerEventType::Load), m_url(url)
+    {}
 
-    WorkerLoadEvent(int workerId, const QUrl &url);
-
-    int workerId() const;
-    QUrl url() const;
+    QUrl url() const { return m_url; }
 
 private:
-    int m_id;
     QUrl m_url;
 };
 
-class WorkerRemoveEvent : public QEvent
+class WorkerRemoveEvent : public WorkerIdEvent
 {
 public:
-    enum Type { WorkerRemove = WorkerLoadEvent::WorkerLoad + 1 };
-
-    WorkerRemoveEvent(int workerId);
-
-    int workerId() const;
-
-private:
-    int m_id;
+    WorkerRemoveEvent(int workerId) : WorkerIdEvent(workerId, WorkerEventType::Remove) {}
 };
 
 class WorkerErrorEvent : public QEvent
 {
 public:
-    enum Type { WorkerError = WorkerRemoveEvent::WorkerRemove + 1 };
+    WorkerErrorEvent(const QQmlError &error)
+        : QEvent(QEvent::Type(WorkerEventType::Error)), m_error(error)
+    {}
 
-    WorkerErrorEvent(const QQmlError &error);
-
-    QQmlError error() const;
+    QQmlError error() const { return m_error; }
 
 private:
     QQmlError m_error;
 };
 
-struct WorkerScript : public QV4::ExecutionEngine::Deletable
+class WorkerReadyEvent : public QEvent
 {
-    WorkerScript(QV4::ExecutionEngine *);
+public:
+    WorkerReadyEvent() : QEvent(QEvent::Type(WorkerEventType::Ready)) {}
+};
+
+class WorkerDestroyEvent : public QEvent
+{
+public:
+    WorkerDestroyEvent() : QEvent(QEvent::Type(WorkerEventType::Destroy)) {}
+};
+
+struct WorkerScript
+    : public QV4::ExecutionEngine::Deletable
+    , public QQmlNotifyingBlob::Callback
+#if QT_CONFIG(qml_network)
+    , public QQmlNetworkAccessManagerFactory
+#endif
+{
+    WorkerScript(QV4::ExecutionEngine *engine);
     ~WorkerScript() = default;
 
+    QV4::ExecutionEngine *engine = nullptr;
     QQuickWorkerScriptEnginePrivate *p = nullptr;
-    QUrl source;
     QQuickWorkerScript *owner = nullptr;
+
 #if QT_CONFIG(qml_network)
-    QScopedPointer<QNetworkAccessManager> scriptLocalNAM;
+    QNetworkAccessManager *create(QObject *parent) final;
 #endif
+
+    void ready(QQmlNotifyingBlob *blob) final;
 };
 
 V4_DEFINE_EXTENSION(WorkerScript, workerScriptExtension);
@@ -109,10 +143,6 @@ class QQuickWorkerScriptEnginePrivate : public QObject
 {
     Q_OBJECT
 public:
-    enum WorkerEventTypes {
-        WorkerDestroyEvent = QEvent::User + 100
-    };
-
     QQuickWorkerScriptEnginePrivate(QQmlTypeLoader *typeLoader)
         : m_typeLoader(typeLoader), m_nextId(0)
     {
@@ -134,6 +164,9 @@ public:
     static QV4::ReturnedValue method_sendMessage(const QV4::FunctionObject *, const QV4::Value *thisObject, const QV4::Value *argv, int argc);
     QV4::ExecutionEngine *workerEngine(int id);
 
+    void reportScriptReady(WorkerScript *);
+    void reportScriptException(WorkerScript *, const QQmlError &error);
+
 signals:
     void stopThread();
 
@@ -141,9 +174,8 @@ protected:
     bool event(QEvent *) override;
 
 private:
-    void processMessage(int, const QByteArray &);
-    void processLoad(int, const QUrl &);
-    void reportScriptException(WorkerScript *, const QQmlError &error);
+    void processMessage(int id, const QByteArray &data);
+    void processLoad(int id, const QUrl &url);
 };
 
 QV4::ReturnedValue QQuickWorkerScriptEnginePrivate::method_sendMessage(const QV4::FunctionObject *b,
@@ -165,18 +197,18 @@ QV4::ReturnedValue QQuickWorkerScriptEnginePrivate::method_sendMessage(const QV4
 
 bool QQuickWorkerScriptEnginePrivate::event(QEvent *event)
 {
-    if (event->type() == (QEvent::Type)WorkerDataEvent::WorkerData) {
+    switch (WorkerEventType(event->type())) {
+    case WorkerEventType::Data: {
         WorkerDataEvent *workerEvent = static_cast<WorkerDataEvent *>(event);
         processMessage(workerEvent->workerId(), workerEvent->data());
         return true;
-    } else if (event->type() == (QEvent::Type)WorkerLoadEvent::WorkerLoad) {
+    }
+    case WorkerEventType::Load: {
         WorkerLoadEvent *workerEvent = static_cast<WorkerLoadEvent *>(event);
         processLoad(workerEvent->workerId(), workerEvent->url());
         return true;
-    } else if (event->type() == (QEvent::Type)WorkerDestroyEvent) {
-        emit stopThread();
-        return true;
-    } else if (event->type() == (QEvent::Type)WorkerRemoveEvent::WorkerRemove) {
+    }
+    case WorkerEventType::Remove: {
         QMutexLocker locker(&m_lock);
         WorkerRemoveEvent *workerEvent = static_cast<WorkerRemoveEvent *>(event);
         auto itr = workers.constFind(workerEvent->workerId());
@@ -186,9 +218,15 @@ bool QQuickWorkerScriptEnginePrivate::event(QEvent *event)
             workers.erase(itr);
         }
         return true;
-    } else {
-        return QObject::event(event);
     }
+    case WorkerEventType::Destroy:
+        emit stopThread();
+        return true;
+    default:
+        break;
+    }
+
+    return QObject::event(event);
 }
 
 QV4::ExecutionEngine *QQuickWorkerScriptEnginePrivate::workerEngine(int id)
@@ -244,40 +282,24 @@ void QQuickWorkerScriptEnginePrivate::processLoad(int id, const QUrl &url)
     if (url.isRelative())
         return;
 
-    QString fileName = QQmlFile::urlToLocalFileOrQrc(url);
-
     QV4::ExecutionEngine *engine = workerEngine(id);
     if (!engine)
         return;
 
     WorkerScript *script = workerScriptExtension(engine);
-    script->source = url;
+    QQmlRefPointer<QQmlScriptBlob> scriptBlob = engine->typeLoader()->getScript(url);
 
-    if (fileName.endsWith(QLatin1String(".mjs"))) {
-        if (auto module = engine->loadModule(url)) {
-            if (module->instantiate())
-                module->evaluate();
-        } else {
-            engine->throwError(QStringLiteral("Could not load module file"));
-        }
-    } else {
-        QString error;
-        QV4::Scope scope(engine);
-        QScopedPointer<QV4::Script> program;
-        program.reset(QV4::Script::createFromFileOrCache(
-                          engine, /*qmlContext*/nullptr, fileName, url, &error));
-        if (program.isNull()) {
-            if (!error.isEmpty())
-                qWarning().nospace() << error;
-            return;
-        }
+    if (scriptBlob->isCompleteOrError())
+        script->ready(scriptBlob.data());
+    else
+        scriptBlob->registerCallback(script);
+}
 
-        if (!engine->hasException)
-            program->run();
-    }
-
-    if (engine->hasException)
-        reportScriptException(script, engine->catchExceptionAsQmlError());
+void QQuickWorkerScriptEnginePrivate::reportScriptReady(WorkerScript *script)
+{
+    QMutexLocker locker(&script->p->m_lock);
+    if (script->owner)
+        QCoreApplication::postEvent(script->owner, new WorkerReadyEvent);
 }
 
 void QQuickWorkerScriptEnginePrivate::reportScriptException(WorkerScript *script,
@@ -288,63 +310,9 @@ void QQuickWorkerScriptEnginePrivate::reportScriptException(WorkerScript *script
         QCoreApplication::postEvent(script->owner, new WorkerErrorEvent(error));
 }
 
-WorkerDataEvent::WorkerDataEvent(int workerId, const QByteArray &data)
-: QEvent((QEvent::Type)WorkerData), m_id(workerId), m_data(data)
-{
-}
-
-WorkerDataEvent::~WorkerDataEvent()
-{
-}
-
-int WorkerDataEvent::workerId() const
-{
-    return m_id;
-}
-
-QByteArray WorkerDataEvent::data() const
-{
-    return m_data;
-}
-
-WorkerLoadEvent::WorkerLoadEvent(int workerId, const QUrl &url)
-: QEvent((QEvent::Type)WorkerLoad), m_id(workerId), m_url(url)
-{
-}
-
-int WorkerLoadEvent::workerId() const
-{
-    return m_id;
-}
-
-QUrl WorkerLoadEvent::url() const
-{
-    return m_url;
-}
-
-WorkerRemoveEvent::WorkerRemoveEvent(int workerId)
-: QEvent((QEvent::Type)WorkerRemove), m_id(workerId)
-{
-}
-
-int WorkerRemoveEvent::workerId() const
-{
-    return m_id;
-}
-
-WorkerErrorEvent::WorkerErrorEvent(const QQmlError &error)
-: QEvent((QEvent::Type)WorkerError), m_error(error)
-{
-}
-
-QQmlError WorkerErrorEvent::error() const
-{
-    return m_error;
-}
-
 QQuickWorkerScriptEngine::QQuickWorkerScriptEngine(QQmlEngine *parent)
     : QThread(parent)
-    , d(new QQuickWorkerScriptEnginePrivate(&QQmlEnginePrivate::get(parent)->typeLoader))
+    , d(new QQuickWorkerScriptEnginePrivate(QQmlTypeLoader::get(parent)))
 {
     connect(d, SIGNAL(stopThread()), this, SLOT(quit()), Qt::DirectConnection);
     QMutexLocker locker(&d->m_lock);
@@ -355,7 +323,7 @@ QQuickWorkerScriptEngine::QQuickWorkerScriptEngine(QQmlEngine *parent)
 
 QQuickWorkerScriptEngine::~QQuickWorkerScriptEngine()
 {
-    QCoreApplication::postEvent(d, new QEvent((QEvent::Type)QQuickWorkerScriptEnginePrivate::WorkerDestroyEvent));
+    QCoreApplication::postEvent(d, new WorkerDestroyEvent);
 
     //We have to force to cleanup the main thread's event queue here
     //to make sure the main GUI release all pending locks/wait conditions which
@@ -371,7 +339,7 @@ QQuickWorkerScriptEngine::~QQuickWorkerScriptEngine()
 }
 
 
-WorkerScript::WorkerScript(QV4::ExecutionEngine *engine)
+WorkerScript::WorkerScript(QV4::ExecutionEngine *engine) : engine(engine)
 {
     engine->initQmlGlobalObject();
 
@@ -387,16 +355,48 @@ WorkerScript::WorkerScript(QV4::ExecutionEngine *engine)
     engine->globalObject->put(workerScriptName, api);
 
 #if QT_CONFIG(qml_network)
-    engine->networkAccessManager = [](QV4::ExecutionEngine *engine) {
-        WorkerScript *workerScript = workerScriptExtension(engine);
-        if (!workerScript->scriptLocalNAM) {
-            workerScript->scriptLocalNAM.reset(
-                    workerScript->p->m_typeLoader->createNetworkAccessManager(workerScript->p));
-        }
-        return workerScript->scriptLocalNAM.get();
-    };
+    engine->typeLoader()->setNetworkAccessManagerFactory(this);
 #endif // qml_network
 }
+
+void WorkerScript::ready(QQmlNotifyingBlob *scriptBlob)
+{
+    if (scriptBlob->isComplete()) {
+        const auto cu = engine->executableCompilationUnit(
+                static_cast<QQmlScriptBlob *>(scriptBlob)->scriptData()->compilationUnit());
+        if (cu->isESModule()) {
+            if (cu->instantiate())
+                cu->evaluate();
+        } else {
+            QV4::Function *vmFunction = cu->rootFunction();
+            QScopedValueRollback<QV4::Function *> savedGlobal(engine->globalCode, vmFunction);
+            vmFunction->call(engine->globalObject, nullptr, 0, engine->rootContext());
+        }
+
+        if (engine->hasException)
+            p->reportScriptException(this, engine->catchExceptionAsQmlError());
+
+    } else {
+        Q_ASSERT(scriptBlob->isError());
+
+        const QList<QQmlError> errors = scriptBlob->errors();
+        for (const QQmlError &error : errors) {
+            // Funnel this through SyntaxError to get the right output format.
+            engine->throwSyntaxError(
+                    error.description(), error.url().toString(), error.line(), error.column());
+            p->reportScriptException(this, engine->catchExceptionAsQmlError());
+        }
+    }
+
+    p->reportScriptReady(this);
+}
+
+#if QT_CONFIG(qml_network)
+QNetworkAccessManager *WorkerScript::create(QObject *parent)
+{
+    return p->m_typeLoader->createNetworkAccessManager(parent);
+}
+#endif
 
 int QQuickWorkerScriptEngine::registerWorkerScript(QQuickWorkerScript *owner)
 {
@@ -509,7 +509,7 @@ void QQuickWorkerScriptEngine::run()
     Scripts that are ECMAScript modules can freely use import and export statements.
 */
 QQuickWorkerScript::QQuickWorkerScript(QObject *parent)
-: QObject(parent), m_engine(nullptr), m_scriptId(-1), m_componentComplete(true)
+: QObject(parent)
 {
 }
 
@@ -543,6 +543,11 @@ void QQuickWorkerScript::setSource(const QUrl &source)
     if (engine()) {
         const QQmlContext *context = qmlContext(this);
         m_engine->executeUrl(m_scriptId, context ? context->resolvedUrl(m_source) : m_source);
+        if (m_ready) {
+            // While the new script is loading, we can't accept any events.
+            m_ready = false;
+            emit readyChanged();
+        }
     }
 
     emit sourceChanged();
@@ -556,11 +561,11 @@ void QQuickWorkerScript::setSource(const QUrl &source)
 */
 bool QQuickWorkerScript::ready() const
 {
-    return m_engine != nullptr;
+    return m_ready;
 }
 
 /*!
-    \qmlmethod WorkerScript::sendMessage(jsobject message)
+    \qmlmethod void WorkerScript::sendMessage(jsobject message)
 
     Sends the given \a message to a worker script handler in another
     thread. The other worker script handler can receive this message
@@ -620,8 +625,6 @@ QQuickWorkerScriptEngine *QQuickWorkerScript::engine()
         if (m_source.isValid())
             m_engine->executeUrl(m_scriptId, context->resolvedUrl(m_source));
 
-        emit readyChanged();
-
         return m_engine;
     }
     return nullptr;
@@ -642,21 +645,30 @@ void QQuickWorkerScript::componentComplete()
 
 bool QQuickWorkerScript::event(QEvent *event)
 {
-    if (event->type() == (QEvent::Type)WorkerDataEvent::WorkerData) {
+    switch (WorkerEventType(event->type())) {
+    case WorkerEventType::Data:
         if (QQmlEngine *engine = qmlEngine(this)) {
             QV4::ExecutionEngine *v4 = engine->handle();
             WorkerDataEvent *workerEvent = static_cast<WorkerDataEvent *>(event);
             emit message(QJSValuePrivate::fromReturnedValue(
-                             QV4::Serialize::deserialize(workerEvent->data(), v4)));
+                    QV4::Serialize::deserialize(workerEvent->data(), v4)));
         }
         return true;
-    } else if (event->type() == (QEvent::Type)WorkerErrorEvent::WorkerError) {
+    case WorkerEventType::Error: {
         WorkerErrorEvent *workerEvent = static_cast<WorkerErrorEvent *>(event);
         QQmlEnginePrivate::warning(qmlEngine(this), workerEvent->error());
         return true;
-    } else {
-        return QObject::event(event);
     }
+    case WorkerEventType::Ready:
+        Q_ASSERT(!m_ready);
+        m_ready = true;
+        emit readyChanged();
+        return true;
+    default:
+        break;
+    }
+
+    return QObject::event(event);
 }
 
 QT_END_NAMESPACE

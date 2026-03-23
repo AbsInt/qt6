@@ -24,19 +24,6 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
-namespace {
-struct LockFileInfo
-{
-    qint64 pid;
-    QString appname;
-    QString hostname;
-    QByteArray hostid;
-    QByteArray bootid;
-};
-}
-
-static bool getLockInfo_helper(const QString &fileName, LockFileInfo *info);
-
 static QString machineName()
 {
 #ifdef Q_OS_WIN
@@ -364,8 +351,8 @@ bool QLockFile::tryLock(std::chrono::milliseconds timeout)
 bool QLockFile::getLockInfo(qint64 *pid, QString *hostname, QString *appname) const
 {
     Q_D(const QLockFile);
-    LockFileInfo info;
-    if (!getLockInfo_helper(d->fileName, &info))
+    QLockFilePrivate::LockFileInfo info;
+    if (!QLockFilePrivate::getLockInfo_helper(d->fileName, &info))
         return false;
     if (pid)
         *pid = info.pid;
@@ -400,11 +387,16 @@ QByteArray QLockFilePrivate::lockFileContents() const
             % QSysInfo::bootUniqueId() % '\n';
 }
 
-static bool getLockInfo_helper(const QString &fileName, LockFileInfo *info)
+bool QLockFilePrivate::getLockInfo_helper(const QString &fileName, LockFileInfo *info)
 {
-    QFile reader(fileName);
-    if (!reader.open(QIODevice::ReadOnly | QIODevice::Text))
+    int fd = openNewFileDescriptor(fileName);
+    if (fd < 0)
         return false;
+    QFile reader;
+    if (!reader.open(fd, QFile::ReadOnly | QFile::Text, QFile::AutoCloseHandle)) {
+        QT_CLOSE(fd);
+        return false;
+    }
 
     QByteArray pidLine = reader.readLine();
     pidLine.chop(1);

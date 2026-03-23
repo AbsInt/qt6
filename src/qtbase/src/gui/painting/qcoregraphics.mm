@@ -19,37 +19,123 @@
 # include <UIKit/UIKit.h>
 #endif
 
+#include <Accelerate/Accelerate.h>
+
 QT_USE_NAMESPACE
 
 QT_BEGIN_NAMESPACE
 
 // ---------------------- Images ----------------------
 
-CGBitmapInfo qt_mac_bitmapInfoForImage(const QImage &image)
+std::optional<vImage_CGImageFormat> qt_mac_cgImageFormatForImage(const QImage &image)
 {
-    CGBitmapInfo bitmapInfo = kCGImageAlphaNone;
-    switch (image.format()) {
-    case QImage::Format_ARGB32:
-        bitmapInfo = CGBitmapInfo(kCGImageAlphaFirst) | kCGBitmapByteOrder32Host;
+    const QPixelFormat format = image.pixelFormat();
+
+    // FIXME: Support other color models, such as Grayscale and Alpha,
+    // which would require the calling code to use a non-RGB color space.
+    if (format.colorModel() != QPixelFormat::RGB)
+        return {};
+
+    const int alphaBits = format.alphaSize();
+
+    CGBitmapInfo bitmapInfo = [&]{
+        if (!alphaBits)
+            return kCGImageAlphaNone;
+
+        if (format.channelCount() == 1)
+            return kCGImageAlphaOnly;
+
+        return CGImageAlphaInfo(
+            (format.alphaUsage() == QPixelFormat::IgnoresAlpha ?
+                kCGImageAlphaNoneSkipLast
+              : (format.premultiplied() == QPixelFormat::Premultiplied ?
+                    kCGImageAlphaPremultipliedLast : kCGImageAlphaLast)
+            ) // 'First' variants have a value one more than their 'Last'
+            + (format.alphaPosition() == QPixelFormat::AtBeginning ? 1 : 0)
+        );
+    }();
+
+    const std::tuple rgbBits{format.redSize(), format.greenSize(), format.blueSize() };
+
+    const CGImageByteOrderInfo byteOrder16Bit =
+        format.byteOrder() == QPixelFormat::LittleEndian ?
+            kCGImageByteOrder16Little : kCGImageByteOrder16Big;
+
+    const CGImageByteOrderInfo byteOrder32Bit =
+        format.byteOrder() == QPixelFormat::LittleEndian ?
+            kCGImageByteOrder32Little : kCGImageByteOrder32Big;
+
+    static const auto isPacked = [](const QPixelFormat f) {
+        return f.redSize() == f.greenSize()
+            && f.greenSize() == f.blueSize()
+            && (!f.alphaSize() || f.alphaSize() == f.blueSize());
+    };
+
+    switch (format.typeInterpretation()) {
+    case QPixelFormat::UnsignedByte:
+        // Qt always uses UnsignedByte for BigEndian formats, instead of
+        // representing e.g. Format_RGBX8888 as UnsignedInteger+BigEndian,
+        // so we need to look at the bits per pixel as well.
+        if (format.bitsPerPixel() == 32)
+            bitmapInfo |= kCGImageByteOrder32Big;
+        else if (format.bitsPerPixel() == 16)
+            bitmapInfo |= kCGImageByteOrder16Big;
+        else
+            bitmapInfo |= kCGImageByteOrderDefault;
         break;
-    case QImage::Format_RGB32:
-        bitmapInfo = CGBitmapInfo(kCGImageAlphaNoneSkipFirst) | kCGBitmapByteOrder32Host;
+    case QPixelFormat::UnsignedShort:
+        bitmapInfo |= byteOrder16Bit;
+        if (isPacked(format))
+            bitmapInfo |= kCGImagePixelFormatPacked;
+        else if (rgbBits == std::tuple{5,5,5} && alphaBits == 1)
+            bitmapInfo |= kCGImagePixelFormatRGB555;
+        else if (rgbBits == std::tuple{5,6,5} && !alphaBits)
+            bitmapInfo |= kCGImagePixelFormatRGB565;
+        else
+            return {};
         break;
-    case QImage::Format_RGBA8888_Premultiplied:
-        bitmapInfo = CGBitmapInfo(kCGImageAlphaPremultipliedLast) | kCGBitmapByteOrder32Big;
+    case QPixelFormat::UnsignedInteger:
+        bitmapInfo |= byteOrder32Bit;
+        if (isPacked(format))
+            bitmapInfo |= kCGImagePixelFormatPacked;
+        else if (rgbBits == std::tuple{10,10,10} && alphaBits == 2)
+            bitmapInfo |= kCGImagePixelFormatRGB101010;
+        else
+            return {};
         break;
-    case QImage::Format_RGBA8888:
-        bitmapInfo = CGBitmapInfo(kCGImageAlphaLast) | kCGBitmapByteOrder32Big;
-        break;
-    case QImage::Format_RGBX8888:
-        bitmapInfo = CGBitmapInfo(kCGImageAlphaNoneSkipLast) | kCGBitmapByteOrder32Big;
-        break;
-    case QImage::Format_ARGB32_Premultiplied:
-        bitmapInfo = CGBitmapInfo(kCGImageAlphaPremultipliedFirst) | kCGBitmapByteOrder32Host;
-        break;
-    default: break;
+    case QPixelFormat::FloatingPoint:
+        bitmapInfo |= kCGBitmapFloatComponents;
+        if (!isPacked(format))
+            return {};
+        if (format.bitsPerPixel() == 128)
+            bitmapInfo |= byteOrder32Bit; // Full float
+        else if (format.bitsPerPixel() == 64)
+            bitmapInfo |= byteOrder16Bit; // Half float
+        else
+            return {};
     }
-    return bitmapInfo;
+
+    // By trial and error the logic for the bits per component
+    // seems to be the smallest of the color channels. This is
+    // also somewhat corroborated by the vImage documentation.
+    const uint32_t bitsPerComponent = std::min({
+        format.redSize(), format.greenSize(), format.blueSize()
+    });
+
+    QCFType<CGColorSpaceRef> colorSpace = [&]{
+        if (const auto colorSpace = image.colorSpace(); colorSpace.isValid()) {
+            QCFType<CFDataRef> iccData = colorSpace.iccProfile().toCFData();
+            return CGColorSpaceCreateWithICCData(iccData);
+        } else {
+            return CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+        }
+    }();
+
+    return vImage_CGImageFormat{
+        bitsPerComponent, format.bitsPerPixel(),
+        colorSpace, bitmapInfo, 0, nullptr,
+        kCGRenderingIntentDefault
+    };
 }
 
 CGImageRef qt_mac_toCGImage(const QImage &inImage)
@@ -73,21 +159,149 @@ void qt_mac_drawCGImage(CGContextRef inContext, const CGRect *inBounds, CGImageR
     CGContextRestoreGState(inContext);
 }
 
-QImage qt_mac_toQImage(CGImageRef image)
+QImage::Format qt_mac_imageFormatForCGImage(CGImageRef image)
 {
-    const size_t w = CGImageGetWidth(image),
-                 h = CGImageGetHeight(image);
-    QImage ret(w, h, QImage::Format_ARGB32_Premultiplied);
-    ret.fill(Qt::transparent);
-    CGRect rect = CGRectMake(0, 0, w, h);
-    QMacCGContext ctx(&ret);
-    qt_mac_drawCGImage(ctx, &rect, image);
+    if (!image)
+        return QImage::Format_Invalid;
 
-    CGColorSpaceRef colorSpace = CGImageGetColorSpace(image);
-    QCFType<CFDataRef> iccData = CGColorSpaceCopyICCData(colorSpace);
-    ret.setColorSpace(QColorSpace::fromIccProfile(QByteArray::fromRawCFData(iccData)));
+    const CGColorSpaceRef colorSpace = CGImageGetColorSpace(image);
+    if (CGColorSpaceGetModel(colorSpace) != kCGColorSpaceModelRGB)
+        return QImage::Format_Invalid;
 
-    return ret;
+    const CGBitmapInfo bitmapInfo = CGImageGetBitmapInfo(image);
+    const auto byteOrder = CGImageByteOrderInfo(bitmapInfo & kCGBitmapByteOrderMask);
+
+    auto qtByteOrder = [&]() -> std::optional<QPixelFormat::ByteOrder> {
+        switch (byteOrder) {
+        case kCGImageByteOrder16Big:
+        case kCGImageByteOrder32Big:
+        case kCGImageByteOrderDefault:
+            return QPixelFormat::BigEndian;
+        case kCGImageByteOrder16Little:
+        case kCGImageByteOrder32Little:
+            return QPixelFormat::LittleEndian;
+        default:
+            return {};
+        }
+    }();
+    if (!qtByteOrder)
+        return QImage::Format_Invalid;
+
+    auto typeInterpretation = [&]() -> std::optional<QPixelFormat::TypeInterpretation> {
+        if (bitmapInfo & kCGBitmapFloatComponents)
+            return QPixelFormat::FloatingPoint;
+        else if (qtByteOrder == QPixelFormat::BigEndian)
+            // Qt always uses UnsignedByte for BigEndian formats, instead of
+            // representing e.g. Format_RGBX8888 as UnsignedInteger+BigEndian.
+            return QPixelFormat::UnsignedByte;
+        else if (byteOrder == kCGImageByteOrder16Little)
+            return QPixelFormat::UnsignedShort;
+        else if (byteOrder == kCGImageByteOrder32Little)
+            return QPixelFormat::UnsignedInteger;
+        else
+            return {};
+    }();
+    if (!typeInterpretation)
+        return QImage::Format_Invalid;
+
+    const auto alphaInfo = CGImageAlphaInfo(bitmapInfo & kCGBitmapAlphaInfoMask);
+
+    QPixelFormat::AlphaPosition alphaPosition = [&]{
+        switch (alphaInfo) {
+        case kCGImageAlphaNone:
+        case kCGImageAlphaFirst:
+        case kCGImageAlphaNoneSkipFirst:
+        case kCGImageAlphaPremultipliedFirst:
+            return QPixelFormat::AtBeginning;
+        default:
+            return QPixelFormat::AtEnd;
+        }
+    }();
+
+    QPixelFormat::AlphaUsage alphaUsage = [&]{
+        switch (alphaInfo) {
+        case kCGImageAlphaNone:
+        case kCGImageAlphaNoneSkipLast:
+        case kCGImageAlphaNoneSkipFirst:
+            return QPixelFormat::IgnoresAlpha;
+        default:
+            return QPixelFormat::UsesAlpha;
+        }
+    }();
+
+    QPixelFormat::AlphaPremultiplied alphaPremultiplied = [&]{
+        switch (alphaInfo) {
+        case kCGImageAlphaPremultipliedFirst:
+        case kCGImageAlphaPremultipliedLast:
+            return QPixelFormat::Premultiplied;
+        default:
+            return QPixelFormat::NotPremultiplied;
+        }
+    }();
+
+    auto [redSize, greenSize, blueSize, alphaSize] = [&]() -> std::tuple<uchar,uchar,uchar,uchar> {
+        const auto pixelFormat = CGImagePixelFormatInfo(bitmapInfo & kCGImagePixelFormatMask);
+        const size_t bpc = CGImageGetBitsPerComponent(image);
+        if (pixelFormat == kCGImagePixelFormatPacked)
+            return {bpc, bpc, bpc, alphaInfo != kCGImageAlphaNone ? bpc : 0};
+        else if (pixelFormat == kCGImagePixelFormatRGB555)
+            return {5, 5, 5, 1};
+        else if (pixelFormat == kCGImagePixelFormatRGB565)
+            return {5, 6, 5, 0};
+        else if (pixelFormat == kCGImagePixelFormatRGB101010)
+            return {10, 10, 10, 2};
+        else
+            return {0, 0, 0, 0};
+    }();
+
+    QPixelFormat pixelFormat(QPixelFormat::RGB, redSize, greenSize, blueSize, 0, 0,
+        alphaSize, alphaUsage, alphaPosition, alphaPremultiplied,
+        *typeInterpretation, *qtByteOrder);
+
+    return QImage::toImageFormat(pixelFormat);
+}
+
+QImage qt_mac_toQImage(CGImageRef cgImage)
+{
+    const size_t width = CGImageGetWidth(cgImage);
+    const size_t height = CGImageGetHeight(cgImage);
+
+    QImage image = [&]() -> QImage {
+        QImage::Format imageFormat = qt_mac_imageFormatForCGImage(cgImage);
+        if (imageFormat == QImage::Format_Invalid)
+            return {};
+
+        CGDataProviderRef dataProvider = CGImageGetDataProvider(cgImage);
+        if (!dataProvider)
+            return {};
+
+        // Despite its name, this should not copy the actual image data
+        CFDataRef data = CGDataProviderCopyData(dataProvider);
+        if (!data)
+            return {};
+
+        // Adopt data for the lifetime of the QImage
+        return QImage(CFDataGetBytePtr(data), width, height,
+            CGImageGetBytesPerRow(cgImage), imageFormat,
+            QImageCleanupFunction(CFRelease), (void*)data);
+    }();
+
+    if (image.isNull()) {
+        // Fall back to drawing to a know good format
+        image = QImage(width, height, QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        QMacCGContext context(&image);
+        CGRect rect = CGRectMake(0, 0, width, height);
+        qt_mac_drawCGImage(context, &rect, cgImage);
+    }
+
+    if (!image.isNull()) {
+        CGColorSpaceRef colorSpace = CGImageGetColorSpace(cgImage);
+        QCFType<CFDataRef> iccData = CGColorSpaceCopyICCData(colorSpace);
+        image.setColorSpace(QColorSpace::fromIccProfile(QByteArray::fromRawCFData(iccData)));
+    }
+
+    return image;
 }
 
 QImage qt_mac_padToSquareImage(const QImage &image)
@@ -520,9 +734,15 @@ QMacCGContext::QMacCGContext(QPainter *painter)
 
 void QMacCGContext::initialize(const QImage *image, QPainter *painter)
 {
-    QCFType<CGColorSpaceRef> colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-    context = CGBitmapContextCreate((void *)image->bits(), image->width(), image->height(), 8,
-                                    image->bytesPerLine(), colorSpace, qt_mac_bitmapInfoForImage(*image));
+    auto cgImageFormat = qt_mac_cgImageFormatForImage(*image);
+    if (!cgImageFormat) {
+        qWarning() << "QMacCGContext:: Could not get bitmap info for" << image;
+        return;
+    }
+
+    context = CGBitmapContextCreate((void *)image->bits(), image->width(), image->height(),
+        cgImageFormat->bitsPerComponent, image->bytesPerLine(), cgImageFormat->colorSpace,
+        cgImageFormat->bitmapInfo);
 
     // Invert y axis
     CGContextTranslateCTM(context, 0, image->height());

@@ -403,6 +403,16 @@ QPropertyBindingPrivate::NotificationState QPropertyBindingPrivate::notifyNonRec
 }
 
 /*!
+    \class QUntypedPropertyBinding
+    \inmodule QtCore
+    \since 6.0
+    \ingroup tools
+    \brief Represents a type-erased property binding.
+
+    \sa QUntypedBindable
+*/
+
+/*!
   Constructs a null QUntypedPropertyBinding.
 
   \sa isNull()
@@ -410,8 +420,8 @@ QPropertyBindingPrivate::NotificationState QPropertyBindingPrivate::notifyNonRec
 QUntypedPropertyBinding::QUntypedPropertyBinding() = default;
 
 /*!
-  \fn template<typename Functor>
-  QUntypedPropertyBinding(QMetaType metaType, Functor &&f, const QPropertyBindingSourceLocation &location)
+  \fn template<typename Functor> QUntypedPropertyBinding(
+        QMetaType metaType, Functor &&f, const QPropertyBindingSourceLocation &location)
 
   \internal
 */
@@ -449,7 +459,6 @@ QUntypedPropertyBinding::QUntypedPropertyBinding(const QUntypedPropertyBinding &
     : d(other.d)
 {
 }
-
 /*!
     Copy-assigns \a other to this QUntypedPropertyBinding.
 */
@@ -1184,7 +1193,7 @@ QString QPropertyBindingError::description() const
 
   \return \c true when the binding was successfully set.
 
-  //! \sa QUntypedPropertyBinding::valueMetaType()
+  \sa QUntypedPropertyBinding::valueMetaType()
 */
 
 /*!
@@ -1200,8 +1209,7 @@ QString QPropertyBindingError::description() const
   Returns the metatype of the property from which the QUntypedBindable was created.
   If the bindable is invalid, an invalid metatype will be returned.
 
-  \sa isValid()
-  //! \sa QUntypedPropertyBinding::valueMetaType()
+  \sa isValid(), QUntypedPropertyBinding::valueMetaType()
 */
 
 /*!
@@ -1570,6 +1578,8 @@ QString QPropertyBindingError::description() const
   A simple example is given in the following.
 
   \snippet code/src_corelib_kernel_qproperty.cpp 4
+  \snippet code/src_corelib_kernel_qproperty.cpp 4_include_moc
+
 
   QObjectBindableProperty is usually not used directly, instead an instance of
   it is created by using the Q_OBJECT_BINDABLE_PROPERTY macro.
@@ -1590,6 +1600,7 @@ QString QPropertyBindingError::description() const
   please explicitly call the specific constructor.
 
   \snippet code/src_corelib_kernel_qproperty.cpp 2
+  \snippet code/src_corelib_kernel_qproperty.cpp 2_property_use
 
   The change handler can optionally accept one argument, of the same type as the
   property, in which case it is passed the new value of the property. Otherwise,

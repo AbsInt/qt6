@@ -18,7 +18,6 @@
 
 #include "qlanguageserver_p.h"
 #include "qqmlbasemodule_p.h"
-#include "qqmlcodemodel_p.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -32,16 +31,13 @@ class QQmlHover : public QQmlBaseModule<HoverRequest>
 {
     Q_OBJECT
 public:
-    QQmlHover(QmlLsp::QQmlCodeModel *codeModel);
+    QQmlHover(QmlLsp::QQmlCodeModelManager *codeModelManager);
     ~QQmlHover() override;
     QString name() const override;
     void registerHandlers(QLanguageServer *server, QLanguageServerProtocol *protocol) override;
     void setupCapabilities(const QLspSpecification::InitializeParams &clientInfo,
                            QLspSpecification::InitializeResult &) override;
     void process(RequestPointerArgument req) override;
-
-private:
-    std::unique_ptr<HelpManager> m_helpManager;
 };
 
 QT_END_NAMESPACE

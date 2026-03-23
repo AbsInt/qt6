@@ -9,6 +9,7 @@
 #include <QtCore/qtdeprecationmarkers.h>
 #include <QtCore/qfiledevice.h>
 #include <QtCore/qflags.h>
+#include <QtCore/qobjectdefs.h>
 #include <QtCore/qtclasshelpermacros.h>
 #include <QtCore/qtcoreexports.h>
 #include <QtCore/qdatetime.h>
@@ -25,6 +26,7 @@ class QTimeZone;
 
 class QDirListing
 {
+    Q_GADGET_EXPORT(Q_CORE_EXPORT)
 public:
     enum class IteratorFlag {
         Default =               0x000000,
@@ -42,8 +44,11 @@ public:
         CaseSensitive =         0x000100,
         Recursive =             0x000400,
         FollowDirSymlinks =     0x000800,
+        IncludeBrokenSymlinks = 0x001000,
+        NoNameFiltersForDirs  = 0x040000, // used internally
     };
     Q_DECLARE_FLAGS(IteratorFlags, IteratorFlag)
+    Q_FLAG(IteratorFlags)
 
     Q_CORE_EXPORT explicit QDirListing(const QString &path,
                                        IteratorFlags flags = IteratorFlag::Default);
@@ -153,19 +158,7 @@ private:
 
     Q_CORE_EXPORT static DirEntry next(DirEntry);
 
-    // Private constructor that is used in deprecated code paths.
-    // `uint` instead of QDir::Filters and QDirIterator::IteratorFlags
-    // because qdir.h can't be included here; qdiriterator.h can't included
-    // either, because it includes qdir.h
-    Q_CORE_EXPORT QDirListing(const QString &path, const QStringList &nameFilters, uint dirFilters,
-                              uint qdirIteratorFlags = 0); // QDirIterator::NoIteratorFlags == 0x0
-
     QDirListingPrivate *d;
-    friend class QDir;
-    friend class QDirPrivate;
-    friend class QDirIteratorPrivate;
-    friend class QAbstractFileEngine;
-    friend class QFileInfoGatherer;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QDirListing::IteratorFlags)

@@ -11,4 +11,7 @@ qt_internal_add_plugin(QAppleNetworkInformationPlugin
     LIBRARIES
         Qt::NetworkPrivate
         ${FWNetwork}
+    DEFINES
+        "QT_ENABLE_STRICT_MODE_UP_TO=QT_VERSION_CHECK(6,11,0)"
+        QT_NO_CAST_FROM_ASCII
 )

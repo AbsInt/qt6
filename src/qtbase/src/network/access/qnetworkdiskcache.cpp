@@ -30,6 +30,11 @@ QT_BEGIN_NAMESPACE
 using namespace Qt::StringLiterals;
 
 /*!
+    \class QNetworkDiskCachePrivate
+    \internal
+*/
+
+/*!
     \class QNetworkDiskCache
     \since 4.5
     \inmodule QtNetwork
@@ -566,6 +571,11 @@ QString QNetworkDiskCachePrivate::cacheFileName(const QUrl &url) const
     QString fullpath = dataDirectory + uniqueFileName(url);
     return  fullpath;
 }
+
+/*!
+    \class QCacheItem
+    \internal
+ */
 
 /*!
     We compress small text and JavaScript files.

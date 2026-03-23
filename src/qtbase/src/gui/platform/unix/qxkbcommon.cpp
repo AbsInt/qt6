@@ -328,6 +328,12 @@ static constexpr const auto KeyTbl = qMakeArray(
         Xkb2Qt<XKB_KEY_XF86Option,              Qt::Key_Option>,
         Xkb2Qt<XKB_KEY_XF86Paste,               Qt::Key_Paste>,
         Xkb2Qt<XKB_KEY_XF86Phone,               Qt::Key_Phone>,
+#ifdef XKB_KEY_XF86PickupPhone
+        Xkb2Qt<XKB_KEY_XF86PickupPhone,         Qt::Key_Call>,
+#endif
+#ifdef XKB_KEY_XF86HangupPhone
+        Xkb2Qt<XKB_KEY_XF86HangupPhone,         Qt::Key_Hangup>,
+#endif
         Xkb2Qt<XKB_KEY_XF86Reply,               Qt::Key_Reply>,
         Xkb2Qt<XKB_KEY_XF86Reload,              Qt::Key_Reload>,
         Xkb2Qt<XKB_KEY_XF86RotateWindows,       Qt::Key_RotateWindows>,

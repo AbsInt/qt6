@@ -40,8 +40,8 @@ bool CompletionRequest::fillFrom(QmlLsp::OpenDocument doc, const Parameters &par
     return true;
 }
 
-QmlCompletionSupport::QmlCompletionSupport(QmlLsp::QQmlCodeModel *codeModel)
-    : BaseT(codeModel), m_completionEngine(codeModel->pluginLoader())
+QmlCompletionSupport::QmlCompletionSupport(QmlLsp::QQmlCodeModelManager *codeModelManager)
+    : BaseT(codeModelManager), m_completionEngine(codeModelManager->pluginLoader())
 {
 }
 
@@ -73,7 +73,7 @@ void QmlCompletionSupport::setupCapabilities(
 void QmlCompletionSupport::process(RequestPointerArgument req)
 {
     QmlLsp::OpenDocumentSnapshot doc =
-            m_codeModel->snapshotByUrl(req->m_parameters.textDocument.uri);
+            m_codeModelManager->snapshotByUrl(req->m_parameters.textDocument.uri);
     req->sendCompletions(req->completions(doc, m_completionEngine));
 }
 

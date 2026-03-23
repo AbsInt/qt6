@@ -462,7 +462,7 @@ void tst_QQmlDebugJS::setBreakpointInJavaScript()
         QProcess process;
         process.start(QLibraryInfo::path(QLibraryInfo::BinariesPath) + "/qmlscene",
                       { testFile(QUITINJS_QMLFILE) });
-        QTRY_COMPARE(process.state(), QProcess::NotRunning);
+        QTRY_COMPARE_WITH_TIMEOUT(process.state(), QProcess::NotRunning, 3000);
     }
 
     QCOMPARE(runAndConnect(qmlscene, QUITINJS_QMLFILE), ConnectSuccess);
@@ -996,7 +996,7 @@ void tst_QQmlDebugJS::breakOnAnchor()
 
     m_client->connect();
 
-    QTRY_COMPARE(m_process->state(), QProcess::NotRunning);
+    QTRY_COMPARE_WITH_TIMEOUT(m_process->state(), QProcess::NotRunning, 3000);
     QCOMPARE(m_process->exitStatus(), QProcess::NormalExit);
 
     QCOMPARE(breaks, 2);

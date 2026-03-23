@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qwaylandshellsurface_p.h"
 #include "qwaylandwindow_p.h"
@@ -87,6 +88,7 @@ void QWaylandShellSurface::requestXdgActivationToken(quint32 serial)
 }
 
 /*!
+    \internal
     Determines whether the client should commit the surface with no buffer
     after creating the role and performing initial setup
 */

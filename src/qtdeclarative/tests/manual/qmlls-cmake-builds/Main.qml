@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 import QtQuick
-import autoGenCMake
+import AutoGenCMake
 
 Window {
     width: 640
@@ -10,5 +10,9 @@ Window {
     visible: true
     title: qsTr("Hello World")
 
-    HelloWorld { myP: 55; myPPP: 55 }
+    HelloWorld {
+        myP: 55
+        myPPP: 55
+        invalid: 123
+    }
 }

@@ -17,15 +17,26 @@ class tst_QGetPutEnv : public QObject
 {
 Q_OBJECT
 private slots:
+    void init();
+
     void getSetCheck();
     void encoding();
     void intValue_data();
     void intValue();
+
+private:
+    QByteArray uniqueEnvVarName;
 };
+
+void tst_QGetPutEnv::init()
+{
+    QUuid uuid = QUuid::createUuid();
+    uniqueEnvVarName = "QT_TEST_ENV_VAR_" + uuid.toByteArray(QUuid::Id128);
+}
 
 void tst_QGetPutEnv::getSetCheck()
 {
-    const char varName[] = "should_not_exist";
+    const char *varName = uniqueEnvVarName.constData();
 
     bool ok;
 
@@ -117,13 +128,14 @@ void tst_QGetPutEnv::encoding()
     // The LATIN SMALL LETTER A WITH ACUTE is NFC for NFD:
     //  U+0061 U+0301   LATIN SMALL LETTER A + COMBINING ACUTE ACCENT
 
-    const char varName[] = "should_not_exist";
+    const char *varName = uniqueEnvVarName.constData();
+
     static const wchar_t rawvalue[] = { 'a', 0x00E1, 0x03B1, 0x0430, 0 };
     QString value = QString::fromWCharArray(rawvalue);
 
 #if defined(Q_OS_WIN)
-    const wchar_t wvarName[] = L"should_not_exist";
-    _wputenv_s(wvarName, rawvalue);
+    std::wstring wvarName = QString::fromUtf8(varName).toStdWString();
+    _wputenv_s(wvarName.data(), rawvalue);
 #else
     // confirm the locale is UTF-8
     if (value.toLocal8Bit() != "a\xc3\xa1\xce\xb1\xd0\xb0")
@@ -203,7 +215,7 @@ void tst_QGetPutEnv::intValue_data()
 void tst_QGetPutEnv::intValue()
 {
     const int maxlen = (sizeof(qint64) * CHAR_BIT + 2) / 3;
-    const char varName[] = "should_not_exist";
+    const char *varName = uniqueEnvVarName.constData();
 
     QFETCH(QByteArray, value);
     QFETCH(qint64, expected);

@@ -1,6 +1,7 @@
 // Copyright (C) 2017 The Qt Company Ltd.
 // Copyright (C) 2017 Eurogiciel, author: <philippe.coval@eurogiciel.fr>
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #pragma once
 
@@ -18,6 +19,10 @@
 
 QT_BEGIN_NAMESPACE
 
+namespace QtWayland {
+    class xx_toplevel_session_v1;
+}
+
 namespace QtWaylandClient {
 
 class QWaylandDisplay;
@@ -29,6 +34,7 @@ class QWaylandXdgExporterV2;
 class QWaylandXdgDialogWmV1;
 class QWaylandXdgDialogV1;
 class QWaylandXdgToplevelIconManagerV1;
+class QWaylandTopLevelSession;
 
 class Q_WAYLANDCLIENT_EXPORT QWaylandXdgSurface : public QWaylandShellSurface, public QtWayland::xdg_surface
 {
@@ -58,6 +64,8 @@ public:
     bool isAlertState() const override { return m_alertState; }
     QString externWindowHandle() override;
     void setWindowPosition(const QPoint &position) override;
+    void setWindowSize(const QSize &size) override;
+    void setWindowGeometry(const QRect &rect) override;
     void setIcon(const QIcon &icon) override;
 
     void setSizeHints();
@@ -102,6 +110,9 @@ private:
         QWaylandXdgToplevelDecorationV1 *m_decoration = nullptr;
         QScopedPointer<QWaylandXdgExportedV2> m_exported;
         QScopedPointer<QWaylandXdgDialogV1> m_xdgDialog;
+#ifndef QT_NO_SESSIONMANAGER
+        QScopedPointer<QtWayland::xx_toplevel_session_v1> m_session;
+#endif
     };
 
     class Positioner : public QtWayland::xdg_positioner {
@@ -119,6 +130,8 @@ private:
         void resetConfiguration();
 
         void grab(QWaylandInputDevice *seat, uint serial);
+        void reposition();
+
         void xdg_popup_configure(int32_t x, int32_t y, int32_t width, int32_t height) override;
         void xdg_popup_popup_done() override;
         void xdg_popup_repositioned(uint32_t token) override;

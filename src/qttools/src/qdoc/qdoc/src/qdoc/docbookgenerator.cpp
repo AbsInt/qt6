@@ -16,12 +16,15 @@
 #include "functionnode.h"
 #include "generator.h"
 #include "genustypes.h"
+#include "inclusionfilter.h"
 #include "node.h"
+#include "nodecontext.h"
 #include "propertynode.h"
 #include "quoter.h"
 #include "qdocdatabase.h"
 #include "qmlpropertynode.h"
 #include "sharedcommentnode.h"
+#include "template_declaration.h"
 #include "typedefnode.h"
 #include "utilities.h"
 #include "variablenode.h"
@@ -160,7 +163,7 @@ void DocBookGenerator::initializeGenerator()
     m_useITS = m_config->get(format() + Config::dot + "its").asBool();
 }
 
-QString DocBookGenerator::format()
+QString DocBookGenerator::format() const
 {
     return "DocBook";
 }
@@ -205,8 +208,8 @@ qsizetype DocBookGenerator::generateAtom(const Atom *atom, const Node *relative,
 {
     Q_ASSERT(m_writer);
     // From HtmlGenerator::generateAtom, without warning generation.
-    int idx = 0;
-    int skipAhead = 0;
+    qsizetype idx = 0;
+    qsizetype skipAhead = 0;
     Genus genus = Genus::DontCare;
 
     switch (atom->type()) {
@@ -279,7 +282,11 @@ qsizetype DocBookGenerator::generateAtom(const Atom *atom, const Node *relative,
         break;
     case Atom::Code:
         m_writer->writeStartElement(dbNamespace, "programlisting");
-        m_writer->writeAttribute("language", "cpp");
+        // Recover an additional string containing the code language, if present.
+        if (atom->strings().count() == 2)
+            m_writer->writeAttribute("language", atom->string(1));
+        else
+            m_writer->writeAttribute("language", "cpp");
         if (m_useITS)
             m_writer->writeAttribute(itsNamespace, "translate", "no");
         m_writer->writeCharacters(plainCode(removeCodeMarkers(atom->string())));
@@ -613,7 +620,8 @@ qsizetype DocBookGenerator::generateAtom(const Atom *atom, const Node *relative,
             QString file_name{QFileInfo{file.get_path()}.fileName()};
 
             // TODO: [uncentralized-output-directory-structure]
-            Config::copyFile(relative->doc().location(), file.get_path(), file_name, outputDir() + QLatin1String("/images"));
+            Config::copyFile(relative->doc().location(), file.get_path(), file_name,
+                             "%1/%2"_L1.arg(outputDir(), imagesOutputDir()));
 
             if (atom->next() && !atom->next()->string().isEmpty()
                 && atom->next()->type() == Atom::ImageText) {
@@ -624,14 +632,15 @@ qsizetype DocBookGenerator::generateAtom(const Atom *atom, const Node *relative,
             m_writer->writeStartElement(dbNamespace, "imageobject");
             newLine();
             m_writer->writeEmptyElement(dbNamespace, "imagedata");
+            const auto &imgPath = "%1/%2"_L1.arg(imagesOutputDir(), file_name);
             // TODO: [uncentralized-output-directory-structure]
-            m_writer->writeAttribute("fileref", "images/" + file_name);
+            m_writer->writeAttribute("fileref", imgPath);
             newLine();
             m_writer->writeEndElement(); // imageobject
             newLine();
 
             // TODO: [uncentralized-output-directory-structure]
-            setImageFileName(relative, "images/" + file_name);
+            setImageFileName(relative, imgPath);
         }
 
         m_writer->writeEndElement(); // [inline]mediaobject
@@ -1155,8 +1164,10 @@ qsizetype DocBookGenerator::generateAtom(const Atom *atom, const Node *relative,
         m_writer->writeEndElement(); // th if m_inTableHeader, otherwise td
         newLine();
         break;
-    case Atom::TableOfContents:
-        Q_FALLTHROUGH();
+    case Atom::TableOfContentsLeft:
+        // Skip \toc .. \endtoc content, handled separately by TOCWriter
+        std::ignore = atom->find(Atom::TableOfContentsRight, &skipAhead);
+        break;
     case Atom::Keyword:
         break;
     case Atom::Target:
@@ -1350,8 +1361,11 @@ void DocBookGenerator::generateAnnotatedList(const Node *relative, const NodeLis
         return;
 
     // Do nothing if all items are internal or obsolete.
-    if (std::all_of(nodeList.cbegin(), nodeList.cend(), [](const Node *n) {
-        return n->isInternal() || n->isDeprecated(); })) {
+    const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+    if (std::all_of(nodeList.cbegin(), nodeList.cend(), [&policy](const Node *n) {
+            const NodeContext context = n->createContext();
+            return !InclusionFilter::isIncluded(policy, context) || n->isDeprecated();
+        })) {
         return;
     }
 
@@ -1378,8 +1392,10 @@ void DocBookGenerator::generateAnnotatedList(const Node *relative, const NodeLis
             std::sort(members.rbegin(), members.rend(), Node::nodeSortKeyOrNameLessThan);
         else
             std::sort(members.begin(), members.end(), Node::nodeSortKeyOrNameLessThan);
+        const InclusionPolicy policy = Config::instance().createInclusionPolicy();
         for (const auto &node : std::as_const(members)) {
-            if (node->isInternal() || node->isDeprecated())
+            const NodeContext context = node->createContext();
+            if (!InclusionFilter::isIncluded(policy, context) || node->isDeprecated())
                 continue;
 
             if (noItemsHaveTitle) {
@@ -1764,7 +1780,7 @@ bool DocBookGenerator::generateSince(const Node *node)
     Generate the DocBook header for the file, including the abstract.
     Equivalent to calling generateTitle and generateBrief in HTML.
 */
-void DocBookGenerator::generateHeader(const QString &title, const QString &subTitle,
+void DocBookGenerator::generateHeader(const Text &title, const QString &subTitle,
                                       const Node *node)
 {
     refMap.clear();
@@ -1775,7 +1791,7 @@ void DocBookGenerator::generateHeader(const QString &title, const QString &subTi
     m_writer->writeStartElement(dbNamespace, "title");
     if (isApiGenus(node->genus()) && m_useITS)
         m_writer->writeAttribute(itsNamespace, "translate", "no");
-    m_writer->writeCharacters(title);
+    generateText(title, node);
     m_writer->writeEndElement(); // title
     newLine();
 
@@ -2335,12 +2351,20 @@ void DocBookGenerator::generateQmlRequisites(const QmlTypeNode *qcn)
     QmlTypeNode::subclasses(qcn, subs);
 
     QmlTypeNode *base = qcn->qmlBaseNode();
-    while (base && base->isInternal()) {
+    const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+    while (base) {
+        const NodeContext context = base->createContext();
+        if (InclusionFilter::isIncluded(policy, context))
+            break;
         base = base->qmlBaseNode();
     }
 
     // Skip import statement for \internal collections
-    const bool generate_import_statement = !qcn->logicalModuleName().isEmpty() && (!collection || !collection->isInternal() || m_showInternal);
+    bool generate_import_statement = !qcn->logicalModuleName().isEmpty();
+    if (generate_import_statement && collection) {
+        const NodeContext context = collection->createContext();
+        generate_import_statement = InclusionFilter::isIncluded(policy, context);
+    }
     // Detect if anything is generated in this method. If not, exit early to avoid having an empty list.
     const bool generates_something = generate_import_statement || !qcn->since().isEmpty() || !subs.isEmpty() || base;
 
@@ -2888,7 +2912,7 @@ void DocBookGenerator::generateExampleFilePage(const Node *node, ResolvedFile re
     // Store current (active) writer
     QXmlStreamWriter *currentWriter = m_writer;
     m_writer = startDocument(en, resolved_file.get_query());
-    generateHeader(en->fullTitle(), en->subtitle(), en);
+    generateHeader(en->doc().title(), en->subtitle(), en);
 
     Text text;
     Quoter quoter;
@@ -3045,6 +3069,7 @@ void DocBookGenerator::generateCppReferencePage(Node *node)
     const auto aggregate = static_cast<const Aggregate *>(node);
 
     QString title;
+    Text titleText;
     QString subtitleText;
     const QString typeWord{aggregate->typeWord(true)};
     if (aggregate->isNamespace()) {
@@ -3057,14 +3082,19 @@ void DocBookGenerator::generateCppReferencePage(Node *node)
                                              aggregate->plainFullName());
         title = "%1 %2"_L1.arg(aggregate->plainFullName(), typeWord);
     } else if (aggregate->isHeader()) {
-        title =  aggregate->fullTitle();
+        title = aggregate->fullTitle();
+        if (!aggregate->doc().title().isEmpty())
+            titleText << aggregate->name() << " - "_L1 << aggregate->doc().title();
     }
 
     // Start producing the DocBook file.
     m_writer = startDocument(node);
 
     // Info container.
-    generateHeader(title, subtitleText, aggregate);
+    if (!titleText.isEmpty())
+        generateHeader(titleText, subtitleText, aggregate);
+    else
+        generateHeader(title, subtitleText, aggregate);
 
     generateRequisites(aggregate);
     generateStatus(aggregate);
@@ -3094,9 +3124,6 @@ void DocBookGenerator::generateCppReferencePage(Node *node)
         startSection(section.title().toLower(), section.title());
 
         for (const Node *member : section.members()) {
-            if (member->access() == Access::Private) // ### check necessary?
-                continue;
-
             if (member->nodeType() != NodeType::Class) {
                 // This function starts its own section.
                 generateDetailedMember(member, aggregate);
@@ -3374,6 +3401,8 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
             signature += " = 0";
         else if (functionNode->isDefault())
             signature += " = default";
+        if (const auto &req = functionNode->trailingRequiresClause(); req && !req->isEmpty())
+            signature += " requires " + *req;
         generateSynopsisInfo("signature", signature);
     }
 
@@ -3520,8 +3549,13 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
             generateSynopsisInfo("since", formatSince(qcn));
 
         QmlTypeNode *base = qcn->qmlBaseNode();
-        while (base && base->isInternal())
+        const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+        while (base) {
+            const NodeContext context = base->createContext();
+            if (InclusionFilter::isIncluded(policy, context))
+                break;
             base = base->qmlBaseNode();
+        }
 
         QStringList knownTypeNames{qcn->name()};
         if (base)
@@ -3803,6 +3837,15 @@ void DocBookGenerator::generateSynopsis(const Node *node, const Node *relative,
     case NodeType::Function: {
         const auto func = (const FunctionNode *)node;
 
+        if (style == Section::Details) {
+            if (auto templateDecl = func->templateDecl()) {
+                if (templateDecl->parameters.size() > QDoc::MultilineTemplateParamThreshold)
+                    m_writer->writeCharacters(templateDecl->to_qstring_multiline() + QLatin1Char('\n'));
+                else
+                    m_writer->writeCharacters(templateDecl->to_qstring() + QLatin1Char(' '));
+            }
+        }
+
         // First, the part coming before the name.
         if (style == Section::Summary || style == Section::Accessors) {
             if (!func->isNonvirtual())
@@ -3856,6 +3899,8 @@ void DocBookGenerator::generateSynopsis(const Node *node, const Node *relative,
                 synopsis += QStringLiteral(" &");
             else if (func->isRefRef())
                 synopsis += QStringLiteral(" &&");
+            if (const auto &req = func->trailingRequiresClause(); req && !req->isEmpty())
+                synopsis += " requires " + *req;
             m_writer->writeCharacters(synopsis);
         }
     } break;
@@ -3905,9 +3950,12 @@ void DocBookGenerator::generateSynopsis(const Node *node, const Node *relative,
     } break;
     case NodeType::TypeAlias: {
         if (style == Section::Details) {
-            auto templateDecl = node->templateDecl();
-            if (templateDecl)
-                m_writer->writeCharacters((*templateDecl).to_qstring() + QLatin1Char(' '));
+            if (auto templateDecl = node->templateDecl()) {
+                if (templateDecl->parameters.size() > QDoc::MultilineTemplateParamThreshold)
+                    m_writer->writeCharacters(templateDecl->to_qstring_multiline() + QLatin1Char('\n'));
+                else
+                    m_writer->writeCharacters(templateDecl->to_qstring() + QLatin1Char(' '));
+            }
         }
         m_writer->writeCharacters(namePrefix);
         generateSynopsisName(node, relative, generateNameLink);
@@ -4127,6 +4175,11 @@ void DocBookGenerator::generateAddendum(const Node *node, Addendum type, CodeMar
     }
     case OverloadNote: {
         const auto *func = static_cast<const FunctionNode *>(node);
+
+        // Primary overloads should not display any overload note text
+        if (func->isPrimaryOverload())
+            return;
+
         m_writer->writeStartElement(dbNamespace, "para");
 
         if (func->isSignal() || func->isSlot()) {
@@ -4195,11 +4248,10 @@ void DocBookGenerator::generateAddendum(const Node *node, Addendum type, CodeMar
                 const Node *linkNode = nullptr;
                 Atom linkAtom = Atom(Atom::AutoLink, target);
                 QString link = getAutoLink(&linkAtom, node, &linkNode);
-                if (!link.isEmpty() && linkNode) {
+                if (!link.isEmpty() && linkNode)
                     generateSimpleLink(link, target);
-                } else {
+                else
                     m_writer->writeCharacters(target);
-                }
                 m_writer->writeCharacters(".");
             }
         }
@@ -4469,7 +4521,7 @@ void DocBookGenerator::generatePageNode(PageNode *pn)
     Q_ASSERT(m_writer == nullptr);
     m_writer = startDocument(pn);
 
-    generateHeader(pn->fullTitle(), pn->subtitle(), pn);
+    generateHeader(pn->doc().title(), pn->subtitle(), pn);
     generateBody(pn);
     generateAlsoList(pn);
     generateFooter();
@@ -4488,11 +4540,14 @@ void DocBookGenerator::generateQmlTypePage(QmlTypeNode *qcn)
     m_writer = startDocument(qcn);
 
     Generator::setQmlTypeContext(qcn);
-    QString title = qcn->fullTitle();
+    QString title = qcn->name();
     if (qcn->isQmlBasicType())
         title.append(" QML Value Type");
     else
         title.append(" QML Type");
+
+    if (qcn->isSingleton())
+        title.append(" (Singleton)");
     // TODO: for ITS attribute, only apply translate="no" on qcn->fullTitle(),
     // not its suffix (which should be translated). generateHeader doesn't
     // allow this kind of input, the title isn't supposed to be structured.
@@ -4501,6 +4556,19 @@ void DocBookGenerator::generateQmlTypePage(QmlTypeNode *qcn)
     generateHeader(title, qcn->subtitle(), qcn);
     generateQmlRequisites(qcn);
     generateStatus(qcn);
+
+    if (qcn->isSingleton()) {
+        m_writer->writeStartElement(dbNamespace, "note");
+        m_writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "emphasis");
+        m_writer->writeAttribute("role", "bold");
+        m_writer->writeCharacters("Note: ");
+        m_writer->writeEndElement(); // emphasis
+        m_writer->writeCharacters("This type is a QML singleton. "
+                                  "There is only one instance of this type in the QML engine.");
+        m_writer->writeEndElement(); // para
+        m_writer->writeEndElement(); // note
+    }
 
     startSection("details", "Detailed Description");
     generateBody(qcn);
@@ -4666,7 +4734,9 @@ void DocBookGenerator::generateDocumentation(Node *node)
         return;
     if (node->isIndexNode())
         return;
-    if (node->isInternal() && !m_showInternal)
+    const InclusionPolicy policy = Config::instance().createInclusionPolicy();
+    const NodeContext context = node->createContext();
+    if (!InclusionFilter::isIncluded(policy, context))
         return;
     if (node->isExternalPage())
         return;
@@ -4719,7 +4789,7 @@ void DocBookGenerator::generateDocumentation(Node *node)
     if (node->isAggregate()) {
         auto *aggregate = static_cast<Aggregate *>(node);
         for (auto c : aggregate->childNodes()) {
-            if (node->isPageNode() && !node->isPrivate())
+            if (node->isPageNode())
                 generateDocumentation(c);
         }
     }
@@ -4760,17 +4830,15 @@ void DocBookGenerator::generateProxyPage(Aggregate *aggregate)
 
         const QList<Node *> &members = section.members();
         for (const auto &member : members) {
-            if (!member->isPrivate()) { // ### check necessary?
-                if (!member->isClassNode()) {
-                    generateDetailedMember(member, aggregate);
-                } else {
-                    startSectionBegin();
-                    generateFullName(member, aggregate);
-                    startSectionEnd();
+            if (!member->isClassNode()) {
+                generateDetailedMember(member, aggregate);
+            } else {
+                startSectionBegin();
+                generateFullName(member, aggregate);
+                startSectionEnd();
 
-                    generateBrief(member);
-                    endSection();
-                }
+                generateBrief(member);
+                endSection();
             }
         }
 
@@ -4793,7 +4861,7 @@ void DocBookGenerator::generateCollectionNode(CollectionNode *cn)
     m_writer = startDocument(cn);
 
     // Info container.
-    generateHeader(cn->fullTitle(), cn->subtitle(), cn);
+    generateHeader(cn->doc().title(), cn->subtitle(), cn);
 
     // Element synopsis.
     generateDocBookSynopsis(cn);

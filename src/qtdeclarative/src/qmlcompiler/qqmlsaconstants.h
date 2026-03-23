@@ -41,7 +41,9 @@ enum class ScopeType {
     QMLScope,
     GroupedPropertyScope,
     AttachedPropertyScope,
-    EnumScope
+    EnumScope,
+    BindingFunctionScope,
+    SignalHandlerFunctionScope,
 };
 
 } // namespace QQmlSA

@@ -307,7 +307,9 @@ DEFINEFUNC(STACK_OF(X509) *, SSL_get_peer_cert_chain, SSL *a, a, return nullptr,
 #if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
 DEFINEFUNC(X509 *, SSL_get1_peer_certificate, SSL *a, a, return nullptr, return)
 DEFINEFUNC(int, EVP_PKEY_get_bits, const EVP_PKEY *pkey, pkey, return -1, return)
+DEFINEFUNC(int, EVP_PKEY_get_security_bits, const EVP_PKEY *pkey, pkey, return -1, return)
 DEFINEFUNC(int, EVP_PKEY_get_base_id, const EVP_PKEY *pkey, pkey, return -1, return)
+DEFINEFUNC(const char *, EVP_PKEY_get0_type_name, const EVP_PKEY *pkey, pkey, return nullptr, return)
 #else
 DEFINEFUNC(X509 *, SSL_get_peer_certificate, SSL *a, a, return nullptr, return)
 DEFINEFUNC(int, EVP_PKEY_base_id, EVP_PKEY *a, a, return NID_undef, return)
@@ -1079,7 +1081,9 @@ bool q_resolveOpenSslSymbols()
 #if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
         RESOLVEFUNC(SSL_get1_peer_certificate)
         RESOLVEFUNC(EVP_PKEY_get_bits)
+        RESOLVEFUNC(EVP_PKEY_get_security_bits)
         RESOLVEFUNC(EVP_PKEY_get_base_id)
+        RESOLVEFUNC(EVP_PKEY_get0_type_name)
 #else
         RESOLVEFUNC(SSL_get_peer_certificate)
         RESOLVEFUNC(EVP_PKEY_base_id)

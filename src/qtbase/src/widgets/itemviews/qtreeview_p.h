@@ -234,7 +234,9 @@ public:
         return (viewIndex(index) + (header ? 1 : 0)) * model->columnCount()+index.column();
     }
 
-    int accessibleTree2Index(const QModelIndex &index) const;
+#if QT_CONFIG(accessibility)
+    int accessibleChildIndex(const QModelIndex &index) const override;
+#endif
 
     void updateIndentationFromStyle();
 

@@ -10,6 +10,8 @@
 #include <QtQml/QQmlContext>
 #include <QQuickWidget>
 #include <QQuickItem>
+#elif defined(Q_CC_MSVC)
+#pragma message "Building without Quick UI"
 #else
 #warning "Building without Quick UI"
 #endif
@@ -26,6 +28,7 @@ class Gadget
     Q_PROPERTY(QString display READ display WRITE setDisplay)
     Q_PROPERTY(QColor decoration READ decoration WRITE setDecoration)
     Q_PROPERTY(QString toolTip READ toolTip WRITE setToolTip)
+    Q_PROPERTY(QString user READ display WRITE setDisplay)
 public:
     Gadget() = default;
 
@@ -92,7 +95,7 @@ struct QMetaEnumerator
     using const_iterator = iterator;
 
     template <typename Enum>
-    explicit QMetaEnumerator(Enum e) noexcept
+    explicit QMetaEnumerator(Enum) noexcept
         : m_enum(QMetaEnum::fromType<Enum>())
     {}
 
@@ -165,25 +168,39 @@ class Object : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString display READ display WRITE setDisplay NOTIFY displayChanged)
+    Q_PROPERTY(QColor decoration READ decoration WRITE setDecoration NOTIFY decorationChanged)
 
 public:
-    Object(int x)
-        : m_display(QString::number(x))
+    Object(int x, QObject *parent = nullptr)
+        : QObject(parent)
+        , m_display(QString::number(x))
+        , m_decoration(QColor::fromHsv(x % 255, 255, 255))
     {}
     QString display() const { return m_display; }
-    void setDisplay(const QString &d) { m_display = d; displayChanged(); }
+    void setDisplay(const QString &display)
+    {
+        if (m_display == display)
+            return;
+        m_display = display;
+        emit displayChanged();
+    }
+
+    QColor decoration() const { return m_decoration; }
+    void setDecoration(QColor color)
+    {
+        if (m_decoration == color)
+            return;
+        m_decoration = color;
+        emit decorationChanged();
+    }
 
 Q_SIGNALS:
     void displayChanged();
+    void decorationChanged();
 
 private:
     QString m_display;
-};
-
-template <>
-struct QRangeModel::RowOptions<Object>
-{
-    static constexpr auto rowCategory = QRangeModel::RowCategory::MultiRoleItem;
+    QColor m_decoration;
 };
 
 class ModelFactory : public QObject
@@ -193,6 +210,14 @@ class ModelFactory : public QObject
     std::vector<int> numbers = {1, 2, 3, 4, 5};
     QList<QString> strings = {u"one"_s, u"two"_s, u"three"_s};
     std::array<int, 1000000> largeArray = {};
+    QTimer updater;
+
+public:
+    void reset()
+    {
+        updater.stop();
+        updater.disconnect();
+    }
 
 public slots:
     QRangeModel *makeNumbers()
@@ -205,6 +230,21 @@ public slots:
         return new QRangeModel(&largeArray);
     }
 
+    QRangeModel *makeVectorWithAdapter()
+    {
+        QRangeModelAdapter adapter(std::ref(numbers));
+        auto *model = adapter.model();
+        qDebug() << "Data from index" << adapter.index(0).data();
+        qDebug() << "Data from adapter" << adapter.data(0);
+        qDebug() << "Data from operator[]" << adapter[0];
+
+        connect(&updater, &QTimer::timeout, model, [adapter] mutable {
+            adapter[0] = adapter[0] + 1;
+        });
+
+        updater.start(1000);
+        return model;
+    }
 
     QRangeModel *makeStrings()
     {
@@ -229,6 +269,7 @@ public slots:
             { 4, "vier"},
             { 5, "fünf"},
         };
+
         return new QRangeModel(data);
     }
 
@@ -268,6 +309,17 @@ public slots:
         return new QRangeModel(std::views::zip(x, y, z));
     }
 
+    QRangeModel *makeGadgetList()
+    {
+        QList<Gadget> gadgetList = {
+            {"1/1", Qt::red, "red"},
+            {"1/2", Qt::black, "black"},
+            {"2/1", Qt::blue, "blue"},
+            {"2/2", Qt::green, "green"},
+        };
+        return new QRangeModel(gadgetList);
+    }
+
     QRangeModel *makeGadgetTable()
     {
         QList<QList<Gadget>> gadgetTable = {
@@ -295,6 +347,17 @@ public slots:
             {3, 0.3},
             {4, 0.4},
         });
+    }
+
+    QRangeModel *makeFilterView()
+    {
+        const QDate today = QDate::currentDate();
+        auto view = std::views::iota(today.addYears(-100), today.addYears(100))
+                  | std::views::filter([](QDate date){
+                        return date.dayOfWeek() < 6;
+                    });
+
+        return new QRangeModel(view);
     }
 
     QRangeModel *makeMultiRoleMap()
@@ -332,7 +395,7 @@ public slots:
         //     std::make_unique<QString>("C"),
         // };
         // return new QRangeModel(std::move(data));
-        return nullptr;
+        return new QRangeModel(QList{"Nothing to see here"});
     }
 
     QRangeModel *makeUniqueRows()
@@ -347,12 +410,13 @@ public slots:
 
     QRangeModel *makeTree()
     {
-        static TreeRow root[] = {{"Germany", "Berlin"},
-                                 {"France", "Paris"},
-                                 {"Austria", "Vienna"}
-                                };
+        TreeRow root[] = {{"Germany", "Berlin"},
+                          {"France", "Paris"},
+                          {"Austria", "Vienna"}
+                         };
 
-        static Tree europe{std::make_move_iterator(std::begin(root)), std::make_move_iterator(std::end(root))};
+        Tree europe{std::make_move_iterator(std::begin(root)),
+                    std::make_move_iterator(std::end(root))};
         TreeRow &bavaria = europe[0].addChild("Bavaria", "Munich");
         bavaria.addChild("Upper Bavaria", "München");
         bavaria.addChild("Lower Bavaria", "Landshut");
@@ -383,9 +447,93 @@ public slots:
         europe[2].addChild("Vorarlberg", "Bregenz");
         europe[2].addChild("Burgenland", "Eisenstadt");
 
-        return new QRangeModel(std::ref(europe));
+        QRangeModelAdapter adapter(std::move(europe));
+        const QList<int> path = {1, 0};
+        QRangeModel *model = adapter.model();
+        connect(&updater, &QTimer::timeout, model, [adapter] mutable {
+            // adapter[0] = tree_row{"Deutschland", "Berlin"};
+            for (auto row : adapter) {
+                qDebug() << row[0] << row[1];
+            }
+            adapter[QSpan<const int>{ 0, 0, 0 }, 1] = "Munich";
+        });
+        updater.start(1000);
+
+        return model;
+    }
+
+    QRangeModel *makeAutoConnectedObjects()
+    {
+        std::array<std::pair<Object *, Object *>, 500> table;
+        for (size_t i = 0; i < table.size(); ++i) {
+            table[i].first = new Object(i);
+            table[i].second = new Object(i);
+        }
+
+        QRangeModelAdapter adapter(std::move(table));
+        QRangeModel *model = adapter.model();
+        connect(&updater, &QTimer::timeout, this, [adapter = std::move(adapter)] {
+            for (auto row : adapter) {
+                for (auto column : row) {
+                    const_cast<Object *>(column)->setDisplay(QTime::currentTime().toString());
+                }
+            }
+        });
+
+        updater.start(1000);
+        model->setAutoConnectPolicy(QRangeModel::AutoConnectPolicy::OnRead);
+        return model;
+    }
+
+    QRangeModel *makeAutoConnectedConstObjects()
+    {
+        std::array<std::pair<Object *, Object *>, 500> table;
+        for (size_t i = 0; i < table.size(); ++i) {
+            table[i].first = new Object(i);
+            table[i].second = new Object(i);
+        }
+
+        QRangeModelAdapter adapter(std::move(std::as_const(table)));
+        QRangeModel *model = adapter.model();
+        connect(&updater, &QTimer::timeout, this, [adapter = std::move(adapter)] {
+            for (auto row : adapter) {
+                for (auto column : row) {
+                    auto object = const_cast<Object *>(column);
+                    object->setDisplay(QTime::currentTime().toString());
+                    int hue = column->decoration().hue() + 1;
+                    object->setDecoration(QColor::fromHsv(hue % 255, 255, 255));
+                }
+            }
+        });
+
+        updater.start(1000);
+        model->setAutoConnectPolicy(QRangeModel::AutoConnectPolicy::Full);
+        return model;
+    }
+
+    QRangeModel *makeAutoConnectedRows()
+    {
+        QList<Object *> list;
+        for (int i = 0; i < 100; ++i)
+            list.append(new Object(i));
+
+        QRangeModelAdapter adapter(std::move(list));
+        QRangeModel *model = adapter.model();
+        connect(&updater, &QTimer::timeout, this, [adapter = std::move(adapter)] {
+            for (auto row : adapter) {
+                auto object = const_cast<Object *>(row.get());
+                object->setDisplay(QTime::currentTime().toString());
+                int hue = row->decoration().hue() + 1;
+                object->setDecoration(QColor::fromHsv(hue % 255, 255, 255));
+            }
+        });
+
+        updater.start(100);
+        model->setAutoConnectPolicy(QRangeModel::AutoConnectPolicy::Full);
+        return model;
     }
 };
+
 struct QMetaMethodEnumerator
 {
     struct iterator
@@ -465,7 +613,11 @@ public:
 
 #ifdef QUICK_UI
         quickWidget = new QQuickWidget;
+        connect(quickWidget, &QQuickWidget::statusChanged, this, [](QQuickWidget::Status status){
+            qDebug() << "Quick UI status" << status;
+        });
         quickWidget->loadFromModule("Main", "Main");
+        quickWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
         splitter->addWidget(quickWidget);
 #endif
 
@@ -473,13 +625,11 @@ public:
 
         QComboBox *modelPicker = new QComboBox;
         connect(modelPicker, &QComboBox::currentIndexChanged, this, &MainWindow::modelChanged);
-        // this will implicitly run modelChanged()
-        modelPicker->setModel(new QRangeModel(QMetaMethodEnumerator::fromType<ModelFactory>(),
-                                              modelPicker));
-        modelPicker->setModelColumn(1);
 
         QToolBar *toolBar = addToolBar(tr("Model Operations"));
         toolBar->addWidget(modelPicker);
+
+        toolBar->addSeparator();
 
         QAction *addAction = toolBar->addAction(tr("Add"), this, &MainWindow::onAdd);
         addAction->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::ListAdd));
@@ -493,23 +643,68 @@ public:
         indentAction->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::FormatIndentMore));
         QAction *dedentAction = toolBar->addAction(tr("Move out"), this, &MainWindow::onOut);
         dedentAction->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::FormatIndentLess));
+
+        toolBar->addSeparator();
+
+        connectionOptions = new QActionGroup(this);
+        QAction *fullAutoConnectAction = connectionOptions->addAction(tr("Full"));
+        fullAutoConnectAction->setCheckable(true);
+        fullAutoConnectAction->setData(QVariant::fromValue(QRangeModel::AutoConnectPolicy::Full));
+        QAction *onReadAutoConnectAction = connectionOptions->addAction(tr("On Read"));
+        onReadAutoConnectAction->setCheckable(true);
+        onReadAutoConnectAction->setData(QVariant::fromValue(QRangeModel::AutoConnectPolicy::OnRead));
+
+        connectionOptions->setExclusive(true);
+        connectionOptions->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
+
+        toolBar->addAction(fullAutoConnectAction);
+        toolBar->addAction(onReadAutoConnectAction);
+
+        connect(connectionOptions, &QActionGroup::triggered, this, [this](){
+            QAction *checkedAction = connectionOptions->checkedAction();
+            const auto policy = checkedAction ? checkedAction->data().value<QRangeModel::AutoConnectPolicy>()
+                                              : QRangeModel::AutoConnectPolicy::None;
+
+            qDebug() << "Switching to policy" << policy;
+            model->setAutoConnectPolicy(policy);
+        });
+
+        // this will implicitly run modelChanged() and update the UI
+        modelPicker->setModel(new QRangeModel(QMetaMethodEnumerator::fromType<ModelFactory>(),
+                                              modelPicker));
+        modelPicker->setModelColumn(1);
+    }
+
+    ~MainWindow()
+    {
+        factory.reset();
     }
 
 private:
     void modelChanged(int index)
     {
-        QAbstractItemModel *oldModel = model;
+        QPointer<QRangeModel> oldModel = model;
 
+        factory.reset();
+
+        QRangeModel *newModel = nullptr;
         const QMetaObject &mo = ModelFactory::staticMetaObject;
         const QMetaMethod method = mo.method(index + mo.methodOffset());
-        if (method.invoke(&factory, qReturnArg(model))) {
-            treeview->setModel(model);
+        if (method.invoke(&factory, qReturnArg(newModel))) {
+            model = newModel;
+            newModel->setParent(this);
+            newModel->setObjectName(QString::fromUtf8(method.name()).slice(4));
+            treeview->setModel(newModel);
 #ifdef QUICK_UI
             if (!quickWidget->rootObject())
                 statusBar()->showMessage(tr("Failed to load QML"));
             else
-                quickWidget->rootObject()->setProperty("model", QVariant::fromValue(model));
+                quickWidget->rootObject()->setProperty("model", QVariant::fromValue(newModel));
 #endif
+            for (auto *action : connectionOptions->actions()) {
+                action->setChecked(action->data().value<QRangeModel::AutoConnectPolicy>()
+                                == model->autoConnectPolicy());
+            }
         }
 
         delete oldModel;
@@ -583,11 +778,12 @@ private:
     }
 
     ModelFactory factory;
-    QRangeModel *model;
+    QPointer<QRangeModel> model; // might be owned by an adapter
     QTreeView *treeview;
 #ifdef QUICK_UI
     QQuickWidget *quickWidget;
 #endif
+    QActionGroup *connectionOptions;
 };
 
 int main(int argc, char *argv[])

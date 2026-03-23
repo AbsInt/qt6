@@ -602,7 +602,7 @@ void tst_qqmlmetatype::unregisterAttachedProperties()
 
         const QQmlType attachedType = QQmlMetaType::qmlType("QtQuick/KeyNavigation",
                                                             QTypeRevision::fromVersion(2, 2));
-        QCOMPARE(attachedType.attachedPropertiesType(QQmlEnginePrivate::get(&e)),
+        QCOMPARE(attachedType.attachedPropertiesType(QQmlTypeLoader::get(&e)),
                  attachedType.metaObject());
 
         QScopedPointer<QObject> obj(c.create());

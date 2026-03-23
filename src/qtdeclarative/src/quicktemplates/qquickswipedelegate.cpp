@@ -1155,7 +1155,7 @@ QQuickSwipeDelegate::QQuickSwipeDelegate(QQuickItem *parent)
         \li enabled
         \li This property determines whether or not the control can be swiped.
 
-            This property was added in QtQuick.Controls 2.2.
+            This property was added in \l{QtQuick.Controls} 2.2.
     \row
         \li left
         \li This property holds the left delegate.
@@ -1210,7 +1210,7 @@ QQuickSwipeDelegate::QQuickSwipeDelegate(QQuickItem *parent)
 
             \snippet qtquickcontrols-swipedelegate-transition.qml 1
 
-            This property was added in Qt Quick Controls 2.2.
+            This property was added in \l{QtQuick.Controls} 2.2.
     \endtable
 
     \sa {Control::}{contentItem}, {Control::}{background}, swipe.open(), swipe.close()

@@ -45,7 +45,7 @@ int QAccessibleTable::logicalIndex(const QModelIndex &index) const
         return -1;
 
 #if QT_CONFIG(listview)
-    if (m_role == QAccessible::List) {
+    if (role() == QAccessible::List) {
         if (index.column() != qobject_cast<const QListView*>(view())->modelColumn())
             return -1;
         else
@@ -60,35 +60,10 @@ int QAccessibleTable::logicalIndex(const QModelIndex &index) const
     }
 }
 
-QAccessibleTable::QAccessibleTable(QWidget *w)
-    : QAccessibleObject(w)
+QAccessibleTable::QAccessibleTable(QWidget *w, QAccessible::Role role)
+    : QAccessibleWidgetV2(w, role)
 {
     Q_ASSERT(view());
-
-#if QT_CONFIG(tableview)
-    if (qobject_cast<const QTableView*>(view())) {
-        m_role = QAccessible::Table;
-    } else
-#endif
-#if QT_CONFIG(treeview)
-    if (qobject_cast<const QTreeView*>(view())) {
-        m_role = QAccessible::Tree;
-    } else
-#endif
-#if QT_CONFIG(listview)
-    if (qobject_cast<const QListView*>(view())) {
-        m_role = QAccessible::List;
-    } else
-#endif
-    {
-        // is this our best guess?
-        m_role = QAccessible::Table;
-    }
-}
-
-bool QAccessibleTable::isValid() const
-{
-    return view() && !qt_widget_private(view())->data.in_destructor;
 }
 
 QAccessibleTable::~QAccessibleTable()
@@ -125,6 +100,21 @@ QHeaderView *QAccessibleTable::verticalHeader() const
     return header;
 }
 
+// Normally cellAt takes row/column in the range
+//   [0 .. rowCount())
+//   [0 .. columnCount())
+//
+// As an extension we allow clients to ask for headers
+//
+// * Has both vertical and horizontal headers:
+//      (-1,-1)      -> corner button
+// * Has column headers:
+//      (-1, column) -> column header for column \a column
+// * has row headers
+//      (row, -1)    -> row header for row \a row
+//
+// If asking for a header that does not exist, The invalid
+// index warning is logged, and nullptr is returned.
 QAccessibleInterface *QAccessibleTable::cellAt(int row, int column) const
 {
     const QAbstractItemView *theView = view();
@@ -133,6 +123,22 @@ QAccessibleInterface *QAccessibleTable::cellAt(int row, int column) const
         return nullptr;
     Q_ASSERT(role() != QAccessible::List);
     Q_ASSERT(role() != QAccessible::Tree);
+
+    const int vHeader = verticalHeader() ? 1 : 0;
+    const int hHeader = horizontalHeader() ? 1 : 0;
+
+    const int doHHeader = ((row == -1) && hHeader);
+    const int doVHeader = ((column == -1) && vHeader);
+
+    if (doVHeader && doHHeader)
+        return child(0);
+
+    if (doVHeader)
+        return child((row + hHeader) * (columnCount() + vHeader) + (column + vHeader));
+
+    if (doHHeader)
+        return child((row + hHeader) * (columnCount() + vHeader) + (column + vHeader));
+
     QModelIndex index = theModel->index(row, column, theView->rootIndex());
     if (Q_UNLIKELY(!index.isValid())) {
         qWarning() << "QAccessibleTable::cellAt: invalid index: " << index << " for " << theView;
@@ -162,7 +168,7 @@ int QAccessibleTable::columnCount() const
     if (!theModel)
         return 0;
     const int modelColumnCount = theModel->columnCount(theView->rootIndex());
-    return m_role == QAccessible::List ? qMin(1, modelColumnCount) : modelColumnCount;
+    return role() == QAccessible::List ? qMin(1, modelColumnCount) : modelColumnCount;
 }
 
 int QAccessibleTable::rowCount() const
@@ -492,36 +498,6 @@ bool QAccessibleTable::clear()
 }
 
 
-QAccessible::Role QAccessibleTable::role() const
-{
-    return m_role;
-}
-
-QAccessible::State QAccessibleTable::state() const
-{
-    QAccessible::State state;
-    const auto *w = view();
-
-    if (w->testAttribute(Qt::WA_WState_Visible) == false)
-        state.invisible = true;
-    if (w->focusPolicy() != Qt::NoFocus)
-        state.focusable = true;
-    if (w->hasFocus())
-        state.focused = true;
-    if (!w->isEnabled())
-        state.disabled = true;
-    if (w->isWindow()) {
-        if (w->windowFlags() & Qt::WindowSystemMenuHint)
-            state.movable = true;
-        if (w->minimumSize() != w->maximumSize())
-            state.sizeable = true;
-        if (w->isActiveWindow())
-            state.active = true;
-    }
-
-    return state;
-}
-
 QAccessibleInterface *QAccessibleTable::childAt(int x, int y) const
 {
     QPoint viewportOffset = view()->viewport()->mapTo(view(), QPoint(0,0));
@@ -588,21 +564,6 @@ int QAccessibleTable::indexOfChild(const QAccessibleInterface *iface) const
     }
     // FIXME: we are in denial of our children. this should stop.
     return -1;
-}
-
-QString QAccessibleTable::text(QAccessible::Text t) const
-{
-    if (t == QAccessible::Description)
-        return view()->accessibleDescription();
-    return view()->accessibleName();
-}
-
-QRect QAccessibleTable::rect() const
-{
-    if (!view()->isVisible())
-        return QRect();
-    QPoint pos = view()->mapToGlobal(QPoint(0, 0));
-    return QRect(pos.x(), pos.y(), view()->width(), view()->height());
 }
 
 QAccessibleInterface *QAccessibleTable::parent() const
@@ -678,7 +639,7 @@ void *QAccessibleTable::interface_cast(QAccessible::InterfaceType t)
        return static_cast<QAccessibleSelectionInterface*>(this);
     if (t == QAccessible::TableInterface)
        return static_cast<QAccessibleTableInterface*>(this);
-   return nullptr;
+    return QAccessibleWidgetV2::interface_cast(t);
 }
 
 void QAccessibleTable::modelChange(QAccessibleTableModelChangeEvent *event)

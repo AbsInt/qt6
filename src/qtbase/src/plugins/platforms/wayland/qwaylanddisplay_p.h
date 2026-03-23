@@ -1,6 +1,7 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // Copyright (C) 2024 Jie Liu <liujie01@kylinos.cn>
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #ifndef QWAYLANDDISPLAY_H
 #define QWAYLANDDISPLAY_H
@@ -56,6 +57,7 @@ namespace QtWayland {
     class wp_cursor_shape_manager_v1;
     class wp_fractional_scale_manager_v1;
     class wp_viewporter;
+    class xx_session_manager_v1;
     class xdg_system_bell_v1;
     class xdg_toplevel_drag_manager_v1;
     class wp_pointer_warp_v1;
@@ -86,6 +88,7 @@ class QWaylandPointerGestures;
 class QWaylandWindow;
 class QWaylandIntegration;
 class QWaylandHardwareIntegration;
+class QWaylandSessionManager;
 class QWaylandSurface;
 class QWaylandShellIntegration;
 class QWaylandCursor;
@@ -213,6 +216,10 @@ public:
     QtWayland::xdg_toplevel_drag_manager_v1 *xdgToplevelDragManager() const
     {
         return mGlobals.xdgToplevelDragManager.get();
+    }
+    QtWayland::xx_session_manager_v1 *xxSessionManager() const
+    {
+        return mGlobals.xxSessionManager.get();
     }
     QtWayland::xdg_system_bell_v1 *systemBell() const
     {
@@ -360,6 +367,7 @@ private:
         std::unique_ptr<QtWayland::wp_viewporter> viewporter;
         std::unique_ptr<QtWayland::wp_fractional_scale_manager_v1> fractionalScaleManager;
         std::unique_ptr<QtWayland::wp_cursor_shape_manager_v1> cursorShapeManager;
+        std::unique_ptr<QtWayland::xx_session_manager_v1> xxSessionManager;
         std::unique_ptr<QtWayland::xdg_system_bell_v1> systemBell;
         std::unique_ptr<QtWayland::xdg_toplevel_drag_manager_v1> xdgToplevelDragManager;
         std::unique_ptr<QWaylandWindowManagerIntegration> windowManagerIntegration;
