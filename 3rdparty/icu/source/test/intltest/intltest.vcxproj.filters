@@ -490,6 +490,12 @@
     <ClCompile Include="ustrtest.cpp">
       <Filter>strings</Filter>
     </ClCompile>
+    <ClCompile Include="utfiteratortest.cpp">
+      <Filter>strings</Filter>
+    </ClCompile>
+    <ClCompile Include="utfstringtest.cpp">
+      <Filter>strings</Filter>
+    </ClCompile>
     <ClCompile Include="utxttest.cpp">
       <Filter>strings</Filter>
     </ClCompile>
@@ -587,6 +593,9 @@
       <Filter>misc</Filter>
     </ClCompile>
     <ClCompile Include="usetheaderonlytest.cpp">
+      <Filter>misc</Filter>
+    </ClCompile>
+    <ClCompile Include="intltesttest.cpp">
       <Filter>misc</Filter>
     </ClCompile>
   </ItemGroup>
