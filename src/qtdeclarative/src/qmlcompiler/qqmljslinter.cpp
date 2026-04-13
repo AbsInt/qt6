@@ -681,6 +681,7 @@ QQmlJSLinter::lintFileImpl(const QString &filename, const QString *fileContents,
                                  contextPropertiesFor(filename, mapper ? &*mapper : nullptr,
                                                       heuristicContextProperties) };
     codegen.setTypeResolver(std::move(typeResolver));
+    codegen.setKnownUnresolvedTypes(v.knownUnresolvedTypes());
 
     using PassManagerPtr =
             std::unique_ptr<QQmlSA::PassManager,
@@ -804,6 +805,12 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintModuleImpl(
 
     // We can't lint properly if a module has already been pre-cached
     m_importer.clearCache();
+    // We don't support file selectors during module linting currently
+    const QQmlJSImporterFlags oldFlags = m_importer.flags();
+    QQmlJSImporterFlags newFlags = oldFlags;
+    newFlags.setFlag(TolerateFileSelectors, false);
+    m_importer.setFlags(newFlags);
+    auto flagGuard = qScopeGuard([this, oldFlags]() { m_importer.setFlags(oldFlags); });
     m_importer.setImportPaths(qmlImportPaths);
 
     QQmlJSResourceFileMapper mapper(resourceFiles);

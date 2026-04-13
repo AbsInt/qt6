@@ -1127,8 +1127,9 @@ void QFontEngineFT::setDefaultHintStyle(HintStyle style)
     default_hint_style = style;
 }
 
-bool QFontEngineFT::expectsGammaCorrectedBlending() const
+bool QFontEngineFT::expectsGammaCorrectedBlending(QFontEngine::GlyphFormat format) const
 {
+    Q_UNUSED(format);
     return stemDarkeningDriver;
 }
 
@@ -1955,10 +1956,12 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
     FT_Library_SetLcdFilter(slot->library, (FT_LcdFilter)lcdFilterType);
 
     err = FT_Render_Glyph(slot, renderMode);
-    if (err != FT_Err_Ok)
-        qWarning("render glyph failed err=%x face=%p, glyph=%d", err, face, glyph);
-
     FT_Library_SetLcdFilter(slot->library, FT_LCD_FILTER_NONE);
+
+    if (err != FT_Err_Ok) {
+        qWarning("render glyph failed err=%x face=%p, glyph=%d", err, face, glyph);
+        return nullptr;
+    }
 
     info.height = slot->bitmap.rows;
     info.width = slot->bitmap.width;

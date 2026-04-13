@@ -1166,6 +1166,7 @@ void QRhiD3D12::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
             QD3D12Buffer *bufD = QRHI_RES(QD3D12Buffer, b->u.ubuf.buf);
             Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer));
             Q_ASSERT(bufD->m_type == QRhiBuffer::Dynamic);
+            sanityCheckResourceOwnership(bufD);
             bufD->executeHostWritesForFrameSlot(currentFrameSlot);
         }
             break;
@@ -1181,6 +1182,8 @@ void QRhiD3D12::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
                 // images and samplers, so tex or sampler (but not both) can be
                 // null here.
                 Q_ASSERT(texD || samplerD);
+                sanityCheckResourceOwnership(texD);
+                sanityCheckResourceOwnership(samplerD);
                 if (texD) {
                     UINT state = 0;
                     if (b->stage == QRhiShaderResourceBinding::FragmentStage) {
@@ -1201,6 +1204,7 @@ void QRhiD3D12::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
         case QRhiShaderResourceBinding::ImageLoadStore:
         {
             QD3D12Texture *texD = QRHI_RES(QD3D12Texture, b->u.simage.tex);
+            sanityCheckResourceOwnership(texD);
             if (QD3D12Resource *res = resourcePool.lookupRef(texD->handle)) {
                 if (res->uavUsage) {
                     if (res->uavUsage & QD3D12Resource::UavUsageWrite) {
@@ -1230,6 +1234,7 @@ void QRhiD3D12::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
         case QRhiShaderResourceBinding::BufferLoadStore:
         {
             QD3D12Buffer *bufD = QRHI_RES(QD3D12Buffer, b->u.sbuf.buf);
+            sanityCheckResourceOwnership(bufD);
             Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::StorageBuffer));
             Q_ASSERT(bufD->m_type != QRhiBuffer::Dynamic);
             if (QD3D12Resource *res = resourcePool.lookupRef(bufD->handles[0])) {
@@ -6938,7 +6943,11 @@ bool QD3D12SwapChain::createOrResize()
                 rhiD->dxgiFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_WINDOW_CHANGES);
             }
         }
-        if (FAILED(hr)) {
+        if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
+            qWarning("Device loss detected during swapchain creation");
+            rhiD->deviceLost = true;
+            return false;
+        } else if (FAILED(hr)) {
             qWarning("Failed to create D3D12 swapchain: %s"
                      " (Width=%u Height=%u Format=%u SampleCount=%u BufferCount=%u Scaling=%u SwapEffect=%u Stereo=%u)",
                      qPrintable(QSystemError::windowsComString(hr)),
