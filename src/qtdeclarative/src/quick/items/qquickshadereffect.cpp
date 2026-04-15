@@ -1212,11 +1212,7 @@ void QQuickShaderEffectPrivate::disconnectSignals(Shader shaderType)
             if (source) {
                 if (q->window())
                     QQuickItemPrivate::get(source)->derefWindow();
-                auto it = m_destroyedConnections.constFind(source);
-                if (it != m_destroyedConnections.constEnd()) {
-                    QObject::disconnect(*it);
-                    m_destroyedConnections.erase(it);
-                }
+                QObject::disconnect(m_destroyedConnections.take(source));
             }
         }
     }
@@ -1449,8 +1445,8 @@ void QQuickShaderEffectPrivate::updateShaderVars(Shader shaderType)
                 // disconnect instead.
                 if (!m_destroyedConnections.contains(source))
                     m_destroyedConnections.insert(source,
-                        QObject::connect(source, &QObject::destroyed, source,
-                                         [this](QObject *obj) { sourceDestroyed(obj); }));
+                        connect(source, &QObject::destroyed,
+                                this, &QQuickShaderEffectPrivate::sourceDestroyed));
             }
         }
     }
@@ -1513,13 +1509,8 @@ void QQuickShaderEffectPrivate::propertyChanged(int mappedId)
             // If the same source has been attached to two separate
             // textures/samplers, then changing one of them would trigger both
             // to be disconnected. So check first.
-            if (sourceIsUnique(source, type, idx)) {
-                auto it = m_destroyedConnections.constFind(source);
-                if (it != m_destroyedConnections.constEnd()) {
-                    QObject::disconnect(*it);
-                    m_destroyedConnections.erase(it);
-                }
-            }
+            if (sourceIsUnique(source, type, idx))
+                QObject::disconnect(m_destroyedConnections.take(source));
         }
 
         source = qobject_cast<QQuickItem *>(qvariant_cast<QObject *>(vd.value));
@@ -1532,8 +1523,8 @@ void QQuickShaderEffectPrivate::propertyChanged(int mappedId)
                 QQuickItemPrivate::get(source)->refWindow(q->window());
             if (!m_destroyedConnections.contains(source))
                 m_destroyedConnections.insert(source,
-                    QObject::connect(source, &QObject::destroyed,
-                                     source, [this](QObject *obj) { sourceDestroyed(obj); }));
+                    connect(source, &QObject::destroyed,
+                            this, &QQuickShaderEffectPrivate::sourceDestroyed));
         }
 
         m_dirty |= QSGShaderEffectNode::DirtyShaderTexture;

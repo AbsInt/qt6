@@ -8137,7 +8137,7 @@ void QQuickItem::setFocus(bool focus, Qt::FocusReason reason)
     while (scope && !scope->isFocusScope() && scope->parentItem())
         scope = scope->parentItem();
 
-    if (d->focus == focus && (!focus || !scope || QQuickItemPrivate::get(scope)->subFocusItem == this))
+    if (d->focus == focus && d->activeFocus == focus && (!focus || !scope || QQuickItemPrivate::get(scope)->subFocusItem == this))
         return;
 
     bool notifyListeners = false;
@@ -8447,7 +8447,7 @@ void QQuickItemPrivate::setHasCursorInChild(bool hc)
     // if we're asked to turn it off (because of an unsetcursor call, or a node
     // removal) then we should make sure it's really ok to turn it off.
     if (!hc && subtreeCursorEnabled) {
-        if (hasCursor)
+        if (hasCursor || hasCursorHandler)
             return; // nope! sorry, I have a cursor myself
         for (QQuickItem *otherChild : std::as_const(childItems)) {
             QQuickItemPrivate *otherChildPrivate = QQuickItemPrivate::get(otherChild);

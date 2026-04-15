@@ -2,20 +2,23 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
-#include <QtTest/QtTest>
+#include <QtTest/QTest>
 
 #include <qguiapplication.h>
 #include <qdebug.h>
 #include <qsvgrenderer.h>
 #include <qsvggenerator.h>
+#include <QBuffer>
+#include <QByteArray>
+#include <QFile>
+#include <QImage>
 #include <QPainter>
 #include <QPen>
 #include <QPicture>
+#include <QRgb>
+#include <QRectF>
+#include <QTimer>
 #include <QXmlStreamReader>
-
-#ifndef SRCDIR
-#define SRCDIR
-#endif
 
 using namespace Qt::Literals::StringLiterals;
 
@@ -1809,10 +1812,10 @@ void tst_QSvgRenderer::glyphWarnings()
 
     QFETCH(QString, missingGlyphAttributes);
     QFETCH(QString, secondElement);
-    QFETCH(QByteArrayList, warnings);
+    QFETCH(const QByteArrayList, warnings);
 
     for (const auto &w: warnings)
-        QTest::ignoreMessage(QtWarningMsg, w);
+        QTest::ignoreMessage(QtWarningMsg, w.constData());
     QSvgRenderer renderer(svgTemplate.arg(missingGlyphAttributes).arg(secondElement).toUtf8());
     QVERIFY(renderer.isValid());
 }
