@@ -2392,6 +2392,8 @@ QQuickItem::~QQuickItem()
 #if QT_CONFIG(accessibility)
     if (QGuiApplicationPrivate::is_app_running && !QGuiApplicationPrivate::is_app_closing && QAccessible::isActive())
         QAccessibleCache::instance()->sendObjectDestroyedEvent(this);
+
+    d->isAccessible = false;
 #endif
 
     if (d->windowRefCount > 1)
@@ -8999,7 +9001,7 @@ void QQuickItem::setContainmentMask(QObject *mask)
     if (!extraDataExists)
         d->extra.value(); // ensure extra exists
     if (mask) {
-        int methodIndex = mask->metaObject()->indexOfMethod(QByteArrayLiteral("contains(QPointF)"));
+        int methodIndex = mask->metaObject()->indexOfMethod("contains(QPointF)");
         if (methodIndex < 0) {
             qmlWarning(this) << QStringLiteral("QQuickItem: Object set as mask does not have an invokable contains method, ignoring it.");
             return;

@@ -59,6 +59,9 @@ private slots:
     void pinchHandlerOnFlickable();
     void nativeGesturePinchOnFlickableWithParentTapHandler_data();
     void nativeGesturePinchOnFlickableWithParentTapHandler();
+    void touchDraggableFlickableParent();
+    void tapAboveFlickable_data();
+    void tapAboveFlickable();
 
 private:
     void createView(QScopedPointer<QQuickView> &window, const char *fileName);
@@ -807,7 +810,7 @@ void tst_FlickableInterop::pinchHandlerOnFlickable()
     QSignalSpy grabChangedSpy(touchscreen.get(), &QPointingDevice::grabChanged);
 
     QObject *grabber = nullptr;
-    connect(touchscreen.get(), &QPointingDevice::grabChanged, this,
+    connect(touchscreen.get(), &QPointingDevice::grabChanged, &window,
             [&grabber](QObject *g, QPointingDevice::GrabTransition transition, const QPointerEvent *, const QEventPoint &) {
         if (transition == QPointingDevice::GrabTransition::GrabExclusive)
             grabber = g;
@@ -970,6 +973,64 @@ void tst_FlickableInterop::nativeGesturePinchOnFlickableWithParentTapHandler()
     if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
     QCOMPARE(tapSpy.size(), 0);
     QCOMPARE(tapActiveSpy.size(), 0);
+}
+
+void tst_FlickableInterop::touchDraggableFlickableParent()
+{
+    const int dragThreshold = QGuiApplication::styleHints()->startDragDistance();
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("draggableFlickableParent.qml")));
+    QQuickFlickable *flickable = window.rootObject()->findChild<QQuickFlickable *>(); // actually ListView
+    QVERIFY(flickable);
+    QQuickDragHandler *dragHandler = window.rootObject()->findChild<QQuickDragHandler *>();
+    QVERIFY(dragHandler);
+
+    // Drag one finger on the Flickable and make sure it flicks, not the DragHandler
+    QTest::QTouchEventSequence touchSeq = QTest::touchEvent(&window, touchscreen.get());
+    QPoint p1(10, 190);
+    touchSeq.press(1, p1, &window).commit();
+    QQuickTouchUtils::flush(&window);
+    int beganFlicking = -1;
+    for (int i = 0; i < 10; ++i) {
+        p1 += QPoint(dragThreshold, -dragThreshold);
+        touchSeq.move(1, p1, &window).commit();
+        QQuickTouchUtils::flush(&window);
+        if (flickable->isMovingVertically() && beganFlicking < 0)
+            beganFlicking = i;
+        QCOMPARE(dragHandler->active(), false);
+    }
+    QCOMPARE(beganFlicking, 2);
+    touchSeq.release(1, p1, &window).commit();
+}
+
+
+void tst_FlickableInterop::tapAboveFlickable_data()
+{
+    QTest::addColumn<const QPointingDevice*>("device");
+    const QPointingDevice *constTouchscreen = touchscreen.get();
+
+    QTest::newRow("touchscreen") << constTouchscreen;
+    QTest::newRow("primary") << QPointingDevice::primaryPointingDevice();
+}
+
+void tst_FlickableInterop::tapAboveFlickable()
+{
+    QFETCH(const QPointingDevice*, device);
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("tapOnItemAboveFlickable.qml")));
+    QQuickFlickable *flickable = window.rootObject()->findChild<QQuickFlickable *>();
+    QVERIFY(flickable);
+    QSignalSpy draggingChangedSpy(flickable, &QQuickFlickable::draggingChanged);
+    QQuickTapHandler *tapHandler = window.rootObject()->findChild<QQuickTapHandler *>();
+    QVERIFY(tapHandler);
+    QSignalSpy pressedChangedSpy(tapHandler, &QQuickTapHandler::pressedChanged);
+
+    // Press and drag: TapHandler needs only a passive grab to react;
+    // but Flickable should grab and be dragged
+    QQuickTest::pointerFlick(device, &window, 1, {20, 280}, {20, 20}, 100);
+    QCOMPARE(pressedChangedSpy.count(), 2);
+    QCOMPARE(draggingChangedSpy.count(), 2);
 }
 
 QTEST_MAIN(tst_FlickableInterop)

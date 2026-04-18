@@ -18,9 +18,8 @@
 
 #include <private/qtqmlcompilerglobal_p.h>
 
-#include <QtCore/qglobal.h>
-#include <QtCore/qstring.h>
-#include <QtCore/qversionnumber.h>
+#include <QtCore/qstringfwd.h>
+#include <QtCore/qtyperevision.h>
 
 QT_BEGIN_NAMESPACE
 

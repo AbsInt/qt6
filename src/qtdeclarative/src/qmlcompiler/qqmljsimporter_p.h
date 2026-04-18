@@ -23,6 +23,8 @@
 #include <QtQml/private/qqmldirparser_p.h>
 #include <QtQml/private/qqmljsast_p.h>
 
+#include <QtCore/qtyperevision.h>
+
 QT_BEGIN_NAMESPACE
 
 namespace QQmlJS {
@@ -147,7 +149,6 @@ public:
     ImportedTypes importHardCodedBuiltins();
     QList<QQmlJS::DiagnosticMessage> importQmldirs(const QStringList &qmltypesFiles);
 
-    bool registerScope(const QQmlJSScope::Ptr &scope);
     QQmlJSScope::Ptr importFile(const QString &file);
     ImportedTypes importDirectory(const QString &directory, quint8 precedence,
                                   const QString &prefix = QString());

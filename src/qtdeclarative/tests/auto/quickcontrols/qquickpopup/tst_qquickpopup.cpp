@@ -44,6 +44,16 @@ using namespace Qt::StringLiterals;
 using namespace QQuickVisualTestUtils;
 using namespace QQuickControlsTestUtils;
 
+static bool isPlatformWayland()
+{
+    return QGuiApplication::platformName().startsWith(QStringLiteral("wayland"));
+}
+
+static bool isPlatformUbuntu()
+{
+    return qEnvironmentVariable("XDG_SESSION_DESKTOP") == QStringLiteral("ubuntu");
+}
+
 class tst_QQuickPopup : public QQmlDataTest
 {
     Q_OBJECT
@@ -146,11 +156,20 @@ private slots:
     void popupWindowWithPaddingFromSafeArea();
     void popupWindowPositionerRespectingScreenBounds_data();
     void popupWindowPositionerRespectingScreenBounds();
+    void popupWindowRepositionOnImplicitSizeChange();
     void propagateTouchEvents();
+    void blockEventsBehindModal_data();
+    void blockEventsBehindModal();
     void spacingAndInsetsAreRevaluatedWhenChanged();
 
 private:
     QScopedPointer<QPointingDevice> touchScreen = QScopedPointer<QPointingDevice>(QTest::createTouchDevice());
+#if QT_CONFIG(tabletevent)
+    std::unique_ptr<const QPointingDevice> tabletStylusDevice{
+        QPointingDevicePrivate::tabletDevice(QInputDevice::DeviceType::Stylus,
+                                             QPointingDevice::PointerType::Pen,
+                                             QPointingDeviceUniqueId::fromNumericId(1234567890))};
+#endif
 };
 
 tst_QQuickPopup::tst_QQuickPopup()
@@ -3668,6 +3687,74 @@ void tst_QQuickPopup::popupWindowPositionerRespectingScreenBounds()
     popup->close();
 }
 
+// QTBUG-142700: Verify that when a popup window's implicit size changes
+// (e.g. ToolTip text gets longer), the popup window is repositioned to
+// reflect the new size. Previously, reposition() was not called after
+// resizing, so the popup appeared in the wrong location.
+void tst_QQuickPopup::popupWindowRepositionOnImplicitSizeChange()
+{
+    if (!arePopupWindowsSupported())
+        QSKIP("The platform doesn't support popup windows. Skipping test.");
+
+    QQuickControlsApplicationHelper helper(this, "popupWindowImplicitSizeChange.qml");
+    QVERIFY2(helper.ready, helper.failureMessage());
+
+    QQuickWindow *window = helper.window;
+    centerOnScreen(window);
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    window->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(window));
+
+    auto *button = window->property("button").value<QQuickButton *>();
+    QVERIFY(button);
+
+    // Get the ToolTip attached to the button
+    auto *toolTipAttached = qobject_cast<QQuickToolTipAttached *>(
+        qmlAttachedPropertiesObject<QQuickToolTip>(button, false));
+    QVERIFY(toolTipAttached);
+    QQuickPopup *toolTip = toolTipAttached->toolTip();
+    QVERIFY(toolTip);
+
+    toolTip->setPopupType(QQuickPopup::Window);
+
+    // Set negative insets to simulate a style with drop-shadow (like FluentWinUI3).
+    toolTip->setLeftInset(-10);
+    toolTip->setRightInset(-10);
+    toolTip->setTopInset(-10);
+    toolTip->setBottomInset(-10);
+
+    // Hover the button to show the tooltip. Start from the bottom of the
+    // window to ensure a proper hover-enter transition on the button.
+    const QPointF buttonCenter = button->mapToItem(window->contentItem(),
+        QPointF(button->width() / 2, button->height() / 2));
+    PointLerper lerper(window, QPoint(buttonCenter.x(), window->height() - 1));
+    lerper.move(buttonCenter.toPoint());
+    QTRY_VERIFY(toolTip->isOpened());
+
+    auto *popupPrivate = QQuickPopupPrivate::get(toolTip);
+    TRY_VERIFY_POPUP_OPENED(toolTip);
+    auto *popupWindow = popupPrivate->popupWindow;
+    QVERIFY(popupWindow);
+    QVERIFY(QTest::qWaitForWindowExposed(popupWindow));
+
+    const int initialY = popupWindow->y();
+
+    const int initialWidth = popupWindow->width();
+
+    // Change the text to something much longer, triggering implicit size change.
+    // Without the fix, the popup window is resized but not repositioned,
+    // causing the y position to drift.
+    window->setProperty("toolTipText", "Flinstone, Fred - a much longer tooltip text");
+
+    // Wait for the popup window to finish resizing before checking position.
+    QTRY_VERIFY(popupWindow->width() > initialWidth);
+
+    // The tooltip should remain at the same y position.
+    // Without the fix (missing reposition()), y shifts incorrectly.
+    QCOMPARE(popupWindow->y(), initialY);
+}
+
 void tst_QQuickPopup::propagateTouchEvents()
 {
     QQuickApplicationHelper helper(this, "propagateTouchEvents.qml");
@@ -3694,6 +3781,102 @@ void tst_QQuickPopup::propagateTouchEvents()
     QCOMPARE(tapSpy.count(), 1);
 
     QTRY_VERIFY(!popup->isOpened());
+}
+
+void tst_QQuickPopup::blockEventsBehindModal_data()
+{
+    QTest::addColumn<QQuickPopup::PopupType>("popupType");
+    QTest::addColumn<const QPointingDevice *>("device");
+
+    // QTest::newRow("window: primary") // TODO QTBUG-131786 QTBUG-145585 QTBUG-141362 etc.
+    //         << QQuickPopup::Window
+    //         << QPointingDevice::primaryPointingDevice();
+    QTest::newRow("item: primary")
+            << QQuickPopup::Item
+            << QPointingDevice::primaryPointingDevice();
+    QTest::newRow("item: touch")
+            << QQuickPopup::Item
+            << static_cast<const QPointingDevice*>(touchScreen.get());
+    QTest::newRow("window: touch")
+            << QQuickPopup::Window
+            << static_cast<const QPointingDevice*>(touchScreen.get());
+#if QT_CONFIG(tabletevent) && !defined(Q_OS_QNX)
+    QTest::newRow("window: stylus")     // QTBUG-135879
+            << QQuickPopup::Window
+            << tabletStylusDevice.get();
+    QTest::newRow("item: stylus")
+            << QQuickPopup::Item
+            << tabletStylusDevice.get();
+#endif
+}
+
+void tst_QQuickPopup::blockEventsBehindModal()
+{
+    if (isPlatformUbuntu())
+        QSKIP("Ubuntu: sidebar tends to overlay the test window and interfere");
+
+    QFETCH(QQuickPopup::PopupType, popupType);
+    QFETCH(const QPointingDevice *, device);
+
+    QQuickApplicationHelper helper(this, "windowWithInteractiveItemsAndPopup.qml");
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickWindow *window = helper.window;
+    helper.window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    auto *extraButton = window->findChild<QQuickAbstractButton *>("extra button");
+    QVERIFY(extraButton);
+    QSignalSpy buttonPressedChangedSpy(extraButton, &QQuickAbstractButton::pressedChanged);
+    QPoint buttonP = extraButton->mapToScene(extraButton->boundingRect().center()).toPoint();
+
+    auto *tapHandler = window->findChild<QQuickTapHandler *>();
+    QVERIFY(tapHandler);
+    QSignalSpy thPressedChangedSpy(tapHandler, &QQuickTapHandler::pressedChanged);
+    QPoint tapHandlerP = tapHandler->parentItem()->mapToScene(tapHandler->parentItem()->boundingRect().center()).toPoint();
+
+    auto *popup = window->findChild<QQuickPopup *>();
+    QVERIFY(popup);
+    popup->setPopupType(popupType);
+    auto *popupCloseButton = popup->findChild<QQuickButton *>();
+    QVERIFY(popupCloseButton);
+    QSignalSpy closeButtonPressedChangedSpy(popupCloseButton, &QQuickAbstractButton::pressedChanged);
+
+    auto pointerClick = [device](const QPoint &p, QQuickWindow *window) {
+        QQuickTest::pointerPress(device, window, 1, p);
+        QQuickTest::pointerRelease(device, window, 1, p);
+    };
+
+    // the popup is not shown yet: we can click anything with any device
+    QCOMPARE(buttonPressedChangedSpy.count(), 0);
+    QCOMPARE(thPressedChangedSpy.count(), 0);
+    pointerClick(buttonP, window);
+    QTRY_COMPARE(buttonPressedChangedSpy.count(), 2);
+    pointerClick(tapHandlerP, window);
+    QTRY_COMPARE(thPressedChangedSpy.count(), 2);
+
+    // show the modal popup: then we cannot click anything behind it
+    popup->open();
+    QTRY_VERIFY(popup->isOpened()); // wait for it to fully open
+    QQuickWindow *windowOfPopup = popupCloseButton->window(); // main window or native popup window
+    QVERIFY(QTest::qWaitForWindowExposed(windowOfPopup));
+    pointerClick(buttonP, window);
+    QCOMPARE(buttonPressedChangedSpy.count(), 2);
+    pointerClick(tapHandlerP, window);
+    QCOMPARE(thPressedChangedSpy.count(), 2);
+
+    // click the close button on the popup
+    QPoint popupCloseButtonP = popupCloseButton->mapToScene(popupCloseButton->boundingRect().center()).toPoint();
+    pointerClick(popupCloseButtonP, windowOfPopup);
+    QTRY_COMPARE(closeButtonPressedChangedSpy.count(), 2);
+
+    // wait for it to close, then click stuff in the main window again
+    QTRY_COMPARE(popup->isVisible(), false);
+    buttonPressedChangedSpy.clear();
+    thPressedChangedSpy.clear();
+    pointerClick(buttonP, window);
+    QTRY_COMPARE(buttonPressedChangedSpy.count(), 2);
+    pointerClick(tapHandlerP, window);
+    QTRY_COMPARE(thPressedChangedSpy.count(), 2);
 }
 
 void tst_QQuickPopup::spacingAndInsetsAreRevaluatedWhenChanged()

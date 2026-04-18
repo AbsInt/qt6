@@ -26,9 +26,14 @@ readonly MINIMUM_IOS_VERSION="16.0"
 
 source "${BASH_SOURCE%/*}/../unix/ffmpeg-installation-utils.sh"
 
-ffmpeg_version=$(ffmpeg_version_default)
 ffmpeg_source_dir=$(download_ffmpeg)
-ffmpeg_config_options=$(get_ffmpeg_config_options "shared")
+ffmpeg_version="n$(<"${ffmpeg_source_dir}/RELEASE")"
+if [ ! -n "$ffmpeg_version" ]; then
+    echo "Error. Unable to determine FFmpeg version."
+    exit 1
+fi
+ffmpeg_build_type="shared"
+ffmpeg_config_options=$(get_ffmpeg_config_options "$ffmpeg_build_type")
 default_prefix="/usr/local/ios/ffmpeg"
 prefix="${1:-$default_prefix}"
 
@@ -96,8 +101,6 @@ build_ffmpeg_ios() {
         --extra-cxxflags="${common_arch_flags}"
         --extra-ldflags="${common_arch_flags}"
         --target-os=darwin
-        --enable-shared
-        --disable-static
         --install-name-dir="@rpath"
         --disable-audiotoolbox
 
