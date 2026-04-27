@@ -68,6 +68,10 @@ inline bool isPressed(const QStyleOption *option)
 {
     return option->state.testFlag(QStyle::State_Sunken);
 }
+inline bool isSelected(const QStyleOption *option)
+{
+    return option->state.testFlag(QStyle::State_Selected);
+}
 inline bool isHover(const QStyleOption *option)
 {
     return option->state.testFlag(QStyle::State_MouseOver);
@@ -1004,7 +1008,7 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
             if (indicator != QStyleOptionHeader::None) {
                 QPainterStateGuard psg(painter);
                 QFont f(d->assetFont);
-                f.setPointSize(6);
+                f.setPointSize(option->rect.height());
                 painter->setFont(f);
                 painter->setPen(header->palette.text().color());
                 const auto ico = indicator == QStyleOptionHeader::SortUp ? Icon::ChevronDown
@@ -1776,18 +1780,29 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
 
     case CE_MenuItem:
         if (const auto *menuitem = qstyleoption_cast<const QStyleOptionMenuItem *>(option)) {
+            using namespace StyleOptionHelper;
+
             const auto visualMenuRect = [&](const QRect &rect) {
                 return visualRect(option->direction, menuitem->rect, rect);
             };
-            bool dis = !(menuitem->state & State_Enabled);
-            bool checked = menuitem->checkType != QStyleOptionMenuItem::NotCheckable
-                    ? menuitem->checked : false;
-            bool act = menuitem->state & State_Selected;
+
+            const bool checked =
+                    menuitem->checkType != QStyleOptionMenuItem::NotCheckable && menuitem->checked;
 
             const QRect rect = menuitem->rect.marginsRemoved(QMargins(2,2,2,2));
-            if (act && dis == false) {
-                drawRoundedRect(painter, rect, Qt::NoPen, highContrastTheme ? menuitem->palette.brush(QPalette::Highlight)
-                                                                            : QBrush(winUI3Color(subtleHighlightColor)));
+            if (!isDisabled(menuitem)) {
+                QPen pen(Qt::NoPen);
+                QBrush brush(Qt::NoBrush);
+                if (highContrastTheme) {
+                    pen = QPen(menuitem->palette.highlight().color(), 2);
+                    brush = menuitem->palette.window();
+                } else if (isPressed(menuitem)) {
+                    brush = winUI3Color(subtlePressedColor);
+                } else if (isSelected(menuitem)) { // == hover
+                    brush = winUI3Color(subtleHighlightColor);
+                }
+                if (pen != Qt::NoPen || brush != Qt::NoBrush)
+                    drawRoundedRect(painter, rect, pen, brush);
             }
             if (menuitem->menuItemType == QStyleOptionMenuItem::Separator) {
                 constexpr int yoff = 1;
@@ -1816,9 +1831,9 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
                                                  rect.y(),
                                                  menuitem->maxIconWidth - 4,
                                                  rect.height())));
-                QIcon::Mode mode = dis ? QIcon::Disabled : QIcon::Normal;
-                if (act && !dis)
-                    mode = QIcon::Active;
+                const auto mode = isDisabled(menuitem)
+                        ? QIcon::Disabled
+                        : (isSelected(menuitem) ? QIcon::Active : QIcon::Normal);
                 const auto size = proxy()->pixelMetric(PM_SmallIconSize, option, widget);
                 QRect pmr(QPoint(0, 0), QSize(size, size));
                 pmr.moveCenter(vRect.center());
@@ -1838,10 +1853,12 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
 
                 QColor penColor;
                 if (highContrastTheme) {
-                    penColor = menuitem->palette.color(act ? QPalette::HighlightedText
-                                                           : QPalette::Text);
+                    penColor = menuitem->palette.color(
+                            isSelected(menuitem) ? QPalette::HighlightedText : QPalette::Text);
                 } else {
-                    penColor = controlTextColor(option);
+                    QStyleOption tmpOpt(*option);
+                    tmpOpt.state.setFlag(State_Sunken, false);
+                    penColor = controlTextColor(&tmpOpt);
                 }
                 painter->setPen(penColor);
 
@@ -2179,10 +2196,23 @@ QRect QWindows11Style::subElementRect(QStyle::SubElement element, const QStyleOp
         }
         break;
 #endif // QT_CONFIG(toolbar)
-    case QStyle::SE_HeaderLabel:
-    case QStyle::SE_HeaderArrow:
-        ret = QWindowsVistaStyle::subElementRect(element, option, widget);
+    case SE_HeaderLabel: {
+        const int margin = proxy()->pixelMetric(PM_HeaderMargin, option, widget);
+        ret = option->rect.marginsRemoved({ margin, margin, margin, margin });
         break;
+    }
+    case SE_HeaderArrow: {
+        ret = option->rect;
+        if (const auto *header = qstyleoption_cast<const QStyleOptionHeader *>(option)) {
+            // the sort indicator is always show above in the win11 style
+            if (header->sortIndicator != QStyleOptionHeader::None) {
+                const int arrowSize = proxy()->pixelMetric(PM_HeaderMarkSize, option, widget);
+                const int xCenter = ret.center().x();
+                ret = QRect(xCenter - arrowSize / 2, ret.top(), arrowSize, arrowSize);
+            }
+        }
+        break;
+    }
     case SE_PushButtonContents: {
         int border = proxy()->pixelMetric(PM_DefaultFrameWidth, option, widget);
         ret = option->rect.marginsRemoved(QMargins(border, border, border, border));
@@ -2683,6 +2713,9 @@ int QWindows11Style::pixelMetric(PixelMetric metric, const QStyleOption *option,
     case PM_ProgressBarChunkWidth:
         res = 0;    // no chunks on windows11
         break;
+    case PM_HeaderMarkSize:
+        res = 6;
+        break;
     default:
         res = QWindowsVistaStyle::pixelMetric(metric, option, widget);
     }
@@ -3090,7 +3123,7 @@ QBrush QWindows11Style::controlFillBrush(const QStyleOption *option, ControlType
     };
 
     if (option->palette.isBrushSet(QPalette::Current, QPalette::Button))
-        return option->palette.button();
+        return option->palette.brush(QPalette::Current, QPalette::Button);
 
     if (!isChecked(option) && isAutoRaise(option))
         return Qt::NoBrush;
@@ -3109,7 +3142,7 @@ QBrush QWindows11Style::inputFillBrush(const QStyleOption *option, const QWidget
     using namespace StyleOptionHelper;
     const auto role = widget ? widget->backgroundRole() : QPalette::Window;
     if (option->palette.isBrushSet(QPalette::Current, role))
-        return option->palette.button();
+        return option->palette.brush(QPalette::Current, role);
 
     if (isDisabled(option))
         return winUI3Color(fillControlDisabled);
@@ -3131,7 +3164,7 @@ QColor QWindows11Style::controlTextColor(const QStyleOption *option, bool ignore
     };
 
     if (option->palette.isBrushSet(QPalette::Current, QPalette::ButtonText))
-        return option->palette.buttonText().color();
+        return option->palette.color(QPalette::Current, QPalette::ButtonText);
 
     const int colorIndex = !ignoreIsChecked && isChecked(option) ? 1 : 0;
     const auto state = calcControlState(option);

@@ -184,6 +184,15 @@ template <class T> inline size_t qHash(const T *key, size_t seed = 0) noexcept
 {
     return qHash(reinterpret_cast<quintptr>(key), seed);
 }
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0) && !defined(QT_BOOTSTRAPPED)
+
+// this used to be matched by the 1-to-2-arg adapter, which mixed the seed in differently
+// in Qt 7, when the adapter is gone, this will use the const T* overload above instead
+template <class T> inline size_t qHash(T *key, size_t seed = 0) noexcept
+{
+    return qHash(reinterpret_cast<quintptr>(key)) ^ seed;
+}
+#endif // Qt 6
 Q_DECL_CONST_FUNCTION constexpr inline size_t qHash(std::nullptr_t, size_t seed = 0) noexcept
 {
     return seed;
@@ -222,7 +231,7 @@ Q_DECL_CONST_FUNCTION constexpr inline size_t qHash(QFlags<Enum> flags, size_t s
 
 // ### Qt 7: remove this "catch-all" overload logic, and require users
 // to provide the two-argument version of qHash.
-#if (QT_VERSION < QT_VERSION_CHECK(7, 0, 0)) && !defined(QT_NO_SINGLE_ARGUMENT_QHASH_OVERLOAD)
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
 // Beware of moving this code from here. It needs to see all the
 // declarations of qHash overloads for C++ fundamental types *before*
 // its own declaration.
@@ -242,10 +251,21 @@ template <typename T, typename...Args,
           std::enable_if_t<QHashPrivate::HasQHashSingleArgOverload<T>
                            && sizeof...(Args) == 0 && !std::is_enum_v<T>, bool> = true>
 constexpr size_t qHash(const T &t, size_t seed, Args&&...) noexcept(noexcept(qHash(t)))
+#ifdef QT_NO_SINGLE_ARGUMENT_QHASH_OVERLOAD
+    = delete;
+#else
 { return qHash(t) ^ seed; }
+#endif // QT_NO_SINGLE_ARGUMENT_QHASH_OVERLOAD
 #endif // < Qt 7
 
 namespace QHashPrivate {
+
+// helper for qHash() calls that used to go via the above 1-to-2-arg adapter
+template <typename T>
+constexpr size_t ex1to2arg(const T &key, size_t seed)
+{
+    return QT7_ONLY(qHash(key, seed)) QT6_ONLY(qHash(key, 0U) ^ seed);
+}
 
 namespace detail {
 // approximates std::equality_comparable_with

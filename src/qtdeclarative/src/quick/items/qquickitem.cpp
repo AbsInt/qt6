@@ -2664,9 +2664,9 @@ QQuickItem* QQuickItemPrivate::nextPrevItemInTabFocusChain(QQuickItem *item, boo
             }
             current = parent;
         } else if (hasChildren) {
-            if (!wrap) {
+            if (!wrap && !isTabFence) {
                 qCDebug(lcFocus) << "QQuickItemPrivate::nextPrevItemInTabFocusChain:"
-                                 << "Focus chain about to wrap but wrapping was set to false."
+                                 << "Focus chain about to wrap but we're outside a tab fence and wrapping was set to false."
                                  << "Returning.";
                 return nullptr;
             }
@@ -10296,13 +10296,15 @@ QQuickItemPrivate::ExtraData::ExtraData()
 #if QT_CONFIG(accessibility)
 QAccessible::Role QQuickItemPrivate::effectiveAccessibleRole() const
 {
-    Q_Q(const QQuickItem);
-    auto *attached = qmlAttachedPropertiesObject<QQuickAccessibleAttached>(q, false);
     auto role = QAccessible::NoRole;
-    if (auto *accessibleAttached = qobject_cast<QQuickAccessibleAttached *>(attached))
-        role = accessibleAttached->role();
-    if (role == QAccessible::NoRole)
-        role = accessibleRole();
+    if (!inDestructor) { // we might get called back while emitting QAccessible::ObjectDestroy
+        Q_Q(const QQuickItem);
+        auto *attached = qmlAttachedPropertiesObject<QQuickAccessibleAttached>(q, false);
+        if (auto *accessibleAttached = qobject_cast<QQuickAccessibleAttached *>(attached))
+            role = accessibleAttached->role();
+        if (role == QAccessible::NoRole)
+            role = accessibleRole();
+    }
     return role;
 }
 

@@ -5,6 +5,8 @@
 #define QRGBA64_H
 
 #include <QtGui/qtguiglobal.h>
+
+#include <QtCore/qhashfunctions.h>
 #include <QtCore/qprocessordetection.h>
 
 QT_BEGIN_NAMESPACE
@@ -148,6 +150,9 @@ public:
     }
 
 private:
+    friend constexpr size_t qHash(QRgba64 key, size_t seed = 0) noexcept
+    { return QHashPrivate::ex1to2arg(key.rgba, seed); }
+
     Q_ALWAYS_INLINE static constexpr quint64 alphaMask() { return Q_UINT64_C(0xffff) << AlphaShift; }
 
     Q_ALWAYS_INLINE static constexpr quint8 div_257_floor(uint x) { return quint8((x - (x >> 8)) >> 8); }
