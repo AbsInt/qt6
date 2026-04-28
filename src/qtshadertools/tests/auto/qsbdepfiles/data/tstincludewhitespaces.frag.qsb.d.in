@@ -1,3 +1,0 @@
-@CMAKE_CURRENT_BINARY_DIR@/.qsb/shaders/tstincludewhitespaces.frag.qsb: \
-  @CMAKE_CURRENT_SOURCE_DIR@/shaders/tstincludewhitespaces.frag \
-  @CMAKE_CURRENT_SOURCE_DIR@/shaders/common.glsl

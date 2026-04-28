@@ -1,3 +1,4 @@
 -f
 --branch
+--no-resolve-deps
 --module-subset=qtbase,qtdeclarative,qttools,qtsvg

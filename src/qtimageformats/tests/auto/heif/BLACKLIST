@@ -1,2 +1,0 @@
-[writeImage]
-macos-12 arm # HEIC codec doesn't seem to work in Tart VMs
