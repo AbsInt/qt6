@@ -14,7 +14,7 @@ use warnings;
 our ($script, $script_path);
 BEGIN {
     use Cwd qw(abs_path);
-    if ($^O eq "msys") {
+    if ($^O eq "msys" || $^O eq "cygwin") {
         $0 =~ s,\\,/,g;
         $0 =~ s,^(.):/,/$1/,g;
     }
@@ -3149,7 +3149,7 @@ if (@ARGV && ($ARGV[0] eq "--x--post-rewrite")) {
 
 my $editor = $ENV{GIT_EDITOR};
 if (defined($editor)) {
-    if ($^O eq "msys") {
+    if ($^O eq "msys" || $^O eq "cygwin") {
         $editor =~ s,\\,/,g;
         $editor =~ s,^(.):/,/$1/,g;
     }

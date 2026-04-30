@@ -29,6 +29,7 @@ QT_BEGIN_NAMESPACE
 
 class Q_SVG_EXPORT QSvgAbstractAnimatedProperty
 {
+    Q_DISABLE_COPY_MOVE(QSvgAbstractAnimatedProperty)
 public:
     enum Type
     {
@@ -64,6 +65,7 @@ class Q_SVG_EXPORT QSvgAnimatedPropertyColor : public QSvgAbstractAnimatedProper
 {
 public:
     QSvgAnimatedPropertyColor(const QString &name);
+    ~QSvgAnimatedPropertyColor() override;
 
     void setColors(const QList<QColor> &colors);
     void appendColor(const QColor &color);
@@ -79,6 +81,7 @@ class Q_SVG_EXPORT QSvgAnimatedPropertyFloat : public QSvgAbstractAnimatedProper
 {
 public:
     QSvgAnimatedPropertyFloat(const QString &name);
+    ~QSvgAnimatedPropertyFloat() override;
 
     void setValues(const QList<qreal> &values);
     void appendValue(const qreal value);
@@ -107,6 +110,7 @@ public:
 
 public:
     QSvgAnimatedPropertyTransform(const QString &name);
+    ~QSvgAnimatedPropertyTransform() override;
 
     void setTransformCount(quint32 count);
     quint32 transformCount() const;

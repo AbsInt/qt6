@@ -15,7 +15,7 @@ no warnings qw(io);
 our ($script, $script_path);
 BEGIN {
     use Cwd qw(abs_path);
-    if ($^O eq "msys") {
+    if ($^O eq "msys" || $^O eq "cygwin") {
         $0 =~ s,\\,/,g;
         $0 =~ s,^(.):/,/$1/,g;
     }

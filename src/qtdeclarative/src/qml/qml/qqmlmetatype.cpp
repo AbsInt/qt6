@@ -1650,7 +1650,7 @@ static int doCountInternalCompositeTypeSelfReferences(
     };
 
     doCheck(compilationUnit->metaType().iface());
-    for (auto &&inlineData: compilationUnit->inlineComponentData)
+    for (const auto &inlineData : std::as_const(compilationUnit->inlineComponentData))
         doCheck(inlineData.qmlType.typeId().iface());
 
     return result;
@@ -1667,8 +1667,8 @@ void QQmlMetaType::freeUnusedTypesAndCaches()
     bool droppedAtLeastOneComposite;
     do {
         droppedAtLeastOneComposite = false;
-        auto it = data->compositeTypes.cbegin();
-        while (it != data->compositeTypes.cend()) {
+        auto it = data->compositeTypes.begin();
+        while (it != data->compositeTypes.end()) {
             const auto &cu = *it;
             if (cu->count() <= doCountInternalCompositeTypeSelfReferences(data, cu)) {
                 QQmlMetaTypeData::clearCompositeType(cu);
@@ -2059,7 +2059,7 @@ void QQmlMetaType::registerInternalCompositeType(
     };
 
     doInsert(compilationUnit->metaType().iface());
-    for (auto &&inlineData: compilationUnit->inlineComponentData)
+    for (const auto &inlineData : std::as_const(compilationUnit->inlineComponentData))
         doInsert(inlineData.qmlType.typeId().iface());
 }
 
@@ -2083,7 +2083,7 @@ void QQmlMetaType::unregisterInternalCompositeType(
     };
 
     doRemove(compilationUnit->metaType().iface());
-    for (auto &&inlineData: compilationUnit->inlineComponentData)
+    for (const auto &inlineData : std::as_const(compilationUnit->inlineComponentData))
         doRemove(inlineData.qmlType.typeId().iface());
 }
 
