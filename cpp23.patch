@@ -1,0 +1,29 @@
+commit 5a75dfc81777396ac832eae5a5cb03966cb27132
+Author: Christoph Cullmann <cullmann@kde.org>
+Date:   Fri May 1 20:42:19 2026 +0200
+
+    fix compile with C++23
+    
+    bug 40921
+
+diff --git a/src/qtdeclarative/src/qml/jsapi/qjsengine_p.h b/src/qtdeclarative/src/qml/jsapi/qjsengine_p.h
+index 2427e508f7..65860267a8 100644
+--- a/src/qtdeclarative/src/qml/jsapi/qjsengine_p.h
++++ b/src/qtdeclarative/src/qml/jsapi/qjsengine_p.h
+@@ -23,14 +23,12 @@
+ #include "private/qtqmlglobal_p.h"
+ #include <private/qqmlmetatype_p.h>
+ 
++#include <private/qv4engine_p.h>
++
+ QT_BEGIN_NAMESPACE
+ 
+ class QQmlPropertyCache;
+ 
+-namespace QV4 {
+-struct ExecutionEngine;
+-}
+-
+ class Q_QML_EXPORT QJSEnginePrivate : public QObjectPrivate
+ {
+     Q_DECLARE_PUBLIC(QJSEngine)
