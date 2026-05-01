@@ -23,13 +23,11 @@
 #include "private/qtqmlglobal_p.h"
 #include <private/qqmlmetatype_p.h>
 
+#include <private/qv4engine_p.h>
+
 QT_BEGIN_NAMESPACE
 
 class QQmlPropertyCache;
-
-namespace QV4 {
-struct ExecutionEngine;
-}
 
 class Q_QML_EXPORT QJSEnginePrivate : public QObjectPrivate
 {
