@@ -1492,7 +1492,7 @@ static QSvgNode *createAnimateColorNode(QSvgNode *parent,
     return anim;
 }
 
-static QSvgNode *createAimateMotionNode(QSvgNode *parent,
+static QSvgNode *createAnimateMotionNode(QSvgNode *parent,
                                         const QXmlStreamAttributes &attributes,
                                         QSvgHandler *)
 {
@@ -3196,6 +3196,9 @@ static QSvgNode *createUseNode(QSvgNode *parent,
     case QSvgNode::Group:
     case QSvgNode::Switch:
     case QSvgNode::Mask:
+    case QSvgNode::Symbol:
+    case QSvgNode::Marker:
+    case QSvgNode::Pattern:
         group = static_cast<QSvgStructureNode*>(parent);
         break;
     default:
@@ -3375,7 +3378,7 @@ static AnimationMethod findAnimationFactory(const QStringView name, QtSvg::Optio
     case 'a':
         if (ref == QLatin1String("nimate")) return createAnimateNode;
         if (ref == QLatin1String("nimateColor")) return createAnimateColorNode;
-        if (ref == QLatin1String("nimateMotion")) return createAimateMotionNode;
+        if (ref == QLatin1String("nimateMotion")) return createAnimateMotionNode;
         if (ref == QLatin1String("nimateTransform")) return createAnimateTransformNode;
         break;
     default:
