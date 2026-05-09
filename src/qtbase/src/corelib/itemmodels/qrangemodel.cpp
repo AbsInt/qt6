@@ -18,7 +18,9 @@ class QRangeModelPrivate : QAbstractItemModelPrivate
 public:
     explicit QRangeModelPrivate(std::unique_ptr<QRangeModelImplBase, QRangeModelImplBase::Deleter> impl)
         : impl(std::move(impl))
-    {}
+    {
+        this->impl->call<QRangeModelImplBase::InterfaceVersion>(m_interfaceVersion);
+    }
 
     std::unique_ptr<QRangeModelImplBase, QRangeModelImplBase::Deleter> impl;
     friend class QRangeModelImplBase;
@@ -29,6 +31,7 @@ public:
     mutable QHash<int, QByteArray> m_roleNames;
     QRangeModel::AutoConnectPolicy m_autoConnectPolicy = QRangeModel::AutoConnectPolicy::None;
     bool m_dataChangedDispatchBlocked = false;
+    int m_interfaceVersion = -1;
 
     static void emitDataChanged(const QModelIndex &index, int role)
     {
@@ -703,6 +706,14 @@ Q_CORE_EXPORT QVariant qVariantAtIndex(const QModelIndex &index)
     Qt version it gets built against is different from the Qt version an
     application using that library is built against.
 
+    New and optimized implementations of virtual functions introduced in later
+    version of Qt might also not be used if QRangeModel detects that the
+    implementation was compiled against an older version of Qt. For instance,
+    the implementations of sort() and match() are new in Qt 6.12, but will not
+    be called by an application that was compiled against Qt 6.11, even if the
+    Qt library used is Qt 6.12. To benefit from such new overrides, recompile
+    your application.
+
     \sa {Model/View Programming}
 */
 
@@ -1313,6 +1324,8 @@ QModelIndexList QRangeModel::match(const QModelIndex &start, int role, const QVa
 void QRangeModel::multiData(const QModelIndex &index, QModelRoleDataSpan roleDataSpan) const
 {
     Q_D(const QRangeModel);
+    if (d->m_interfaceVersion < QT_VERSION_CHECK(6, 11, 0))
+        return QAbstractItemModel::multiData(index, roleDataSpan);
     d->impl->call<QRangeModelImplBase::MultiData>(index, roleDataSpan);
 }
 

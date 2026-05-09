@@ -39,11 +39,13 @@
 /:// Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
+#ifndef RECOGNIZER_H
+#define RECOGNIZER_H
+
 #include "$header"
 
 #include "lalr.h"
 
-#include <QtCore/qdebug.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qtextstream.h>
@@ -110,6 +112,8 @@ protected:
   QString _M_current_value;
   bool _M_no_lines;
 };
+
+#endif // RECOGNIZER_H
 :/
 
 /.// Copyright (C) 2016 The Qt Company Ltd.
@@ -128,7 +132,7 @@ using namespace Qt::StringLiterals;
 Recognizer::Recognizer (Grammar *grammar, bool no_lines):
   tos(0),
   stack_size(0),
-  state_stack(0),
+  state_stack(nullptr),
   _M_line(1),
   _M_action_line(0),
   _M_grammar(grammar),
@@ -174,7 +178,7 @@ int Recognizer::nextToken()
     {
       inp(); // skip "
       text.clear ();
-      while (! ch.isNull () && ch != u'"')
+      while (!ch.isNull () && ch != u'"')
         {
           if (ch == u'\\')
             {
@@ -252,7 +256,7 @@ int Recognizer::nextToken()
   if (token == '-' && ch == u'-')
     {
       do { inp (); }
-      while (! ch.isNull () && ch != u'\n');
+      while (!ch.isNull () && ch != u'\n');
       goto Lagain;
     }
 
