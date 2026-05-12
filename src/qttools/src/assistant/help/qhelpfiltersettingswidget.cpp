@@ -1,5 +1,6 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// Qt-Security score:significant reason:default
 
 #include "qhelpfilterdata.h"
 #include "qfilternamedialog_p.h"
@@ -56,8 +57,8 @@ static QMap<QString, QHelpFilterData> subtract(const QMap<QString, QHelpFilterDa
     QMap<QString, QHelpFilterData> result = minuend;
 
     for (auto itSubtrahend = subtrahend.cbegin(); itSubtrahend != subtrahend.cend(); ++itSubtrahend) {
-        auto itResult = result.find(itSubtrahend.key());
-        if (itResult != result.end() && itSubtrahend.value() == itResult.value())
+        auto itResult = result.constFind(itSubtrahend.key());
+        if (itResult != result.constEnd() && itSubtrahend.value() == itResult.value())
             result.erase(itResult);
     }
     return result;

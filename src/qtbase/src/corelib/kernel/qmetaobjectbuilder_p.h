@@ -146,7 +146,7 @@ private:
 class Q_CORE_EXPORT QMetaMethodBuilder
 {
 public:
-    QMetaMethodBuilder() : _mobj(nullptr), _index(0) {}
+    QMetaMethodBuilder() = default;
 
     int index() const;
 
@@ -176,9 +176,9 @@ public:
     void setRevision(int revision);
 
 private:
-    const QMetaObjectBuilder *_mobj;
-    int _index;
-    QMetaMethod::MethodType _type;
+    const QMetaObjectBuilder *_mobj = nullptr;
+    int _index = 0;
+    QMetaMethod::MethodType _type = QMetaMethod::MethodType::Method;
 
     friend class QMetaObjectBuilder;
     friend class QMetaPropertyBuilder;
