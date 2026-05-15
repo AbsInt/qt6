@@ -262,13 +262,22 @@ function(_qt_internal_sbom_end_project_generate)
         ${build_time_args}
     )
 
+    _qt_internal_sbom_add_verify_source_sbom_build_time_target(
+        REPO_PROJECT_NAME_LOWERCASE "${repo_project_name_lowercase}"
+        SBOM_BUILD_OUTPUT_DIR "${sbom_build_output_dir}"
+        SBOM_BUILD_OUTPUT_PATH_WITHOUT_EXT "${sbom_build_output_path_without_ext}"
+    )
+
     # Add 'reuse lint' per-repo custom targets.
-    if(arg_LINT_SOURCE_SBOM AND NOT QT_INTERNAL_NO_SBOM_PYTHON_OPS)
+    # If the script exists, it means it was already opted in and we can create the target.
+    get_cmake_property(reuse_lint_script _qt_sbom_cmake_reuse_lint_build_time_script)
+    if(reuse_lint_script)
         if(NOT TARGET reuse_lint)
             add_custom_target(reuse_lint)
         endif()
 
         set(comment "Running 'reuse lint' for '${repo_project_name_lowercase}'.")
+        set(repo_sbom_target "sbom_${repo_project_name_lowercase}")
         add_custom_target(${repo_sbom_target}_reuse_lint
             COMMAND "${CMAKE_COMMAND}" -P "${reuse_lint_script}"
             COMMENT "${comment}"

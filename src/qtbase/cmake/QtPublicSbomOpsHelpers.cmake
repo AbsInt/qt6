@@ -124,10 +124,7 @@ function(_qt_internal_sbom_setup_project_ops_generation)
             set(lint_no_error_option NO_ERROR)
         endif()
         _qt_internal_sbom_find_python_dependency_program(NAME reuse REQUIRED)
-        _qt_internal_sbom_run_reuse_lint(
-            ${lint_no_error_option}
-            BUILD_TIME_SCRIPT_PATH_OUT_VAR reuse_lint_script
-        )
+        _qt_internal_sbom_run_reuse_lint(${lint_no_error_option})
     endif()
 endfunction()
 
@@ -1096,73 +1093,49 @@ function(_qt_internal_sbom_get_project_reuse_toml_path out_var)
     set(${out_var} "${reuse_toml_path}" PARENT_SCOPE)
 endfunction()
 
-# Helper to generate and install a source SBOM using reuse.
-function(_qt_internal_sbom_generate_reuse_source_sbom)
-    set(opt_args NO_ERROR)
-    set(single_args "")
+# Shows reuse.toml not found message.
+function(_qt_internal_sbom_show_skip_source_sbom_message reuse_toml_path)
+    message(STATUS
+        "Skipping source SBOM generation: No reuse.toml file found at '${reuse_toml_path}'.")
+endfunction()
+
+# Helper that generates a source SPDX sbom using 'reuse' and then verifies it with the
+# tst_licenses.pl script from qtqa if the verification flag is set.
+function(_qt_internal_sbom_generate_and_verify_reuse_source_sbom_helper)
+    set(opt_args
+        NO_ERROR
+        VERIFY_SOURCE_SBOM
+        FORCE_SOURCE_SBOM_GENERATION
+    )
+    set(single_args
+        REUSE_PATH
+        LICENSE_TEST_SCRIPT_PATH
+        LICENSE_TEST_SCRIPT_WORKING_DIR
+        REUSE_TOML_PATH
+        PROJECT_SOURCE_DIR
+        PROJECT_SUPPLIER
+        PROJECT_SUPPLIER_URL
+        SOURCE_SBOM_OUTPUT_PATH
+    )
     set(multi_args "")
     cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
     _qt_internal_validate_all_args_are_parsed(arg)
 
-    _qt_internal_get_current_project_sbom_dir(sbom_dir)
-    set(file_op "${sbom_dir}/generate_reuse_source_sbom.cmake")
-
-    _qt_internal_sbom_get_project_reuse_toml_path(reuse_toml_path)
-    if(NOT EXISTS "${reuse_toml_path}" AND NOT QT_FORCE_SOURCE_SBOM_GENERATION)
-        set(skip_message
-            "Skipping source SBOM generation: No reuse.toml file found at '${reuse_toml_path}'.")
-        message(STATUS "${skip_message}")
-
-        set(content "
-            message(STATUS \"${skip_message}\")
-")
-
-        file(GENERATE OUTPUT "${file_op}" CONTENT "${content}")
-        set_property(GLOBAL APPEND PROPERTY _qt_sbom_cmake_post_generation_include_files
-            "${file_op}")
+    set(reuse_toml_path "${arg_REUSE_TOML_PATH}")
+    if(NOT EXISTS "${reuse_toml_path}" AND NOT arg_FORCE_SOURCE_SBOM_GENERATION)
+        _qt_internal_sbom_show_skip_source_sbom_message("${reuse_toml_path}")
         return()
     endif()
 
-    set(handle_error "")
-    if(NOT arg_NO_ERROR)
-        set(handle_error "
-            if(NOT res EQUAL 0)
-                message(FATAL_ERROR \"Source SBOM generation using reuse tool failed: \${res}\")
-            endif()
-")
-    endif()
-
-    set(source_sbom_path "\${QT_SBOM_OUTPUT_PATH_WITHOUT_EXT}.source.spdx")
-    file(TO_CMAKE_PATH "$ENV{QT_QA_LICENSE_TEST_DIR}/$ENV{QT_SOURCE_SBOM_TEST_SCRIPT}"
-        full_path_to_license_test)
-    set(verify_source_sbom "
-            if(res EQUAL 0)
-                message(STATUS \"Verifying source SBOM ${source_sbom_path} using qtqa tst_licenses.pl ${full_path_to_license_test}\")
-                if(NOT EXISTS \"${full_path_to_license_test}\")
-                    message(FATAL_ERROR \"Source SBOM check has failed: The tst_licenses.pl script could not be found at ${full_path_to_license_test}\")
-                endif()
-                execute_process(
-                    COMMAND perl \"\$ENV{QT_SOURCE_SBOM_TEST_SCRIPT}\" -sbomonly -sbom \"${source_sbom_path}\"
-                    WORKING_DIRECTORY \"\$ENV{QT_QA_LICENSE_TEST_DIR}\"
-                    RESULT_VARIABLE res
-                    COMMAND_ECHO STDOUT
-                )
-                if(NOT res EQUAL 0)
-                    message(FATAL_ERROR \"Source SBOM check has failed: \${res}\")
-                endif()
-            endif()
-")
-
     set(extra_reuse_args "")
 
-    get_property(project_supplier GLOBAL PROPERTY _qt_sbom_project_supplier)
-    if(project_supplier)
-        get_property(project_supplier_url GLOBAL PROPERTY _qt_sbom_project_supplier_url)
+    if(arg_PROJECT_SUPPLIER)
+        set(project_supplier "${arg_PROJECT_SUPPLIER}")
 
         # Add the supplier url if available. Add it in parenthesis to stop reuse from adding its
         # own empty parenthesis.
-        if(project_supplier_url)
-            set(project_supplier "${project_supplier} (${project_supplier_url})")
+        if(arg_PROJECT_SUPPLIER_URL)
+            string(APPEND project_supplier " (${arg_PROJECT_SUPPLIER_URL})")
         endif()
 
         # Unfortunately there's no way to silence the addition of the 'Creator: Person' field,
@@ -1170,27 +1143,196 @@ function(_qt_internal_sbom_generate_reuse_source_sbom)
         list(APPEND extra_reuse_args --creator-organization "${project_supplier}")
     endif()
 
-    set(content "
-        message(STATUS \"Generating source SBOM using reuse tool: ${source_sbom_path}\")
-        set(extra_reuse_args \"${extra_reuse_args}\")
+    message(STATUS "Generating source SBOM using reuse tool: ${arg_SOURCE_SBOM_OUTPUT_PATH}")
+    execute_process(
+        COMMAND
+            "${arg_REUSE_PATH}"
+            --root "${arg_PROJECT_SOURCE_DIR}"
+            spdx
+            -o "${arg_SOURCE_SBOM_OUTPUT_PATH}"
+            ${extra_reuse_args}
+        RESULT_VARIABLE res
+    )
+
+    if(NOT arg_NO_ERROR AND NOT res EQUAL 0)
+        message(FATAL_ERROR "Source SBOM generation using reuse tool failed: Result: '${res}'")
+    endif()
+
+    if(arg_VERIFY_SOURCE_SBOM AND res EQUAL 0)
+        file(TO_CMAKE_PATH "${arg_LICENSE_TEST_SCRIPT_PATH}" full_path_to_license_test)
+        set(license_test_script_working_dir "${arg_LICENSE_TEST_SCRIPT_WORKING_DIR}")
+
+        message(STATUS
+            "Verifying source SBOM '${arg_SOURCE_SBOM_OUTPUT_PATH}' using qtqa tst_licenses.pl "
+            "at '${full_path_to_license_test}'")
+        if(NOT EXISTS "${full_path_to_license_test}")
+            message(FATAL_ERROR
+                "Source SBOM check has failed: The tst_licenses.pl script could not be found at "
+                "'${full_path_to_license_test}'")
+        endif()
         execute_process(
             COMMAND
-                \"${QT_SBOM_PROGRAM_REUSE}\"
-                --root \"${PROJECT_SOURCE_DIR}\"
-                spdx
-                -o \"${source_sbom_path}\"
-                \${extra_reuse_args}
+                perl "${full_path_to_license_test}" -sbomonly -sbom "${arg_SOURCE_SBOM_OUTPUT_PATH}"
+            WORKING_DIRECTORY "${license_test_script_working_dir}"
             RESULT_VARIABLE res
+            COMMAND_ECHO STDOUT
         )
-        ${handle_error}
-        if(\"\$ENV{VERIFY_SOURCE_SBOM}\")
-            ${verify_source_sbom}
+        if(NOT res EQUAL 0)
+            message(FATAL_ERROR "Source SBOM check has failed: Result: '${res}'")
         endif()
+    endif()
+endfunction()
+
+# Helper to create a script that will generate and install a source SBOM using the 'reuse' tool,
+# and optionally verify the SBOM using the qtqa tst_licenses.pl script if the necessary env vars
+# are set (which are usually set by the CI instructions).
+# The generated script runs at install time, or during build time in the 'sbom' custom target.
+function(_qt_internal_sbom_generate_reuse_source_sbom)
+    set(opt_args NO_ERROR)
+    set(single_args "")
+    set(multi_args "")
+    cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    set(func_args "")
+
+    _qt_internal_sbom_get_project_reuse_toml_path(reuse_toml_path)
+    list(APPEND func_args REUSE_TOML_PATH "${reuse_toml_path}")
+
+    if(QT_FORCE_SOURCE_SBOM_GENERATION)
+        list(APPEND func_args FORCE_SOURCE_SBOM_GENERATION)
+    endif()
+
+    if(arg_NO_ERROR)
+        list(APPEND func_args NO_ERROR)
+    endif()
+
+    if(NOT EXISTS "${reuse_toml_path}" AND NOT QT_FORCE_SOURCE_SBOM_GENERATION)
+        _qt_internal_sbom_show_skip_source_sbom_message("${reuse_toml_path}")
+        # Fall through to create the driving script anyway, to show the message at install time
+        # too.
+    endif()
+
+    set(source_sbom_path "\${QT_SBOM_OUTPUT_PATH_WITHOUT_EXT}.source.spdx")
+    list(APPEND func_args SOURCE_SBOM_OUTPUT_PATH "${source_sbom_path}")
+
+    # Pass the license test info if the env vars are available.
+    set(maybe_qt_qa_license_test_dir "$ENV{QT_QA_LICENSE_TEST_DIR}")
+    set(maybe_qt_source_sbom_test_script "$ENV{QT_SOURCE_SBOM_TEST_SCRIPT}")
+    if(maybe_qt_qa_license_test_dir AND maybe_qt_source_sbom_test_script)
+        # Avoid backslashes on Windows.
+        file(TO_CMAKE_PATH "${maybe_qt_qa_license_test_dir}/${maybe_qt_source_sbom_test_script}"
+            license_test_script_path)
+
+        file(TO_CMAKE_PATH "${maybe_qt_qa_license_test_dir}" license_test_script_working_dir)
+
+        list(APPEND func_args
+            LICENSE_TEST_SCRIPT_PATH "${license_test_script_path}"
+            LICENSE_TEST_SCRIPT_WORKING_DIR "${license_test_script_working_dir}"
+        )
+    endif()
+
+    get_property(project_supplier GLOBAL PROPERTY _qt_sbom_project_supplier)
+    if(project_supplier)
+        list(APPEND func_args PROJECT_SUPPLIER "${project_supplier}")
+
+        get_property(project_supplier_url GLOBAL PROPERTY _qt_sbom_project_supplier_url)
+        if(project_supplier_url)
+            list(APPEND func_args PROJECT_SUPPLIER_URL "${project_supplier_url}")
+        endif()
+    endif()
+
+    list(APPEND func_args
+        PROJECT_SOURCE_DIR "${PROJECT_SOURCE_DIR}"
+        REUSE_PATH "${QT_SBOM_PROGRAM_REUSE}"
+    )
+
+    set(verify_source_sbom_env "$ENV{VERIFY_SOURCE_SBOM}")
+    if(verify_source_sbom_env)
+        list(APPEND func_args VERIFY_SOURCE_SBOM)
+    endif()
+
+    # Join the args in a way that it looks nice in the generated script file, as well
+    # as quoting values just in case.
+    set(func_args_wrapped "")
+    foreach(func_arg IN LISTS func_args)
+        list(APPEND func_args_wrapped "\"${func_arg}\"")
+    endforeach()
+    list(JOIN func_args_wrapped "\n    " func_args_pretty)
+
+    set(content "
+_qt_internal_sbom_generate_and_verify_reuse_source_sbom_helper(
+    ${func_args_pretty}
+)
 ")
 
+    _qt_internal_get_current_project_sbom_dir(sbom_dir)
+    set(file_op "${sbom_dir}/generate_reuse_source_sbom.cmake")
     file(GENERATE OUTPUT "${file_op}" CONTENT "${content}")
 
     set_property(GLOBAL APPEND PROPERTY _qt_sbom_cmake_post_generation_include_files "${file_op}")
+
+    # Used by separate build target.
+    set_property(GLOBAL PROPERTY _qt_sbom_verify_source_sbom_script "${file_op}")
+endfunction()
+
+# Helper to create a build time custom target that generates and license checks the source SBOM.
+# The new target will be used in the CI to run the license verification earlier.
+function(_qt_internal_sbom_add_verify_source_sbom_build_time_target)
+    set(opt_args "")
+    set(single_args
+        REPO_PROJECT_NAME_LOWERCASE
+        SBOM_BUILD_OUTPUT_DIR
+        SBOM_BUILD_OUTPUT_PATH_WITHOUT_EXT
+    )
+    set(multi_args "")
+    cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    # Add per-repo custom targets which generate a spdx source sbom in the build dir and optionally
+    # runs the perl license checker on the output (if the required env vars are set).
+    # If the script exists, it means the builder opted into the feature and we can create the
+    # build target.
+    get_cmake_property(verify_script _qt_sbom_verify_source_sbom_script)
+    if(NOT verify_script)
+        return()
+    endif()
+
+    get_property(macro_module_base_dir GLOBAL PROPERTY __qt_sbom_generation_helpers_base_dir)
+    set(content "
+# Include helpers functions.
+include(\"${macro_module_base_dir}/QtPublicCMakeHelpers.cmake\")
+include(\"${macro_module_base_dir}/QtPublicSbomOpsHelpers.cmake\")
+
+# Setup required vars
+set(QT_SBOM_OUTPUT_PATH_WITHOUT_EXT \"${arg_SBOM_BUILD_OUTPUT_PATH_WITHOUT_EXT}\")
+
+# Create the dir
+file(MAKE_DIRECTORY \"${arg_SBOM_BUILD_OUTPUT_DIR}\")
+
+# Include actual script.
+include(\"${verify_script}\")
+")
+    _qt_internal_get_current_project_sbom_dir(sbom_dir)
+    set(script_wrapper
+        "${sbom_dir}/run_sbom_source_verify_build_time_${arg_REPO_PROJECT_NAME_LOWERCASE}.cmake")
+    file(GENERATE OUTPUT "${script_wrapper}" CONTENT "${content}")
+
+    string(CONCAT comment "Generating source sbom and verifying licenses for "
+        "'${arg_REPO_PROJECT_NAME_LOWERCASE}'.")
+
+    set(repo_sbom_target "sbom_${arg_REPO_PROJECT_NAME_LOWERCASE}")
+    add_custom_target(${repo_sbom_target}_source_verify
+        COMMAND "${CMAKE_COMMAND}" -P "${script_wrapper}"
+        COMMENT "${comment}"
+        VERBATIM
+        USES_TERMINAL # To avoid running multiple repo verifications in parallel
+    )
+
+    if(NOT TARGET sbom_source_verify)
+        add_custom_target(sbom_source_verify)
+    endif()
+    add_dependencies(sbom_source_verify ${repo_sbom_target}_source_verify)
 endfunction()
 
 # Helper to run 'reuse lint' on the project source dir.
@@ -1198,9 +1340,7 @@ function(_qt_internal_sbom_run_reuse_lint)
     set(opt_args
         NO_ERROR
     )
-    set(single_args
-        BUILD_TIME_SCRIPT_PATH_OUT_VAR
-    )
+    set(single_args "")
     set(multi_args "")
     cmake_parse_arguments(PARSE_ARGV 0 arg "${opt_args}" "${single_args}" "${multi_args}")
     _qt_internal_validate_all_args_are_parsed(arg)
@@ -1250,8 +1390,6 @@ function(_qt_internal_sbom_run_reuse_lint)
     endif()
 
     set_property(GLOBAL APPEND PROPERTY _qt_sbom_cmake_verify_include_files "${file_op_install}")
-
-    if(arg_BUILD_TIME_SCRIPT_PATH_OUT_VAR)
-        set(${arg_BUILD_TIME_SCRIPT_PATH_OUT_VAR} "${file_op_build}" PARENT_SCOPE)
-    endif()
+    set_property(GLOBAL APPEND PROPERTY _qt_sbom_cmake_reuse_lint_build_time_script
+        "${file_op_build}")
 endfunction()

@@ -32608,6 +32608,13 @@
             <arglist>(quint64 c)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type>size_t</type>
+            <name>qHash</name>
+            <anchorfile>qrgba64.html</anchorfile>
+            <anchor>qHash</anchor>
+            <arglist>(QRgba64 key, size_t seed)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
             <name>setAlpha</name>
             <anchorfile>qrgba64.html</anchorfile>

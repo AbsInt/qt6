@@ -14917,6 +14917,20 @@
         <name>QByteArray::FromBase64Result</name>
         <filename>qbytearray-frombase64result.html</filename>
         <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QByteArray &amp;</type>
+            <name>operator*</name>
+            <anchorfile>qbytearray-frombase64result.html</anchorfile>
+            <anchor>operator-2a-1</anchor>
+            <arglist>() &amp;</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QByteArray &amp;&amp;</type>
+            <name>operator*</name>
+            <anchorfile>qbytearray-frombase64result.html</anchorfile>
+            <anchor>operator-2a</anchor>
+            <arglist>() &amp;&amp;</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>operator!=</name>
             <anchorfile>qbytearray-frombase64result.html</anchorfile>
@@ -14941,8 +14955,8 @@
             <type>const QByteArray &amp;</type>
             <name>operator*</name>
             <anchorfile>qbytearray-frombase64result.html</anchorfile>
-            <anchor>operator-2a</anchor>
-            <arglist>() const const</arglist>
+            <anchor>operator-2a-2</anchor>
+            <arglist>() const &amp; const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
@@ -36445,6 +36459,18 @@
             <name>const_reverse_iterator</name>
             <anchorfile>qjniarray.html</anchorfile>
             <anchor>const_reverse_iterator-typedef</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="typedef" type="">
+            <name>iterator</name>
+            <anchorfile>qjniarray.html</anchorfile>
+            <anchor>iterator-typedef</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="typedef" type="">
+            <name>reverse_iterator</name>
+            <anchorfile>qjniarray.html</anchorfile>
+            <anchor>reverse_iterator-typedef</anchor>
             <arglist></arglist>
         </member>
     </compound>
@@ -61989,6 +62015,14 @@
     <compound kind="class">
         <name>QRangeModelAdapter</name>
         <filename>qrangemodeladapter.html</filename>
+        <class>QRangeModelAdapter::ColumnIterator</class>
+        <class>QRangeModelAdapter::ConstColumnIterator</class>
+        <class>QRangeModelAdapter::ConstRowIterator</class>
+        <class>QRangeModelAdapter::ConstRowReference</class>
+        <class>QRangeModelAdapter::DataReference</class>
+        <class>QRangeModelAdapter::RowIterator</class>
+        <class>QRangeModelAdapter::RowReference</class>
+        <class>QRangeModelAdapter::RowReferenceBase</class>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type></type>
             <name>QRangeModelAdapter</name>
@@ -62036,28 +62070,28 @@
             <name>at</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>at-1</anchor>
-            <arglist>(int row)</arglist>
+            <arglist>(int listRow)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>auto</type>
             <name>at</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>at-2</anchor>
-            <arglist>(int row)</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>auto</type>
-            <name>at</name>
-            <anchorfile>qrangemodeladapter.html</anchorfile>
-            <anchor>at-3</anchor>
-            <arglist>(int row)</arglist>
+            <arglist>(int tableRow)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>auto</type>
             <name>at</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>at-8</anchor>
-            <arglist>(int row, int column)</arglist>
+            <arglist>(int tableRow, int column)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>auto</type>
+            <name>at</name>
+            <anchorfile>qrangemodeladapter.html</anchorfile>
+            <anchor>at-3</anchor>
+            <arglist>(int treeRow)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>auto</type>
@@ -62071,21 +62105,21 @@
             <name>operator[]</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>operator-5b-5d-1</anchor>
-            <arglist>(int row)</arglist>
+            <arglist>(int listRow)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>auto</type>
             <name>operator[]</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>operator-5b-5d-2</anchor>
-            <arglist>(int row)</arglist>
+            <arglist>(int tableRow)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>auto</type>
             <name>operator[]</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>operator-5b-5d-3</anchor>
-            <arglist>(int row)</arglist>
+            <arglist>(int treeRow)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
@@ -62260,14 +62294,14 @@
             <name>setData</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>setData</anchor>
-            <arglist>(int row, const QVariant &amp;value, int role)</arglist>
+            <arglist>(int listRow, const QVariant &amp;value, int role)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
             <name>setData</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>setData-2</anchor>
-            <arglist>(int row, int column, const QVariant &amp;value, int role)</arglist>
+            <arglist>(int tableRow, int column, const QVariant &amp;value, int role)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>void</type>
@@ -62309,14 +62343,14 @@
             <name>index</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>index</anchor>
-            <arglist>(int row) const const</arglist>
+            <arglist>(int listRow) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QModelIndex</type>
             <name>index</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>index-2</anchor>
-            <arglist>(int row, int column) const const</arglist>
+            <arglist>(int tableRow, int column) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QVariant</type>
@@ -62337,28 +62371,28 @@
             <name>data</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>data</anchor>
-            <arglist>(int row) const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>data</name>
-            <anchorfile>qrangemodeladapter.html</anchorfile>
-            <anchor>data-3</anchor>
-            <arglist>(int row, int column) const const</arglist>
-        </member>
-        <member kind="function" protection="public" virtualness="non" static="no">
-            <type>QVariant</type>
-            <name>data</name>
-            <anchorfile>qrangemodeladapter.html</anchorfile>
-            <anchor>data-5</anchor>
-            <arglist>(int row, int column, int role) const const</arglist>
+            <arglist>(int listRow) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QVariant</type>
             <name>data</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>data-2</anchor>
-            <arglist>(int row, int role) const const</arglist>
+            <arglist>(int listRow, int role) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QVariant</type>
+            <name>data</name>
+            <anchorfile>qrangemodeladapter.html</anchorfile>
+            <anchor>data-3</anchor>
+            <arglist>(int tableRow, int column) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QVariant</type>
+            <name>data</name>
+            <anchorfile>qrangemodeladapter.html</anchorfile>
+            <anchor>data-5</anchor>
+            <arglist>(int tableRow, int column, int role) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>bool</type>
@@ -62393,7 +62427,7 @@
             <name>at</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>at-6</anchor>
-            <arglist>(auto) at(int row) const const</arglist>
+            <arglist>(auto) at(int tableRow) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>decltype(auto)</type>
@@ -62407,7 +62441,7 @@
             <name>operator[]</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>operator-5b-5d-6</anchor>
-            <arglist>(auto) operator[](int row) const const</arglist>
+            <arglist>(auto) operator[](int tableRow) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>int</type>
@@ -62421,14 +62455,14 @@
             <name>at</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>at-5</anchor>
-            <arglist>(int row) const const</arglist>
+            <arglist>(int listRow) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>int</type>
             <name>at</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>at-10</anchor>
-            <arglist>(int row, int column) const const</arglist>
+            <arglist>(int tableRow, int column) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>int</type>
@@ -62442,7 +62476,7 @@
             <name>operator[]</name>
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>operator-5b-5d-5</anchor>
-            <arglist>(int row) const const</arglist>
+            <arglist>(int listRow) const const</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>int</type>
@@ -62464,6 +62498,278 @@
             <anchorfile>qrangemodeladapter.html</anchorfile>
             <anchor>rowCount-2</anchor>
             <arglist>(int row) const const</arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QRangeModelAdapter::ColumnIterator</name>
+        <filename>qrangemodeladapter-columniterator.html</filename>
+        <base>ColumnIteratorBase</base>
+    </compound>
+    <compound kind="class">
+        <name>QRangeModelAdapter::ConstColumnIterator</name>
+        <filename>qrangemodeladapter-constcolumniterator.html</filename>
+        <base>ColumnIteratorBase</base>
+    </compound>
+    <compound kind="class">
+        <name>QRangeModelAdapter::ConstRowIterator</name>
+        <filename>qrangemodeladapter-constrowiterator.html</filename>
+        <base>RowIteratorBase</base>
+    </compound>
+    <compound kind="class">
+        <name>QRangeModelAdapter::ConstRowReference</name>
+        <filename>qrangemodeladapter-constrowreference.html</filename>
+        <base>RowReferenceBase</base>
+    </compound>
+    <compound kind="class">
+        <name>QRangeModelAdapter::DataReference</name>
+        <filename>qrangemodeladapter-datareference.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>DataReference</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>DataReference</anchor>
+            <arglist>(QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference &amp;&amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>DataReference</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>DataReference-1</anchor>
+            <arglist>(const QModelIndex &amp;index)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>DataReference</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>DataReference-2</anchor>
+            <arglist>(const QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference &amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>operator-eq</anchor>
+            <arglist>(QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference &amp;&amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>operator-eq-1</anchor>
+            <arglist>(QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference::value_type &amp;&amp;value)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>operator-eq-2</anchor>
+            <arglist>(const QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference &amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>operator-eq-3</anchor>
+            <arglist>(const QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference::value_type &amp;value)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference::const_value_type</type>
+            <name>get</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>get</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference::pointer</type>
+            <name>operator-&gt;</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>operator--gt</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>isValid</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>isValid</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QRangeModelAdapter&lt;Range, Protocol, Model&gt;::DataReference::const_value_type</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>operator-QRangeModelAdapter-ltRange-2c-Protocol-2c-Model-gt-3a-3aDataReference-3a-3aconst_value_type</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="typedef" type="">
+            <name>const_value_type</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>const_value_type-typedef</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="typedef" type="">
+            <name>pointer</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>pointer-typedef</anchor>
+            <arglist></arglist>
+        </member>
+        <member kind="typedef" type="">
+            <name>value_type</name>
+            <anchorfile>qrangemodeladapter-datareference.html</anchorfile>
+            <anchor>value_type-typedef</anchor>
+            <arglist></arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QRangeModelAdapter::RowIterator</name>
+        <filename>qrangemodeladapter-rowiterator.html</filename>
+        <base>RowIteratorBase</base>
+    </compound>
+    <compound kind="class">
+        <name>QRangeModelAdapter::RowReference</name>
+        <filename>qrangemodeladapter-rowreference.html</filename>
+        <base>RowReferenceBase</base>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::ColumnIterator</type>
+            <name>begin</name>
+            <anchorfile>qrangemodeladapter-rowreference.html</anchorfile>
+            <anchor>begin</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::ColumnIterator</type>
+            <name>end</name>
+            <anchorfile>qrangemodeladapter-rowreference.html</anchorfile>
+            <anchor>end</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::RowReference &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qrangemodeladapter-rowreference.html</anchorfile>
+            <anchor>operator-eq</anchor>
+            <arglist>(QRangeModelAdapter&lt;Range, Protocol, Model&gt;::RowReference::row_type &amp;&amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::RowReference &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qrangemodeladapter-rowreference.html</anchorfile>
+            <anchor>operator-eq-1</anchor>
+            <arglist>(const QRangeModelAdapter&lt;Range, Protocol, Model&gt;::ConstRowReference &amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::RowReference &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qrangemodeladapter-rowreference.html</anchorfile>
+            <anchor>operator-eq-2</anchor>
+            <arglist>(const QRangeModelAdapter&lt;Range, Protocol, Model&gt;::RowReference &amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::RowReference &amp;</type>
+            <name>operator=</name>
+            <anchorfile>qrangemodeladapter-rowreference.html</anchorfile>
+            <anchor>operator-eq-3</anchor>
+            <arglist>(const QRangeModelAdapter&lt;Range, Protocol, Model&gt;::RowReference::row_type &amp;other)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>auto</type>
+            <name>at</name>
+            <anchorfile>qrangemodeladapter-rowreference.html</anchorfile>
+            <anchor>at</anchor>
+            <arglist>(int column)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>auto</type>
+            <name>children</name>
+            <anchorfile>qrangemodeladapter-rowreference.html</anchorfile>
+            <anchor>children</anchor>
+            <arglist>()</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>auto</type>
+            <name>operator[]</name>
+            <anchorfile>qrangemodeladapter-rowreference.html</anchorfile>
+            <anchor>operator-5b-5d</anchor>
+            <arglist>(int column)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type></type>
+            <name>operator QRangeModelAdapter&lt;Range, Protocol, Model&gt;::ConstRowReference</name>
+            <anchorfile>qrangemodeladapter-rowreference.html</anchorfile>
+            <anchor>operator-QRangeModelAdapter-ltRange-2c-Protocol-2c-Model-gt-3a-3aConstRowReference</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="typedef" type="">
+            <name>row_type</name>
+            <anchorfile>qrangemodeladapter-rowreference.html</anchorfile>
+            <anchor>row_type-typedef</anchor>
+            <arglist></arglist>
+        </member>
+    </compound>
+    <compound kind="class">
+        <name>QRangeModelAdapter::RowReferenceBase</name>
+        <filename>qrangemodeladapter-rowreferencebase.html</filename>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::ConstColumnIterator</type>
+            <name>begin</name>
+            <anchorfile>qrangemodeladapter-rowreferencebase.html</anchorfile>
+            <anchor>begin</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::ConstColumnIterator</type>
+            <name>cbegin</name>
+            <anchorfile>qrangemodeladapter-rowreferencebase.html</anchorfile>
+            <anchor>cbegin</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::ConstColumnIterator</type>
+            <name>cend</name>
+            <anchorfile>qrangemodeladapter-rowreferencebase.html</anchorfile>
+            <anchor>cend</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::ConstColumnIterator</type>
+            <name>end</name>
+            <anchorfile>qrangemodeladapter-rowreferencebase.html</anchorfile>
+            <anchor>end</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QRangeModelAdapter&lt;Range, Protocol, Model&gt;::RowReferenceBase&lt;Reference, Adapter&gt;::size_type</type>
+            <name>size</name>
+            <anchorfile>qrangemodeladapter-rowreferencebase.html</anchorfile>
+            <anchor>size</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>auto</type>
+            <name>at</name>
+            <anchorfile>qrangemodeladapter-rowreferencebase.html</anchorfile>
+            <anchor>at</anchor>
+            <arglist>(int column) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>auto</type>
+            <name>children</name>
+            <anchorfile>qrangemodeladapter-rowreferencebase.html</anchorfile>
+            <anchor>children</anchor>
+            <arglist>() const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>auto</type>
+            <name>operator[]</name>
+            <anchorfile>qrangemodeladapter-rowreferencebase.html</anchorfile>
+            <anchor>operator-5b-5d</anchor>
+            <arglist>(int column) const const</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>bool</type>
+            <name>hasChildren</name>
+            <anchorfile>qrangemodeladapter-rowreferencebase.html</anchorfile>
+            <anchor>hasChildren</anchor>
+            <arglist>() const const</arglist>
         </member>
     </compound>
     <compound kind="class">
