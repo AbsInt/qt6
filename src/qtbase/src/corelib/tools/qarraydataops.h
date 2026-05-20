@@ -37,8 +37,6 @@ protected:
 public:
     typedef typename QArrayDataPointer<T>::parameter_type parameter_type;
 
-    using QArrayDataPointer<T>::QArrayDataPointer;
-
     void copyAppend(const T *b, const T *e) noexcept
     {
         Q_ASSERT(this->isMutable() || b == e);
@@ -224,7 +222,7 @@ public:
             if (it == end)
                 return result;
 
-            QPodArrayOps<T> other(this->size);
+            QArrayDataPointer<T> other(this->size);
             Q_CHECK_PTR(other.data());
             auto dest = other.begin();
             // std::uninitialized_copy will fallback to ::memcpy/memmove()
@@ -620,6 +618,7 @@ template <class T>
 struct QMovableArrayOps
     : QGenericArrayOps<T>
 {
+    using Base = QGenericArrayOps<T>;
     static_assert (std::is_nothrow_destructible_v<T>, "Types with throwing destructors are not supported in Qt containers.");
 
 protected:
@@ -863,7 +862,7 @@ public:
                     T
                 >;
         if constexpr (canUseCopyAppend) {
-            this->copyAppend(std::to_address(b), std::to_address(e));
+            Base::copyAppend(std::to_address(b), std::to_address(e));
         } else
 #endif
         {
@@ -891,7 +890,7 @@ public:
             this->detachAndGrow(QArrayData::GrowsAtEnd, n, nullptr, nullptr);
         Q_ASSERT(this->freeSpaceAtEnd() >= n);
         // b might be updated so use [b, n)
-        this->copyAppend(b, b + n);
+        Base::copyAppend(b, b + n);
     }
 
     void appendUninitialized(qsizetype newSize)
@@ -928,7 +927,7 @@ public:
             bool wasLastRef = !this->deref();
             if (wasLastRef && needCapacity) {
                 // free memory we can't reuse
-                this->destroyAll();
+                Base::destroyAll();
                 Data::deallocate(this->d);
             }
             if (!needCapacity && wasLastRef) {
@@ -951,7 +950,7 @@ public:
             // it's easiest to just clear the container and start fresh.
             // The alternative would be to keep track of two active, disjoint ranges.
             if (undoPrependOptimization) {
-                this->truncate(0);
+                Base::truncate(0);
                 this->setBegin(Data::dataStart(this->d, alignof(typename Data::AlignmentDummy)));
                 undoPrependOptimization = false;
             }
@@ -1005,7 +1004,7 @@ public:
             }
             if (dst == dend) {      // ran out of existing elements to overwrite
                 do {
-                    this->emplace(this->size, std::invoke(proj, *first));
+                    Base::emplace(this->size, std::invoke(proj, *first));
                 } while (++first != last);
                 return;         // size() is already correct (and dst invalidated)!
             }

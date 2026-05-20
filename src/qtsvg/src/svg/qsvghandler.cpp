@@ -45,7 +45,12 @@ Q_LOGGING_CATEGORY(lcSvgHandler, "qt.svg")
 
 namespace {
 namespace tokens {
+// common
 constexpr auto inherit = "inherit"_L1;
+constexpr auto normal = "normal"_L1;
+// font-style
+constexpr auto italic = "italic"_L1;
+constexpr auto oblique = "oblique"_L1;
 } // namespace tokens
 } // unnamed namespace
 
@@ -883,11 +888,61 @@ static FontSizeSpec fontSizeSpec(QStringView spec)
     return FontSizeValue;
 }
 
+static std::optional<QFont::Style> parseFontStyle(QStringView s)
+{
+    // https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-style-prop
+    //   Value: normal | italic | oblique
+
+    if (s == tokens::normal)
+        return QFont::StyleNormal;
+    if (s == tokens::italic)
+        return QFont::StyleItalic;
+    if (s == tokens::oblique)
+        return QFont::StyleOblique;
+
+    return std::nullopt; // incl. empty and tokens::inherit
+}
+
+static std::optional<qreal> parseFontSize(QStringView s)
+{
+    // https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-size-prop
+    //   Value:           <absolute-size> | <relative-size> | <length-percentage>
+    //   <absolute-size>: [ xx-small | x-small | small | medium | large | x-large | xx-large ]
+    //   <relative-size>: [ larger | smaller ]
+
+    // TODO: Support <relative-size>s
+
+    if (s.isEmpty() || s == tokens::inherit)
+        return std::nullopt;
+
+    const FontSizeSpec spec = fontSizeSpec(s);
+    switch (spec) {
+    case FontSizeNone:
+        return std::nullopt;
+    case FontSizeValue: {
+        QSvgUtils::LengthType type;
+        bool ok = false;
+        qreal fs = QSvgUtils::parseLength(s, &type, &ok);
+        if (!ok)
+            return std::nullopt;
+        fs = QSvgUtils::convertToPixels(fs, true, type);
+        return (std::min)(fs, qreal(0xffff));
+    }
+    default:
+        return sizeTable[spec];
+    }
+
+    Q_UNREACHABLE_RETURN(std::nullopt);
+}
+
 static void parseFont(QSvgNode *node,
                       const QSvgAttributes &attributes,
                       QSvgHandler *)
 {
-    if (attributes.fontFamily.isEmpty() && attributes.fontSize.isEmpty() && attributes.fontStyle.isEmpty() &&
+    auto parsedFontSize = parseFontSize(attributes.fontSize);
+    auto parsedFontStyle = parseFontStyle(attributes.fontStyle);
+
+    if (attributes.fontFamily.isEmpty() && !parsedFontSize && !parsedFontStyle &&
         attributes.fontWeight.isEmpty() && attributes.fontVariant.isEmpty() && attributes.textAnchor.isEmpty())
         return;
 
@@ -909,34 +964,11 @@ static void parseFont(QSvgNode *node,
         fontStyle->setFamily(family.toString());
     }
 
-    if (!attributes.fontSize.isEmpty() && attributes.fontSize != tokens::inherit) {
-        // TODO: Support relative sizes 'larger' and 'smaller'.
-        const FontSizeSpec spec = fontSizeSpec(attributes.fontSize);
-        switch (spec) {
-        case FontSizeNone:
-            break;
-        case FontSizeValue: {
-            QSvgUtils::LengthType type;
-            qreal fs = QSvgUtils::parseLength(attributes.fontSize, &type);
-            fs = QSvgUtils::convertToPixels(fs, true, type);
-            fontStyle->setSize(qMin(fs, qreal(0xffff)));
-        }
-            break;
-        default:
-            fontStyle->setSize(sizeTable[spec]);
-            break;
-        }
-    }
+    if (parsedFontSize)
+        fontStyle->setSize(*parsedFontSize);
 
-    if (!attributes.fontStyle.isEmpty() && attributes.fontStyle != tokens::inherit) {
-        if (attributes.fontStyle == QLatin1String("normal")) {
-            fontStyle->setStyle(QFont::StyleNormal);
-        } else if (attributes.fontStyle == QLatin1String("italic")) {
-            fontStyle->setStyle(QFont::StyleItalic);
-        } else if (attributes.fontStyle == QLatin1String("oblique")) {
-            fontStyle->setStyle(QFont::StyleOblique);
-        }
-    }
+    if (parsedFontStyle)
+        fontStyle->setStyle(*parsedFontStyle);
 
     if (!attributes.fontWeight.isEmpty() && attributes.fontWeight != tokens::inherit) {
         bool ok = false;
