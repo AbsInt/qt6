@@ -7,7 +7,6 @@ buildscript {
     dependencies {
         //noinspection AndroidGradlePluginVersion
         classpath 'com.android.tools.build:gradle:9.0.0'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0"
     }
 }
 
@@ -79,7 +78,7 @@ android {
 
     packagingOptions {
         jniLibs {
-            useLegacyPackaging = legacyPackaging
+            useLegacyPackaging = legacyPackaging.toBoolean()
         }
     }
 

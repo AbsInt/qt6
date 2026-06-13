@@ -965,11 +965,10 @@ static constexpr QLatin1StringView contextString(QXmlStreamReaderPrivate::XmlCon
 QXmlStreamPrivateTagStack::QXmlStreamPrivateTagStack()
 {
     tagStack.reserve(16);
-    tagStackStringStorage.reserve(32);
     tagStackStringStorageSize = 0;
     NamespaceDeclaration &namespaceDeclaration = namespaceDeclarations.push();
-    namespaceDeclaration.prefix = addToStringStorage(u"xml");
     namespaceDeclaration.namespaceUri = addToStringStorage(u"http://www.w3.org/XML/1998/namespace");
+    namespaceDeclaration.prefix = addToStringStorage(u"xml");
     initialTagStackStringStorageSize = tagStackStringStorageSize;
     tagsDone = false;
 }
@@ -1790,7 +1789,7 @@ void QXmlStreamReaderPrivate::resolveTag()
     const qsizetype n = attributeStack.size();
 
     if (namespaceProcessing) {
-        for (DtdAttribute &dtdAttribute : dtdAttributes) {
+        for (const DtdAttribute &dtdAttribute : dtdAttributes) {
             if (!dtdAttribute.isNamespaceAttribute
                 || dtdAttribute.defaultValue.isNull()
                 || dtdAttribute.tagName != qualifiedName
@@ -1860,7 +1859,7 @@ void QXmlStreamReaderPrivate::resolveTag()
         }
     }
 
-    for (DtdAttribute &dtdAttribute : dtdAttributes) {
+    for (const DtdAttribute &dtdAttribute : dtdAttributes) {
         if (dtdAttribute.isNamespaceAttribute
             || dtdAttribute.defaultValue.isNull()
             || dtdAttribute.tagName != qualifiedName
@@ -1933,7 +1932,7 @@ uint QXmlStreamReaderPrivate::resolveCharRef(int symbolIndex)
     uint s;
     // ### add toXShort to XmlString?
     if (sym(symbolIndex).c == 'x')
-        s = symString(symbolIndex, 1).view().toUInt(&ok, 16);
+        s = symString(symbolIndex).view().sliced(1).toUInt(&ok, 16);
     else
         s = symString(symbolIndex).view().toUInt(&ok, 10);
 
@@ -4289,7 +4288,8 @@ void QXmlStreamWriter::writeCurrentToken(const QXmlStreamReader &reader)
     case QXmlStreamReader::StartElement: {
         // Namespaces must be added before writeStartElement is called so new prefixes are found
         QList<QXmlStreamPrivateTagStack::NamespaceDeclaration> extraNamespaces;
-        for (const auto &namespaceDeclaration : reader.namespaceDeclarations()) {
+        const QXmlStreamNamespaceDeclarations nsDeclarations = reader.namespaceDeclarations();
+        for (const auto &namespaceDeclaration : nsDeclarations) {
             auto &extraNamespace = d->addExtraNamespace(namespaceDeclaration.namespaceUri(),
                                                         namespaceDeclaration.prefix());
             extraNamespaces.append(extraNamespace);

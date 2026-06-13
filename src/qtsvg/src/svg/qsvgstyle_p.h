@@ -46,21 +46,17 @@ public:
         if (t)
             t->ref();
     }
+
     QSvgRefCounter(const QSvgRefCounter &other)
     {
         t = other.t;
         if (t)
             t->ref();
     }
-    QSvgRefCounter &operator =(T *_t)
-    {
-        if(_t)
-            _t->ref();
-        if (t)
-            t->deref();
-        t = _t;
-        return *this;
-    }
+
+    QSvgRefCounter(QSvgRefCounter &&other) noexcept
+        : t{std::exchange(other.t, nullptr)} {}
+
     QSvgRefCounter &operator =(const QSvgRefCounter &other)
     {
         if(other.t)
@@ -70,11 +66,22 @@ public:
         t = other.t;
         return *this;
     }
+
+    // both T and users are a bounded set, so we can use PURE_SWAP,
+    // and manage expectations
+    QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QSvgRefCounter)
+
     ~QSvgRefCounter()
     {
         if (t)
             t->deref();
     }
+
+    void swap(QSvgRefCounter &other) noexcept
+    { qt_ptr_swap(t, other.t); }
+
+    void reset(T *other = nullptr)
+    { QSvgRefCounter(other).swap(*this); }
 
     inline T *operator->() const { return t; }
     inline operator T*() const { return t; }
@@ -408,13 +415,13 @@ public:
     void setStroke(QBrush brush)
     {
         m_stroke.setBrush(brush);
-        m_style = nullptr;
+        m_style.reset();
         m_strokeSet = 1;
     }
 
     void setStyle(QSvgPaintStyleProperty *style)
     {
-        m_style = style;
+        m_style.reset(style);
         m_strokeSet = 1;
     }
 

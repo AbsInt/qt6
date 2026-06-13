@@ -21,13 +21,15 @@
 
 #include <QtCore/qtyperevision.h>
 
+#include <optional>
+
 QT_BEGIN_NAMESPACE
 
 namespace QQmlJS {
 
 // note: like QQmlImportInstance::Precedence, except that inline components are 0 and
 // "Precedence::Highest" is 1 instead of 0.
-enum PrecedenceValues : quint8 {
+enum class PrecedenceValues : quint8 {
     InlineComponent = 0,
     Default = 1,
     ImplicitImport = std::numeric_limits<quint8>::max() >> 1
@@ -124,6 +126,12 @@ struct ContextualTypes
     fileSelectorInfoFor(const QQmlJSScope::ConstPtr &scope) const;
     const auto &names() const { return m_names; }
 
+    // Selector of the file currently being analysed
+    QString currentFileSelector() const { return m_currentFileSelector; }
+    void setCurrentFileSelector(const QString &selector) { m_currentFileSelector = selector; }
+    std::optional<ContextualType>
+    fileSelectedTypeFor(const QString &name, const QString &selector) const;
+
     void clearTypes()
     {
         m_names.clear();
@@ -134,6 +142,7 @@ private:
     QHash<QString, ContextualType> m_types;
     QMultiHash<QString, FileSelectedType> m_fileSelectedTypes;
     QMultiHash<QQmlJSScope::ConstPtr, QString> m_names;
+    QString m_currentFileSelector;
     CompileContext m_context;
 
     // For resolving sequence types
