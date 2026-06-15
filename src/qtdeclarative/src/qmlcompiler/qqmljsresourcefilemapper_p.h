@@ -28,9 +28,9 @@ struct Q_QMLCOMPILER_EXPORT QQmlJSResourceFileMapper
 {
     struct Entry
     {
-        QString resourcePath; // can be empty to denote the root path `qrc:/`
+        QString resourcePath;
         QString filePath;
-        bool isValid() const { return !filePath.isEmpty(); }
+        bool isValid() const { return !resourcePath.isEmpty() && !filePath.isEmpty(); }
     };
 
     enum FilterMode {

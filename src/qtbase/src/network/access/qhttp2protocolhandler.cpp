@@ -442,16 +442,12 @@ void QHttp2ProtocolHandler::handleAuthorization(QHttp2Stream *stream)
         Q_ASSERT(httpReply);
         const QByteArrayView auth = authField.trimmed();
         if (auth.startsWith("Negotiate") || auth.startsWith("NTLM")) {
-            // NTLM/Kerberos/Negotiate authentication is not supported with HTTP/2.
-            // Finish the stream with an error so QNetworkReply::finished is emitted.
-            // Falling back to HTTP/1.1 is a separate, larger effort (QTBUG-143926).
-            emit httpReply->headerChanged();
-            emit httpReply->readyRead();
-            const QNetworkReply::NetworkError error = isProxy
-                    ? QNetworkReply::ProxyAuthenticationRequiredError
-                    : QNetworkReply::AuthenticationRequiredError;
-            finishStreamWithError(stream, error,
-                                  m_connection->d_func()->errorDetail(error, m_socket));
+            // @todo: We're supposed to fall back to http/1.1:
+            // https://docs.microsoft.com/en-us/iis/get-started/whats-new-in-iis-10/http2-on-iis#when-is-http2-not-supported
+            // "Windows authentication (NTLM/Kerberos/Negotiate) is not supported with HTTP/2.
+            // In this case IIS will fall back to HTTP/1.1."
+            // Though it might be OK to ignore this. The server shouldn't let us connect with
+            // HTTP/2 if it doesn't support us using it.
             return false;
         }
         // Somewhat mimics parts of QHttpNetworkConnectionChannel::handleStatus
@@ -543,15 +539,7 @@ void QHttp2ProtocolHandler::finishStream(QHttp2Stream *stream, Qt::ConnectionTyp
     }
 
     qCDebug(QT_HTTP2) << "stream" << stream->streamID() << "closed";
-
-    // Detach the reply and tear down the stream via canonical path, so a
-    // later stray frame cannot fail an already-finished reply. tryRemoveReply()
-    // also clears the reply->stream map, its sendRST_STREAM() does nothing on a
-    // gracefully closed stream.
-    if (!httpReply || !tryRemoveReply(httpReply)) {
-        requestReplyPairs.remove(stream);
-        stream->deleteLater();
-    }
+    stream->deleteLater();
 }
 
 void QHttp2ProtocolHandler::handleGOAWAY(Http2Error errorCode, quint32 lastStreamID)

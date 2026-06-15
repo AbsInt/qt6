@@ -60,7 +60,7 @@ void QQmlAbstractColumnModel::columns_clear(QQmlListProperty<QQmlTableModelColum
 {
     auto *model = static_cast<QQmlAbstractColumnModel *>(property->object);
     Q_ASSERT(model);
-    model->mColumns.clear();
+    return model->mColumns.clear();
 }
 
 void QQmlAbstractColumnModel::columns_replace(QQmlListProperty<QQmlTableModelColumn> *property, qsizetype index, QQmlTableModelColumn *value)
@@ -68,7 +68,7 @@ void QQmlAbstractColumnModel::columns_replace(QQmlListProperty<QQmlTableModelCol
     auto *model = static_cast<QQmlAbstractColumnModel *>(property->object);
     Q_ASSERT(model);
     if (auto *column = qobject_cast<QQmlTableModelColumn *>(value))
-        model->mColumns.replace(index, column);
+        return model->mColumns.replace(index, column);
 }
 
 void QQmlAbstractColumnModel::columns_removeLast(QQmlListProperty<QQmlTableModelColumn> *property)

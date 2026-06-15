@@ -52,7 +52,6 @@ DelegateContainer {
         parent: root
         quickControl: root.quickControl
         delegateStyle: root.indicatorStyle.foreground
-        visible: root.indicatorStyle.foreground.visible
         x: fgItem.x
         y: fgItem.y
         z: 1

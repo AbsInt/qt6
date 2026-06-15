@@ -15,8 +15,7 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
 
     QFile file(":/default.txt"_L1);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        qFatal("simpletreemodel: Cannot read embedded default text file.");
+    file.open(QIODevice::ReadOnly | QIODevice::Text);
     TreeModel model(QString::fromUtf8(file.readAll()));
     file.close();
 

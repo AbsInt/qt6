@@ -338,7 +338,7 @@ QStringList QSettingsPrivate::variantListToStringList(const QVariantList &l)
 {
     QStringList result;
     result.reserve(l.size());
-    for (const auto &v : l)
+    for (auto v : l)
         result.append(variantToString(v));
     return result;
 }
@@ -1425,9 +1425,8 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
                 }
             }
 
-            for (auto it = confFile->unparsedIniSections.keyBegin();
-                 it != confFile->unparsedIniSections.keyEnd(); ++it) {
-                if (it->count(u'/') > 1) {
+            for (const auto &section : confFile->unparsedIniSections.keys()) {
+                if (section.count(u'/') > 1) {
                     setStatus(QSettings::FormatError);
                     break;
                 }

@@ -263,7 +263,7 @@ inline void QFactoryLoader::Private::updateSinglePath(const QString &path)
     };
 
     // If we've already loaded, skip it...
-    if (loadedPaths->hasSeen(path))
+    if (loadedPaths.hasSeen(path))
         return;
 
     qCDebug(lcFactoryLoader) << "checking directory path" << path << "...";
@@ -407,7 +407,7 @@ QFactoryLoader::~QFactoryLoader()
     }
 #endif
 
-    for (QtPluginInstanceFunction staticInstance : std::as_const(d->usedStaticInstances)) {
+    for (QtPluginInstanceFunction staticInstance : d->usedStaticInstances) {
         if (staticInstance)
             delete staticInstance();
     }
@@ -479,7 +479,7 @@ void QFactoryLoader::setExtraSearchPath(const QString &path)
             }
         }
         d->loadedLibraries.fill(false);
-        d->loadedPaths.emplace(); // hard-reset QDuplicateTracker
+        d->loadedPaths.clear();
         d->libraries.clear();
         d->keyMap.clear();
         update();

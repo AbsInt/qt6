@@ -1790,6 +1790,8 @@ static bool slog2_default_handler(QtMsgType type, const QMessageLogContext &,
 
         if (slog2_register(&buffer_config, &buffer_handle, 0) == -1) {
             fprintf(stderr, "Error registering slogger2 buffer!\n");
+            fprintf(stderr, "%s", formattedMessage.toLocal8Bit().constData());
+            fflush(stderr);
             return false;
         }
 
@@ -1850,7 +1852,7 @@ static bool systemd_default_message_handler(QtMsgType type,
     }
 
     // Explicit QByteArray instead of auto, to resolve the QStringBuilder proxy
-    const QByteArray messageField = "MESSAGE="_ba + message.toUtf8();
+    const QByteArray messageField = "MESSAGE="_ba + message.toUtf8().constData();
     const QByteArray priorityField = "PRIORITY="_ba + QByteArray::number(priority);
     const QByteArray tidField = "TID="_ba + QByteArray::number(qlonglong(qt_gettid()));
     const QByteArray fileField = context.file
@@ -1967,7 +1969,6 @@ static void win_outputDebugString_helper(const QString &message)
     if (message.length() <= maxOutputStringLength) {
         OutputDebugString(reinterpret_cast<const wchar_t *>(message.utf16()));
     } else {
-        Q_DECL_UNINITIALIZED
         wchar_t messagePart[maxOutputStringLength + 1];
         for (qsizetype i = 0; i < message.length(); i += maxOutputStringLength) {
             const qsizetype length = qMin(message.length() - i, maxOutputStringLength);
@@ -2034,8 +2035,7 @@ static void stderr_message_handler(QtMsgType type, const QMessageLogContext &con
     // (still print empty lines, e.g. because message itself was empty)
     if (formattedMessage.isNull())
         return;
-    const QByteArray msg = formattedMessage.toLocal8Bit() + '\n';
-    fwrite(msg.constData(), 1, msg.size(), stderr);
+    fprintf(stderr, "%s\n", formattedMessage.toLocal8Bit().constData());
     fflush(stderr);
 }
 

@@ -2610,7 +2610,7 @@ ArgumentList: T_ELLIPSIS AssignmentExpression_In;
 /.
     case $rule_number: {
         AST::ArgumentList *node = new (pool) AST::ArgumentList(sym(2).Expression);
-        node->spreadToken = loc(1);
+        node->isSpreadElement = true;
         sym(1).Node = node;
     } break;
 ./
@@ -2629,7 +2629,7 @@ ArgumentList: ArgumentList T_COMMA T_ELLIPSIS AssignmentExpression_In;
     case $rule_number: {
         AST::ArgumentList *node = new (pool) AST::ArgumentList(sym(1).ArgumentList, sym(4).Expression);
         node->commaToken = loc(2);
-        node->spreadToken = loc(3);
+        node->isSpreadElement = true;
         sym(1).Node = node;
     } break;
 ./

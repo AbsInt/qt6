@@ -833,8 +833,7 @@ void QMimeXMLProvider::addMimeType(const QMimeTypeXMLData &mt)
 
 void QMimeXMLProvider::addParents(const QString &mime, QStringList &result)
 {
-    const QStringList parents = m_parents.value(mime);
-    for (const QString &parent : parents) {
+    for (const QString &parent : m_parents.value(mime)) {
         if (!result.contains(parent))
             result.append(parent);
     }

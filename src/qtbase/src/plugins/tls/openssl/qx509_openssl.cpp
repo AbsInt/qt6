@@ -29,7 +29,7 @@ namespace QTlsPrivate {
 
 namespace {
 
-QByteArray asn1ObjectId(const ASN1_OBJECT *object)
+QByteArray asn1ObjectId(ASN1_OBJECT *object)
 {
     if (!object)
         return {};
@@ -40,7 +40,7 @@ QByteArray asn1ObjectId(const ASN1_OBJECT *object)
     return QByteArray(buf);
 }
 
-QByteArray asn1ObjectName(const ASN1_OBJECT *object)
+QByteArray asn1ObjectName(ASN1_OBJECT *object)
 {
     if (!object)
         return {};
@@ -52,14 +52,14 @@ QByteArray asn1ObjectName(const ASN1_OBJECT *object)
     return asn1ObjectId(object);
 }
 
-QMultiMap<QByteArray, QString> mapFromX509Name(const X509_NAME *name)
+QMultiMap<QByteArray, QString> mapFromX509Name(X509_NAME *name)
 {
     if (!name)
         return {};
 
     QMultiMap<QByteArray, QString> info;
     for (int i = 0; i < q_X509_NAME_entry_count(name); ++i) {
-        const X509_NAME_ENTRY *e = q_X509_NAME_get_entry(name, i);
+        X509_NAME_ENTRY *e = q_X509_NAME_get_entry(name, i);
 
         QByteArray name = asn1ObjectName(q_X509_NAME_ENTRY_get_object(e));
         unsigned char *data = nullptr;
@@ -147,7 +147,7 @@ QString x509ToText(X509 *x509)
     return QString::fromLatin1(result);
 }
 
-QVariant x509UnknownExtensionToValue(QT_OPENSSL4_CONST X509_EXTENSION *ext)
+QVariant x509UnknownExtensionToValue(X509_EXTENSION *ext)
 {
     // Get the extension specific method object if available
     // we cast away the const-ness here because some versions of openssl
@@ -157,7 +157,7 @@ QVariant x509UnknownExtensionToValue(QT_OPENSSL4_CONST X509_EXTENSION *ext)
 
     X509V3_EXT_METHOD *meth = const_cast<X509V3_EXT_METHOD *>(q_X509V3_EXT_get(ext));
     if (!meth) {
-        QT_OPENSSL4_CONST ASN1_OCTET_STRING *value = q_X509_EXTENSION_get_data(ext);
+        ASN1_OCTET_STRING *value = q_X509_EXTENSION_get_data(ext);
         Q_ASSERT(value);
         QByteArray result( reinterpret_cast<const char *>(q_ASN1_STRING_get0_data(value)),
                            q_ASN1_STRING_length(value));
@@ -237,9 +237,9 @@ QVariant x509UnknownExtensionToValue(QT_OPENSSL4_CONST X509_EXTENSION *ext)
  * taken from RFC 5280, however we decided the capitalisation in the RFC
  * was too silly for the real world.
  */
-QVariant x509ExtensionToValue(QT_OPENSSL4_CONST X509_EXTENSION *ext)
+QVariant x509ExtensionToValue(X509_EXTENSION *ext)
 {
-    QT_OPENSSL4_CONST ASN1_OBJECT *obj = q_X509_EXTENSION_get_object(ext);
+    ASN1_OBJECT *obj = q_X509_EXTENSION_get_object(ext);
     int nid = q_OBJ_obj2nid(obj);
 
     // We cast away the const-ness here because some versions of openssl
@@ -330,9 +330,8 @@ QVariant x509ExtensionToValue(QT_OPENSSL4_CONST X509_EXTENSION *ext)
 
             // keyid
             if (auth_key->keyid) {
-                const unsigned char *data = q_ASN1_STRING_get0_data(auth_key->keyid);
-                int length = q_ASN1_STRING_length(auth_key->keyid);
-                QByteArray keyid(reinterpret_cast<const char *>(data), length);
+                QByteArray keyid(reinterpret_cast<const char *>(auth_key->keyid->data),
+                                 auth_key->keyid->length);
                 result["keyid"_L1] = keyid.toHex();
             }
 
@@ -466,10 +465,10 @@ X509CertificateOpenSSL::subjectAlternativeNames() const
             QHostAddress ipAddress;
             switch (len) {
             case 4: // IPv4
-                ipAddress = QHostAddress(qFromBigEndian(*reinterpret_cast<const quint32 *>(q_ASN1_STRING_get0_data(genName->d.iPAddress))));
+                ipAddress = QHostAddress(qFromBigEndian(*reinterpret_cast<quint32 *>(genName->d.iPAddress->data)));
                 break;
             case 16: // IPv6
-                ipAddress = QHostAddress(reinterpret_cast<const quint8 *>(q_ASN1_STRING_get0_data(genName->d.iPAddress)));
+                ipAddress = QHostAddress(reinterpret_cast<quint8 *>(genName->d.iPAddress->data));
                 break;
             default: // Unknown IP address format
                 break;
@@ -563,11 +562,9 @@ QSslCertificate X509CertificateOpenSSL::certificateFromX509(X509 *x509)
 
     if (ASN1_INTEGER *serialNumber = q_X509_get_serialNumber(x509)) {
         QByteArray hexString;
-        const unsigned char *serialNumberData = q_ASN1_STRING_get0_data(serialNumber);
-        int serialNumberLength = q_ASN1_STRING_length(serialNumber);
-        hexString.reserve(qsizetype(serialNumberLength) * 3);
-        for (int a = 0; a < serialNumberLength; ++a) {
-            hexString += QByteArray::number(serialNumberData[a], 16).rightJustified(2, '0');
+        hexString.reserve(serialNumber->length * 3);
+        for (int a = 0; a < serialNumber->length; ++a) {
+            hexString += QByteArray::number(serialNumber->data[a], 16).rightJustified(2, '0');
             hexString += ':';
         }
         hexString.chop(1);
@@ -901,7 +898,7 @@ void X509CertificateOpenSSL::parseExtensions()
     extensions.reserve(count);
 
     for (int i = 0; i < count; i++) {
-        QT_OPENSSL4_CONST X509_EXTENSION *ext = q_X509_get_ext(x509, i);
+        X509_EXTENSION *ext = q_X509_get_ext(x509, i);
         if (!ext) {
             qCWarning(lcTlsBackend) << "Invalid (nullptr) extension at index" << i;
             continue;
@@ -914,13 +911,13 @@ void X509CertificateOpenSSL::parseExtensions()
     QTlsBackendOpenSSL::clearErrorQueue();
 }
 
-X509CertificateBase::X509CertificateExtension X509CertificateOpenSSL::convertExtension(QT_OPENSSL4_CONST X509_EXTENSION *ext)
+X509CertificateBase::X509CertificateExtension X509CertificateOpenSSL::convertExtension(X509_EXTENSION *ext)
 {
     Q_ASSERT(ext);
 
     X509CertificateExtension result;
 
-    QT_OPENSSL4_CONST ASN1_OBJECT *obj = q_X509_EXTENSION_get_object(ext);
+    ASN1_OBJECT *obj = q_X509_EXTENSION_get_object(ext);
     if (!obj)
         return result;
 

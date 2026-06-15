@@ -87,7 +87,7 @@ struct QObjectPrivate::Connection : public ConnectionOrSignalVector
     QAtomicInt ref_{
         2
     }; // ref_ is 2 for the use in the internal lists, and for the use in QMetaObject::Connection
-    QAtomicInteger<uint> id{0};
+    uint id = 0;
     ushort method_offset;
     ushort method_relative;
     signed int signal_index : 27; // In signal range (see QObjectPrivate::signalIndex())
@@ -205,7 +205,7 @@ struct QObjectPrivate::ConnectionData
         newVector->next = nullptr;
         newVector->allocated = size;
 
-        signalVector.storeRelease(newVector);
+        signalVector.storeRelaxed(newVector);
         if (vector) {
             TaggedSignalVector o = nullptr;
             /* No ABA issue here: When adding a node, we only care about the list head, it doesn't
@@ -219,8 +219,7 @@ struct QObjectPrivate::ConnectionData
     }
     int signalVectorCount() const
     {
-        SignalVector *v = signalVector.loadAcquire();
-        return v ? v->count() : -1;
+        return signalVector.loadAcquire() ? signalVector.loadRelaxed()->count() : -1;
     }
 
     static void deleteOrphaned(TaggedSignalVector o);

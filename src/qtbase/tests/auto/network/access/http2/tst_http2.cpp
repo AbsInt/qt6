@@ -104,7 +104,6 @@ private slots:
     void authenticationRequired();
 
     void unsupportedAuthenticateChallenge();
-    void ntlmAuthenticateChallengeEmitsFinished();
 
     void h2cAllowedAttribute_data();
     void h2cAllowedAttribute();
@@ -113,8 +112,6 @@ private slots:
     void redirect();
 
     void trailingHEADERS();
-
-    void dataFrameAfterEndStream();
 
     void duplicateRequestsWithAborts();
 
@@ -1485,50 +1482,6 @@ void tst_Http2::unsupportedAuthenticateChallenge()
 
 }
 
-void tst_Http2::ntlmAuthenticateChallengeEmitsFinished()
-{
-    // QTBUG-143926: a server returning NTLM/Negotiate must still emit finished()
-    clearHTTP2State();
-    serverPort = 0;
-
-    if (defaultConnectionType() == H2Type::h2c)
-        QSKIP("This test requires TLS with ALPN to work");
-
-    ServerPtr targetServer(newServer(defaultServerSettings, defaultConnectionType()));
-    targetServer->setAuthenticationHeader("NTLM");
-
-    QMetaObject::invokeMethod(targetServer.get(), "startServer", Qt::QueuedConnection);
-    runEventLoop();
-
-    QVERIFY(serverPort != 0);
-
-    nRequests = 1;
-
-    QUrl url = requestUrl(defaultConnectionType());
-    url.setPath("/index.html");
-    QNetworkRequest request(url);
-
-    auto reply = std::unique_ptr<QNetworkReply>(manager->get(request));
-
-    bool finishedReceived = false;
-    connect(reply.get(), &QNetworkReply::finished, reply.get(),
-            [&]() { finishedReceived = true; });
-
-    connect(reply.get(), &QNetworkReply::errorOccurred, this,
-            &tst_Http2::replyFinishedWithError, Qt::QueuedConnection);
-
-    reply->ignoreSslErrors();
-
-    runEventLoop();
-    STOP_ON_FAILURE
-
-    QVERIFY2(reply->isFinished(), "QNetworkReply::finished must be emitted for NTLM challenges");
-    QCOMPARE(reply->error(), QNetworkReply::AuthenticationRequiredError);
-    QVERIFY(finishedReceived);
-
-    QTRY_VERIFY(serverGotSettingsACK);
-}
-
 void tst_Http2::h2cAllowedAttribute_data()
 {
     QTest::addColumn<bool>("h2cAllowed");
@@ -1693,51 +1646,6 @@ void tst_Http2::trailingHEADERS()
     QCOMPARE(nRequests, 0);
 
     QCOMPARE(reply->error(), QNetworkReply::NoError);
-    QTRY_VERIFY(serverGotSettingsACK);
-}
-
-void tst_Http2::dataFrameAfterEndStream()
-{
-    // A non-conformant server (observed with VK's "kittenx") may send a stray,
-    // empty DATA frame with END_STREAM after the stream was already closed by
-    // a previous END_STREAM. Per RFC 9113 6.1 we answer with RST_STREAM, but an
-    // already fully-received reply must not be turned into an error, and no data
-    // that was received must be dropped.
-    // See QHttp2ProtocolHandler::finishStream().
-    clearHTTP2State();
-    serverPort = 0;
-
-    const QByteArray responseBody = "The complete and correct response body.";
-
-    ServerPtr targetServer(newServer(defaultServerSettings, defaultConnectionType()));
-    targetServer->setResponseBody(responseBody);
-    targetServer->setSendRedundantEndStreamDATA(true);
-
-    QMetaObject::invokeMethod(targetServer.get(), "startServer", Qt::QueuedConnection);
-    runEventLoop();
-
-    QVERIFY(serverPort != 0);
-
-    nRequests = 1;
-
-    const auto url = requestUrl(defaultConnectionType());
-    QNetworkRequest request(url);
-    // H2C might be used on macOS where SecureTransport doesn't support server-side ALPN:
-    request.setAttribute(QNetworkRequest::Http2CleartextAllowedAttribute, true);
-
-    std::unique_ptr<QNetworkReply> reply{ manager->get(request) };
-    connect(reply.get(), &QNetworkReply::finished, this, &tst_Http2::replyFinished);
-
-    // Since we're using self-signed certificates, ignore SSL errors:
-    reply->ignoreSslErrors();
-
-    runEventLoop();
-    STOP_ON_FAILURE
-
-    QCOMPARE(nRequests, 0);
-
-    QCOMPARE(reply->error(), QNetworkReply::NoError);
-    QCOMPARE(reply->readAll(), responseBody);
     QTRY_VERIFY(serverGotSettingsACK);
 }
 

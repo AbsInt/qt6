@@ -75,9 +75,6 @@ public:
     void setRedirect(const QByteArray &redirectUrl, int count);
     // Send a trailing HEADERS frame with PRIORITY and END_STREAM flag
     void setSendTrailingHEADERS(bool enable);
-    // Emulate a non-conformant server that sends a stray, empty DATA frame with END_STREAM set
-    // after the stream was already closed by a previous END_STREAM.
-    void setSendRedundantEndStreamDATA(bool enable);
     void emulateGOAWAY(int goawayCode, int timeout);
     void redirectOpenStream(quint16 targetPort);
 
@@ -218,7 +215,6 @@ private:
     int redirectCount = 0;
 
     bool sendTrailingHEADERS = false;
-    bool sendRedundantEndStreamDATA = false;
     int informationalStatusCode = 0;
 
     std::optional<quint32> pendingMaxTableSizeUpdate;

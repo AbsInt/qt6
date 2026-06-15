@@ -313,7 +313,7 @@ QVariant QQuickText::loadResource(int type, const QUrl &source)
             if (job->isError()) {
                 qmlWarning(this) << job->error();
                 delete *it;
-                d->extra->pixmapsInProgress.erase(it);
+                it = d->extra->pixmapsInProgress.erase(it);
                 return QImage();
             }
             qCDebug(lcText) << "already downloading" << url;
@@ -341,7 +341,7 @@ void QQuickText::resourceRequestFinished()
 {
     Q_D(QQuickText);
     bool allDone = true;
-    for (auto it = d->extra->pixmapsInProgress.begin(); it != d->extra->pixmapsInProgress.end();) {
+    for (auto it = d->extra->pixmapsInProgress.cbegin(); it != d->extra->pixmapsInProgress.cend();) {
         auto *job = *it;
         if (job->isError()) {
             // get QTextDocument::loadResource() to call QQuickText::loadResource() again, to return the placeholder
@@ -3017,8 +3017,7 @@ bool QQuickTextPrivate::isLinkHoveredConnected()
 
 static void getLinks_helper(const QTextLayout *layout, QList<QQuickTextPrivate::LinkDesc> *links)
 {
-    const auto formats = layout->formats();
-    for (const QTextLayout::FormatRange &formatRange : formats) {
+    for (const QTextLayout::FormatRange &formatRange : layout->formats()) {
         if (formatRange.format.isAnchor()) {
             const int start = formatRange.start;
             const int len = formatRange.length;

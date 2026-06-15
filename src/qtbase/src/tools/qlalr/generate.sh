@@ -20,5 +20,4 @@ exec qlalr \
      --no-debug \
      --no-lines \
      --use-pragma-once \
-     --qt-security=insignificant:build-tool \
      lalr.g

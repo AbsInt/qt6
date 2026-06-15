@@ -303,39 +303,39 @@ public:
 
 void tst_QGraphicsEffectSource::pixmapPadding_data()
 {
-    QTest::addColumn<Qt::CoordinateSystem>("coordinateMode");
-    QTest::addColumn<QGraphicsEffect::PixmapPadMode>("padMode");
+    QTest::addColumn<int>("coordinateMode");
+    QTest::addColumn<int>("padMode");
     QTest::addColumn<QSize>("size");
     QTest::addColumn<QPoint>("offset");
     QTest::addColumn<uint>("ulPixel");
 
-    QTest::newRow("log,nopad") << Qt::LogicalCoordinates
-                               << QGraphicsEffect::NoPad
+    QTest::newRow("log,nopad") << int(Qt::LogicalCoordinates)
+                               << int(QGraphicsEffect::NoPad)
                                << QSize(10, 10) << QPoint(0, 0)
                                << 0xffff0000u;
 
-    QTest::newRow("log,transparent") << Qt::LogicalCoordinates
-                                     << QGraphicsEffect::PadToTransparentBorder
+    QTest::newRow("log,transparent") << int(Qt::LogicalCoordinates)
+                                     << int(QGraphicsEffect::PadToTransparentBorder)
                                      << QSize(14, 14) << QPoint(-2, -2)
                                      << 0x00000000u;
 
-    QTest::newRow("log,effectrect") << Qt::LogicalCoordinates
-                                    << QGraphicsEffect::PadToEffectiveBoundingRect
+    QTest::newRow("log,effectrect") << int(Qt::LogicalCoordinates)
+                                    << int(QGraphicsEffect::PadToEffectiveBoundingRect)
                                     << QSize(20, 20) << QPoint(-5, -5)
                                     << 0x00000000u;
 
-    QTest::newRow("dev,nopad") << Qt::DeviceCoordinates
-                               << QGraphicsEffect::NoPad
+    QTest::newRow("dev,nopad") << int(Qt::DeviceCoordinates)
+                               << int(QGraphicsEffect::NoPad)
                                << QSize(20, 20) << QPoint(40, 40)
                                << 0xffff0000u;
 
-    QTest::newRow("dev,transparent") << Qt::DeviceCoordinates
-                                     << QGraphicsEffect::PadToTransparentBorder
+    QTest::newRow("dev,transparent") << int(Qt::DeviceCoordinates)
+                                     << int(QGraphicsEffect::PadToTransparentBorder)
                                      << QSize(24, 24) << QPoint(38, 38)
                                      << 0x00000000u;
 
-    QTest::newRow("dev,effectrect") << Qt::DeviceCoordinates
-                                    << QGraphicsEffect::PadToEffectiveBoundingRect
+    QTest::newRow("dev,effectrect") << int(Qt::DeviceCoordinates)
+                                    << int(QGraphicsEffect::PadToEffectiveBoundingRect)
                                     << QSize(40, 40) << QPoint(30, 30)
                                     << 0x00000000u;
 
@@ -357,14 +357,14 @@ void tst_QGraphicsEffectSource::pixmapPadding()
     scene.addItem(pmItem);
     pmItem->setGraphicsEffect(effect);
 
-    QFETCH(Qt::CoordinateSystem, coordinateMode);
-    QFETCH(QGraphicsEffect::PixmapPadMode, padMode);
+    QFETCH(int, coordinateMode);
+    QFETCH(int, padMode);
     QFETCH(QPoint, offset);
     QFETCH(QSize, size);
     QFETCH(uint, ulPixel);
 
-    effect->padMode = padMode;
-    effect->coordinateMode = coordinateMode;
+    effect->padMode = (QGraphicsEffect::PixmapPadMode) padMode;
+    effect->coordinateMode = (Qt::CoordinateSystem) coordinateMode;
 
     scene.render(&dummyPainter, scene.itemsBoundingRect(), scene.itemsBoundingRect());
 

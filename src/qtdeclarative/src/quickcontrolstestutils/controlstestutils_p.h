@@ -15,7 +15,6 @@
 // We mean it.
 //
 
-#include <QtTest/qtest.h>
 #include <QtGui/qpa/qplatformtheme.h>
 #include <QtQuickTestUtils/private/visualtestutils_p.h>
 

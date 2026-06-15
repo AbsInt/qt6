@@ -817,10 +817,8 @@ protected:
         std::vector<Moth::BytecodeGenerator::Jump> jumpsToPatch;
         bool actuallyHasOptionals = false;
     };
-    using OptionalChainStates = std::stack<OptionalChainState, std::vector<OptionalChainState>>;
-
     QSet<QQmlJS::AST::Node*> m_seenOptionalChainNodes;
-    OptionalChainStates *m_optionalChainsStates = nullptr;
+    std::stack<OptionalChainState> m_optionalChainsStates;
 
     ControlFlow *controlFlow = nullptr;
 

@@ -324,7 +324,7 @@ static QFontEngine::HintStyle parseXftHintStyle(const QByteArray& stringValue)
     else if (stringValue == "hintslight")
         return QFontEngine::HintLight;
 
-    return QFontEngine::HintUnset;
+    return QFontEngine::HintStyle(-1);
 }
 
 static QFontEngine::SubpixelAntialiasingType parseXftRgba(const QByteArray& stringValue)
@@ -340,7 +340,7 @@ static QFontEngine::SubpixelAntialiasingType parseXftRgba(const QByteArray& stri
     else if (stringValue == "vbgr")
         return QFontEngine::Subpixel_VBGR;
 
-    return QFontEngine::Subpixel_Unset;
+    return QFontEngine::SubpixelAntialiasingType(-1);
 }
 
 void QXcbVirtualDesktop::readXResources()

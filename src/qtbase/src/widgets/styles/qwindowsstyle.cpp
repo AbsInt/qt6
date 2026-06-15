@@ -759,7 +759,8 @@ void QWindowsStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, 
             points[3] = { points[2].x() + 4 * scaleh,   points[2].y() - 4 * scalev };
             points[4] = { points[3].x(),                points[3].y() - 2 * scalev };
             points[5] = { points[4].x() - 4 * scaleh,   points[4].y() + 4 * scalev };
-            p->setBrush(p->pen().color());
+            p->setPen(QPen(opt->palette.text().color(), 0));
+            p->setBrush(opt->palette.text());
             p->drawPolygon(points.data(), static_cast<int>(points.size()));
         }
         if (doRestore)
@@ -2040,6 +2041,8 @@ void QWindowsStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComp
                 }
             }
             if (cmb->subControls & SC_ComboBoxArrow) {
+                State flags = State_None;
+
                 QRect ar = proxy()->subControlRect(CC_ComboBox, cmb, SC_ComboBoxArrow, widget);
                 bool sunkenArrow = cmb->activeSubControls == SC_ComboBoxArrow
                                    && cmb->state & State_Sunken;
@@ -2056,26 +2059,36 @@ void QWindowsStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComp
                                    &cmb->palette.brush(QPalette::Button));
                 }
 
-                QStyleOption arrowOpt = *cmb;
-                arrowOpt.state = State_None;
+                ar.adjust(2, 2, -2, -2);
                 if (opt->state & State_Enabled)
-                    arrowOpt.state |= State_Enabled;
+                    flags |= State_Enabled;
                 if (opt->state & State_HasFocus)
-                    arrowOpt.state |= State_HasFocus;
+                    flags |= State_HasFocus;
+
                 if (sunkenArrow)
-                    arrowOpt.state |= State_Sunken;
-                arrowOpt.rect = ar.adjusted(3, 3, -3, -3);
+                    flags |= State_Sunken;
+                QStyleOption arrowOpt = *cmb;
+                arrowOpt.rect = ar.adjusted(1, 1, -1, -1);
+                arrowOpt.state = flags;
                 proxy()->drawPrimitive(PE_IndicatorArrowDown, &arrowOpt, p, widget);
             }
 
-            if (cmb->subControls.testFlag(SC_ComboBoxEditField) && !cmb->editable) {
-                if (cmb->state.testFlag(State_HasFocus)) {
-                    const auto re =
-                            proxy()->subControlRect(CC_ComboBox, cmb, SC_ComboBoxEditField, widget);
-                    p->fillRect(re, cmb->palette.brush(QPalette::Highlight));
+            if (cmb->subControls & SC_ComboBoxEditField) {
+                QRect re = proxy()->subControlRect(CC_ComboBox, cmb, SC_ComboBoxEditField, widget);
+                if (cmb->state & State_HasFocus && !cmb->editable)
+                    p->fillRect(re.x(), re.y(), re.width(), re.height(),
+                                cmb->palette.brush(QPalette::Highlight));
+
+                if (cmb->state & State_HasFocus) {
+                    p->setPen(cmb->palette.highlightedText().color());
+                    p->setBackground(cmb->palette.highlight());
+
+                } else {
+                    p->setPen(cmb->palette.text().color());
+                    p->setBackground(cmb->palette.window());
                 }
 
-                if (cmb->state.testFlag(State_HasFocus)) {
+                if (cmb->state & State_HasFocus && !cmb->editable) {
                     QStyleOptionFocusRect focus;
                     focus.QStyleOption::operator=(*cmb);
                     focus.rect = subElementRect(SE_ComboBoxFocusRect, cmb, widget);

@@ -333,7 +333,7 @@ void QmlLintSuggestions::diagnoseHelper(const QByteArray &url,
             categories.append(category);
     }
 
-    QQmlToolingSettings settings(QLatin1String("qmllint"), { "General"_L1, "Warnings"_L1 });
+    QQmlToolingSettings settings(QLatin1String("qmllint"));
     if (settings.search(filename).isValid()) {
         QQmlJS::LoggingUtils::updateLogLevels(categories, settings, nullptr);
     }

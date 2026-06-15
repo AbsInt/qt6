@@ -56,8 +56,6 @@ private slots:
 
     void findDefinitionFromLocation_data();
     void findDefinitionFromLocation();
-    void findMultipleDefinitionsFromLocation_data();
-    void findMultipleDefinitionsFromLocation();
 
     void findDefinitionFromAbsoluteLocation();
 

@@ -54,8 +54,7 @@ namespace
         };
         callbacks.catchFunc = [permissionName](val err)
         {
-            if (err["name"].as<std::string>() == "NotAllowedError"
-                || err["name"].as<std::string>() == "NotFoundError")
+            if (err["name"].as<std::string>() == "NotAllowedError")
                 return updatePermission(permissionName, wapiDenied, {});
 
             qCInfo(lcPermissions, "'%s' '%s'", err["name"].as<std::string>().c_str(),
@@ -154,9 +153,6 @@ namespace
         };
         queryCallbacks.catchFunc = [device, cb](val error)
         {
-            qCInfo(lcPermissions) << "error"
-                       << error["name"].as<std::string>();
-
             if (error["name"].as<std::string>() == "NotAllowedError")
                 return updatePermission(device, wapiDenied, cb);
             updatePermission(device, wapiPrompt, cb);

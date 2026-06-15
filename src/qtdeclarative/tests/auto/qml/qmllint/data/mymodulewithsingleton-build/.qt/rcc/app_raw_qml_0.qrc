@@ -1,5 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file alias="Singleton.qml">../../../mymodulewithsingleton-source/MyModuleWithSingleton/Singleton.qml</file>
-    </qresource>
-</RCC>

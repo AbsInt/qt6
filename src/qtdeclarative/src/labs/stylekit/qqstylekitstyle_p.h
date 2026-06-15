@@ -99,7 +99,6 @@ protected:
 private:
     void parseThemes();
     void recreateTheme();
-    void reapplyStyle();
     void executeFallbackStyle(bool complete = false);
     void syncFromQPalette(const QPalette &palette);
     QPalette effectivePalette() const;

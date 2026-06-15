@@ -12,6 +12,10 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
+static const QString ROWS_PROPERTY_NAME = u"rows"_s;
+
 /*!
     \qmltype TreeModel
 //!    \nativetype QQmlTreeModel
@@ -303,13 +307,9 @@ void QQmlTreeModel::appendRow(const QVariant &row)
 */
 void QQmlTreeModel::clear()
 {
-    if (mRows.empty())
-        return;
-
-    beginResetModel();
-    mRows.clear();
-    endResetModel();
-    emit rowsChanged();
+    QQmlEngine *engine = qmlEngine(this);
+    Q_ASSERT(engine);
+    setRows(QVariant::fromValue(engine->newArray()));
 }
 
 /*!
@@ -334,11 +334,6 @@ QVariant QQmlTreeModel::getRow(const QModelIndex &rowIndex) const
 
 QVariant QQmlTreeModel::firstRow() const
 {
-    if (mRows.empty()) {
-        qmlWarning(this) << "TreeModel::firstRow(): model is empty";
-        return {};
-    }
-
     return mRows.front().get()->data();
 }
 

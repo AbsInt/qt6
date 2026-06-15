@@ -1060,8 +1060,7 @@ static inline QImage createAnimationBuffer(const QStyleOption *option, const QWi
 {
     const qreal devicePixelRatio = widget
             ? widget->devicePixelRatioF() : qApp->devicePixelRatio();
-    const QSize sz(ceil(option->rect.width() * devicePixelRatio), ceil(option->rect.height() * devicePixelRatio));
-    QImage result(sz, QImage::Format_ARGB32_Premultiplied);
+    QImage result(option->rect.size() * devicePixelRatio, QImage::Format_ARGB32_Premultiplied);
     result.setDevicePixelRatio(devicePixelRatio);
     result.fill(0);
     return result;

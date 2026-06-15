@@ -7,7 +7,6 @@
 #include <QLoggingCategory>
 #if QT_CONFIG(regularexpression)
 #include <QRegularExpression>
-#include <QRegularExpressionMatchIterator>
 #endif
 #include <QTextCursor>
 #include <QTextDocument>
@@ -528,15 +527,15 @@ int QTextMarkdownImporter::cbText(int textType, const char *text, unsigned size)
         // count how many tags are opened and how many are closed
 #if QT_CONFIG(regularexpression) && QT_CONFIG(texthtmlparser)
         {
-            QRegularExpressionMatchIterator i = openingBracket.globalMatch(s);
-            while (i.hasNext()) {
+            int startIdx = 0;
+            while ((startIdx = s.indexOf(openingBracket, startIdx)) >= 0) {
                 ++m_htmlTagDepth;
-                i.next();
+                startIdx += 2;
             }
-            i = closingBracket.globalMatch(s);
-            while (i.hasNext()) {
+            startIdx = 0;
+            while ((startIdx = s.indexOf(closingBracket, startIdx)) >= 0) {
                 --m_htmlTagDepth;
-                i.next();
+                startIdx += 2;
             }
         }
         m_htmlAccumulator += s;

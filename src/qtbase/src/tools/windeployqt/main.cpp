@@ -1819,8 +1819,7 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
         }
         for (const QString &qtLib : std::as_const(libraries)) {
             if (isSystemLibrary(qtLib)) {
-                if (optVerboseLevel)
-                    std::wcout << "Skipping system library " << qtLib << "\n";
+                std::wcout << "Skipping system library " << qtLib << "\n";
                 continue;
             }
             if (!updateLibrary(qtLib, targetPath, options, errorMessage))

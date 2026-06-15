@@ -1,3 +1,0 @@
-module modulewithinternaltypessubdir
-PublicType 1.0 Qml/MyPublicType.qml
-internal InternalType Qml/MyInternalType.qml

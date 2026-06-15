@@ -284,11 +284,11 @@ inline void QObjectPrivate::addConnection(int signal, Connection *c)
     ConnectionList &connectionList = cd->connectionsForSignal(signal);
     if (connectionList.last.loadRelaxed()) {
         Q_ASSERT(connectionList.last.loadRelaxed()->receiver.loadRelaxed());
-        connectionList.last.loadRelaxed()->nextConnectionList.storeRelease(c);
+        connectionList.last.loadRelaxed()->nextConnectionList.storeRelaxed(c);
     } else {
-        connectionList.first.storeRelease(c);
+        connectionList.first.storeRelaxed(c);
     }
-    c->id.storeRelease(++cd->currentConnectionId);
+    c->id = ++cd->currentConnectionId;
     c->prevConnectionList = connectionList.last.loadRelaxed();
     connectionList.last.storeRelaxed(c);
 
@@ -4285,9 +4285,7 @@ void doActivate(QObject *sender, int signal_index, void **argv)
     {
     Q_ASSERT(sp->connections.loadRelaxed());
     QObjectPrivate::ConnectionDataPointer connections(sp->connections.loadAcquire());
-    // loadAcquire pairs with the storeRelease in resizeSignalVector(), ensuring
-    // that all writes to the new SignalVector's contents are visible here.
-    QObjectPrivate::SignalVector *signalVector = connections->signalVector.loadAcquire();
+    QObjectPrivate::SignalVector *signalVector = connections->signalVector.loadRelaxed();
 
     const QObjectPrivate::ConnectionList *list;
     if (signal_index < signalVector->count())
@@ -4302,7 +4300,7 @@ void doActivate(QObject *sender, int signal_index, void **argv)
     // during the signal emission are not emitted in this emission.
     uint highestConnectionId = connections->currentConnectionId.loadRelaxed();
     do {
-        QObjectPrivate::Connection *c = list->first.loadAcquire();
+        QObjectPrivate::Connection *c = list->first.loadRelaxed();
         if (!c)
             continue;
 
@@ -4403,7 +4401,7 @@ void doActivate(QObject *sender, int signal_index, void **argv)
                 if (callbacks_enabled && signal_spy_set->slot_end_callback != nullptr)
                     signal_spy_set->slot_end_callback(receiver, method);
             }
-        } while ((c = c->nextConnectionList.loadAcquire()) != nullptr && c->id.loadAcquire() <= highestConnectionId);
+        } while ((c = c->nextConnectionList.loadRelaxed()) != nullptr && c->id <= highestConnectionId);
 
     } while (list != &signalVector->at(-1) &&
         //start over for all signals;
@@ -5550,13 +5548,10 @@ QMetaObject::Connection QObjectPrivate::connectImpl(const QObject *sender, int s
 }
 
 /*!
-    Disconnects \a connection and resets it to
-    \l{QMetaObject::Connection::operator bool()}{invalid}.
+    Disconnect a connection.
 
-    If \a connection is invalid or has already been disconnected, do nothing
+    If the \a connection is invalid or has already been disconnected, do nothing
     and return false.
-
-    \note Future versions of Qt may only accept non-const objects here.
 
    \sa connect()
  */

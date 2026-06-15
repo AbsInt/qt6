@@ -98,7 +98,6 @@ bool QDBusContext::calledFromDBus() const
 */
 QDBusConnection QDBusContext::connection() const
 {
-    Q_ASSERT(calledFromDBus());
     return d_ptr->connection;
 }
 
@@ -107,7 +106,6 @@ QDBusConnection QDBusContext::connection() const
 */
 const QDBusMessage &QDBusContext::message() const
 {
-    Q_ASSERT(calledFromDBus());
     return d_ptr->message;
 }
 
@@ -118,7 +116,6 @@ const QDBusMessage &QDBusContext::message() const
 */
 bool QDBusContext::isDelayedReply() const
 {
-    Q_ASSERT(calledFromDBus());
     return message().isDelayedReply();
 }
 
@@ -139,7 +136,6 @@ bool QDBusContext::isDelayedReply() const
 */
 void QDBusContext::setDelayedReply(bool enable) const
 {
-    Q_ASSERT(calledFromDBus());
     message().setDelayedReply(enable);
 }
 
@@ -152,7 +148,6 @@ void QDBusContext::setDelayedReply(bool enable) const
 */
 void QDBusContext::sendErrorReply(const QString &name, const QString &msg) const
 {
-    Q_ASSERT(calledFromDBus());
     setDelayedReply(true);
     connection().send(message().createErrorReply(name, msg));
 }
@@ -167,7 +162,6 @@ void QDBusContext::sendErrorReply(const QString &name, const QString &msg) const
 */
 void QDBusContext::sendErrorReply(QDBusError::ErrorType type, const QString &msg) const
 {
-    Q_ASSERT(calledFromDBus());
     setDelayedReply(true);
     connection().send(message().createErrorReply(type, msg));
 }

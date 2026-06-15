@@ -1,13 +1,10 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
-// Qt-Security score:insignificant reason:build-tool
 
 #pragma once
 
 #include "lalr.h"
 #include "compress.h"
-
-#include <optional>
 
 class Grammar;
 class Automaton;
@@ -16,21 +13,6 @@ class Recognizer;
 class CppGenerator
 {
 public:
-    struct SecurityHeader // see QUIP-23
-    {
-        enum class Security {
-            Insignificant,
-            Significant,
-            Critical,
-        };
-
-        static std::optional<SecurityHeader> parse(QStringView s);
-        QByteArray print() const;
-
-        Security score;
-        QByteArray reason;
-    };
-
   CppGenerator(const Recognizer &p, Grammar &grammar, Automaton &aut, bool verbose):
     p (p),
     grammar (grammar),
@@ -46,10 +28,6 @@ public:
   void setDebugInfo (bool d) { debug_info = d; }
 
   void setUsePragmaOnce(bool use) { use_pragma_once = use; }
-  void setSecurityHeader(SecurityHeader header)
-  {
-      security = std::move(header);
-  }
 
   void setCopyright (bool t) { copyright = t; }
 
@@ -60,7 +38,7 @@ private:
   void generateImpl (QTextStream &out);
 
   QString debugInfoProt() const;
-  QByteArray copyrightHeader() const;
+  QString copyrightHeader() const;
   QString privateCopyrightHeader() const;
 
 private:
@@ -70,9 +48,6 @@ private:
   const Recognizer &p;
   Grammar &grammar;
   Automaton &aut;
-
-  std::optional<SecurityHeader> security;
-
   bool verbose;
   int accept_state;
   int state_count;

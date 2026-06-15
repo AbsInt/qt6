@@ -27,7 +27,7 @@ qt_internal_add_plugin(QSQLiteDriverPlugin
 
 qt_internal_extend_target(QSQLiteDriverPlugin CONDITION QT_FEATURE_system_sqlite
     LIBRARIES
-        WrapSystemSQLite3::WrapSystemSQLite3
+        SQLite::SQLite3
 )
 
 if (NOT QT_FEATURE_system_sqlite)

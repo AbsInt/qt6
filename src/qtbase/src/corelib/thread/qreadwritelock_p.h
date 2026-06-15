@@ -27,17 +27,22 @@ QT_REQUIRE_CONFIG(thread);
 QT_BEGIN_NAMESPACE
 
 namespace QReadWriteLockStates {
-enum StateForWaitCondition : quint32;
+enum {
+    StateMask = 0x3,
+    StateLockedForRead = 0x1,
+    StateLockedForWrite = 0x2,
+};
+enum StateForWaitCondition {
+    LockedForRead,
+    LockedForWrite,
+    Unlocked,
+    RecursivelyLocked
+};
 }
 
 class QReadWriteLockPrivate
 {
 public:
-    // export the State constants protected in QReadWriteLock
-    static constexpr quintptr StateLockedForRead = QReadWriteLock::StateLockedForRead;
-    static constexpr quintptr StateLockedForWrite = QReadWriteLock::StateLockedForWrite;
-    static constexpr quintptr StateMask = QReadWriteLock::StateMask;
-
     explicit QReadWriteLockPrivate(bool isRecursive = false)
         : recursive(isRecursive) {}
 
@@ -79,16 +84,7 @@ public:
     static QReadWriteLockStates::StateForWaitCondition
     stateForWaitCondition(const QReadWriteLock *lock);
 };
-Q_DECLARE_TYPEINFO(QReadWriteLockPrivate::Reader, Q_PRIMITIVE_TYPE);
-
-namespace QReadWriteLockStates {
-enum StateForWaitCondition : quint32 {
-    Unlocked = 0,
-    LockedForRead = QReadWriteLockPrivate::StateLockedForRead,
-    LockedForWrite = QReadWriteLockPrivate::StateLockedForWrite,
-    RecursivelyLocked,
-};
-}
+Q_DECLARE_TYPEINFO(QReadWriteLockPrivate::Reader, Q_PRIMITIVE_TYPE);\
 
 /*! \internal  Helper for QWaitCondition::wait */
 inline QReadWriteLockStates::StateForWaitCondition

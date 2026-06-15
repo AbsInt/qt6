@@ -63,17 +63,6 @@ public:
     bool isNull() const { return !m_string; }
     QString toString() const { return view().toString(); }
 
-    XmlStringRef sliced(qsizetype pos) const
-    {
-        verify(pos, 0);
-        return XmlStringRef(m_string, m_pos + pos, m_size - pos);
-    }
-    XmlStringRef sliced(qsizetype pos, qsizetype n) const
-    {
-        verify(pos, n);
-        return XmlStringRef(m_string, m_pos + pos, n);
-    }
-
     using value_type = QStringView::value_type;
     using size_type = QStringView::size_type;
     using difference_type = QStringView::difference_type;
@@ -122,17 +111,6 @@ public:
     MAKE_OP(<)
     MAKE_OP(>)
 #undef MAKE_OP
-
-private:
-    Q_ALWAYS_INLINE
-    void verify([[maybe_unused]] qsizetype pos = 0,
-                [[maybe_unused]] qsizetype n = 1) const
-    {
-        Q_PRE(pos >= 0);
-        Q_PRE(pos <= size());
-        Q_PRE(n >= 0);
-        Q_PRE(n <= size() - pos);
-    }
 };
 
 }
@@ -195,7 +173,6 @@ class QXmlStream
 };
 
 class QXmlStreamPrivateTagStack {
-    Q_DISABLE_COPY_MOVE(QXmlStreamPrivateTagStack)
 public:
     struct NamespaceDeclaration
     {
@@ -478,7 +455,8 @@ public:
     QXmlStreamSimpleStack<Attribute> attributeStack;
 
     inline XmlStringRef symString(int index) {
-        return symString(sym(index));
+        const Value &symbol = sym(index);
+        return XmlStringRef(&textBuffer, symbol.pos + symbol.prefix, symbol.len - symbol.prefix);
     }
     QStringView symView(int index) const
     {
@@ -486,26 +464,18 @@ public:
         return QStringView(textBuffer.data() + symbol.pos, symbol.len).mid(symbol.prefix);
     }
     inline XmlStringRef symName(int index) {
-        return symName(sym(index));
+        const Value &symbol = sym(index);
+        return XmlStringRef(&textBuffer, symbol.pos, symbol.len);
+    }
+    inline XmlStringRef symString(int index, int offset) {
+        const Value &symbol = sym(index);
+        return XmlStringRef(&textBuffer, symbol.pos + symbol.prefix + offset, symbol.len - symbol.prefix -  offset);
     }
     inline XmlStringRef symPrefix(int index) {
-        return symPrefix(sym(index));
-    }
-    auto symQName(int index) {
-        struct R {
-            XmlStringRef m_data;
-            qsizetype m_prefix;
-
-            XmlStringRef all() const { return m_data; }
-            XmlStringRef qname() const { return m_data; }
-            XmlStringRef prefix() const
-            { return m_prefix ? m_data.sliced(0, m_prefix - 1) : XmlStringRef(); }
-            XmlStringRef localPart() const { return m_data.sliced(m_prefix); }
-
-            void resetBackingStorage(XmlStringRef newData) { m_data = newData; } // m_prefix stays!
-        };
         const Value &symbol = sym(index);
-        return R{{&textBuffer, symbol.pos, symbol.len}, symbol.prefix};
+        if (symbol.prefix)
+            return XmlStringRef(&textBuffer, symbol.pos, symbol.prefix - 1);
+        return XmlStringRef();
     }
     inline XmlStringRef symString(const Value &symbol) {
         return XmlStringRef(&textBuffer, symbol.pos + symbol.prefix, symbol.len - symbol.prefix);

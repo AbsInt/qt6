@@ -819,7 +819,6 @@ void QQuickTextEdit::setHAlign(HAlignment align)
         d->updateDefaultTextOption();
         updateSize();
         updateWholeDocument();
-        moveCursorDelegate();
     }
 }
 
@@ -830,8 +829,6 @@ void QQuickTextEdit::resetHAlign()
     if (d->determineHorizontalAlignment() && isComponentComplete()) {
         d->updateDefaultTextOption();
         updateSize();
-        updateWholeDocument();
-        moveCursorDelegate();
     }
 }
 
@@ -1076,7 +1073,6 @@ void QQuickTextEdit::setVAlign(QQuickTextEdit::VAlignment alignment)
     d->vAlign = alignment;
     d->updateDefaultTextOption();
     updateSize();
-    updateWholeDocument();
     moveCursorDelegate();
     emit verticalAlignmentChanged(d->vAlign);
 }
@@ -3156,7 +3152,6 @@ void QQuickTextEdit::q_updateAlignment()
         d->updateDefaultTextOption();
         d->xoff = qMax(qreal(0), QQuickTextUtil::alignedX(d->document->size().width(), width(), effectiveHAlign()));
         moveCursorDelegate();
-        updateWholeDocument();
     }
 }
 
