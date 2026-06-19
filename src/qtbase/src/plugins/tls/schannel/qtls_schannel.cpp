@@ -2348,7 +2348,7 @@ void TlsCryptographSchannel::initializeCertificateStores()
                         CERT_FIND_ANY, nullptr, nullptr);
                 if (certificateContext) {
                     // Store the certificate context so we can easily refer back to it later:
-                    localCertificateCtxt.reset(certificateContext);
+                    localCertificateCtxt.reset(CertDuplicateCertificateContext(certificateContext));
                     DWORD keySpec = 0;
                     BOOL mustFree = FALSE;
                     NCRYPT_KEY_HANDLE testKey = 0;
