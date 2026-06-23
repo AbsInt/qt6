@@ -34,8 +34,6 @@ private slots:
     void getSetCheck();
     void emptyRect_data();
     void emptyRect();
-    void inexistentUrl();
-    void emptyUrl();
     void invalidUrl_data();
     void invalidUrl();
     void testStrokeWidth();
@@ -105,6 +103,9 @@ private slots:
 
     void testUseInsideContainerElement_data();
     void testUseInsideContainerElement();
+
+    void testDeeplyNested_data();
+    void testDeeplyNested();
 
 #ifndef QT_NO_COMPRESS
     void testGzLoading();
@@ -178,28 +179,6 @@ void tst_QSvgRenderer::emptyRect()
     QVERIFY(renderer.isValid());
 }
 
-void tst_QSvgRenderer::inexistentUrl()
-{
-    const char *src = "<svg><g><path d=\"M0 0\" style=\"stroke:url(#inexistent)\"/></g></svg>";
-    QTest::ignoreMessage(QtWarningMsg, "<input>:1:66: Could not resolve property: inexistent");
-
-    QByteArray data(src);
-    QSvgRenderer renderer(data);
-
-    QVERIFY(renderer.isValid());
-}
-
-void tst_QSvgRenderer::emptyUrl()
-{
-    const char *src = "<svg><text fill=\"url()\" /></svg>";
-    QTest::ignoreMessage(QtWarningMsg, "<input>:1:32: Could not resolve property: ");
-
-    QByteArray data(src);
-    QSvgRenderer renderer(data);
-
-    QVERIFY(renderer.isValid());
-}
-
 void tst_QSvgRenderer::invalidUrl_data()
 {
     QTest::addColumn<QByteArray>("svg");
@@ -230,15 +209,17 @@ void tst_QSvgRenderer::invalidUrl_data()
             << R"(<svg><linearGradient id="blabla"/><circle fill="url(blabla) "/></svg>)"_ba;
     QTest::newRow("url(#blabla")
             << R"(<svg><linearGradient id="blabla"/><circle fill="url(#blabla" /></svg>)"_ba;
+    QTest::newRow("inexistent")
+            << R"svg(<svg><g><path d="M0 0" style="stroke:url(#inexistent)"/></g></svg>)svg"_ba;
+    QTest::newRow("emptyUrl")
+            << R"svg(<svg><text fill="url()"/></svg>)svg"_ba;
 }
 
 void tst_QSvgRenderer::invalidUrl()
 {
-    QFETCH(QByteArray, svg);
+    QFETCH(const QByteArray, svg);
 
-#if QT_CONFIG(regularexpression)
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression("Could not resolve property"));
-#endif
     QSvgRenderer renderer(svg);
     QVERIFY(renderer.isValid());
 }
@@ -869,46 +850,65 @@ void tst_QSvgRenderer::gradientRefs()
 void tst_QSvgRenderer::recursiveRefs_data()
 {
     QTest::addColumn<QByteArray>("svg");
+    QTest::addColumn<QByteArray>("expectedWarning");
 
-    QTest::newRow("single") << QByteArray(R"(<svg>
-                                          <linearGradient id="0" xlink:href="#0"/>
-                                          <rect x="0" y="0" width="20" height="20" fill="url(#0) "/>
-                                          </svg>)");
+    QTest::newRow("single") << R"(<svg><linearGradient id="0" xlink:href="#0"/>
+                                  <rect x="0" y="0" width="20" height="20" fill="url(#0) "/>
+                                  </svg>)"_ba
+                            << "Could not resolve property : #0"_ba;
 
-    QTest::newRow("double") << QByteArray(R"(<svg>
-                                          <linearGradient id="0" xlink:href="#1"/>
-                                          <linearGradient id="1" xlink:href="#0"/>
-                                          <rect x="0" y="0" width="20" height="20" fill="url(#0) "/>
-                                          </svg>)");
+    QTest::newRow("double") << R"(<svg><linearGradient id="0" xlink:href="#1"/>
+                                  <linearGradient id="1" xlink:href="#0"/>
+                                  <rect x="0" y="0" width="20" height="20" fill="url(#0) "/>
+                                  </svg>)"_ba
+                            << "Could not resolve property : #1"_ba;
 
-    QTest::newRow("triple") << QByteArray(R"(<svg>
-                                          <linearGradient id="0" xlink:href="#1"/>
-                                          <linearGradient id="1" xlink:href="#2"/>
-                                          <linearGradient id="2" xlink:href="#0"/>
-                                          <rect x="0" y="0" width="20" height="20" fill="url(#0) "/>
-                                          </svg>)");
+    QTest::newRow("triple") << R"(<svg>
+                                  <linearGradient id="0" xlink:href="#1"/>
+                                  <linearGradient id="1" xlink:href="#2"/>
+                                  <linearGradient id="2" xlink:href="#0"/>
+                                  <rect x="0" y="0" width="20" height="20" fill="url(#0) "/>
+                                  </svg>)"_ba
+                            << "Could not resolve property : #1"_ba;
 
-    QTest::newRow("pattern") << QByteArray(R"(<svg><pattern id="pattern" width="4" height="4"
-                                              fill="url(#pattern) ">
-                                              <rect width="2" height="2" fill=" "/></pattern>
-                                              <rect width="2" height="2" fill="url(#pattern) "/>
-                                              </svg>)");
+    QTest::newRow("pattern") << R"(<svg><pattern id="pattern" width="4" height="4"
+                                   fill="url(#pattern) ">
+                                   <rect width="2" height="2" fill=" "/></pattern>
+                                   <rect width="2" height="2" fill="url(#pattern) "/>
+                                   </svg>)"_ba
+                             << "The pattern is trying to render itself recursively. "
+                                "Returning a transparent QImage of the right size."_ba;
 
     // lead to division by zero in QSvgPattern::patternImage while loading document
-    QTest::newRow("pattern-no-elements") << QByteArray(R"(<svg>
-                                                          <pattern id="pattern" width="4" height="4"
-                                                           fill="url(#pattern) "/>
-                                                          </svg>)");
+    QTest::newRow("pattern-no-elements") << R"(<svg><pattern id="pattern" width="4" height="4"
+                                               fill="url(#pattern) "/>
+                                               </svg>)"_ba
+                                         << QByteArray();
+
+    QTest::newRow("markers") << R"(<svg><marker id="mark" markerWidth="10" markerHeight="10"
+                                    viewBox="0 0 1 1" refX="0" refY="0.5">
+                                    <rect x="0" y="0" width="1" height="1" fill="red"
+                                    marker-end="url(#mark)/></marker>
+                                    </svg>)"_ba
+                             << QByteArray();
+
+    QTest::newRow("symbol") << R"(<svg><symbol id="dot" width="100" height="100" viewBox="0 0 1 1">
+                                  <use href="#dot" x="0" y="0"/></symbol>
+                                  </svg>)"_ba
+                            << "link dot is recursive!"_ba;
 }
 
 void tst_QSvgRenderer::recursiveRefs()
 {
     QFETCH(QByteArray, svg);
+    QFETCH(QByteArray, expectedWarning);
 
     QImage image(20, 20, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::green);
     QImage refImage = image.copy();
 
+    if (!expectedWarning.isEmpty())
+        QTest::ignoreMessage(QtWarningMsg, expectedWarning.data());
     QSvgRenderer renderer(svg);
     QPainter painter(&image);
     renderer.render(&painter);
@@ -2291,9 +2291,7 @@ void tst_QSvgRenderer::testCycles_data()
 void tst_QSvgRenderer::testCycles()
 {
     QFETCH(QByteArray, svgDoc);
-#if QT_CONFIG(regularexpression)
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression("Cycles detected in SVG"));
-#endif
     QSvgRenderer renderer(svgDoc);
     QVERIFY(!renderer.isValid());
 }
@@ -2593,6 +2591,60 @@ void tst_QSvgRenderer::testUseInsideContainerElement()
 
     // The center pixel must be red — that confirms <use> was resolved correctly
     QVERIFY(image.pixelColor(50, 50) == QColor(Qt::red));
+}
+
+void tst_QSvgRenderer::testDeeplyNested_data()
+{
+    auto generateNests = [](uint count) -> QByteArray
+    {
+        QByteArray svgDoc = R"(<svg width="50" height="50">)"_ba;
+        for (uint i = 0; i < count; i++) {
+            svgDoc += R"(<g id="g)"_ba;
+            svgDoc += QByteArray::number(i);
+            svgDoc += R"(">)"_ba;
+        }
+
+        svgDoc += R"(<line id="line1" x1="10" y1="10" x2="40" y2="10" stroke="black" stroke-width="4"/>)"_ba
+                  R"(<line id="line1" x1="10" y1="20" x2="40" y2="20" stroke="black" stroke-width="4"/>)"_ba
+                  R"(<line id="line1" x1="10" y1="30" x2="40" y2="30" stroke="black" stroke-width="4"/>)"_ba;
+        for (uint i = 0; i < count; i++)
+            svgDoc += R"(</g>)"_ba;
+
+        svgDoc += R"(</svg>)"_ba;
+        return svgDoc;
+    };
+
+
+    QTest::addColumn<QByteArray>("deeplyNested");
+    QTest::addColumn<bool>("trusted");
+    for (int i = 8; i <= 16384; i *= 2) {
+        QTest::newRow((QString::number(i) + " groups").toStdString().c_str())
+                << generateNests(i) << (i <= 32);
+    }
+}
+
+void tst_QSvgRenderer::testDeeplyNested()
+{
+    QFETCH(QByteArray, deeplyNested);
+    QFETCH(bool, trusted);
+
+    QSvgRenderer renderer;
+    if (trusted) {
+        renderer.setOptions(QtSvg::AssumeTrustedSource);
+    } else {
+        QTest::ignoreMessage(QtWarningMsg,
+                             "Too many nested nodes at g exceeding max nested limit of 32 . "
+                             "Enable AssumeTrustedSource in QSvgHandler or set "
+                             "QT_SVG_DEFAULT_OPTIONS=2 to disable this check.");
+    }
+
+    renderer.load(deeplyNested);
+    QVERIFY(renderer.isValid());
+
+    QImage image(QSize(50, 50), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter p(&image);
+    renderer.render(&p);
 }
 
 QTEST_MAIN(tst_QSvgRenderer)

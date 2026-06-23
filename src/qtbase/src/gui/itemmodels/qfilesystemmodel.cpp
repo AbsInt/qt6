@@ -1166,8 +1166,8 @@ void QFileSystemModel::sort(int column, Qt::SortOrder order)
         return;
 
     emit layoutAboutToBeChanged();
-    QModelIndexList oldList = persistentIndexList();
-    QList<std::pair<QFileSystemModelPrivate::QFileSystemNode *, int>> oldNodes;
+    const QModelIndexList oldList = persistentIndexList();
+    std::vector<std::pair<QFileSystemModelPrivate::QFileSystemNode *, int>> oldNodes;
     oldNodes.reserve(oldList.size());
     for (const QModelIndex &oldNode : oldList)
         oldNodes.emplace_back(d->node(oldNode), oldNode.column());
@@ -1736,7 +1736,7 @@ void QFileSystemModel::setNameFilters(const QStringList &filters)
     if (!d->bypassFilters.isEmpty()) {
         // update the bypass filter to only bypass the stuff that must be kept around
         d->bypassFilters.clear();
-        // We guarantee that rootPath will stick around
+        // AXIVION Next Line Qt-UnusedNonTrivialVariable: We guarantee that rootPath will stick around
         QPersistentModelIndex root(index(rootPath()));
         const QModelIndexList persistentList = persistentIndexList();
         for (const auto &persistentIndex : persistentList) {

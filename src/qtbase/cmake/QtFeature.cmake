@@ -1507,6 +1507,12 @@ function(qt_run_config_compile_test name)
         message(STATUS "Performing Test ${arg_LABEL}")
 
         set(flags "")
+        # Treat use of an API newer than the deployment target as an error rather than a
+        # warning, so the test fails instead of succeeding for an API that won't be available
+        # at runtime on the minimum supported OS version.
+        if(APPLE)
+            string(APPEND CMAKE_CXX_FLAGS " -Werror=unguarded-availability-new")
+        endif()
         qt_get_platform_try_compile_vars(platform_try_compile_vars)
         list(APPEND flags ${platform_try_compile_vars})
 
@@ -1681,6 +1687,13 @@ function(qt_run_config_compile_test name)
                 list(APPEND CMAKE_REQUIRED_FLAGS "-Zc:__cplusplus")
             endif()
 
+            # Treat use of an API newer than the deployment target as an error rather than a
+            # warning, so the test fails instead of succeeding for an API that won't be available
+            # at runtime on the minimum supported OS version.
+            if(APPLE)
+                list(APPEND CMAKE_REQUIRED_FLAGS "-Werror=unguarded-availability-new")
+            endif()
+
             # Let CMake load our custom platform modules.
             if(NOT QT_AVOID_CUSTOM_PLATFORM_MODULES)
                 list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES CMAKE_MODULE_PATH)
@@ -1688,6 +1701,13 @@ function(qt_run_config_compile_test name)
 
             set(_save_CMAKE_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}")
             set(CMAKE_REQUIRED_LIBRARIES "${arg_LIBRARIES}")
+
+            # Join the CMAKE_REQUIRED_FLAGS list into a space-separated string as mentioned in
+            # newer versions of the CMake documentation, otherwise the arguments after the first
+            # semicolon get passed to the CMake try_compile invocation as CMake CLI arguments.
+            if(CMAKE_REQUIRED_FLAGS)
+                list(JOIN CMAKE_REQUIRED_FLAGS " " CMAKE_REQUIRED_FLAGS)
+            endif()
 
             _qt_internal_get_check_cxx_source_compiles_out_var(try_compile_output extra_args)
             check_cxx_source_compiles(
@@ -1780,12 +1800,27 @@ function(qt_get_platform_try_compile_vars out_var)
         # device architecture, aka some variation of "arm" (armv7, arm64).
         list(APPEND flags_cmd_line "-DCMAKE_OSX_ARCHITECTURES:STRING=${osx_first_arch}")
     endif()
+    if(CMAKE_OSX_DEPLOYMENT_TARGET)
+        # Project-based try_compile() doesn't inherit the deployment target the way the
+        # source-file signature does (that path is gated by CMP0137, and Qt's policy cap is
+        # below 3.24), so forward it explicitly. Otherwise the test builds against the SDK's
+        # default minimum instead of Qt's.
+        list(APPEND flags_cmd_line
+            "-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    endif()
     if(UIKIT)
         # Specify the sysroot, but only if not doing a simulator_and_device build.
         # So keep the sysroot empty for simulator_and_device builds.
+        # FIXME: Untangle the QT_APPLE_SDK and CMAKE_OSX_SYSROOT variables
         if(QT_APPLE_SDK)
             list(APPEND flags_cmd_line "-DCMAKE_OSX_SYSROOT:STRING=${QT_APPLE_SDK}")
         endif()
+    elseif(CMAKE_OSX_SYSROOT) # macOS
+        # Pin the SDK for project-based try_compile() too. Otherwise it resolves the SDK from
+        # the ambient developer dir (xcode-select / DEVELOPER_DIR) at compile time, rather than
+        # the SDK Qt is configured with. CMAKE_OSX_SYSROOT has been resolved to an absolute path
+        # by this point, so forwarding it pins the exact SDK.
+        list(APPEND flags_cmd_line "-DCMAKE_OSX_SYSROOT:STRING=${CMAKE_OSX_SYSROOT}")
     endif()
     if(QT_NO_USE_FIND_PACKAGE_SYSTEM_ENVIRONMENT_PATH)
         list(APPEND flags_cmd_line "-DCMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH:BOOL=OFF")

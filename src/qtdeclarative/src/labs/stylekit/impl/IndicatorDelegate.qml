@@ -13,6 +13,7 @@ DelegateContainer {
     implicitWidth: Math.max(delegateInstance ? delegateInstance.implicitWidth : 0, indicatorLayout.implicitWidth)
     implicitHeight: Math.max(delegateInstance ? delegateInstance.implicitHeight : 0, indicatorLayout.implicitHeight)
 
+    visible: delegateStyle.visible
     transformOrigin: Item.TopLeft
     rotation: vertical ? 90 : 0
     scale: vertical ? -1 : 1
@@ -52,6 +53,7 @@ DelegateContainer {
         parent: root
         quickControl: root.quickControl
         delegateStyle: root.indicatorStyle.foreground
+        visible: root.indicatorStyle.foreground.visible
         x: fgItem.x
         y: fgItem.y
         z: 1

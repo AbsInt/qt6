@@ -132,13 +132,7 @@ void QQStyleKitAttached::setStyle(QQStyleKitStyle *style)
         m_style->deleteLater();
 
     m_style = style;
-
-    if (m_style && m_style->m_theme) {
-        m_style->m_theme->updateThemePalettes();
-        m_style->m_theme->updateThemeFonts();
-    }
-    if (m_style->loaded())
-        QQStyleKitReader::resetAll();
+    m_style->reapplyStyle();
 
     emit styleChanged();
 }
@@ -156,14 +150,27 @@ void QQStyleKitAttached::setStyleUrl(const QString &styleUrl)
     m_styleUrl = styleUrl;
 
     Q_ASSERT(m_engine);
-    QQmlComponent comp(m_engine, QUrl(styleUrl), this);
-    if (!comp.errors().isEmpty()) {
-        qmlWarning(this) << "Could not create a StyleKit style: " << comp.errorString();
+    QQmlComponent component(m_engine, styleUrl, this);
+    if (!component.errors().isEmpty()) {
+        qmlWarning(this) << "Could not create a Style from url '" << styleUrl << "': " << component.errorString();
         return;
     }
-    auto *style = qobject_cast<QQStyleKitStyle *>(comp.create());
+
+    /* Avoid creating anything other than StyleKit Style objects by checking the metaobject
+     * of the root type before creating the object. This to avoid instantiating items or other
+     * object that could cause unwanted side effects. */
+    QQmlComponentPrivate *componentPrivate = QQmlComponentPrivate::get(&component);
+    const auto compilationUnit = componentPrivate->compilationUnit();
+    const auto propertyCache = compilationUnit ? compilationUnit->rootPropertyCache() : nullptr;
+    const auto firstMetaObject = propertyCache ? propertyCache->firstCppMetaObject() : nullptr;
+    if (!firstMetaObject || !firstMetaObject->inherits(&QQStyleKitStyle::staticMetaObject)) {
+        qmlWarning(this) << "Could not create a Style from url '" << styleUrl << "': the root item is not a Style.";
+        return;
+    }
+
+    auto *style = qobject_cast<QQStyleKitStyle *>(component.create());
     if (!style) {
-        qmlWarning(this) << "Could not create a StyleKit style from url: " << styleUrl;
+        qmlWarning(this) << "Could not create a Style from url '" << styleUrl << "': failed to create an instance of the resolved Component.";
         return;
     }
 

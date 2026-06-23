@@ -255,6 +255,7 @@ private Q_SLOTS:
     void getWithAndWithoutBodyFromHttp();
     void getWithBodyRedirected_data();
     void getWithBodyRedirected();
+    void getWithBodyChainedRedirect(); // QTBUG-133976
     void getErrors_data();
     void getErrors();
 #if QT_CONFIG(networkproxy)
@@ -571,6 +572,7 @@ private Q_SLOTS:
 #if QT_CONFIG(http) || defined (Q_OS_WASM)
     void requestWithTimeout_data();
     void requestWithTimeout();
+    void requestWithTimeoutAfterRedirect();
 #endif
 
     void moreActivitySignals_data();
@@ -2336,6 +2338,63 @@ void tst_QNetworkReply::getWithBodyRedirected()
         // In these cases the message body should not reach the server
         QVERIFY(server2.contentLength == 0);
     }
+}
+
+void tst_QNetworkReply::getWithBodyChainedRedirect()
+{
+    // QTBUG-133976: a GET request carrying a body, redirected through a chain
+    // where an earlier hop drops the body (301) and a later one would otherwise
+    // keep it (308). The body, once dropped, cannot be restored (the source
+    // QIODevice has been consumed); the request headers must therefore be kept
+    // in sync and also be dropped, otherwise the final request would advertise a
+    // Content-Length for a body that never arrives.
+
+    const QByteArray body = "HELLO_BODY";
+
+    // server3: final 200 OK target
+    MiniHttpServer server3(httpEmpty200Response);
+
+    // server2: 308 Permanent Redirect -> server3
+    QUrl redirect2to3 = QUrl("http://localhost");
+    redirect2to3.setPort(server3.serverPort());
+    MiniHttpServer server2(
+        permRedirectReplyStr().arg(QString(redirect2to3.toEncoded())).toLatin1());
+
+    // server1: 301 Moved Permanently -> server2
+    QUrl redirect1to2 = QUrl("http://localhost");
+    redirect1to2.setPort(server2.serverPort());
+    MiniHttpServer server1(
+        movedReplyStr().arg(QString(redirect1to2.toEncoded())).toLatin1());
+
+    QUrl localhost = QUrl("http://localhost");
+    localhost.setPort(server1.serverPort());
+    QNetworkRequest request(localhost);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "text/plain");
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
+
+    QNetworkReplyPtr reply;
+    reply.reset(manager.get(request, body));
+
+    QSignalSpy redSpy(reply.data(), SIGNAL(redirected(QUrl)));
+    QVERIFY2(waitForFinish(reply) == Success, msgWaitForFinished(reply));
+
+    // Two redirects: 301 then 308
+    QCOMPARE(redSpy.size(), 2);
+    QCOMPARE(reply->error(), QNetworkReply::NoError);
+
+    // server1 received the full body
+    QCOMPARE(server1.contentLength, body.size());
+
+    // server2 (308 hop): body was already dropped by the 301 redirect, so it
+    // must not receive a body either.
+    QVERIFY(server2.contentLength == 0);
+
+    // server3 (final target): the body cannot be restored, so its request must
+    // NOT carry a Content-Length / Content-Type advertising a body that is not
+    // present.
+    QVERIFY(server3.contentLength == 0);
+    QVERIFY(!server3.receivedData.toLower().contains("content-type:"));
 }
 
 #if QT_CONFIG(networkproxy)
@@ -10290,6 +10349,36 @@ void tst_QNetworkReply::requestWithTimeout()
         reply.reset(manager.post(request, data));
     QVERIFY(reply);
 
+    QSignalSpy spy(reply.data(), &QNetworkReply::errorOccurred);
+    QCOMPARE(waitForFinish(reply), int(Failure));
+    QCOMPARE(spy.size(), 1);
+    QCOMPARE(reply->error(), QNetworkReply::TimeoutError);
+}
+
+void tst_QNetworkReply::requestWithTimeoutAfterRedirect()
+{
+    // QTBUG-147039: transfer timeout must survive redirects
+    MiniHttpServer target(QByteArray(), false);
+    target.stopTransfer = true;
+
+    QUrl targetUrl("http://localhost/");
+    targetUrl.setPort(target.serverPort());
+
+    QString redirectReply = QStringLiteral("HTTP/1.1 302 Found\r\n"
+                                           "location: %1\r\n"
+                                           "content-length: 0\r\n"
+                                           "\r\n")
+                                    .arg(targetUrl.toString());
+    MiniHttpServer redirectServer(redirectReply.toLatin1(), false);
+    QUrl url("http://localhost/");
+    url.setPort(redirectServer.serverPort());
+
+    QNetworkRequest request(url);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setTransferTimeout(1000);
+
+    QNetworkReplyPtr reply(manager.get(request));
     QSignalSpy spy(reply.data(), &QNetworkReply::errorOccurred);
     QCOMPARE(waitForFinish(reply), int(Failure));
     QCOMPARE(spy.size(), 1);

@@ -954,7 +954,7 @@ QDateTimeParser::parseSection(const QDateTime &currentValue, int sectionIndex, i
                 } else if (!lastVal && !calendar.hasYearZero()
                            && (sn.type == YearSection
                                || (sn.type == YearSection2Digits && currentValue.isValid()
-                                   && currentValue.date().year() / 100 == 0))) {
+                                   && currentValue.date().year(calendar) / 100 == 0))) {
                     // Year zero prohibited
                     result = ParsedSection(unfilled ? Acceptable : Invalid, lastVal, used);
                 } else {
@@ -983,7 +983,7 @@ QDateTimeParser::parseSection(const QDateTime &currentValue, int sectionIndex, i
 
 static int weekDayWithinMonth(QCalendar calendar, int year, int month, int day, int weekDay)
 {
-    // TODO: can we adapt this to cope gracefully with intercallary days (day of
+    // TODO: can we adapt this to cope gracefully with intercalary days (day of
     // week > 7) without making it slower for more widely-used calendars ?
     const int maxDay = calendar.daysInMonth(month, year); // 0 if no such month
     day = maxDay > 1 ? qBound(1, day, maxDay) : qMax(1, day);
@@ -1017,7 +1017,7 @@ static QDate actualDate(QDateTimeParser::Sections known, QCalendar calendar, int
     if (actual.isValid() && year % 100 == year2digits && calendar.dayOfWeek(actual) == dayofweek)
         return actual; // The obvious candidate is fine :-)
 
-    if (dayofweek < 1 || dayofweek > 7) // Intercallary (or invalid): ignore
+    if (dayofweek < 1 || dayofweek > 7) // Intercalary (or invalid): ignore
         known &= ~QDateTimeParser::DayOfWeekSectionMask;
 
     // Assuming year > 0 ...
@@ -1407,12 +1407,12 @@ QDateTimeParser::scanString(const QDateTime &defaultValue, bool fixup) const
             if (!date.isValid()) {
                 state = Invalid;
             } else if (!(isSet & YearSection)) {
-                year = date.year();
+                year = date.year(calendar);
             } else {
                 conflicts = true;
                 const SectionNode &sn = sectionNode(currentSectionIndex);
                 if (sn.type == YearSection2Digits)
-                    year = date.year();
+                    year = date.year(calendar);
             }
         }
 
@@ -2353,7 +2353,7 @@ QDateTime QDateTimeParser::getMaximum(const QTimeZone &zone) const
 
     // Cache the only case
     static const QDateTime localTimeMax(QDATETIMEEDIT_DATE_MAX.endOfDay());
-    static const QDateTime utcTimeMax = localTimeMax.toUTC();
+    static const QDateTime utcTimeMax(QDATETIMEEDIT_DATE_MAX.endOfDay(QTimeZone::UTC));
     switch (zone.timeSpec()) {
     case Qt::LocalTime:
         return localTimeMax;

@@ -157,6 +157,7 @@ private slots:
     void popupWindowPositionerRespectingScreenBounds_data();
     void popupWindowPositionerRespectingScreenBounds();
     void popupWindowRepositionOnImplicitSizeChange();
+    void popupWindowDragInsidePopup();
     void propagateTouchEvents();
     void blockEventsBehindModal_data();
     void blockEventsBehindModal();
@@ -3725,35 +3726,84 @@ void tst_QQuickPopup::popupWindowRepositionOnImplicitSizeChange()
     toolTip->setTopInset(-10);
     toolTip->setBottomInset(-10);
 
-    // Hover the button to show the tooltip. Start from the bottom of the
-    // window to ensure a proper hover-enter transition on the button.
-    const QPointF buttonCenter = button->mapToItem(window->contentItem(),
-        QPointF(button->width() / 2, button->height() / 2));
-    PointLerper lerper(window, QPoint(buttonCenter.x(), window->height() - 1));
-    lerper.move(buttonCenter.toPoint());
+    // Show the tooltip with the initial short text and record its geometry.
+    // Visibility is driven by a property rather than synthetic mouse hover,
+    // which is flaky on Windows (QTBUG-147315).
+    window->setProperty("showToolTip", true);
     QTRY_VERIFY(toolTip->isOpened());
 
     auto *popupPrivate = QQuickPopupPrivate::get(toolTip);
-    TRY_VERIFY_POPUP_OPENED(toolTip);
     auto *popupWindow = popupPrivate->popupWindow;
     QVERIFY(popupWindow);
     QVERIFY(QTest::qWaitForWindowExposed(popupWindow));
 
     const int initialY = popupWindow->y();
-
     const int initialWidth = popupWindow->width();
 
-    // Change the text to something much longer, triggering implicit size change.
-    // Without the fix, the popup window is resized but not repositioned,
-    // causing the y position to drift.
+    // Hide the tooltip, then grow the text to something much longer while it is
+    // hidden. The popup window stays alive while hidden, so the implicit size
+    // change happens off-screen and fires implicitHeightChanged/-WidthChanged.
+    window->setProperty("showToolTip", false);
+    QTRY_VERIFY(!toolTip->isVisible());
     window->setProperty("toolTipText", "Flinstone, Fred - a much longer tooltip text");
 
-    // Wait for the popup window to finish resizing before checking position.
+    // Show the tooltip again. Without the fix, the popup window was resized
+    // while hidden but not repositioned, so it reappears with a drifted y
+    // (QTBUG-142700). The drift only manifests on this second show.
+    window->setProperty("showToolTip", true);
+    QTRY_VERIFY(toolTip->isOpened());
+
+    popupWindow = popupPrivate->popupWindow;
+    QVERIFY(popupWindow);
+    QVERIFY(QTest::qWaitForWindowExposed(popupWindow));
+
+    // Wait for the popup window to reflect the larger implicit size.
     QTRY_VERIFY(popupWindow->width() > initialWidth);
 
-    // The tooltip should remain at the same y position.
+    // The tooltip should reappear at the same y position.
     // Without the fix (missing reposition()), y shifts incorrectly.
     QCOMPARE(popupWindow->y(), initialY);
+}
+
+void tst_QQuickPopup::popupWindowDragInsidePopup() // QTBUG-146887
+{
+    if (!arePopupWindowsSupported())
+        QSKIP("The platform doesn't support popup windows. Skipping test.");
+
+    QQuickApplicationHelper helper(this, "popupWindowWithSlider.qml");
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickWindow *window = helper.window;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    auto *popup = window->property("popup").value<QQuickPopup *>();
+    QVERIFY(popup);
+    auto *slider = window->property("slider").value<QQuickSlider *>();
+    QVERIFY(slider);
+
+    popup->open();
+    TRY_VERIFY_POPUP_OPENED(popup);
+
+    auto *popupWindow = QQuickPopupPrivate::get(popup)->popupWindow;
+    QVERIFY(popupWindow);
+
+    // The slider starts at 50; drag it toward value 0 by moving from the
+    // slider center to its left edge (inside the popup window).
+    const QPoint sliderCenter = slider->mapToScene(slider->boundingRect().center()).toPoint();
+    const QPoint sliderLeft = slider->mapToScene(QPointF(0, slider->height() / 2)).toPoint();
+
+    QTest::mousePress(popupWindow, Qt::LeftButton, Qt::NoModifier, sliderCenter);
+    const qreal valueAfterPress = slider->value();
+
+    QTest::mouseMove(popupWindow, sliderLeft);
+    const qreal valueAfterDrag = slider->value();
+
+    QTest::mouseRelease(popupWindow, Qt::LeftButton, Qt::NoModifier, sliderLeft);
+
+    // The slider value must have decreased, proving the drag was delivered.
+    QVERIFY2(valueAfterDrag < valueAfterPress,
+             qPrintable(QString("Slider value did not decrease during drag: was %1, got %2")
+                                .arg(valueAfterPress).arg(valueAfterDrag)));
 }
 
 void tst_QQuickPopup::propagateTouchEvents()

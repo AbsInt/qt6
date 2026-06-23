@@ -269,7 +269,7 @@ bool QHttp2ProtocolHandler::tryRemoveReply(QHttpNetworkReply *reply)
     QHttp2Stream *stream = streamIDs.take(reply);
     if (stream) {
         stream->sendRST_STREAM(stream->isUploadingDATA() ? Http2::CANCEL : Http2::HTTP2_NO_ERROR);
-        requestReplyPairs.remove(stream);
+        clearStreamState(stream);
         stream->deleteLater();
         return true;
     }
@@ -442,12 +442,16 @@ void QHttp2ProtocolHandler::handleAuthorization(QHttp2Stream *stream)
         Q_ASSERT(httpReply);
         const QByteArrayView auth = authField.trimmed();
         if (auth.startsWith("Negotiate") || auth.startsWith("NTLM")) {
-            // @todo: We're supposed to fall back to http/1.1:
-            // https://docs.microsoft.com/en-us/iis/get-started/whats-new-in-iis-10/http2-on-iis#when-is-http2-not-supported
-            // "Windows authentication (NTLM/Kerberos/Negotiate) is not supported with HTTP/2.
-            // In this case IIS will fall back to HTTP/1.1."
-            // Though it might be OK to ignore this. The server shouldn't let us connect with
-            // HTTP/2 if it doesn't support us using it.
+            // NTLM/Kerberos/Negotiate authentication is not supported with HTTP/2.
+            // Finish the stream with an error so QNetworkReply::finished is emitted.
+            // Falling back to HTTP/1.1 is a separate, larger effort (QTBUG-143926).
+            emit httpReply->headerChanged();
+            emit httpReply->readyRead();
+            const QNetworkReply::NetworkError error = isProxy
+                    ? QNetworkReply::ProxyAuthenticationRequiredError
+                    : QNetworkReply::AuthenticationRequiredError;
+            finishStreamWithError(stream, error,
+                                  m_connection->d_func()->errorDetail(error, m_socket));
             return false;
         }
         // Somewhat mimics parts of QHttpNetworkConnectionChannel::handleStatus
@@ -507,6 +511,8 @@ void QHttp2ProtocolHandler::handleAuthorization(QHttp2Stream *stream)
     }
     if (authOk) {
         stream->sendRST_STREAM(CANCEL);
+        clearStreamState(stream);
+        stream->deleteLater();
     } // else: errors handled inside handleAuth
 }
 
@@ -538,8 +544,17 @@ void QHttp2ProtocolHandler::finishStream(QHttp2Stream *stream, Qt::ConnectionTyp
         }
     }
 
+    clearStreamState(stream);
     qCDebug(QT_HTTP2) << "stream" << stream->streamID() << "closed";
-    stream->deleteLater();
+
+    // Detach the reply and tear down the stream via canonical path, so a
+    // later stray frame cannot fail an already-finished reply. tryRemoveReply()
+    // also clears the reply->stream map, its sendRST_STREAM() does nothing on a
+    // gracefully closed stream.
+    if (!httpReply || !tryRemoveReply(httpReply)) {
+        requestReplyPairs.remove(stream);
+        stream->deleteLater();
+    }
 }
 
 void QHttp2ProtocolHandler::handleGOAWAY(Http2Error errorCode, quint32 lastStreamID)
@@ -587,6 +602,8 @@ void QHttp2ProtocolHandler::finishStreamWithError(QHttp2Stream *stream,
         emit httpReply->finishedWithError(error, message);
     }
 
+    clearStreamState(stream);
+    stream->deleteLater();
     qCWarning(QT_HTTP2) << "stream" << stream->streamID() << "finished with error:" << message;
 }
 
@@ -647,8 +664,10 @@ void QHttp2ProtocolHandler::connectStream(const HttpMessagePair &message, QHttp2
 
     reply->setHttp2WasUsed(true);
     QPointer<QHttp2Stream> &oldStream = streamIDs[reply];
-    if (oldStream)
+    if (oldStream) {
         disconnect(oldStream, nullptr, this, nullptr);
+        clearStreamState(oldStream);
+    }
     oldStream = stream;
     requestReplyPairs.emplace(stream, message);
 
@@ -672,6 +691,20 @@ void QHttp2ProtocolHandler::connectStream(const HttpMessagePair &message, QHttp2
             }
         }
     });
+}
+
+void QHttp2ProtocolHandler::clearStreamState(QHttp2Stream *stream)
+{
+    auto it = requestReplyPairs.find(stream);
+    if (it == requestReplyPairs.end())
+        return;
+
+    if (auto *reply = it->second)
+        streamIDs.remove(reply);
+    if (auto *uploadDevice = it->first.uploadByteDevice())
+        streamIDs.remove(uploadDevice);
+
+    requestReplyPairs.erase(it);
 }
 
 void QHttp2ProtocolHandler::initReplyFromPushPromise(const HttpMessagePair &message,

@@ -445,6 +445,13 @@ void QQmlJSImporter::insertExport(const QQmlJS::ContextualType &type,
         if (const QString fileSelector = QQmlJSUtils::fileSelectorFor(type.scope);
             !fileSelector.isEmpty()) {
             types->qmlNames.setFileSelectedType(fileSelector, qmlName, type);
+            // If no other variant exists (with either a different or no file selector),
+            // insert the current one.
+            // A later non-selected variant will replace this entry.
+            if (!types->qmlNames.hasType(qmlName)) {
+                types->qmlNames.setType(qmlName, type);
+                (*seenExports)[qmlName].append(valExport);
+            }
             return;
         }
     }
@@ -555,6 +562,12 @@ void QQmlJSImporter::insertExportWithConflictingVersion(
             !fileSelector.isEmpty()) {
             types->qmlNames.setFileSelectedType(fileSelector, qmlName,
                                                 { val.scope, valExport.version(), precedence });
+            // Ensure type is found if there are no non-file selected versions
+            if (!types->qmlNames.hasType(qmlName)) {
+                types->qmlNames.setType(qmlName,
+                                        { val.scope, valExport.version(), precedence });
+                (*seenExports)[qmlName].append(valExport);
+            }
             return;
         }
         if (!QQmlJSUtils::fileSelectorFor(scope).isEmpty()) {
@@ -720,7 +733,7 @@ QQmlJSImporter::ImportedTypes QQmlJSImporter::importHardCodedBuiltins()
 
         const auto type = builtins.qmlNames.type(hardcoded);
         Q_ASSERT(type.scope);
-        result.setType(hardcoded, { type, QQmlJS::PrecedenceValues::Default });
+        result.setType(hardcoded, { type, quint8(QQmlJS::PrecedenceValues::Default) });
     }
 
     return ImportedTypes(std::move(result), {});
@@ -734,7 +747,7 @@ QQmlJSImporter::AvailableTypes QQmlJSImporter::builtinImportHelper()
 
     AvailableTypes builtins(QQmlJS::ContextualTypes(QQmlJS::ContextualTypes::INTERNAL, {}, {}, {}));
 
-    importHelper(u"QML"_s, &builtins, QQmlJS::PrecedenceValues::Default, QString(),
+    importHelper(u"QML"_s, &builtins, quint8(QQmlJS::PrecedenceValues::Default), QString(),
                  QTypeRevision::fromVersion(1, 0));
 
     QQmlJSScope::ConstPtr arrayType = builtins.cppNames.type(u"Array"_s).scope;

@@ -15,7 +15,7 @@
 #include <qbuffer.h>
 #include <qscopeguard.h>
 #include <qcoreapplication.h>
-
+#include <QtCore/private/qduplicatetracker_p.h>
 #include <private/qoffsetstringarray_p.h>
 #include <private/qtools_p.h>
 
@@ -965,11 +965,10 @@ static constexpr QLatin1StringView contextString(QXmlStreamReaderPrivate::XmlCon
 QXmlStreamPrivateTagStack::QXmlStreamPrivateTagStack()
 {
     tagStack.reserve(16);
-    tagStackStringStorage.reserve(32);
     tagStackStringStorageSize = 0;
     NamespaceDeclaration &namespaceDeclaration = namespaceDeclarations.push();
-    namespaceDeclaration.prefix = addToStringStorage(u"xml");
     namespaceDeclaration.namespaceUri = addToStringStorage(u"http://www.w3.org/XML/1998/namespace");
+    namespaceDeclaration.prefix = addToStringStorage(u"xml");
     initialTagStackStringStorageSize = tagStackStringStorageSize;
     tagsDone = false;
 }
@@ -1781,6 +1780,32 @@ XmlStringRef QXmlStreamReaderPrivate::namespaceForPrefix(QStringView prefix)
      return XmlStringRef();
 }
 
+struct AttributeName
+{
+    QStringView name;
+    QStringView namespaceUri;
+
+    static AttributeName fromXmlAttribute(const QXmlStreamAttribute &a, bool nsProcessing)
+    {
+        if (nsProcessing)
+            return {a.name(), a.namespaceUri()};
+        else
+            return {a.qualifiedName(), a.namespaceUri()};
+    }
+
+    friend bool operator==(const AttributeName &lhs, const AttributeName &rhs) noexcept
+    {
+        return lhs.name == rhs.name
+            && lhs.namespaceUri == rhs.namespaceUri;
+    }
+    friend size_t qHash(const AttributeName &key, size_t seed = 0) noexcept
+    {
+        return qHashMulti(seed,
+                          key.name,
+                          key.namespaceUri);
+    }
+};
+
 /*
   uses namespaceForPrefix and builds the attribute vector
  */
@@ -1790,7 +1815,7 @@ void QXmlStreamReaderPrivate::resolveTag()
     const qsizetype n = attributeStack.size();
 
     if (namespaceProcessing) {
-        for (DtdAttribute &dtdAttribute : dtdAttributes) {
+        for (const DtdAttribute &dtdAttribute : dtdAttributes) {
             if (!dtdAttribute.isNamespaceAttribute
                 || dtdAttribute.defaultValue.isNull()
                 || dtdAttribute.tagName != qualifiedName
@@ -1832,6 +1857,9 @@ void QXmlStreamReaderPrivate::resolveTag()
 
     attributes.resize(n);
 
+    Q_DECL_UNINITIALIZED
+    QDuplicateTracker<AttributeName, 13> names(n);
+
     for (qsizetype i = 0; i < n; ++i) {
         QXmlStreamAttribute &attribute = attributes[i];
         Attribute &attrib = attributeStack[i];
@@ -1849,18 +1877,13 @@ void QXmlStreamReaderPrivate::resolveTag()
             attribute.m_namespaceUri = XmlStringRef(attributeNamespaceUri);
         }
 
-        for (qsizetype j = 0; j < i; ++j) {
-            if (attributes[j].name() == attribute.name()
-                && attributes[j].namespaceUri() == attribute.namespaceUri()
-                && (namespaceProcessing || attributes[j].qualifiedName() == attribute.qualifiedName()))
-            {
-                raiseWellFormedError(QXmlStream::tr("Attribute '%1' redefined.").arg(attribute.qualifiedName()));
-                return;
-            }
+        if (names.hasSeen(AttributeName::fromXmlAttribute(attribute, namespaceProcessing))) {
+            raiseWellFormedError(QXmlStream::tr("Attribute '%1' redefined.").arg(attribute.qualifiedName()));
+            return;
         }
     }
 
-    for (DtdAttribute &dtdAttribute : dtdAttributes) {
+    for (const DtdAttribute &dtdAttribute : dtdAttributes) {
         if (dtdAttribute.isNamespaceAttribute
             || dtdAttribute.defaultValue.isNull()
             || dtdAttribute.tagName != qualifiedName
@@ -1883,6 +1906,18 @@ void QXmlStreamReaderPrivate::resolveTag()
             XmlStringRef attributeNamespaceUri = namespaceForPrefix(dtdAttribute.attributePrefix);
             attribute.m_namespaceUri = XmlStringRef(attributeNamespaceUri);
         }
+
+        // Check that the DTD doesn't complement the element's ns1:a with a
+        // ns2:a where the ns1 and ns2 prefixes resolve to the same
+        // namespace-URI. This can only happen when namespaceProcessing is on,
+        // otherwise the prefixes would have matched, and the DTD attribute skipped,
+        // in the loop over `i` above.
+
+        if (namespaceProcessing && names.hasSeen(AttributeName::fromXmlAttribute(attribute, true))) {
+            raiseWellFormedError(QXmlStream::tr("Attribute '%1' redefined.").arg(attribute.qualifiedName()));
+            return;
+        }
+
         attribute.m_isDefault = true;
         attributes.append(std::move(attribute));
     }
@@ -1933,7 +1968,7 @@ uint QXmlStreamReaderPrivate::resolveCharRef(int symbolIndex)
     uint s;
     // ### add toXShort to XmlString?
     if (sym(symbolIndex).c == 'x')
-        s = symString(symbolIndex, 1).view().toUInt(&ok, 16);
+        s = symString(symbolIndex).view().sliced(1).toUInt(&ok, 16);
     else
         s = symString(symbolIndex).view().toUInt(&ok, 10);
 
@@ -4289,7 +4324,8 @@ void QXmlStreamWriter::writeCurrentToken(const QXmlStreamReader &reader)
     case QXmlStreamReader::StartElement: {
         // Namespaces must be added before writeStartElement is called so new prefixes are found
         QList<QXmlStreamPrivateTagStack::NamespaceDeclaration> extraNamespaces;
-        for (const auto &namespaceDeclaration : reader.namespaceDeclarations()) {
+        const QXmlStreamNamespaceDeclarations nsDeclarations = reader.namespaceDeclarations();
+        for (const auto &namespaceDeclaration : nsDeclarations) {
             auto &extraNamespace = d->addExtraNamespace(namespaceDeclaration.namespaceUri(),
                                                         namespaceDeclaration.prefix());
             extraNamespaces.append(extraNamespace);

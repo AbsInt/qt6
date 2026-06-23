@@ -533,6 +533,22 @@ public:
         return true;
     }
 
+    bool visit(CallExpression *call) override
+    {
+        addSourceLocations(call, call->lparenToken);
+        addSourceLocations(call, call->lparenToken);
+        addSourceLocations(call, call->rparenToken);
+        return true;
+    }
+
+    bool visit(ArgumentList *argumentList) override
+    {
+        addSourceLocations(argumentList, argumentList->commaToken);
+        addSourceLocations(argumentList, argumentList->spreadToken);
+        AST::Node::accept(argumentList->next, this);
+        return true;
+    }
+
     QMap<qsizetype, ElementRef> starts;
     QMap<qsizetype, ElementRef> ends;
 

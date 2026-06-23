@@ -1,6 +1,7 @@
 type: Group
 instructions:
   - !include "{{qt/qtbase}}/prepare_building_env.yaml"
+  - !include "{{qt/qtbase}}/prepare_elinux_build_environment.yaml"
   - !include "{{qt/qtbase}}/prepare_source_sbom_check.yaml"
   - type: Group
     instructions:
@@ -14,23 +15,13 @@ instructions:
           equals_property: target.os
         - condition: property
           property: target.osVersion
-          not_in_values: [QEMU, WebAssembly, INTEGRITY, VxWorks]
+          not_in_values: [QEMU, IMX8, WebAssembly, INTEGRITY, VxWorks]
         - condition: property
           property: features
           not_contains_value: "TargetBuildOnly"
         - condition: property
           property: features
           not_contains_value: "DebianPackaging"
-        - condition: runtime
-          env_var: AXIVION_ANALYSIS
-          not_equals_value: "1"
-  - type: Group
-    instructions:
-       - !include "{{qt/qtbase}}/coin_module_axivion_template_v2.yaml"
-    enable_if:
-      condition: runtime
-      env_var: AXIVION_ANALYSIS
-      equals_value: "1"
   - type: Group
     instructions:
       - type: Group
@@ -52,7 +43,7 @@ instructions:
       conditions:
         - condition: property
           property: target.osVersion
-          in_values: [Android_ANY, QEMU, IOS_ANY, QNX_710, QNX_800, WebAssembly, INTEGRITY, VxWorks]
+          in_values: [Android_ANY, QEMU, IMX8, IOS_ANY, QNX_710, QNX_800, WebAssembly, INTEGRITY, VxWorks]
         - condition: and
           conditions:
             - condition: property

@@ -1,11 +1,10 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
-#include "qmltccommandlineutils.h"
-#include "qmltcvisitor.h"
-#include "qmltctyperesolver.h"
-
-#include "qmltccompiler.h"
+#include <private/qqmltccommandlineutils_p.h>
+#include <private/qqmltccompiler_p.h>
+#include <private/qqmltctyperesolver_p.h>
+#include <private/qqmltcvisitor_p.h>
 
 #include <private/qqmljscompiler_p.h>
 #include <private/qqmljsresourcefilemapper_p.h>
@@ -34,14 +33,13 @@ using namespace Qt::StringLiterals;
 
 void setupLogger(QQmlJSLogger &logger) // prepare logger to work with compiler
 {
-    for (const QQmlJS::LoggerCategory &category : logger.categories()) {
-        if (category.id() == qmlUnusedImports)
-            continue;
-        // shadowing is fine for qmltc
-        if (category.id() == qmlShadow || category.id() == qmlPropertyOverride)
-            continue;
-        logger.setCategoryLevel(category.id(), QtCriticalMsg);
-        logger.setCategoryIgnored(category.id(), false);
+    for (const auto [id, catOverride] : QQmltc::categoryOverrides()) {
+        if (catOverride.has_value()) {
+            const auto level = catOverride.value();
+            logger.setCategoryLevel(id, level);
+            logger.setCategoryIgnored(id, false);
+            logger.setCategoryFatal(id, level == QtCriticalMsg);
+        }
     }
 }
 
@@ -140,7 +138,7 @@ int main(int argc, char **argv)
     }
     const QString inputFile = sources.first();
 
-    QString url = parseUrlArgument(inputFile);
+    QString url = QQmltc::parseUrlArgument(inputFile);
     if (url.isNull())
         return EXIT_FAILURE;
     if (!url.endsWith(u".qml")) {
@@ -157,11 +155,11 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    QString sourceCode = loadUrl(url);
+    QString sourceCode = QQmltc::loadUrl(url);
     if (sourceCode.isEmpty())
         return EXIT_FAILURE;
 
-    QString implicitImportDirectory = getImplicitImportDirectory(url);
+    QString implicitImportDirectory = QQmltc::getImplicitImportDirectory(url);
     if (implicitImportDirectory.isEmpty())
         return EXIT_FAILURE;
 
@@ -244,7 +242,7 @@ int main(int argc, char **argv)
         }
     }
 
-    QmltcCompilerInfo info;
+    QQmltc::CompilerInfo info;
     info.outputCppFile = parser.value(outputCppOption);
     info.outputHFile = parser.value(outputHOption);
     info.resourcePath = firstQml(paths);
@@ -265,7 +263,7 @@ int main(int argc, char **argv)
     importer.setMetaDataMapper(&metaDataMapper);
     auto qmltcVisitor = [](QQmlJS::AST::Node *rootNode, QQmlJSImporter *self,
                            const QQmlJSImporter::ImportVisitorPrerequisites &p) {
-        QmltcVisitor v(self, p.m_logger, p.m_implicitImportDirectory, p.m_qmldirFiles);
+        QQmltc::Visitor v(self, p.m_logger, p.m_implicitImportDirectory, p.m_qmldirFiles);
         QQmlJS::AST::Node::accept(rootNode, &v);
     };
     importer.setImportVisitor(qmltcVisitor);
@@ -282,10 +280,12 @@ int main(int argc, char **argv)
         else
             currentScope->setOwnModuleName(parser.value(moduleOption));
     }
-    QmltcVisitor visitor(&importer, &logger,
-                         QQmlJSImportVisitor::implicitImportDirectory(url, &mapper), qmldirFiles);
-    visitor.setMode(QmltcVisitor::Compile);
-    QmltcTypeResolver typeResolver { &importer };
+
+    QQmltc::Visitor visitor(&importer, &logger,
+                            QQmlJSImportVisitor::implicitImportDirectory(url, &mapper),
+                            qmldirFiles);
+    visitor.setMode(QQmltc::Visitor::Compile);
+    QQmltc::TypeResolver typeResolver{ &importer };
     typeResolver.init(&visitor, qmlParser.rootNode());
 
     using PassManagerPtr =
@@ -315,7 +315,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    QmltcCompiler compiler(url, &typeResolver, &visitor, &logger);
+    QQmltc::Compiler compiler(url, &typeResolver, &visitor, &logger);
     compiler.compile(info);
 
     if (logger.hasErrors())

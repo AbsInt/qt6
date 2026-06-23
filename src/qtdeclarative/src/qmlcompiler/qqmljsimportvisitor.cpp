@@ -484,6 +484,14 @@ void QQmlJSImportVisitor::importBaseModules()
 {
     Q_ASSERT(m_rootScopeImports.isEmpty());
     m_rootScopeImports = m_importer->importHardCodedBuiltins();
+    /* Pass the file's selector along so we have a consistent view on selectors:
+       - If there is a file selector, we only consider non-file-selected files and those
+         using the same selector. Reality is more complicated, but this should be enoguh
+         for most projects.
+       - If the current file is not using a file selector, we consider everything
+     */
+    m_rootScopeImports.setCurrentFileSelector(
+            QQmlJSUtils::fileSelectorFor(m_exportedRootScope));
 
     const QQmlJS::SourceLocation invalidLoc;
     const auto types = m_rootScopeImports.types();
@@ -496,8 +504,8 @@ void QQmlJSImportVisitor::importBaseModules()
     // Pulling in the modules and neighboring qml files of the qmltypes we're trying to lint is not
     // something we need to do.
     if (!m_logger->filePath().endsWith(u".qmltypes"_s)) {
-        m_rootScopeImports.add(m_importer->importDirectory(
-                m_implicitImportDirectory, QQmlJS::PrecedenceValues::ImplicitImport));
+        auto precedence = quint8(QQmlJS::PrecedenceValues::ImplicitImport);
+        m_rootScopeImports.add(m_importer->importDirectory(m_implicitImportDirectory, precedence));
 
         // Import all possible resource directories the file may belong to.
         // This is somewhat fuzzy, but if you're mapping the same file to multiple resource
@@ -509,8 +517,9 @@ void QQmlJSImportVisitor::importBaseModules()
                 const qsizetype lastSlash = path.lastIndexOf(QLatin1Char('/'));
                 if (lastSlash == -1)
                     continue;
-                m_rootScopeImports.add(m_importer->importDirectory(
-                        path.first(lastSlash), QQmlJS::PrecedenceValues::ImplicitImport));
+                auto precedence = quint8(QQmlJS::PrecedenceValues::ImplicitImport);
+                m_rootScopeImports.add(m_importer->importDirectory(path.first(lastSlash),
+                                                                   precedence));
             }
         }
     }
@@ -524,9 +533,9 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiProgram *)
     // if the current file  is a QML file, make it available, too
     if (auto elementName = QFileInfo(m_logger->filePath()).baseName();
         !elementName.isEmpty() && elementName[0].isUpper()) {
+        auto precedence = quint8(QQmlJS::PrecedenceValues::ImplicitImport);
         m_rootScopeImports.setType(elementName,
-                                   { m_exportedRootScope, QTypeRevision{ },
-                                     QQmlJS::PrecedenceValues::ImplicitImport });
+                                   { m_exportedRootScope, QTypeRevision{ }, precedence });
     }
 
     return true;
@@ -1853,8 +1862,8 @@ bool QQmlJSImportVisitor::visit(UiObjectDefinition *definition)
             m_currentScope->setIsInlineComponent(true);
             m_currentScope->setInlineComponentName(name);
             m_currentScope->setOwnModuleName(m_exportedRootScope->moduleName());
-            m_rootScopeImports.setType(
-                    name, { m_currentScope, revision, QQmlJS::PrecedenceValues::InlineComponent });
+            auto precedence = quint8(QQmlJS::PrecedenceValues::InlineComponent);
+            m_rootScopeImports.setType(name, { m_currentScope, revision, precedence });
             m_nextIsInlineComponent = false;
         }
 
@@ -2400,7 +2409,7 @@ void QQmlJSImportVisitor::handleIdDeclaration(QQmlJS::AST::UiScriptBinding *scri
         // we shouldn't need to search for the current root component in any case here
         breakInheritanceCycles(m_currentScope);
         m_scopesById.possibleScopes(
-                name, m_currentScope, Default,
+                name, m_currentScope, QQmlJSScopesByIdOption::Default,
                 [&](const QQmlJSScope::ConstPtr &otherScopeWithID,
                     QQmlJSScopesById::Confidence confidence) {
             // If it's a fuzzy match, that's still warning-worthy
@@ -2719,14 +2728,15 @@ QList<QQmlJS::DiagnosticMessage> QQmlJSImportVisitor::importFromHost(
     if (fileInfo.isFile()) {
         const auto scope = m_importer->importFile(path);
         const QString actualPrefix = prefix.isEmpty() ? scope->internalName() : prefix;
-        m_rootScopeImports.setType(actualPrefix,
-                                   { scope, QTypeRevision(), QQmlJS::PrecedenceValues::Default });
+        auto precedence = quint8(QQmlJS::PrecedenceValues::Default);
+        m_rootScopeImports.setType(actualPrefix, { scope, QTypeRevision(), precedence });
         addImportWithLocation(actualPrefix, location, false);
         return {};
     }
 
     if (fileInfo.isDir()) {
-        auto scopes = m_importer->importDirectory(path, QQmlJS::PrecedenceValues::Default, prefix);
+        auto precedence = quint8(QQmlJS::PrecedenceValues::Default);
+        auto scopes = m_importer->importDirectory(path, precedence, prefix);
         const auto types = scopes.types();
         const auto warnings = scopes.warnings();
         m_rootScopeImports.add(std::move(scopes));
@@ -2757,13 +2767,13 @@ QList<QQmlJS::DiagnosticMessage> QQmlJSImportVisitor::importFromQrc(
         const auto scope = m_importer->importFile(entry.filePath);
         const QString actualPrefix =
                 prefix.isEmpty() ? QFileInfo(entry.resourcePath).baseName() : prefix;
-        m_rootScopeImports.setType(actualPrefix,
-                                   { scope, QTypeRevision(), QQmlJS::PrecedenceValues::Default });
+        auto precedence = quint8(QQmlJS::PrecedenceValues::Default);
+        m_rootScopeImports.setType(actualPrefix, { scope, QTypeRevision(), precedence });
         addImportWithLocation(actualPrefix, location, false);
         return {};
     }
 
-    auto scopes = m_importer->importDirectory(path, QQmlJS::PrecedenceValues::Default, prefix);
+    auto scopes = m_importer->importDirectory(path, quint8(QQmlJS::PrecedenceValues::Default), prefix);
     const auto types = scopes.types();
     const auto warnings = scopes.warnings();
     m_rootScopeImports.add(std::move(scopes));
@@ -2820,7 +2830,7 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiImport *import)
     QStringList staticModulesProvided;
 
     auto imported = m_importer->importModule(
-            path, QQmlJS::PrecedenceValues::Default, prefix,
+            path, quint8(QQmlJS::PrecedenceValues::Default), prefix,
             import->version ? import->version->version : QTypeRevision(), &staticModulesProvided);
     const auto types = imported.types();
     const auto warnings = imported.warnings();
@@ -3150,7 +3160,7 @@ void QQmlJSImportVisitor::endVisit(QQmlJS::AST::UiObjectBinding *uiob)
         while (!childScopes.isEmpty()) {
             const QQmlJSScope::ConstPtr scope = childScopes.takeFirst();
             m_scopesById.possibleIds(
-                    scope, scope, Default,
+                    scope, scope, QQmlJSScopesByIdOption::Default,
                     [&](const QString &id, QQmlJSScopesById::Confidence confidence) {
                 // Any ID is enough to trigger the warning, no matter how confident we are about it.
                 Q_UNUSED(id);

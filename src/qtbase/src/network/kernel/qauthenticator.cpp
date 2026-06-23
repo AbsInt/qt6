@@ -144,6 +144,19 @@ static QByteArray qGssapiContinue(QAuthenticatorPrivate *ctx, QByteArrayView cha
   KDC is set up, and the credentials can be fetched from it. The backend always
   uses \c {HTTPS@<hostname>} as an SPN.
 
+  \section1 Security Considerations
+
+  QAuthenticator stores credentials such as usernames and passwords
+  internally using general-purpose data types (QString, QByteArray)
+  that do not guarantee secure erasure of their contents from memory
+  on destruction. Credential material may persist in freed heap pages,
+  core dumps, swap files, or process memory after a QAuthenticator
+  object is destroyed or cleared.
+
+  Applications with strict requirements for credential hygiene should
+  take this into account when deciding how and where to use
+  QAuthenticator.
+
   \sa QSslSocket
 */
 
@@ -684,6 +697,8 @@ QAuthenticatorPrivate::parseDigestAuthenticationChallenge(QByteArrayView challen
         const char *start = d;
         while (d < end && *d != '=')
             ++d;
+        if (d >= end)
+            break;
         QByteArrayView key = QByteArrayView(start, d - start);
         ++d;
         if (d >= end)
@@ -714,7 +729,8 @@ QAuthenticatorPrivate::parseDigestAuthenticationChallenge(QByteArrayView challen
         }
         while (d < end && *d != ',')
             ++d;
-        ++d;
+        if (d < end)
+            ++d;
         options[key.toByteArray()] = std::move(value);
     }
 
@@ -1459,14 +1475,20 @@ static bool qNtlmDecodePhase2(const QByteArray& data, QNtlmPhase2Block& ch)
     ds >> ch.targetInfo;
 
     if (ch.targetName.len > 0) {
-        if (qsizetype(ch.targetName.len + ch.targetName.offset) > data.size())
+        qsizetype total;
+        if (qAddOverflow(qsizetype(ch.targetName.offset), qsizetype(ch.targetName.len), &total))
+            return false;
+        if (total > data.size())
             return false;
 
         ch.targetNameStr = qStringFromUcs2Le(data.mid(ch.targetName.offset, ch.targetName.len));
     }
 
     if (ch.targetInfo.len > 0) {
-        if (ch.targetInfo.len + ch.targetInfo.offset > (unsigned)data.size())
+        qsizetype total;
+        if (qAddOverflow(qsizetype(ch.targetInfo.offset), qsizetype(ch.targetInfo.len), &total))
+            return false;
+        if (total > data.size())
             return false;
 
         ch.targetInfoBuff = data.mid(ch.targetInfo.offset, ch.targetInfo.len);

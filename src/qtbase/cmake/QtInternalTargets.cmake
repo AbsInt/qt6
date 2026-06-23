@@ -341,6 +341,11 @@ if (MSVC AND NOT CLANG)
             #-Zc:preprocessor # breaks build due to bug in default Windows SDK 10.0.19041
         )
     endif()
+    if (MSVC_VERSION GREATER_EQUAL 1950) # MSVC 2026 / VS 18.0
+        target_compile_options(PlatformCommonInternal INTERFACE
+            "${is_not_clang_cl_start}-await:strict${is_not_clang_cl_end}"
+        )
+    endif()
 
     target_compile_options(PlatformCommonInternal INTERFACE
         -Zc:wchar_t
@@ -410,7 +415,7 @@ if(QT_FEATURE_glibc_fortify_source)
     # Some compilers may define _FORTIFY_SOURCE by default when optimizing, remove it
     # before defining our own
     target_compile_options(PlatformCommonInternal BEFORE INTERFACE "$<${is_optimized_build}:-U_FORTIFY_SOURCE>")
-    if(TEST_glibc_234)
+    if(TEST_glibc_fortify_source_3)
         target_compile_options(PlatformCommonInternal INTERFACE "$<${is_optimized_build}:-D_FORTIFY_SOURCE=3>")
     else()
         target_compile_options(PlatformCommonInternal INTERFACE "$<${is_optimized_build}:-D_FORTIFY_SOURCE=2>")

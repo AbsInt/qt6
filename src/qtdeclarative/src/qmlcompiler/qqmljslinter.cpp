@@ -561,7 +561,7 @@ QQmlJSLinter::lintFile(const QString &filename, const QString *fileContents, con
     processMessages(warnings);
 
     QJsonObject result;
-    result[u"filename"_s] = QFileInfo(filename).absoluteFilePath();
+    result[u"filename"_s] = m_useAbsolutePath ? QFileInfo(filename).absoluteFilePath() : filename;
     result[u"warnings"] = warnings;
     result[u"success"] = lintResult == LintSuccess;
 
@@ -825,7 +825,7 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintModuleImpl(
     m_logger->setSilent(silent || json);
 
     const QQmlJSImporter::ImportedTypes types =
-            m_importer.importModule(module, QQmlJS::PrecedenceValues::Default);
+            m_importer.importModule(module, quint8(QQmlJS::PrecedenceValues::Default));
 
     QList<QQmlJS::DiagnosticMessage> importWarnings =
             m_importer.takeGlobalWarnings() + types.warnings();
