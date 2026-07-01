@@ -505,8 +505,8 @@ QDomDocumentType QDomImplementation::createDocumentType(const QString& qName, co
         dt->publicId.clear();
         dt->systemId.clear();
     } else {
-        dt->publicId = fixedPublicId;
-        dt->systemId = fixedSystemId;
+        dt->publicId = std::move(fixedPublicId);
+        dt->systemId = std::move(fixedSystemId);
     }
     dt->ref.deref();
     return QDomDocumentType(dt);
@@ -1097,8 +1097,6 @@ QDomNodePrivate::~QDomNodePrivate()
             p->setNoParent();
         p = n;
     }
-    first = nullptr;
-    last = nullptr;
 }
 
 void QDomNodePrivate::clear()
@@ -4101,7 +4099,7 @@ void QDomElementPrivate::setAttributeNS(const QString& nsURI, const QString& qNa
         m_attr->setNamedItem(n);
     } else {
         n->setNodeValue(newValue);
-        n->prefix = prefix;
+        n->prefix = std::move(prefix);
     }
 }
 

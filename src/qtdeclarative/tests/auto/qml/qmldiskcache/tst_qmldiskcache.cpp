@@ -95,6 +95,8 @@ private slots:
     void fileSelectors();
     void localAliases();
     void aliasToAlias();
+    void deepAliasThroughGroupedAliasFromCache();
+    void listPropertyReplaceIfNotDefaultFromCache();
     void cacheResources();
     void stableOrderOfDependentCompositeTypes();
     void singletonDependency();
@@ -770,6 +772,94 @@ void tst_qmldiskcache::aliasToAlias()
         QScopedPointer<QObject> obj(component.create());
         QVERIFY(!obj.isNull());
         QCOMPARE(obj->property("myAlias").toInt(), 100);
+    }
+}
+
+void tst_qmldiskcache::deepAliasThroughGroupedAliasFromCache()
+{
+    // A deep alias whose intermediate segment is another alias that carries a grouped binding.
+    // The grouped binding's object has no property cache, so when the unit is reloaded from the
+    // disk cache the compilation-unit deep-alias resolver dereferenced a null cache and crashed.
+    // The alias target is declared before the deep alias here, so this exercises only the deep-alias
+    // resolution, not the out-of-order alias-to-alias resolution.
+    QQmlEngine engine;
+
+    TestCompiler testCompiler(&engine);
+    QVERIFY(testCompiler.tempDir.isValid());
+
+    const QByteArray contents = QByteArrayLiteral("import QtQml\n"
+                                                  "QtObject {\n"
+                                                  "    id: root\n"
+                                                  "    property alias foo: fooId\n"
+                                                  "    property alias bar: root.foo.objectName\n"
+                                                  "    foo {}\n"
+                                                  "    property QtObject o: QtObject {\n"
+                                                  "        id: fooId\n"
+                                                  "        objectName: \"hello\"\n"
+                                                  "    }\n"
+                                                  "}");
+
+    {
+        testCompiler.clearCache();
+        QVERIFY2(testCompiler.compile(contents), qPrintable(testCompiler.lastErrorString));
+        QVERIFY2(testCompiler.verify(), qPrintable(testCompiler.lastErrorString));
+    }
+
+    // Force a reload from the disk cache, which goes through the compilation-unit alias resolver.
+    engine.clearComponentCache();
+
+    {
+        CleanlyLoadingComponent component(&engine, testCompiler.testFilePath);
+        QScopedPointer<QObject> obj(component.create());
+        QVERIFY(!obj.isNull());
+        QCOMPARE(obj->property("bar").toString(), QStringLiteral("hello"));
+    }
+}
+
+void tst_qmldiskcache::listPropertyReplaceIfNotDefaultFromCache()
+{
+    // ReplaceIfNotDefault appends to the default list property and replaces any other list
+    // property. When the unit is reloaded from the disk cache, the behavior is read back from the
+    // unit's flags. ListPropertyAssignReplace is the combination of both replace bits, so a plain
+    // bitwise-and test misreported a ReplaceIfNotDefault unit as Replace and cleared the default
+    // list on the cached path.
+    QQmlEngine engine;
+
+    TestCompiler testCompiler(&engine);
+    QVERIFY(testCompiler.tempDir.isValid());
+
+    const QByteArray contents
+            = QByteArrayLiteral("pragma ListPropertyAssignBehavior: ReplaceIfNotDefault\n"
+                                "import QtQml\n"
+                                "QtObject {\n"
+                                "    component WithDefault: QtObject {\n"
+                                "        default property list<QtObject> defaultList\n"
+                                "    }\n"
+                                "    component MyChild: WithDefault {\n"
+                                "        QtObject {}\n"
+                                "    }\n"
+                                "    property MyChild child: MyChild {\n"
+                                "        QtObject {}\n"
+                                "    }\n"
+                                "    property int count: child.defaultList.length\n"
+                                "}");
+
+    {
+        testCompiler.clearCache();
+        QVERIFY2(testCompiler.compile(contents), qPrintable(testCompiler.lastErrorString));
+        QVERIFY2(testCompiler.verify(), qPrintable(testCompiler.lastErrorString));
+    }
+
+    // Force a reload from the disk cache. The list-assign behavior is read from the unit flags.
+    engine.clearComponentCache();
+
+    {
+        CleanlyLoadingComponent component(&engine, testCompiler.testFilePath);
+        QScopedPointer<QObject> obj(component.create());
+        QVERIFY2(!obj.isNull(), qPrintable(component.errorString()));
+        // The child's own default element plus the one added by the instance: both are appended,
+        // because the default list keeps its append behavior under ReplaceIfNotDefault.
+        QCOMPARE(obj->property("count").toInt(), 2);
     }
 }
 

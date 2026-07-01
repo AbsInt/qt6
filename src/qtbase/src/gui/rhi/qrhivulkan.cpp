@@ -2120,11 +2120,14 @@ bool QRhiVulkan::createOffscreenRenderPass(QVkRenderPassDescriptor *rpD,
         QVkTexture *rtexD = QRHI_RES(QVkTexture, depthResolveTexture);
         if (rtexD->samples > VK_SAMPLE_COUNT_1_BIT)
             qWarning("Resolving into a multisample depth texture is not supported");
+        const VkFormat dstFormat = rtexD->vkformat;
 
-        QVkTexture *texD = QRHI_RES(QVkTexture, depthResolveTexture);
-        if (texD->vkformat != rtexD->vkformat) {
+        QVkTexture *texD = QRHI_RES(QVkTexture, depthTexture);
+        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, depthStencilBuffer);
+        const VkFormat srcFormat = texD ? texD->vkformat : rbD->vkformat;
+        if (srcFormat != dstFormat) {
             qWarning("Multisample resolve between different depth-stencil formats (%d and %d) is not supported.",
-                     int(texD->vkformat), int(rtexD->vkformat));
+                     int(srcFormat), int(dstFormat));
         }
 
         VkAttachmentDescription attDesc = {};
@@ -4290,6 +4293,9 @@ void QRhiVulkan::enqueueResourceUpdates(QVkCommandBuffer *cbD, QRhiResourceUpdat
             err = vmaMapMemory(toVmaAllocator(allocator), a, &mp);
             if (err != VK_SUCCESS) {
                 qWarning("Failed to map image data: %d", err);
+                vmaDestroyBuffer(toVmaAllocator(allocator), utexD->stagingBuffers[currentFrameSlot], a);
+                utexD->stagingBuffers[currentFrameSlot] = VK_NULL_HANDLE;
+                utexD->stagingAllocations[currentFrameSlot] = nullptr;
                 continue;
             }
 
@@ -5150,7 +5156,7 @@ void QRhiVulkan::trackedRegisterBuffer(QRhiPassResourceTracker *passResTracker,
     const VkAccessFlags newAccess = toVkAccess(access);
     const VkPipelineStageFlags newStage = toVkPipelineStage(stage);
     if (u.access == newAccess && u.stage == newStage) {
-        if (!accessIsWrite(access))
+        if (!accessIsWrite(newAccess))
             return;
     }
     passResTracker->registerBuffer(bufD, slot, &access, &stage, toPassTrackerUsageState(u));
@@ -5168,7 +5174,7 @@ void QRhiVulkan::trackedRegisterTexture(QRhiPassResourceTracker *passResTracker,
     const VkPipelineStageFlags newStage = toVkPipelineStage(stage);
     const VkImageLayout newLayout = toVkLayout(access);
     if (u.access == newAccess && u.stage == newStage && u.layout == newLayout) {
-        if (!accessIsWrite(access))
+        if (!accessIsWrite(newAccess))
             return;
     }
     passResTracker->registerTexture(texD, &access, &stage, toPassTrackerUsageState(u));

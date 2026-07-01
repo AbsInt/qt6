@@ -52,7 +52,11 @@ QT_BEGIN_NAMESPACE
 // Also change the comment behind the number to describe the latest change. This has the added
 // benefit that if another patch changes the version too, it will result in a merge conflict, and
 // not get removed silently.
-#define QV4_DATA_STRUCTURE_VERSION 0x49 // Added isVirtual and isOverride fields to property
+//
+// 0x4a was briefly used on the dev branch for an unrelated change ("Removed run-time generated
+// details from Alias") but got bumped to 0x4b before any release was tagged, so it never shipped.
+// We can therefore safely reuse it here on 6.11.
+#define QV4_DATA_STRUCTURE_VERSION 0x4a // Store resolved enum values inline in bindings
 
 class QIODevice;
 class QQmlTypeNameCache;
@@ -593,6 +597,8 @@ struct Binding
     union {
         bool b;
         quint32_le constantValueIndex;
+        qint32_le resolvedEnumValue;    // used when Type_Number and IsResolvedEnum: enum values are
+                                        // integers and stored inline rather than in the constant table
         quint32_le compiledScriptIndex; // used when Type_Script
         quint32_le objectIndex;
         quint32_le translationDataIndex; // used when Type_Translation
@@ -1318,6 +1324,16 @@ struct Unit
     bool isSingleton() const {
         return flags & Unit::IsSingleton;
     }
+
+    bool isListPropertyAssignReplace() const {
+        // ListPropertyAssignReplace is the combination of both replace bits, so it must be tested
+        // for an exact match.
+        return (flags & Unit::ListPropertyAssignReplace) == Unit::ListPropertyAssignReplace;
+    }
+
+    bool isListPropertyAssignReplaceIfNotDefault() const {
+        return flags & Unit::ListPropertyAssignReplaceIfNotDefault;
+    }
     /* end QML specific fields*/
 
     QString stringAtInternal(uint idx) const {
@@ -1626,6 +1642,8 @@ public:
     {
         if (binding->type() != CompiledData::Binding::Type_Number)
             return 0.0;
+        if (binding->hasFlag(CompiledData::Binding::IsResolvedEnum))
+            return binding->value.resolvedEnumValue;
         return constants[binding->value.constantValueIndex].doubleValue();
     }
 
@@ -1693,9 +1711,10 @@ public:
     enum class ListPropertyAssignBehavior { Append, Replace, ReplaceIfNotDefault };
     ListPropertyAssignBehavior listPropertyAssignBehavior() const
     {
-        if (unitData()->flags & CompiledData::Unit::ListPropertyAssignReplace)
+        const CompiledData::Unit *unit = unitData();
+        if (unit->isListPropertyAssignReplace())
             return ListPropertyAssignBehavior::Replace;
-        if (unitData()->flags & CompiledData::Unit::ListPropertyAssignReplaceIfNotDefault)
+        if (unit->isListPropertyAssignReplaceIfNotDefault())
             return ListPropertyAssignBehavior::ReplaceIfNotDefault;
         return ListPropertyAssignBehavior::Append;
     }

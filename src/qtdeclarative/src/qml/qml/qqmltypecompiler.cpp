@@ -489,11 +489,14 @@ bool QQmlEnumTypeResolver::resolveEnumBindings()
     return true;
 }
 
-bool QQmlEnumTypeResolver::assignEnumToBinding(QmlIR::Binding *binding, QStringView, int enumValue, bool)
+bool QQmlEnumTypeResolver::assignEnumToBinding(QmlIR::Binding *binding, QStringView, int enumValue)
 {
     binding->setType(QV4::CompiledData::Binding::Type_Number);
-    binding->value.constantValueIndex = compiler->registerConstant(QV4::Encode((double)enumValue));
-//    binding->setNumberValueInternal((double)enumValue);
+    // Enum values are integers (for now). This keeps the fold independent of the constant table,
+    // which is not regenerated when an ahead-of-time-compiled unit is loaded and its enum bindings
+    // are folded against the run-time-resolved types.
+    // TODO: Filter out long enums when we get to use them
+    binding->value.resolvedEnumValue = enumValue;
     binding->setFlag(QV4::CompiledData::Binding::IsResolvedEnum);
     return true;
 }
@@ -514,22 +517,8 @@ bool QQmlEnumTypeResolver::tryQualifiedEnumAssignment(
 
     Q_ASSERT(binding->type() == QV4::CompiledData::Binding::Type_Script);
     const QString string = compiler->bindingAsString(obj, binding->value.compiledScriptIndex);
-    if (!string.constData()->isUpper())
-        return true;
-
-    // reject any "complex" expression (even simple arithmetic)
-    // we do this by excluding everything that is not part of a
-    // valid identifier or a dot
-    for (const QChar &c : string)
-        if (!(c.isLetterOrNumber() || c == u'.' || c == u'_' || c.isSpace()))
-            return true;
-
-    // we support one or two '.' in the enum phrase:
-    // * <TypeName>.<EnumValue>
-    // * <TypeName>.<ScopedEnumName>.<EnumValue>
-
-    int dot = string.indexOf(QLatin1Char('.'));
-    if (dot == -1 || dot == string.size()-1)
+    const int dot = QmlIR::qualifiedEnumDot(string);
+    if (dot == -1)
         return true;
 
     int dot2 = string.indexOf(QLatin1Char('.'), dot+1);
@@ -551,7 +540,7 @@ bool QQmlEnumTypeResolver::tryQualifiedEnumAssignment(
         bool ok;
         int enumval = evaluateEnum(typeName.toString(), scopedEnumName, enumValue, &ok);
         if (ok) {
-            if (!assignEnumToBinding(binding, enumValue, enumval, isQtObject))
+            if (!assignEnumToBinding(binding, enumValue, enumval))
                 return false;
         }
         return true;
@@ -611,7 +600,7 @@ bool QQmlEnumTypeResolver::tryQualifiedEnumAssignment(
     if (!ok)
         return true;
 
-    return assignEnumToBinding(binding, enumValue, value, isQtObject);
+    return assignEnumToBinding(binding, enumValue, value);
 }
 
 int QQmlEnumTypeResolver::evaluateEnum(const QString &scope, QStringView enumName, QStringView enumValue, bool *ok) const
@@ -935,11 +924,13 @@ static bool sortAliasDependencies(
     \internal
 
     Attempts to resolve a "deep alias" — an alias whose sub-property path
-    goes through an inline component binding or through another alias.
-    For example: \c{alias foo: target.groupProp.innerProp}
+    goes through a QObject property, an inline component binding, or another
+    alias. For example: \c{alias foo: target.groupProp.innerProp}
 
-    Searches the target object's bindings and aliases for \a property, then
-    looks up \a subProperty on the bound/aliased object's property cache.
+    First searches the target object's bindings and aliases for \a property,
+    then looks up \a subProperty on the bound/aliased object's property cache.
+    If no binding or alias matches, falls back to looking up \a subProperty
+    on the declared type's property cache.
 
     On success, updates \a propIdx with the resolved value-type index and
     returns \c true.
@@ -947,7 +938,8 @@ static bool sortAliasDependencies(
 static bool resolveDeepAlias(
         QQmlTypeCompiler *compiler, const QmlIR::Object *targetObject,
         const QmlIR::Object &component, QStringView property, QStringView subProperty,
-        QQmlPropertyIndex &propIdx, const QQmlPropertyCacheVector *propertyCaches,
+        QQmlPropertyIndex &propIdx, QMetaType targetPropertyType,
+        const QQmlPropertyCacheVector *propertyCaches,
         const QMap<int, int> &idToObjectIndex,
         const QSet<const QV4::CompiledData::Alias *> &resolvedAliases)
 {
@@ -990,6 +982,17 @@ static bool resolveDeepAlias(
             continue;
         propIdx = QQmlPropertyIndex(propIdx.coreIndex(), pd->coreIndex());
         return true;
+    }
+
+    const QQmlPropertyCache::ConstPtr typeCache
+            = QQmlMetaType::propertyCacheForType(targetPropertyType);
+    if (typeCache) {
+        const QQmlPropertyResolver resolver(typeCache);
+        const QQmlPropertyData *pd = resolver.property(subProperty.toString());
+        if (pd) {
+            propIdx = QQmlPropertyIndex(propIdx.coreIndex(), pd->coreIndex());
+            return true;
+        }
     }
 
     return false;
@@ -1133,8 +1136,8 @@ QQmlComponentAndAliasResolver<QQmlTypeCompiler>::resolveAliasesInObject(
                     if (isDeepAlias) {
                         isDeepAlias = resolveDeepAlias(
                                 m_compiler, targetObject, component,
-                                property, subProperty,
-                                propIdx, m_propertyCaches, m_idToObjectIndex,
+                                property, subProperty, propIdx,
+                                targetProperty->propType(), m_propertyCaches, m_idToObjectIndex,
                                 resolvedAliases);
                     }
                     if (!isDeepAlias) {
