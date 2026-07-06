@@ -15,18 +15,6 @@ QT_BEGIN_NAMESPACE
 
 void QCollatorPrivate::init()
 {
-    if (!isC()) {
-        if (locale != QLocale::system().collation()) {
-            qWarning("Only the C and system collation locales are supported "
-                     "with the POSIX collation implementation");
-        }
-        if (caseSensitivity != Qt::CaseSensitive)
-            qWarning("Case insensitive sorting unsupported in the posix collation implementation");
-    }
-    if (numericMode)
-        qWarning("Numeric mode unsupported in the posix collation implementation");
-    if (ignorePunctuation)
-        qWarning("Ignoring punctuation unsupported in the posix collation implementation");
     dirty = false;
 }
 

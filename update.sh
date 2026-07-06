@@ -29,6 +29,9 @@ git apply clipboardCrashOnExitX11.patch || exit 1
 # bug 40921
 git apply cpp23.patch || exit 1
 
+# bug 40896
+git apply noCollatorWarnings.patch || exit 1
+
 # Download some tag files. Not 100% accurate because of the version mismatch, but much simpler.
 # Generating these tag files ourselves would require building qdoc, which depends on clang, etc.
 rm -rf docs || exit 1

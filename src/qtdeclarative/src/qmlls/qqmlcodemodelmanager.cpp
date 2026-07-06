@@ -70,6 +70,7 @@ void QQmlCodeModelManager::onBuildFinished(const QByteArray &url)
     const QStringList buildPaths = it->codeModel->buildPaths();
     m_buildInformation.loadSettingsFrom(buildPaths, ForceUpdate);
     setBuildPathsOn(&*it, buildPaths, AppendPathsFromFallback);
+    emit configurationChanged();
 }
 
 void QQmlCodeModelManager::prepareForShutdown()
@@ -361,7 +362,7 @@ void QQmlCodeModelManager::setCMakeJobs(int jobs)
 
 void QQmlCodeModelManager::setBuildPathsForRootUrl(const QByteArray &url, const QStringList &paths)
 {
-    m_buildInformation.loadSettingsFrom(paths);
+    m_buildInformation.loadSettingsFrom(paths, ForceUpdate);
 
     // build paths passed by -b have an empty url and apply to all workspaces
     if (url.isEmpty()) {
@@ -371,11 +372,13 @@ void QQmlCodeModelManager::setBuildPathsForRootUrl(const QByteArray &url, const 
              ++it) {
             setBuildPathsOn(&*it, {}, AppendPathsFromFallback);
         }
+        emit configurationChanged();
         return;
     }
 
     auto ws = findWorkspaceForFile(url);
     setBuildPathsOn(&*ws, paths, AppendPathsFromFallback);
+    emit configurationChanged();
 }
 
 void QQmlCodeModelManager::addOpenToUpdate(const QByteArray &url)

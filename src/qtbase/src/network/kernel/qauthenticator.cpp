@@ -153,6 +153,12 @@ static QByteArray qGssapiContinue(QAuthenticatorPrivate *ctx, QByteArrayView cha
   core dumps, swap files, or process memory after a QAuthenticator
   object is destroyed or cleared.
 
+  When Basic authentication is negotiated, credentials are transmitted
+  using Base64 encoding, which is trivially reversible. Basic authentication
+  should only be used over TLS-encrypted connections. QAuthenticator does not
+  enforce this requirement; applications are responsible for ensuring
+  transport security when Basic authentication is in use.
+
   Applications with strict requirements for credential hygiene should
   take this into account when deciding how and where to use
   QAuthenticator.
@@ -1016,6 +1022,8 @@ QByteArray QAuthenticatorPrivate::digestMd5Response(QByteArrayView challenge, QB
 const int blockSize = 64; //As per RFC2104 Block-size is 512 bits
 const quint8 respversion = 1;
 const quint8 hirespversion = 1;
+// FILETIME: two 32-bit values = 8 bytes (MS-DTYP section 2.3.3)
+static constexpr quint16 NtlmFileTimeSize = 8;
 
 /* usage:
    // fill up ctx with what we know.
@@ -1342,24 +1350,29 @@ static QByteArray clientChallenge(const QAuthenticatorPrivate *ctx)
 static QByteArray qExtractServerTime(const QByteArray& targetInfoBuff)
 {
     QByteArray timeArray;
-    QDataStream ds(targetInfoBuff);
-    ds.setByteOrder(QDataStream::LittleEndian);
-
+    const char *ptr = targetInfoBuff.constBegin();
+    const char *end = targetInfoBuff.constEnd();
     quint16 avId;
     quint16 avLen;
 
-    ds >> avId;
-    ds >> avLen;
-    while(avId != 0) {
+    while (end - ptr >= 4) {
+        avId = qFromLittleEndian<quint16>(ptr + 0);
+        avLen = qFromLittleEndian<quint16>(ptr + 2);
+        ptr += 4;
+
         if (avId == AVTIMESTAMP) {
-            timeArray.resize(avLen);
-            //avLen size of QByteArray is allocated
-            ds.readRawData(timeArray.data(), avLen);
+            if (avLen != NtlmFileTimeSize)
+                break;
+            if (end - ptr < NtlmFileTimeSize)
+                break;
+
+            timeArray.assign(ptr, ptr + NtlmFileTimeSize);
             break;
         }
-        ds.skipRawData(avLen);
-        ds >> avId;
-        ds >> avLen;
+
+        if (avLen > end - ptr)
+            break;
+        ptr += avLen;
     }
     return timeArray;
 }
