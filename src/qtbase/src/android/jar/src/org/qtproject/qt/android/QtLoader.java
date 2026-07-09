@@ -182,6 +182,11 @@ abstract class QtLoader {
 
             if (fallbackAbi != null)
                 return fallbackAbi;
+
+            final String packagedAbis = "[" + String.join(", ", uniqueAbis) + "]";
+            final String deviceAbis = "[" + String.join(", ", Build.SUPPORTED_ABIS) + "]";
+            Log.w(QtTAG, "No packaged library ABIs " + packagedAbis + " match the device ABIs "
+                    + deviceAbis + ", falling back to " + Build.SUPPORTED_ABIS[0] + ".");
         } catch (Resources.NotFoundException ignored) { }
 
         return Build.SUPPORTED_ABIS[0];
@@ -257,18 +262,15 @@ abstract class QtLoader {
     }
 
     /**
-     * Sets a list of keys/values string to as environment variables.
-     * This expects the key/value to be separated by '=', and parameters
-     * to be separated by tabs or space.
+     * Sets a list of keys/values string as environment variables.
+     * The KEY=VALUE pairs are separated by tabs ('\t').
      **/
     public void setEnvironmentVariables(String environmentVariables)
     {
         if (environmentVariables == null || environmentVariables.isEmpty())
             return;
 
-        environmentVariables = environmentVariables.replaceAll("\t", " ");
-
-        for (String variable : environmentVariables.split(" ")) {
+        for (String variable : environmentVariables.split("\t")) {
             String[] keyValue = variable.split("=", 2);
             if (keyValue.length < 2 || keyValue[0].isEmpty())
                 continue;
@@ -429,16 +431,25 @@ abstract class QtLoader {
      **/
     private static boolean isUncompressedNativeLibs()
     {
-        int flags = QtNative.getContext().getApplicationInfo().flags;
+        Context context = QtNative.getContext();
+        if (context == null) {
+            Log.w(QtTAG, "isUncompressedNativeLibs() called before a valid context was set.");
+            return false;
+        }
+        int flags = context.getApplicationInfo().flags;
         return (flags & ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS) == 0;
     }
 
     /**
-     * Returns the native shared libraries path inside relative to the app's APK.
+     * Returns the native shared libraries path relative to the app's APK,
+     * or null if the APK path cannot be resolved.
      **/
     private String getApkNativeLibrariesDir()
     {
-        return QtApkFileEngine.getAppApkFilePath() + "!/lib/" + m_preferredAbi + "/";
+        String apkFilePath = QtApkFileEngine.getAppApkFilePath();
+        if (apkFilePath == null)
+            return null;
+        return apkFilePath + "!/lib/" + m_preferredAbi + "/";
     }
 
     /**
@@ -457,6 +468,10 @@ abstract class QtLoader {
 
         if (isUncompressedNativeLibs()) {
             String apkLibPath = getApkNativeLibrariesDir();
+            if (apkLibPath == null) {
+                Log.e(QtTAG, "Failed to resolve the APK native libraries directory");
+                return LoadingResult.Failed;
+            }
             setEnvironmentVariable("QT_PLUGIN_PATH", apkLibPath);
             setEnvironmentVariable("QML_PLUGIN_PATH", apkLibPath);
         } else {
@@ -540,7 +555,7 @@ abstract class QtLoader {
                 System.loadLibrary(library);
                 loadedLib = library;
             }
-        } catch (Exception e) {
+        } catch (Exception | UnsatisfiedLinkError e) {
             Log.e(QtTAG, "Can't load '" + library + "'", e);
         }
 
@@ -584,16 +599,13 @@ abstract class QtLoader {
     {
         ArrayList<String> oneEntryArray = new ArrayList<>(Collections.singletonList(mainLibName));
         String mainLibPath = getLibrariesFullPaths(oneEntryArray).get(0);
-        final boolean[] success = {true};
         QtNative.getQtThread().run(() -> {
             m_mainLibPath = loadLibraryHelper(mainLibPath);
-            if (m_mainLibPath == null)
-                success[0] = false;
-            else if (isUncompressedNativeLibs())
+            if (m_mainLibPath != null && isUncompressedNativeLibs())
                 m_mainLibPath = getApkNativeLibrariesDir() + "lib" + m_mainLibPath + ".so";
         });
 
-        return success[0];
+        return m_mainLibPath != null;
     }
 
     /**

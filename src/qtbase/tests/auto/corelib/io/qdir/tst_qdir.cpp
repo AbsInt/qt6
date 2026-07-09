@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
+#include <QtTest/qsignalspy.h>
 #include <QtTest/private/qcomparisontesthelper_p.h>
 #include <QTemporaryFile>
 #if QT_CONFIG(process)
@@ -14,6 +15,7 @@
 #include <qdir.h>
 #include <qfileinfo.h>
 #include <qstringlist.h>
+#include <QtCore/qthread.h>
 #include <QDirIterator>
 
 #if defined(Q_OS_WIN)
@@ -98,8 +100,11 @@ private slots:
 
     void removeRecursively_data();
     void removeRecursively();
+    void removeRecursivelyReadOnly_data();
+    void removeRecursivelyReadOnly();
     void removeRecursivelyFailure();
     void removeRecursivelySymlink();
+    void removeRecursivelyNoStackExhaustion();
 
     void exists_data();
     void exists();
@@ -613,6 +618,49 @@ void tst_QDir::removeRecursively()
     QVERIFY(!dir.exists());
 }
 
+void tst_QDir::removeRecursivelyReadOnly_data()
+{
+    QTest::addColumn<bool>("isDir");
+
+    QTest::newRow("file") << false;
+    QTest::newRow("directory") << true;
+}
+
+void tst_QDir::removeRecursivelyReadOnly()
+{
+    QFETCH(bool, isDir);
+
+    // removeRecursively() must delete read-only contents. On Unix, removing an
+    // entry depends on the parent directory's permissions, not the entry's own,
+    // so a read-only file or read-only empty sub-directory is still removable
+    // without first changing its permissions. On Windows, removeRecursively()
+    // clears the read-only attribute before deleting.
+    const QString tmpdir = QDir::currentPath() + "/tmpdir/";
+    const QString path = tmpdir + "readonly";
+    QVERIFY(QDir().mkpath(path));
+
+    QString entry;
+    if (isDir) {
+#ifdef Q_OS_WIN
+        QSKIP("Removing read-only directories is not supported on Windows");
+#endif
+        entry = path + "/subdir";
+        // read + execute, but not writable
+        QVERIFY(QDir().mkdir(entry, QFile::ReadOwner | QFile::ExeOwner));
+    } else {
+        entry = path + "/file";
+        QFile file(entry);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("Hello");
+        file.close();
+        QVERIFY(file.setPermissions(QFile::ReadOwner));
+    }
+
+    QDir dir(path);
+    QVERIFY(dir.removeRecursively());
+    QVERIFY(!dir.exists());
+}
+
 void tst_QDir::removeRecursivelyFailure()
 {
 #ifdef Q_OS_UNIX
@@ -670,6 +718,39 @@ void tst_QDir::removeRecursivelySymlink()
 
     currentDir.rmdir("myDir");
     QFile::remove("testfile");
+#endif
+}
+
+void tst_QDir::removeRecursivelyNoStackExhaustion()
+{
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    // The original recursive version would have crashed here
+    const QString tmpdir = QDir::currentPath() + "/tmpdir";
+    QString path = tmpdir;
+    for (qsizetype i = 0; i < 1000; ++i)
+        path += "/d";
+
+    QVERIFY(QDir().mkpath(path));
+
+    // use a thread and set a small stack size
+    QThread *t = QThread::create([tmpdir] {
+        QDir d(tmpdir);
+        d.removeRecursively();
+    });
+    auto guard = qScopeGuard([t] { delete t; });
+
+    QSignalSpy spy(t, &QThread::finished);
+
+    t->setStackSize(128 * 1024); // minimal working value on Linux
+    t->start(); // may fail because of an unsupported stack size
+
+    if (t->isRunning()) {
+        QTRY_COMPARE(spy.size(), 1);
+        QVERIFY(!QDir(tmpdir).exists());
+    }
+#else
+    // The stack size and nesting depth were checked on Linux only.
+    QSKIP("This test is Linux-only");
 #endif
 }
 
