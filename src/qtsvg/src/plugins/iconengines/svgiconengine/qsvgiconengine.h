@@ -13,10 +13,12 @@ class QSvgIconEnginePrivate;
 
 class QSvgIconEngine : public QIconEngine
 {
+protected:
+    QSvgIconEngine(const QSvgIconEngine &other);
 public:
     QSvgIconEngine();
-    QSvgIconEngine(const QSvgIconEngine &other);
     ~QSvgIconEngine();
+
     void paint(QPainter *painter, const QRect &rect,
                QIcon::Mode mode, QIcon::State state) override;
     QSize actualSize(const QSize &size, QIcon::Mode mode,
@@ -33,7 +35,7 @@ public:
 
     bool isNull() override;
     QString key() const override;
-    QIconEngine *clone() const override;
+    QSvgIconEngine *clone() const override;
     bool read(QDataStream &in) override;
     bool write(QDataStream &out) const override;
 private:
