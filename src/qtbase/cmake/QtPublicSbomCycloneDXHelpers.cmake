@@ -26,16 +26,26 @@ function(_qt_internal_sbom_get_cyclone_dx_generator_path out_var)
     _qt_internal_path_join(installed_script_path
         "${QT6_INSTALL_PREFIX}" "${QT6_INSTALL_LIBEXECS}" "${generator_name}")
 
+    # When a custom path to a qt_cyclonedx_generator is specified, use it. Useful for projects
+    # that embed some of the Qt CMake Sbom helpers.
+    if(QT_CYCLONE_DX_GENERATOR_SCRIPT_PATH AND EXISTS "${QT_CYCLONE_DX_GENERATOR_SCRIPT_PATH}")
+        set(script_path "${QT_CYCLONE_DX_GENERATOR_SCRIPT_PATH}")
+
     # qtbase sources available, always use them, regardless if it's a prefix or non-prefix build.
     # Makes development easier.
-    if(EXISTS "${qtbase_script_path}")
+    elseif(QT_SOURCE_TREE AND EXISTS "${qtbase_script_path}")
         set(script_path "${qtbase_script_path}")
 
-    # qtbase sources unavailable, use installed files.
-    elseif(EXISTS "${installed_script_path}")
+    # qtbase sources unavailable, use installed files if available.
+    elseif(QT6_INSTALL_PREFIX AND EXISTS "${installed_script_path}")
         set(script_path "${installed_script_path}")
     else()
-        message(FATAL_ERROR "Can't find ${generator_name} file.")
+        message(FATAL_ERROR
+            "Can't find the '${generator_name}' script. Searched paths:\n"
+            "  QT_CYCLONE_DX_GENERATOR_SCRIPT_PATH: '${QT_CYCLONE_DX_GENERATOR_SCRIPT_PATH}'\n"
+            "  qtbase_script_path: '${qtbase_script_path}'\n"
+            "  installed_script_path: '${installed_script_path}'\n"
+        )
     endif()
 
     set(${out_var} "${script_path}" PARENT_SCOPE)
@@ -283,6 +293,17 @@ function(_qt_internal_sbom_record_external_target_dependecies)
     endif()
 
     foreach(target IN LISTS arg_TARGETS)
+        # A CycloneDX external component can only be recorded if its external document has a
+        # bom serial number. Skip targets whose external document don't have it (e.g. a
+        # SPDX-only external document).
+        get_target_property(bom_serial_number "${target}" _qt_sbom_cydx_bom_serial_number_uuid)
+        if(NOT bom_serial_number)
+            message(DEBUG
+                "Not recording CycloneDX external component for target '${target}', because its "
+                "external document has no CycloneDX bom serial number.")
+            continue()
+        endif()
+
         # Use the full spdx id (one prefixed with the containing DocumentRef-) because that's what
         # our spdx dependency relationships use at the moment.
         # Both Foo and FooPrivate map to the same spdx_id, so we need to avoid duplicates on spdx id

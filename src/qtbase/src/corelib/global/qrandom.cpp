@@ -213,9 +213,12 @@ static void fallback_update_seed(unsigned value)
     seed.fetchAndXorRelaxed(value);
 }
 
+// this function is pretty big, so optimize for size
 Q_NEVER_INLINE
-#ifdef Q_CC_GNU
-__attribute__((cold))   // this function is pretty big, so optimize for size
+#if __has_attribute(optimize)  // GCC
+__attribute__((optimize("Os")))
+#elif __has_attribute(minsize) // Clang
+__attribute__((minsize))
 #endif
 static void fallback_fill(quint32 *ptr, qsizetype left) noexcept
 {

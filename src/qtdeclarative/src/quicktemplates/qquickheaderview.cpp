@@ -349,10 +349,8 @@ int QHeaderDataProxyModel::columnCount(const QModelIndex &parent) const
 
 QVariant QHeaderDataProxyModel::data(const QModelIndex &index, int role) const
 {
-    if (m_model.isNull())
+    if (m_model.isNull() || !hasIndex(index.row(), index.column()))
         return QVariant();
-    if (!hasIndex(index.row(), index.column()))
-        return QModelIndex();
     auto section = m_orientation == Qt::Vertical ? index.row() : index.column();
     return m_model->headerData(section, m_orientation, role);
 }
@@ -363,7 +361,6 @@ bool QHeaderDataProxyModel::setData(const QModelIndex &index, const QVariant &va
         return false;
     auto section = m_orientation == Qt::Vertical ? index.row() : index.column();
     auto ret = m_model->setHeaderData(section, m_orientation, value, role);
-    emit dataChanged(index, index, { role });
     return ret;
 }
 

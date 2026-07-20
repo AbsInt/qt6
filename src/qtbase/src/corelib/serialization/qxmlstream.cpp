@@ -642,8 +642,12 @@ static bool isDecoderForEncoding(const QStringDecoder &dec, QStringDecoder::Enco
     if (!dec.isValid())
         return false;
 
-    const QAnyStringView nameView{dec.name()};
-    return !nameView.empty() && nameView == QStringDecoder::nameForEncoding(enc);
+    const auto decName = dec.name();
+    if (!decName || !*decName) // only match when non-empty
+        return false;
+
+    const auto encName = QStringConverter::nameForEncoding(enc);
+    return encName && strcmp(decName, encName) == 0;
 }
 
 /*!
@@ -2632,19 +2636,24 @@ QXmlStreamAttribute::QXmlStreamAttribute()
 
 /*!  Constructs an attribute in the namespace described with \a
   namespaceUri with \a name and value \a value.
+
+    The attribute will have isDefault() == \c{false}.
  */
 QXmlStreamAttribute::QXmlStreamAttribute(const QString &namespaceUri, const QString &name, const QString &value)
+    : m_isDefault(false)
 {
     m_namespaceUri = namespaceUri;
     m_name = m_qualifiedName = name;
     m_value = value;
-    m_namespaceUri = namespaceUri;
 }
 
 /*!
     Constructs an attribute with qualified name \a qualifiedName and value \a value.
+
+    The attribute will have isDefault() == \c{false}.
  */
 QXmlStreamAttribute::QXmlStreamAttribute(const QString &qualifiedName, const QString &value)
+    : m_isDefault(false)
 {
     qsizetype colon = qualifiedName.indexOf(u':');
     m_name = qualifiedName.mid(colon + 1);

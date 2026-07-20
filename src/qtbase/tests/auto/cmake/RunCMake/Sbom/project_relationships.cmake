@@ -1,13 +1,12 @@
 # Needed to make the sbom functions available.
 find_package(Qt6 REQUIRED Core)
 
-include(CommonResultGenIntro)
+sbom_test_begin()
 
 _qt_internal_setup_sbom(
     GENERATE_SBOM_DEFAULT "TRUE"
 )
 
-# This is used by common_result_gen.cmake.
 set(SBOM_VERSION "1.0.0")
 
 _qt_internal_sbom_begin_project(
@@ -15,6 +14,7 @@ _qt_internal_sbom_begin_project(
     SUPPLIER_URL "https://qt-project.org/SbomTest"
     VERSION "${SBOM_VERSION}"
 )
+sbom_test_record_project()
 
 function(create_sbom_lib_target target)
     add_library(${target} STATIC)
@@ -37,8 +37,6 @@ function(create_sbom_lib_target target)
         CATEGORY "RELATIONSHIP"
         SPDX_ID "${${target}_spdx_id}"
     )
-
-    bubble_up_extra_result_code()
 endfunction()
 
 foreach(idx RANGE 1 2)
@@ -84,4 +82,4 @@ add_cydx_v1_6_deps_to_result_file(t2 DEPS ${project_spdx_id} ${t1_spdx_id})
 
 _qt_internal_sbom_end_project()
 
-include(CommonResultGen)
+sbom_test_end()

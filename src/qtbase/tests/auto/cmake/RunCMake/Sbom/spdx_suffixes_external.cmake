@@ -26,17 +26,14 @@ function(create_sbom_lib_target target)
         CATEGORY "RELATIONSHIP"
         SPDX_ID "${${target}_spdx_id}"
     )
-
-    bubble_up_extra_result_code()
 endfunction()
 
-include(CommonResultGenIntro)
+sbom_test_begin()
 
 _qt_internal_setup_sbom(
     GENERATE_SBOM_DEFAULT "TRUE"
 )
 
-# This is used by CommonResultGen.cmake.
 set(SBOM_VERSION "1.0.0")
 set(SBOM_PROJECT_NAME "ExtSpdxSuffixes")
 
@@ -46,6 +43,7 @@ _qt_internal_sbom_begin_project(
     SUPPLIER_URL "https://qt-project.org/SbomTest"
     VERSION "${SBOM_VERSION}"
 )
+sbom_test_record_project()
 
 # Case 1, check that the exported DocumentRef id is the one we expect
 # The ref is defined in case 003 of the spdx_suffixes test.
@@ -81,5 +79,5 @@ add_assert_str_exists_in_spdx_v2_3_doc(
     "Relationship: ${c1_spdx_id} DEPENDS_ON ${external_doc_ref_id}:${lib_003_spdx_id}")
 add_cydx_v1_6_deps_to_result_file(c1 DEPS "${lib_003_spdx_id}")
 
-include(CommonResultGen)
+sbom_test_end()
 

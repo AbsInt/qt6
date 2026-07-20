@@ -30,7 +30,8 @@ DEFINE_BOOL_CONFIG_OPTION(qmlMptaVisualTouchDebugging, QML_VISUAL_TOUCH_DEBUGGIN
     The TouchPoint type contains information about a touch point, such as the current
     position, pressure, and area.
 
-    \image touchpoint-metrics.png
+    \image touchpoint-metrics.png {Tablet showing touch points with
+           metrics: bounding box, rotation, and ellipse diameters}
 */
 
 /*!
@@ -801,8 +802,14 @@ void QQuickMultiPointTouchArea::updateTouchPoint(QQuickTouchPoint *dtp, const QE
     QRectF area(QPointF(), p->ellipseDiameters());
     area.moveCenter(p->position());
     dtp->setArea(area);
-    dtp->setStartX(p->pressPosition().x());
-    dtp->setStartY(p->pressPosition().y());
+
+    if (p->state() == QEventPoint::State::Pressed) {
+        // Note that QEventPoint::startPosition() is not stored in it's own
+        // member variable, but derived from QEventPoint::globalPosition().
+        // It will therefore be wrong if the MPTA is transformed.
+        dtp->setStartX(p->position().x());
+        dtp->setStartY(p->position().y());
+    }
     dtp->setPreviousX(p->lastPosition().x());
     dtp->setPreviousY(p->lastPosition().y());
     dtp->setSceneX(p->scenePosition().x());
