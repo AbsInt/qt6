@@ -132,6 +132,11 @@ UNITY_KEY = 'Unity'
 UNITY_BATCH_SIZE_KEY = 'UnityBatchSize'
 
 
+DOCUMENTATION_CMAKE_OPTS = ["-DQT_NO_PACKAGE_VERSION_CHECK=TRUE",
+                            "-DQT_NO_PACKAGE_VERSION_INCOMPATIBLE_WARNING=TRUE",
+                            "-DQT_ALLOW_SYMLINK_IN_PATHS=TRUE"]
+
+
 def default_config_file():
     return (f"{GENERATOR_KEY}={DEFAULT_GENERATOR_NAME}\n"
             f"{BUILD_TESTS_KEY}=False\n"
@@ -203,6 +208,26 @@ def run_process_output_in_dir(args, dir):
     finally:
         os.chdir(current_dir)
     return result
+
+
+def run_process_logfile(args, log_file_name, dir):
+    """Run a process, redirecting output into a log file."""
+    log_string = command_log_string(args, dir) + " > " + log_file_name
+    print(log_string)
+    if opt_dry_run:
+        return
+
+    exit_code = -1
+    with open(log_file_name, "w") as log_file:
+        current_dir = os.getcwd()
+        try:
+            os.chdir(dir)
+            popen = subprocess.Popen(args, universal_newlines=1, stdout=log_file)
+            exit_code = popen.wait()
+        finally:
+            os.chdir(current_dir)
+    if exit_code != 0:
+        raise RuntimeError(f'FAIL({exit_code}): {log_string}')
 
 
 def git_branch(dir):
@@ -387,7 +412,7 @@ config_dict = {}
 
 def read_config_file(file_name):
     """Read the config file into config_dict, expanding continuation lines"""
-    global config_dict
+    global config_dict  # noqa: F824
     keyPattern = re.compile(r'^\s*([A-Za-z0-9\_\-]+)\s*=\s*(.*)$')
     with open(file_name) as f:
         while True:
@@ -541,6 +566,8 @@ def create_argument_parser(desc):
                         help='Git reset hard to upstream state')
     parser.add_argument('--test', '-t', action='store_true',
                         help='Test')
+    parser.add_argument('--documentation', '-o', action='store_true',
+                        help='Documentation build (requires building)')
     parser.add_argument('--version', '-v', action='version',
                         version='%(prog)s 1.0')
     parser.add_argument("modules", help="Override modules configuration",
@@ -569,8 +596,12 @@ def cmake_bool_value(value):
     return "ON" if value else "OFF"
 
 
-def configure_arguments():
+def cmake_generator_argument():
     generator = read_generator_config()
+    return f'-G{generator}'
+
+
+def configure_arguments():
     build_type = read_config(BUILD_TYPE_KEY)
     build_examples = cmake_bool_value(read_bool_config(BUILD_EXAMPLES_KEY))
     build_tests = cmake_bool_value(read_bool_config(BUILD_TESTS_KEY))
@@ -579,8 +610,7 @@ def configure_arguments():
     arguments = read_config(CONFIGURE_ARGUMENTS_KEY)
     mkspec = read_config(MKSPEC_KEY)
 
-    result = [cmake(), f'-DCMAKE_INSTALL_PREFIX={install_dir}',
-              f'-G{generator}']
+    result = [cmake(), f'-DCMAKE_INSTALL_PREFIX={install_dir}', cmake_generator_argument()]
     # Prevent mis-detection of clang/g++ when in path by coincidence
     if PLATFORM == Platform.WINDOWS and os.environ.get('VCINSTALLDIR'):
         result.append('-DCMAKE_CXX_COMPILER=cl.exe')
@@ -625,6 +655,10 @@ def windows_build_cmd(generator, jobs):
     return ['nmake', '/s', '/nologo']
 
 
+def cmake_build_cmd():
+    return [cmake(), '--build', '.', '--parallel']
+
+
 def windows_incredibuild_cmd(generator, jobs):
     """Return Windows build command for incredibuild"""
     cmd = ' '.join(windows_build_cmd(generator, jobs))
@@ -648,7 +682,7 @@ def build_cmd():
     jobs = read_int_config(JOBS_KEY, 1)
     acceleration = read_acceleration_config()
     if acceleration == Acceleration.NONE and jobs <= 1:
-        return [cmake(), '--build', '.', '--parallel']
+        return cmake_build_cmd()
     generator = GENERATORS.get(read_generator_config())
     if not generator:
         values = '", "'.join(GENERATORS.keys())
@@ -714,6 +748,28 @@ def run_tests(modules):
     return result
 
 
+def build_documentation():
+    start_time = time.time()
+    if not os.path.isdir(install_dir) or not os.path.isdir(build_dir):
+        print('The documentation build requires a build to exist')
+        sys.exit(-1)
+    doc_build_dir = os.path.join(build_dir, "doc")
+    if not os.path.isdir(doc_build_dir) and not opt_dry_run:
+        os.mkdir(doc_build_dir)
+    print(f'--- Building documentation in {doc_build_dir} ---')
+
+    cmd = [cmake(), qt_dir, f"-DQT_HOST_PATH={install_dir}", cmake_generator_argument()]
+    cmd.extend(DOCUMENTATION_CMAKE_OPTS)
+    execute_in_dir(cmd, doc_build_dir)
+
+    log_file_name = os.path.join(doc_build_dir, "log.txt")
+    cmd = cmake_build_cmd()
+    cmd.extend(["--target", "docs"])
+    run_process_logfile(cmd, log_file_name, doc_build_dir)
+    elapsed_time = int(time.time() - start_time)
+    print(f'--- Built documentation in {doc_build_dir} ({elapsed_time}s) ---')
+
+
 def init_repository(dir):
     global qt_dir
     target = os.path.basename(dir)
@@ -771,7 +827,7 @@ if __name__ == '__main__':
         build_mode = BuildMode.RECONFIGURE
 
     if build_mode == BuildMode.NONE and not (options.init or options.branch
-       or options.clean or options.pull or options.test or options.reset):
+       or options.clean or options.pull or options.test or options.reset or options.documentation):
         argument_parser.print_help()
         sys.exit(0)
 
@@ -809,6 +865,10 @@ if __name__ == '__main__':
 
     if options.pull:
         run_git(['pull', '--rebase'])
+
+    if options.documentation:
+        build_documentation()
+        sys.exit(0)
 
     sorted_modules = options.modules
     use_default_modules = not sorted_modules

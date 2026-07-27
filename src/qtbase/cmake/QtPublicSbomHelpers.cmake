@@ -499,7 +499,7 @@ function(_qt_internal_sbom_begin_project)
     _qt_internal_sbom_setup_project_ops()
 
     if(NOT arg_NO_AUTO_ADD_BUILD_TOOLS)
-        _qt_internal_sbom_add_project_default_build_tools()
+        _qt_internal_sbom_add_project_default_system_build_tools()
     endif()
 endfunction()
 
@@ -1038,6 +1038,7 @@ macro(_qt_internal_get_sbom_add_target_common_options opt_args single_args multi
         NO_DEFAULT_QT_COPYRIGHTS
         NO_DEFAULT_QT_PACKAGE_VERSION
         NO_DEFAULT_QT_SUPPLIER
+        NO_DEFAULT_PROJECT_CONTAINS_RELATIONSHIP
         SBOM_INCOMPLETE_3RD_PARTY_DEPENDENCIES
         IS_QT_3RD_PARTY_HEADER_MODULE
         IS_EXTERNAL_SBOM_ENTITY
@@ -1580,6 +1581,8 @@ function(_qt_internal_sbom_add_target target)
     _qt_internal_forward_function_args(
         FORWARD_PREFIX arg
         FORWARD_OUT_VAR relationship_args
+        FORWARD_OPTIONS
+            NO_DEFAULT_PROJECT_CONTAINS_RELATIONSHIP
         FORWARD_MULTI
             LIBRARIES
             PUBLIC_LIBRARIES
@@ -2742,6 +2745,8 @@ function(_qt_internal_sbom_get_package_infix type out_infix)
         set(package_infix "installers")
     elseif(type STREQUAL "BUILD_TOOL")
         set(package_infix "build-tool")
+    elseif(type STREQUAL "SYSTEM_BUILD_TOOL")
+        set(package_infix "system-build-tool")
     elseif(type STREQUAL "CUSTOM")
         set(package_infix "custom")
     elseif(type STREQUAL "CUSTOM_NO_INFIX")
@@ -2808,6 +2813,8 @@ function(_qt_internal_sbom_get_package_purpose type out_purpose)
     elseif(type STREQUAL "INSTALLERS")
         set(package_purpose "INSTALL")
     elseif(type STREQUAL "BUILD_TOOL")
+        set(package_purpose "OTHER")
+    elseif(type STREQUAL "SYSTEM_BUILD_TOOL")
         set(package_purpose "OTHER")
     elseif(type STREQUAL "CUSTOM")
         set(package_purpose "OTHER")

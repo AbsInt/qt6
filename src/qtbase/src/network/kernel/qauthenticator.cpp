@@ -538,7 +538,8 @@ void QAuthenticatorPrivate::parseHttpResponse(const QHttpHeaders &headers,
     */
 
     QByteArrayView headerVal;
-    for (const auto &current : headers.values(search)) {
+    const QByteArrayList values = headers.values(search); // pinned for headerVal
+    for (const auto &current : values) {
         const QLatin1StringView str(current);
         if (method < Basic && str.startsWith("basic"_L1, Qt::CaseInsensitive)) {
             method = Basic;
@@ -595,7 +596,7 @@ void QAuthenticatorPrivate::parseHttpResponse(const QHttpHeaders &headers,
         if (newRealm != realm) {
             if (phase == Done)
                 phase = Start;
-            realm = newRealm;
+            realm = std::move(newRealm);
             this->options["realm"_L1] = realm;
         }
     };
@@ -620,7 +621,7 @@ void QAuthenticatorPrivate::parseHttpResponse(const QHttpHeaders &headers,
             phase = Done;
         break;
     }
-    default:
+    case None:
         realm.clear();
         challenge = QByteArray();
         phase = Invalid;
