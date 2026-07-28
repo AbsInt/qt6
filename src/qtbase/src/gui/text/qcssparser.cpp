@@ -118,7 +118,7 @@ static constexpr QCssKnownValue properties[] = {
     { "bottom", Bottom },
     { "color", Color },
     { "float", Float },
-    { "font", Font },
+    { "font", QtFont },
     { "font-family", FontFamily },
     { "font-kerning", FontKerning },
     { "font-size", FontSize },
@@ -406,7 +406,7 @@ static quint64 findKnownValue(const QString &name, const QCssKnownValue *start, 
 static inline bool isInheritable(Property propertyId)
 {
     switch (propertyId) {
-    case Font:
+    case QtFont:
     case FontKerning:
     case FontFamily:
     case FontSize:
@@ -1396,7 +1396,7 @@ bool ValueExtractor::extractFont(QFont *font, int *fontSizeAdjustment)
             case FontFamily: setFontFamilyFromValues(decl.d->values, font); break;
             case FontKerning: setFontKerningFromValue(val, font); break;
             case TextDecoration: setTextDecorationFromValues(decl.d->values, font); break;
-            case Font: parseShorthandFontProperty(decl.d->values, font, fontSizeAdjustment); break;
+            case QtFont: parseShorthandFontProperty(decl.d->values, font, fontSizeAdjustment); break;
             case FontVariant: setFontVariantFromValue(val, font); break;
             case TextTransform: setTextTransformFromValue(val, font); break;
             case LetterSpacing: setLetterSpacingFromValue(val, font); break;
