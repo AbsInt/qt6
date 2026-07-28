@@ -58,7 +58,7 @@ enum Property {
     BackgroundColor,
     Color,
     Float,
-    Font,
+    QtFont,
     FontFamily,
     FontSize,
     FontStyle,
