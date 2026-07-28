@@ -29,3 +29,16 @@ index cd717d81db..c7dbf25132 100644
              case FontVariant: setFontVariantFromValue(val, font); break;
              case TextTransform: setTextTransformFromValue(val, font); break;
              case LetterSpacing: setLetterSpacingFromValue(val, font); break;
+diff --git a/src/qtbase/src/gui/text/qcssparser_p.h b/src/qtbase/src/gui/text/qcssparser_p.h
+index ed9b34aafd..239637dd61 100644
+--- a/src/qtbase/src/gui/text/qcssparser_p.h
++++ b/src/qtbase/src/gui/text/qcssparser_p.h
+@@ -58,7 +58,7 @@ enum Property {
+     BackgroundColor,
+     Color,
+     Float,
+-    Font,
++    QtFont,
+     FontFamily,
+     FontSize,
+     FontStyle,
