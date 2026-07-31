@@ -893,7 +893,7 @@ void QOpenGL2PaintEngineExPrivate::fill(const QVectorPath& path)
                 vertexCoordinateArray.clear();
                 vertexCoordinateArray.addPath(path, inverseScale, false);
                 int vertexCount = vertexCoordinateArray.vertexCount();
-                int floatSizeInBytes = vertexCount * 2 * sizeof(float);
+                qsizetype floatSizeInBytes = qsizetype(vertexCount) * 2 * sizeof(float);
                 cache->vertexCount = vertexCount;
                 cache->indexCount = 0;
                 cache->primitiveType = GL_TRIANGLE_FAN;
@@ -1920,6 +1920,15 @@ void QOpenGL2PaintEngineExPrivate::drawCachedGlyphs(QFontEngine::GlyphFormat gly
     int numGlyphs = vertexCoordinates->vertexCount() / 4;
     if (numGlyphs == 0)
         return;
+
+    // Using uint16 indices. Also we do not want 0xFFFF to be used as an index
+    // value to not accidentally conflict with primitive restart.
+    constexpr int maxGlyphsPerRun = 65536 / 4 - 1; // 16383 -> largest index value is 65531
+    if (numGlyphs > maxGlyphsPerRun) {
+        qWarning("drawCachedGlyphs: glyph run of %d glyphs exceeds the %d-glyph limit; clamping",
+                 numGlyphs, maxGlyphsPerRun);
+        numGlyphs = maxGlyphsPerRun;
+    }
 
     if (elementIndices.size() < numGlyphs*6) {
         Q_ASSERT(elementIndices.size() % 6 == 0);
