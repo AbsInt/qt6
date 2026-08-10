@@ -365,21 +365,21 @@ void QCocoaWindow::updateSafeAreaMarginsIfNeeded()
 
 bool QCocoaWindow::startSystemMove()
 {
-    switch (NSApp.currentEvent.type) {
-    case NSEventTypeLeftMouseDown:
-    case NSEventTypeRightMouseDown:
-    case NSEventTypeOtherMouseDown:
-    case NSEventTypeMouseMoved:
-    case NSEventTypeLeftMouseDragged:
-    case NSEventTypeRightMouseDragged:
-    case NSEventTypeOtherMouseDragged:
-        // The documentation only describes starting a system move
-        // based on mouse down events, but move events also work.
-        [m_view.window performWindowDragWithEvent:NSApp.currentEvent];
-        return true;
-    default:
+    // Only allow move by pressing left mouse button
+    if (!(NSEvent.pressedMouseButtons == 1))
         return false;
-    }
+
+    // Synthesize an event, so that we don't have to rely on
+    // NSApp.currentEvent, which may not be a mouse event.
+    NSEvent *mouseEvent = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown
+        location:m_view.window.mouseLocationOutsideOfEventStream
+        modifierFlags:NSEvent.modifierFlags
+        timestamp:NSProcessInfo.processInfo.systemUptime
+        windowNumber:m_view.window.windowNumber context:nil
+        eventNumber:0 clickCount:1 pressure:1.0];
+
+    [m_view.window performWindowDragWithEvent:mouseEvent];
+    return true;
 }
 
 void QCocoaWindow::setVisible(bool visible)
@@ -1016,8 +1016,11 @@ void QCocoaWindow::handleWindowStateChanged(HandleFlags flags)
     qCDebug(lcQpaWindow) << "QCocoaWindow::handleWindowStateChanged" <<
         m_lastReportedWindowState << "-->" << currentState;
 
+    QPointer<QCocoaWindow> destructionGuard = this;
     QWindowSystemInterface::handleWindowStateChanged<QWindowSystemInterface::SynchronousDelivery>(
         window(), currentState, m_lastReportedWindowState);
+    if (!destructionGuard)
+        return;
     m_lastReportedWindowState = currentState;
 }
 
@@ -1471,8 +1474,11 @@ void QCocoaWindow::windowDidChangeScreen()
     // device-pixel ratio may have changed, and needs to be delivered to all
     // windows, both top level and child windows.
 
+    QPointer<QCocoaWindow> destructionGuard = this;
     QWindowSystemInterface::handleWindowScreenChanged<QWindowSystemInterface::SynchronousDelivery>(
         window(), currentScreen ? currentScreen->screen() : nullptr);
+    if (!destructionGuard)
+        return;
 
     if (currentScreen && hasPendingUpdateRequest()) {
         // Restart display-link on new screen. We need to do this unconditionally,
@@ -1578,7 +1584,11 @@ void QCocoaWindow::handleExposeEvent(const QRegion &region)
     }
 
     qCDebug(lcQpaDrawing) << "QCocoaWindow::handleExposeEvent" << window() << region << "isExposed" << isExposed();
+
+    QPointer<QCocoaWindow> destructionGuard = this;
     QWindowSystemInterface::handleExposeEvent<QWindowSystemInterface::SynchronousDelivery>(window(), region);
+    if (!destructionGuard)
+        return;
 
     if (!isExposed())
         static_cast<QCocoaScreen *>(screen())->maybeStopDisplayLink();
