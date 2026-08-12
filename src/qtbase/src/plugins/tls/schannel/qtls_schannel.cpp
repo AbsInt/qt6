@@ -1011,6 +1011,7 @@ TlsCryptographSchannel::~TlsCryptographSchannel()
     closeCertificateStores();
     deallocateContext();
     freeCredentialsHandle();
+    localCertificateCtxt.reset(); // _has to_ happen after freeing the credentials handle
 }
 
 void TlsCryptographSchannel::init(QSslSocket *qObj, QSslSocketPrivate *dObj)
@@ -1185,7 +1186,6 @@ void TlsCryptographSchannel::freeCredentialsHandle()
 
 void TlsCryptographSchannel::closeCertificateStores()
 {
-    localCertificateCtxt.reset();
     localCertificateStore.reset();
     peerCertificateStore.reset();
     caCertificateStore.reset();
@@ -1692,6 +1692,7 @@ void TlsCryptographSchannel::reset()
     closeCertificateStores(); // certificate stores could've changed
     deallocateContext();
     freeCredentialsHandle(); // in case we already had one (@future: session resumption requires re-use)
+    localCertificateCtxt.reset(); // _has to_ happen after freeing the credentials handle
 
     cipherInfo = {};
     connectionInfo = {};
@@ -2347,11 +2348,7 @@ void TlsCryptographSchannel::initializeCertificateStores()
                         localCertificateStore.get(), X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0,
                         CERT_FIND_ANY, nullptr, nullptr);
                 if (certificateContext) {
-                    // Keep an independent reference to the certificate (and thus its private
-                    // key) that outlives the certificate store: Schannel may still use the key
-                    // after the store is closed during teardown. The find reference is
-                    // intentionally left unfreed so the duplicate is the surviving reference.
-                    localCertificateCtxt.reset(CertDuplicateCertificateContext(certificateContext));
+                    localCertificateCtxt.reset(certificateContext);
                     DWORD keySpec = 0;
                     BOOL mustFree = FALSE;
                     NCRYPT_KEY_HANDLE testKey = 0;
