@@ -5,6 +5,9 @@
 
 #include <QCalendar>
 #include <private/qgregoriancalendar_p.h>
+
+#include <limits>
+
 Q_DECLARE_METATYPE(QCalendar::System)
 
 using namespace Qt::StringLiterals;
@@ -15,6 +18,9 @@ class tst_QCalendar : public QObject
 private:
     void checkYear(const QCalendar &cal, int year);
 
+    // QDate's minJd(), maxJd() are private, so copy their values:
+    static constexpr auto minDate = QDate::fromJulianDay(Q_INT64_C(-784350574879));
+    static constexpr auto maxDate = QDate::fromJulianDay(Q_INT64_C( 784354017364));
 private Q_SLOTS:
     void basic_data();
     void basic();
@@ -29,6 +35,8 @@ private Q_SLOTS:
     void properties_data();
     void properties();
     void aliases();
+    void extremes_data();
+    void extremes();
 
     void gregory();
 };
@@ -446,6 +454,111 @@ void tst_QCalendar::gregory()
             QCOMPARE(QGregorianCalendar::weekDayOfJulian(*day),
                      QGregorianCalendar::weekDayOfJulian(*last));
         }
+    }
+}
+
+void tst_QCalendar::extremes_data()
+{
+    QTest::addColumn<QCalendar::System>("system");
+    // First and last leap years representable as int for this system:
+    QTest::addColumn<int>("minLeap");
+    QTest::addColumn<int>("maxLeap");
+    // First and last full dates representable by this system and QDate:
+    QTest::addColumn<int>("minYear");
+    QTest::addColumn<int>("minMonth");
+    QTest::addColumn<int>("minDay");
+    QTest::addColumn<int>("maxYear");
+    QTest::addColumn<int>("maxMonth");
+    QTest::addColumn<int>("maxDay");
+
+    auto newRow = [](QCalendar::System sys, int minLeap, int maxLeap) {
+        const QCalendar cal(sys);
+        const QByteArray name = cal.name().toUtf8();
+        auto minParts = cal.partsFromDate(minDate);
+        auto maxParts = cal.partsFromDate(maxDate);
+        // Those should produce invalid if an end of the range is beyond the
+        // range of int year; in that case, use the start or end of the year at
+        // the missed end of int year's range instead.
+        using Bound = std::numeric_limits<int>;
+        if (!minParts.isValid()) {
+            // minDate is out of range, so year INT_MIN should be in range:
+            minParts.year = Bound::min();
+            minParts.month = minParts.day = 1;
+        }
+        if (!maxParts.isValid()) {
+            // maxDate is out of range, so year INT_MAX should be in range:
+            maxParts.year = Bound::max();
+            maxParts.month = cal.monthsInYear(maxParts.year);
+            maxParts.day = cal.daysInMonth(maxParts.month, maxParts.year);
+            if (!maxParts.day) {
+                qDebug("%s can't represent max QDate or the end of %d/%d",
+                       name.data(), maxParts.year, maxParts.month);
+            }
+        }
+#if 0 // Activate to see ranges of representable dates for each calendar:
+        qDebug("%s covers from 0x%x/%d/%d to 0x%x/%d/%d", name.data(),
+               minParts.year, minParts.month, minParts.day,
+               maxParts.year, maxParts.month, maxParts.day);
+        // If that reports a minParts.year > 0, or maxParts.year < 0,
+        // daysInMonth() is failing to detect when out of range.
+#endif
+
+        QTest::newRow(name.data())
+            << sys << minLeap << maxLeap
+            << minParts.year << minParts.month << minParts.day
+            << maxParts.year << maxParts.month << maxParts.day;
+    };
+#define NEWROW(sys, minLeap, maxLeap) newRow(QCalendar::System::sys, minLeap, maxLeap)
+
+    NEWROW(Gregorian, -2147483645, 2147483644);
+#ifndef QT_BOOTSTRAPPED
+    NEWROW(Julian, -2147483645, 2147483644);
+    NEWROW(Milankovic, -2147483645, 2147483644);
+#endif
+#if QT_CONFIG(jalalicalendar)
+    NEWROW(Jalali, -2147483647, 2147483646);
+#endif
+#if QT_CONFIG(islamiccivilcalendar)
+    NEWROW(IslamicCivil, -2147483647, 2147483647);
+#endif
+}
+
+void tst_QCalendar::extremes()
+{
+    QFETCH(const QCalendar::System, system);
+    QFETCH(const int, minLeap);
+    QFETCH(const int, maxLeap);
+    // First and last full dates representable by this system and QDate:
+    QFETCH(const int, minYear);
+    QFETCH(const int, minMonth);
+    QFETCH(const int, minDay);
+    QFETCH(const int, maxYear);
+    QFETCH(const int, maxMonth);
+    QFETCH(const int, maxDay);
+    const QCalendar cal(system);
+
+    QVERIFY(cal.isLeapYear(minLeap));
+    QVERIFY(cal.isLeapYear(maxLeap));
+
+    using Bound = std::numeric_limits<int>;
+    const QDate early = cal.dateFromParts(minYear, minMonth, minDay);
+    if (minYear == Bound::min() && minMonth == 1 && minDay == 1) {
+        const auto parts = cal.partsFromDate(early);
+        QCOMPARE(parts.year, minYear);
+        QCOMPARE(parts.month, minMonth);
+        QCOMPARE(parts.day, minDay);
+    } else {
+        QCOMPARE(early, minDate);
+    }
+    const QDate late = cal.dateFromParts(maxYear, maxMonth, maxDay);
+    if (maxYear == Bound::max() && maxMonth == cal.monthsInYear(maxYear)
+        && maxDay == cal.daysInMonth(maxMonth, maxYear)) {
+        const auto parts = cal.partsFromDate(late);
+        QCOMPARE(parts.year, maxYear);
+        QCOMPARE(parts.month, maxMonth);
+        QCOMPARE(parts.day, maxDay);
+    } else {
+        QCOMPARE(late, maxDate);
     }
 }
 

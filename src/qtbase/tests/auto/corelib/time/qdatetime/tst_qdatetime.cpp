@@ -1568,8 +1568,8 @@ void tst_QDateTime::addYears()
 void tst_QDateTime::addMSecs_data()
 {
     QTest::addColumn<QDateTime>("dt");
-    QTest::addColumn<qint64>("nsecs");
-    QTest::addColumn<QDateTime>("result");
+    QTest::addColumn<qint64>("secondCount");
+    QTest::addColumn<QDateTime>("expect");
 
     const QTime standardTime(12, 34, 56);
     const QTime daylightTime(13, 34, 56);
@@ -1677,7 +1677,7 @@ void tst_QDateTime::addMSecs_data()
     QTest::newRow("to-first")
         << QDateTime::fromSecsSinceEpoch(1 - maxSeconds, UTC) << qint64(-1)
         << QDateTime::fromSecsSinceEpoch(-maxSeconds, UTC);
-    // Same four cases, but with the extreme value in nsecs (the rhs of the
+    // Same four cases, but with the extreme value in secondCount (the rhs of the
     // addition) instead of in dt (the lhs):
     QTest::newRow("after-last-rhs")
         << QDateTime::fromSecsSinceEpoch(1, UTC) << maxSeconds << QDateTime();
@@ -1743,51 +1743,48 @@ void tst_QDateTime::addSecs_data()
 void tst_QDateTime::addSecs()
 {
     QFETCH(const QDateTime, dt);
-    QFETCH(const qint64, nsecs);
-    QFETCH(const QDateTime, result);
-    QDateTime test = dt.addSecs(nsecs);
-    QDateTime test2 = dt + std::chrono::seconds(nsecs);
+    QFETCH(const qint64, secondCount);
+    QFETCH(const QDateTime, expect);
+    QDateTime test = dt.addSecs(secondCount);
+    QDateTime test2 = dt + std::chrono::seconds(secondCount);
     QDateTime test3 = dt;
-    test3 += std::chrono::seconds(nsecs);
-    if (!result.isValid()) {
+    test3 += std::chrono::seconds(secondCount);
+    if (!expect.isValid()) {
         QVERIFY(!test.isValid());
         QVERIFY(!test2.isValid());
         QVERIFY(!test3.isValid());
     } else {
-        QCOMPARE(test, result);
-        QCOMPARE(test2, result);
-        QCOMPARE(test3, result);
+        QCOMPARE(test, expect);
+        QCOMPARE(test2, expect);
+        QCOMPARE(test3, expect);
         QCOMPARE(test.timeSpec(), dt.timeSpec());
         QCOMPARE(test2.timeSpec(), dt.timeSpec());
         QCOMPARE(test3.timeSpec(), dt.timeSpec());
-        if (test.timeSpec() == Qt::OffsetFromUTC) {
-            QCOMPARE(test.offsetFromUtc(), dt.offsetFromUtc());
-            QCOMPARE(test2.offsetFromUtc(), dt.offsetFromUtc());
-            QCOMPARE(test3.offsetFromUtc(), dt.offsetFromUtc());
-        }
-        QCOMPARE(result.addSecs(-nsecs), dt);
-        QCOMPARE(result - std::chrono::seconds(nsecs), dt);
-        test3 -= std::chrono::seconds(nsecs);
+        QCOMPARE(test.offsetFromUtc(), expect.offsetFromUtc());
+        QCOMPARE(test2.offsetFromUtc(), expect.offsetFromUtc());
+        QCOMPARE(test3.offsetFromUtc(), expect.offsetFromUtc());
+        QCOMPARE(expect.addSecs(-secondCount), dt);
+        QCOMPARE(expect - std::chrono::seconds(secondCount), dt);
+        test3 -= std::chrono::seconds(secondCount);
         QCOMPARE(test3, dt);
-        QCOMPARE(dt.secsTo(result), nsecs);
+        QCOMPARE(dt.secsTo(expect), secondCount);
     }
 }
 
 void tst_QDateTime::addMSecs()
 {
     QFETCH(const QDateTime, dt);
-    QFETCH(const qint64, nsecs);
-    QFETCH(const QDateTime, result);
+    QFETCH(const qint64, secondCount);
+    QFETCH(const QDateTime, expect);
 
     const auto verify = [&](const QDateTime &test) {
-        if (!result.isValid()) {
+        if (!expect.isValid()) {
             QVERIFY(!test.isValid());
         } else {
-            QCOMPARE(test, result);
+            QCOMPARE(test, expect);
             QCOMPARE(test.timeSpec(), dt.timeSpec());
-            if (test.timeSpec() == Qt::OffsetFromUTC)
-                QCOMPARE(test.offsetFromUtc(), dt.offsetFromUtc());
-            QCOMPARE(result.addMSecs(qint64(-nsecs) * 1000), dt);
+            QCOMPARE(test.offsetFromUtc(), expect.offsetFromUtc());
+            QCOMPARE(expect.addMSecs(-secondCount * 1000), dt);
         }
     };
 #define VERIFY(datum) \
@@ -1795,9 +1792,9 @@ void tst_QDateTime::addMSecs()
     if (QTest::currentTestFailed()) \
         return
 
-    VERIFY(dt.addMSecs(qint64(nsecs) * 1000));
-    VERIFY(dt.addDuration(std::chrono::seconds(nsecs)));
-    VERIFY(dt.addDuration(std::chrono::milliseconds(nsecs * 1000)));
+    VERIFY(dt.addMSecs(secondCount * 1000));
+    VERIFY(dt.addDuration(std::chrono::seconds(secondCount)));
+    VERIFY(dt.addDuration(std::chrono::milliseconds(secondCount * 1000)));
 #undef VERIFY
 }
 
@@ -2003,46 +2000,46 @@ void tst_QDateTime::secsTo_data()
 void tst_QDateTime::secsTo()
 {
     QFETCH(const QDateTime, dt);
-    QFETCH(const qint64, nsecs);
-    QFETCH(const QDateTime, result);
+    QFETCH(const qint64, secondCount);
+    QFETCH(const QDateTime, expect);
 
-    if (result.isValid()) {
-        QCOMPARE(dt.secsTo(result), (qint64)nsecs);
-        QCOMPARE(result.secsTo(dt), (qint64)-nsecs);
-        QCOMPARE(dt == result, 0 == nsecs);
-        QCOMPARE(dt != result, 0 != nsecs);
-        QCOMPARE(dt < result, 0 < nsecs);
-        QCOMPARE(dt <= result, 0 <= nsecs);
-        QCOMPARE(dt > result, 0 > nsecs);
-        QCOMPARE(dt >= result, 0 >= nsecs);
+    if (expect.isValid()) {
+        QCOMPARE(dt.secsTo(expect), secondCount);
+        QCOMPARE(expect.secsTo(dt), -secondCount);
+        QCOMPARE(dt == expect, 0 == secondCount);
+        QCOMPARE(dt != expect, 0 != secondCount);
+        QCOMPARE(dt < expect, 0 < secondCount);
+        QCOMPARE(dt <= expect, 0 <= secondCount);
+        QCOMPARE(dt > expect, 0 > secondCount);
+        QCOMPARE(dt >= expect, 0 >= secondCount);
     } else {
-        QCOMPARE(dt.secsTo(result), 0);
-        QCOMPARE(result.secsTo(dt), 0);
+        QCOMPARE(dt.secsTo(expect), 0);
+        QCOMPARE(expect.secsTo(dt), 0);
     }
 }
 
 void tst_QDateTime::msecsTo()
 {
     QFETCH(const QDateTime, dt);
-    QFETCH(const qint64, nsecs);
-    QFETCH(const QDateTime, result);
+    QFETCH(const qint64, secondCount);
+    QFETCH(const QDateTime, expect);
 
-    if (result.isValid()) {
-        QCOMPARE(dt.msecsTo(result), qint64(nsecs) * 1000);
-        QCOMPARE(result - dt, std::chrono::milliseconds(nsecs * 1000));
-        QCOMPARE(result.msecsTo(dt), -qint64(nsecs) * 1000);
-        QCOMPARE(dt - result, -std::chrono::milliseconds(nsecs * 1000));
-        QCOMPARE(dt == result, 0 == nsecs);
-        QCOMPARE(dt != result, 0 != nsecs);
-        QCOMPARE(dt < result, 0 < nsecs);
-        QCOMPARE(dt <= result, 0 <= nsecs);
-        QCOMPARE(dt > result, 0 > nsecs);
-        QCOMPARE(dt >= result, 0 >= nsecs);
+    if (expect.isValid()) {
+        QCOMPARE(dt.msecsTo(expect), secondCount * 1000);
+        QCOMPARE(expect - dt, std::chrono::milliseconds(secondCount * 1000));
+        QCOMPARE(expect.msecsTo(dt), -secondCount * 1000);
+        QCOMPARE(dt - expect, -std::chrono::milliseconds(secondCount * 1000));
+        QCOMPARE(dt == expect, 0 == secondCount);
+        QCOMPARE(dt != expect, 0 != secondCount);
+        QCOMPARE(dt < expect, 0 < secondCount);
+        QCOMPARE(dt <= expect, 0 <= secondCount);
+        QCOMPARE(dt > expect, 0 > secondCount);
+        QCOMPARE(dt >= expect, 0 >= secondCount);
     } else {
-        QCOMPARE(dt.msecsTo(result), 0);
-        QCOMPARE(result - dt, std::chrono::milliseconds(0));
-        QCOMPARE(result.msecsTo(dt), 0);
-        QCOMPARE(dt - result, std::chrono::milliseconds(0));
+        QCOMPARE(dt.msecsTo(expect), 0);
+        QCOMPARE(expect - dt, std::chrono::milliseconds(0));
+        QCOMPARE(expect.msecsTo(dt), 0);
+        QCOMPARE(dt - expect, std::chrono::milliseconds(0));
     }
 }
 
@@ -3528,14 +3525,12 @@ void tst_QDateTime::fromStringStringFormat_localTimeZone_data()
     const QCalendar greg;
 
 #if QT_CONFIG(timezone)
-    bool lacksRows = true;
     // Note that the localTimeZone needn't match the zone used in the string and
     // expected date-time; indeed, having them different is probably best.
     // Both zones need to be valid; GMT always is, so is a safe one to use for
     // whichever the test-case doesn't care about (if that applies to either).
     QTimeZone etcGmtWithOffset("Etc/GMT+3");
     if (etcGmtWithOffset.isValid()) {
-        lacksRows = false;
         QTest::newRow("local-timezone-t-with-zone:Etc/GMT+3")
                 << "GMT"_ba << u"2008-10-13 Etc/GMT+3 11.50"_s
                 << u"yyyy-MM-dd t hh.mm"_s << 1900 << greg
@@ -3555,7 +3550,6 @@ void tst_QDateTime::fromStringStringFormat_localTimeZone_data()
             << QDateTime(); // Zone name not valid when offset expected
     QTimeZone gmtWithOffset("GMT-0");
     if (gmtWithOffset.isValid()) {
-        lacksRows = false;
         QTest::newRow("local-timezone-with-offset:GMT-0")
                 << "GMT"_ba << u"2008-10-13 GMT-0 11.50"_s
                 << u"yyyy-MM-dd t hh.mm"_s << 1900 << greg
@@ -3563,7 +3557,6 @@ void tst_QDateTime::fromStringStringFormat_localTimeZone_data()
     }
     QTimeZone gmt("GMT");
     if (gmt.isValid()) {
-        lacksRows = false;
         const bool fullyLocal = ([]() {
             TimeZoneRollback useZone("GMT");
             return qTzName(0) == u"GMT"_s;
@@ -3575,7 +3568,6 @@ void tst_QDateTime::fromStringStringFormat_localTimeZone_data()
     }
     QTimeZone helsinki("Europe/Helsinki");
     if (helsinki.isValid()) {
-        lacksRows = false;
         // QTBUG-96861: QAsn1Element::toDateTime() tripped over an assert due to
         // the first 20m 11s of 1921-05-01 being skipped, so the parser's
         // attempt to construct a local time after scanning yyMM tripped up on
@@ -3592,8 +3584,6 @@ void tst_QDateTime::fromStringStringFormat_localTimeZone_data()
                 << "Europe/Helsinki"_ba << u"210501001006Z"_s << u"yyMMddHHmmsst"_s << 1950 << greg
                 << QDateTime(QDate(2021, 5, 1), QTime(0, 10, 6), UTC);
     }
-    if (lacksRows)
-        QSKIP("Testcases all use zones unsupported on this platform");
 #else
     QSKIP("Test only possible with timezone support enabled");
 #endif
