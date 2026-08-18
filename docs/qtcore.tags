@@ -66071,8 +66071,15 @@
             <type>QSet&lt;T&gt;::iterator</type>
             <name>insert</name>
             <anchorfile>qset.html</anchorfile>
-            <anchor>insert-1</anchor>
+            <anchor>insert-2</anchor>
             <arglist>(QSet&lt;T&gt;::const_iterator it, const T &amp;value)</arglist>
+        </member>
+        <member kind="function" protection="public" virtualness="non" static="no">
+            <type>QSet&lt;T&gt;::iterator</type>
+            <name>insert</name>
+            <anchorfile>qset.html</anchorfile>
+            <anchor>insert-1</anchor>
+            <arglist>(T &amp;&amp;value)</arglist>
         </member>
         <member kind="function" protection="public" virtualness="non" static="no">
             <type>QSet&lt;T&gt;::iterator</type>
